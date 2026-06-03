@@ -80,6 +80,26 @@ export default __base_store({
       }
     },
     /**
+     * Actualiza sugerencia IA pendiente y hora de envío automático en la fila del ticket.
+     */
+    patch_ticket_ai_pending(state, payload) {
+      if (!payload || payload.ticket_id == null) {
+        return
+      }
+      const tid = payload.ticket_id
+      let i = 0
+      for (i = 0; i < state.models.length; i = i + 1) {
+        if (String(state.models[i].id) === String(tid)) {
+          const merged = Object.assign({}, state.models[i], {
+            ai_pending_suggestion: payload.ai_pending_suggestion || null,
+            ai_suggestion_send_at: payload.ai_suggestion_send_at || null,
+          })
+          state.models.splice(i, 1, merged)
+          return
+        }
+      }
+    },
+    /**
      * Inserta o reordena un ticket a partir de eventos o respuestas API.
      */
     upsert_from_broadcast(state, ticket) {

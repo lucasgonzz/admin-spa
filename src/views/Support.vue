@@ -47,8 +47,10 @@
       </div>
       <div class="support-right-bottom flex-shrink-0">
         <message-input
+          ref="message_input"
           :can_send="can_send_message"
           :ticket_id="selected_ticket_id"
+          :ai_suggestion_send_at="selected_ticket_ai_send_at"
           @send-message="send_message"
           @suggested-title="apply_suggested_title" />
       </div>
@@ -164,6 +166,17 @@ export default {
      */
     can_send_message() {
       return this.selected_ticket && this.selected_ticket.status == 'open'
+    },
+    /**
+     * Timestamp ISO del envío automático de sugerencia IA (si hay timer activo).
+     *
+     * @returns {string|null}
+     */
+    selected_ticket_ai_send_at() {
+      if (!this.selected_ticket || !this.selected_ticket.ai_suggestion_send_at) {
+        return null
+      }
+      return String(this.selected_ticket.ai_suggestion_send_at)
     },
     /**
      * UUID del Client (tenant) del ticket abierto: habilita canal support.client.* en Pusher.
@@ -368,12 +381,23 @@ export default {
             self.$store.commit('support_message/patch_message_read', message)
           }
         },
+        on_ai_suggestion_pending(payload) {
+          if (!payload || !payload.ticket_id) {
+            return
+          }
+          self.$store.commit('support_ticket/patch_ticket_ai_pending', payload)
+          if (String(payload.ticket_id) !== String(self.selected_ticket_id)) {
+            return
+          }
+          self.sync_ai_pending_to_input(payload.ai_pending_suggestion)
+        },
       })
     },
     /**
      * Abre ticket y carga su conversación.
      */
     select_ticket(ticket_id) {
+      const self = this
       this.selected_ticket_id = ticket_id
       this.$store.dispatch('support_message/load_ticket_messages', ticket_id)
       const ticket = this.tickets.find((t) => t.id == ticket_id)
@@ -381,10 +405,26 @@ export default {
         this.assigned_admin_id = ticket.assigned_admin_id || this.current_admin_id
         this.ticket_name_draft = ticket.name == null ? '' : String(ticket.name)
         this.ticket_status_draft = ticket.status === 'closed' ? 'closed' : 'open'
+        this.$nextTick(function () {
+          self.sync_ai_pending_to_input(ticket.ai_pending_suggestion)
+        })
       } else {
         this.ticket_name_draft = ''
         this.ticket_status_draft = 'open'
       }
+    },
+    /**
+     * Carga en el input la sugerencia IA pendiente del ticket activo.
+     *
+     * @param {string|null} suggestion_text Texto sugerido por Claude.
+     * @returns {void}
+     */
+    sync_ai_pending_to_input(suggestion_text) {
+      const input = this.$refs.message_input
+      if (!input || !input.apply_pending_suggestion) {
+        return
+      }
+      input.apply_pending_suggestion(suggestion_text)
     },
     /**
      * Quita la selección: vacía el panel de conversación sin tocar el ticket en el servidor.

@@ -251,6 +251,17 @@ export default {
         .then(function (response) {
           commit('set_sending', false)
           commit('replace_pending_with_model', { client_key: client_key, model: response.data.model })
+          if (state.active_ticket_id != null) {
+            commit(
+              'support_ticket/patch_ticket_ai_pending',
+              {
+                ticket_id: state.active_ticket_id,
+                ai_pending_suggestion: null,
+                ai_suggestion_send_at: null,
+              },
+              { root: true }
+            )
+          }
           if (response.data && response.data.model) {
             dispatch('support_ticket/apply_ticket_from_message', response.data.model, { root: true })
           }

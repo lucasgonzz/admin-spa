@@ -69,6 +69,13 @@
         </div>
       </div>
 
+      <div id="support-ai-settings" class="card mb-3 account-config-card">
+        <div class="card-body">
+          <h3 class="h6 card-title">IA de soporte</h3>
+          <support-ai-settings-section />
+        </div>
+      </div>
+
       <div id="lead-whatsapp-onboarding" class="card mb-3 account-config-card">
         <div class="card-body">
           <h3 class="h6 card-title">Mensajes automáticos de leads (WhatsApp)</h3>
@@ -126,6 +133,7 @@
 <script>
 import FollowupRulesSection from '@/components/account/sections/FollowupRulesSection.vue'
 import SupportAlertSettingsSection from '@/components/account/sections/SupportAlertSettingsSection.vue'
+import SupportAiSettingsSection from '@/components/account/sections/SupportAiSettingsSection.vue'
 import ProtocolEntriesSection from '@/components/account/sections/ProtocolEntriesSection.vue'
 import AiSystemPromptSection from '@/components/account/sections/AiSystemPromptSection.vue'
 import TaskTemplatesSection from '@/components/account/sections/TaskTemplatesSection.vue'
@@ -134,6 +142,7 @@ import LeadWhatsappOnboardingSection from '@/components/account/sections/LeadWha
 /** Anclas de sección admitidas en /cuenta#... (compatibilidad con rutas antiguas). */
 const ACCOUNT_SECTION_HASHES = [
   'support-alert-settings',
+  'support-ai-settings',
   'lead-whatsapp-onboarding',
   'followup-rules',
   'protocol-entries',
@@ -149,6 +158,7 @@ export default {
   components: {
     FollowupRulesSection,
     SupportAlertSettingsSection,
+    SupportAiSettingsSection,
     ProtocolEntriesSection,
     AiSystemPromptSection,
     TaskTemplatesSection,

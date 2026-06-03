@@ -8,6 +8,7 @@
  * @param {string|null} options.client_uuid UUID del cliente del ticket abierto.
  * @param {Function} options.on_message Callback con el mensaje recibido.
  * @param {Function} [options.on_message_read] Callback al marcar leído.
+ * @param {Function} [options.on_ai_suggestion_pending] Callback con sugerencia IA pendiente.
  * @returns {Object}
  */
 export function useSupportSocket(options) {
@@ -61,6 +62,22 @@ export function useSupportSocket(options) {
 
   echo.channel(client_channel_name).listen('.SupportMessageReceived', handle_event)
   echo.channel(client_channel_name).listen('.SupportMessageRead', handle_read)
+
+  const on_ai_suggestion_pending = options.on_ai_suggestion_pending
+  /**
+   * Entrega sugerencia IA pendiente al panel de conversación.
+   *
+   * @param {Object} event_data Payload del evento Pusher.
+   */
+  function handle_ai_pending(event_data) {
+    if (on_ai_suggestion_pending && event_data) {
+      on_ai_suggestion_pending(event_data)
+    }
+  }
+
+  if (on_ai_suggestion_pending) {
+    echo.channel(client_channel_name).listen('.SupportAiSuggestionPending', handle_ai_pending)
+  }
 
   return {
     /**

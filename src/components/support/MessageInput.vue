@@ -34,6 +34,9 @@
     <div v-if="mic_error" class="support-input-mic-error">
       {{ mic_error_message }}
     </div>
+    <div v-if="pending_send_at_label" class="alert alert-info py-1 px-2 small mb-2">
+      Sugerencia IA lista. Envío automático: {{ pending_send_at_label }}
+    </div>
     <div v-if="suggestion_error" class="support-input-suggestion-error">
       {{ suggestion_error }}
     </div>
@@ -128,6 +131,8 @@ export default {
     can_send: { type: Boolean, default: true },
     /** Id del ticket activo; necesario para POST /suggest. */
     ticket_id: { type: [Number, String], default: null },
+    /** ISO8601 del envío automático programado (null si no hay timer). */
+    ai_suggestion_send_at: { type: String, default: null },
   },
   data() {
     return {
@@ -177,6 +182,21 @@ export default {
      */
     attachment_is_image() {
       return this.attachment && this.attachment.type.indexOf('image') === 0
+    },
+    /**
+     * Etiqueta legible del envío automático pendiente.
+     *
+     * @returns {string}
+     */
+    pending_send_at_label() {
+      if (!this.ai_suggestion_send_at) {
+        return ''
+      }
+      const date = new Date(this.ai_suggestion_send_at)
+      if (isNaN(date.getTime())) {
+        return ''
+      }
+      return date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     },
     /**
      * Duración de grabación formateada como MM:SS para mostrar junto al botón.
@@ -410,6 +430,24 @@ export default {
           self.mic_error_message =
             'Sin acceso al micrófono. Verificá los permisos del navegador o usá Adjuntar.'
         })
+    },
+    /**
+     * Solicita sugerencia IA al backend y completa el textarea.
+     *
+     * @returns {void}
+     */
+    /**
+     * Completa el textarea con una sugerencia recibida por Pusher o al abrir el ticket.
+     *
+     * @param {string} suggestion_text Texto sugerido por Claude.
+     * @returns {void}
+     */
+    apply_pending_suggestion(suggestion_text) {
+      const text = String(suggestion_text || '').trim()
+      if (text) {
+        this.body = text
+        this.suggestion_error = ''
+      }
     },
     /**
      * Solicita sugerencia IA al backend y completa el textarea.
