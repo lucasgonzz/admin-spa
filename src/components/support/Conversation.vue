@@ -16,17 +16,24 @@
         :key="message_key(message)"
         :class="['support-message-row', message.sender_type == 'admin' ? 'mine' : 'their']">
         <div class="support-message-col">
-          <div
-            :class="[
-              'support-message-bubble',
-              has_delivery_error(message) ? 'support-message-bubble--error' : '',
-            ]"
-            :title="message_sent_at_tooltip(message)">
+          <border-progress-wrap
+            :active="is_ai_draft_auto_send_active(message)"
+            :duration_seconds="ai_draft_total_seconds(message)"
+            :elapsed_seconds="ai_draft_elapsed_seconds(message)"
+            :animation_key="ai_draft_animation_key(message)"
+            variant="bubble">
             <div
-              v-if="message.body && !should_hide_body_for_remote_image(message)"
-              class="support-message-text">
-              {{ message.body }}
-            </div>
+              :class="[
+                'support-message-bubble',
+                has_delivery_error(message) ? 'support-message-bubble--error' : '',
+                is_ai_draft_message(message) ? 'support-message-bubble--ai-draft' : '',
+              ]"
+              :title="message_sent_at_tooltip(message)">
+              <div
+                v-if="message.body && !should_hide_body_for_remote_image(message)"
+                class="support-message-text">
+                {{ message.body }}
+              </div>
             <!-- Imagen remota (Kapso) cuando no hay adjunto local -->
             <template
               v-if="message.kind === 'image' && remote_image_url_from_message(message) && !has_local_attachment(message)">
@@ -85,7 +92,8 @@
               class="support-message-placeholder text-muted">
               [Imagen]
             </div>
-          </div>
+            </div>
+          </border-progress-wrap>
           <div
             v-if="is_mine(message) && has_delivery_error(message)"
             class="support-message-error-row">
@@ -146,11 +154,13 @@
 
 <script>
 import ImageLightbox from '@/components/support/ImageLightbox.vue'
+import BorderProgressWrap from '@/components/support/BorderProgressWrap.vue'
 
 export default {
   name: 'SupportConversation',
   components: {
     ImageLightbox,
+    BorderProgressWrap,
   },
   props: {
     messages: { type: Array, default: () => [] },
@@ -162,6 +172,8 @@ export default {
      * Origen del ticket (erp | whatsapp): define checks y textos de error de entrega.
      */
     ticket_source: { type: String, default: null },
+    /** Timestamp reactivo para animaciones de auto-envío en borradores IA. */
+    now_tick: { type: Number, default: 0 },
   },
   data() {
     return {
@@ -199,6 +211,78 @@ export default {
     },
   },
   methods: {
+    /**
+     * Indica si el mensaje es borrador IA pendiente de envío automático.
+     *
+     * @param {Object} message
+     * @returns {boolean}
+     */
+    is_ai_draft_message(message) {
+      return !!(message && message.is_ai_suggestion_draft)
+    },
+    /**
+     * Activa animación de borde en borrador IA hasta ai_auto_send_at.
+     *
+     * @param {Object} message
+     * @returns {boolean}
+     */
+    is_ai_draft_auto_send_active(message) {
+      if (!this.is_ai_draft_message(message) || !message.ai_auto_send_at) {
+        return false
+      }
+      const ends_at = new Date(message.ai_auto_send_at).getTime()
+      return !isNaN(ends_at) && ends_at > this.now_tick
+    },
+    /**
+     * Duración total del timer de auto-envío del borrador (segundos).
+     *
+     * @param {Object} message
+     * @returns {number}
+     */
+    ai_draft_total_seconds(message) {
+      if (!message || !message.ai_auto_send_at) {
+        return 0
+      }
+      const ends_at = new Date(message.ai_auto_send_at).getTime()
+      const starts_at = message.created_at ? new Date(message.created_at).getTime() : NaN
+      if (isNaN(ends_at) || isNaN(starts_at) || ends_at <= starts_at) {
+        return 0
+      }
+      return (ends_at - starts_at) / 1000
+    },
+    /**
+     * Segundos transcurridos del timer de auto-envío (reanuda animación al abrir ticket).
+     *
+     * @param {Object} message
+     * @returns {number}
+     */
+    ai_draft_elapsed_seconds(message) {
+      if (!message || !message.created_at) {
+        return 0
+      }
+      const starts_at = new Date(message.created_at).getTime()
+      if (isNaN(starts_at)) {
+        return 0
+      }
+      const elapsed = (this.now_tick - starts_at) / 1000
+      const total = this.ai_draft_total_seconds(message)
+      if (total <= 0) {
+        return 0
+      }
+      return Math.min(elapsed, total)
+    },
+    /**
+     * Key estable del borrador para reiniciar animación si cambia ai_auto_send_at.
+     *
+     * @param {Object} message
+     * @returns {string}
+     */
+    ai_draft_animation_key(message) {
+      if (!message || message.id == null) {
+        return '0'
+      }
+      return String(message.id) + '-' + String(message.ai_auto_send_at || '')
+    },
     /**
      * Clave para v-for: id persistido o token de optimista.
      */
@@ -327,6 +411,9 @@ export default {
      * @returns {boolean}
      */
     has_delivery_error(message) {
+      if (message.is_ai_suggestion_draft) {
+        return false
+      }
       if (message._delivery_error === 'not_sent') {
         return true
       }
@@ -565,6 +652,11 @@ export default {
 
 .support-message-row.mine .support-message-bubble {
   background: #dff7df;
+}
+
+.support-message-bubble--ai-draft {
+  background: #eef6ff !important;
+  border-style: dashed;
 }
 
 .support-message-meta {

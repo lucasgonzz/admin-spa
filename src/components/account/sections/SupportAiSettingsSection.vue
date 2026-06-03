@@ -12,11 +12,25 @@
       </label>
     </div>
     <p class="text-muted small mb-3">
-      Cuando está activado, cada mensaje nuevo de un cliente por WhatsApp se envía automáticamente a Claude
-      para obtener una sugerencia de respuesta.
+      Cuando está activado, cada mensaje nuevo de un cliente por WhatsApp puede generar una sugerencia de respuesta
+      vía Claude tras la demora configurada. Si el cliente envía varios mensajes seguidos, el temporizador se reinicia
+      con el último mensaje.
     </p>
 
-    <div v-if="local_suggestions_enabled" class="row g-2 align-items-end">
+    <div v-if="local_suggestions_enabled" class="row g-2 align-items-end mb-2">
+      <div class="col-sm-4">
+        <label class="form-label small" for="support_ai_suggestion_delay">
+          Demora antes de pedir sugerencia IA (segundos)
+        </label>
+        <input
+          id="support_ai_suggestion_delay"
+          v-model.number="local_suggestion_delay"
+          type="number"
+          min="0"
+          max="3600"
+          class="form-control form-control-sm"
+          :disabled="loading || saving" />
+      </div>
       <div class="col-sm-4">
         <label class="form-label small" for="support_ai_auto_send_delay">
           Tiempo de espera antes de enviar (segundos)
@@ -44,9 +58,13 @@
     </div>
 
     <p v-if="local_suggestions_enabled" class="form-text small text-muted mb-2">
-      0 = Claude responde automáticamente sin intervención humana. Mayor a 0 = el operador tiene ese tiempo para
-      revisar y editar antes de que se envíe. Si el operador responde manualmente antes de que se cumpla el tiempo,
-      se cancela el envío automático.
+      La demora antes de pedir sugerencia IA evita consultar a Claude mientras el cliente sigue escribiendo. 0 = se
+      consulta de inmediato tras el último mensaje.
+    </p>
+    <p v-if="local_suggestions_enabled" class="form-text small text-muted mb-2">
+      Tiempo de espera antes de enviar: 0 = Claude responde automáticamente sin intervención humana. Mayor a 0 = el
+      operador tiene ese tiempo para revisar y editar antes de que se envíe. Si el operador responde manualmente antes
+      de que se cumpla el tiempo, se cancela el envío automático.
     </p>
 
     <p v-if="loading" class="text-muted small mt-2 mb-0">Cargando…</p>
@@ -59,7 +77,7 @@
 import api from '@/utils/axios'
 
 /**
- * Sección en Cuenta: sugerencias IA automáticas y demora de envío en soporte WhatsApp.
+ * Sección en Cuenta: sugerencias IA automáticas, debounce previo a Claude y demora de envío en soporte WhatsApp.
  */
 export default {
   name: 'SupportAiSettingsSection',
@@ -67,10 +85,13 @@ export default {
     return {
       /** Checkbox: sugerencias automáticas activas. */
       local_suggestions_enabled: false,
-      /** Segundos antes del envío automático (0 = inmediato). */
+      /** Segundos de inactividad del cliente antes de consultar a Claude. */
+      local_suggestion_delay: 0,
+      /** Segundos antes del envío automático de la sugerencia generada (0 = inmediato). */
       local_auto_send_delay: 0,
       /** Valores persistidos en servidor. */
       stored_suggestions_enabled: false,
+      stored_suggestion_delay: 0,
       stored_auto_send_delay: 0,
       /** Carga inicial GET settings. */
       loading: true,
@@ -84,7 +105,7 @@ export default {
   },
   computed: {
     /**
-     * Habilita guardar solo si hubo cambios y el delay está en rango cuando aplica.
+     * Habilita guardar solo si hubo cambios y los delays están en rango cuando aplica.
      *
      * @returns {boolean}
      */
@@ -93,13 +114,16 @@ export default {
         if (!this.local_suggestions_enabled) {
           return true
         }
-        return this.is_delay_valid()
+        return this.is_suggestion_delay_valid() && this.is_auto_send_delay_valid()
       }
       if (!this.local_suggestions_enabled) {
         return false
       }
-      if (this.local_auto_send_delay !== this.stored_auto_send_delay) {
-        return this.is_delay_valid()
+      if (
+        this.local_suggestion_delay !== this.stored_suggestion_delay ||
+        this.local_auto_send_delay !== this.stored_auto_send_delay
+      ) {
+        return this.is_suggestion_delay_valid() && this.is_auto_send_delay_valid()
       }
       return false
     },
@@ -109,11 +133,20 @@ export default {
   },
   methods: {
     /**
-     * Valida delay entre 0 y 3600.
+     * Valida demora previa a Claude entre 0 y 3600.
      *
      * @returns {boolean}
      */
-    is_delay_valid() {
+    is_suggestion_delay_valid() {
+      const value = parseInt(this.local_suggestion_delay, 10)
+      return !isNaN(value) && value >= 0 && value <= 3600
+    },
+    /**
+     * Valida delay de auto-envío entre 0 y 3600.
+     *
+     * @returns {boolean}
+     */
+    is_auto_send_delay_valid() {
       const value = parseInt(this.local_auto_send_delay, 10)
       return !isNaN(value) && value >= 0 && value <= 3600
     },
@@ -131,12 +164,17 @@ export default {
         .then(function (res) {
           const data = res.data || {}
           const enabled = !!data.suggestions_enabled
-          const delay = parseInt(data.auto_send_delay, 10)
+          const suggestion_delay = parseInt(data.suggestion_delay, 10)
+          const auto_send_delay = parseInt(data.auto_send_delay, 10)
           self.local_suggestions_enabled = enabled
           self.stored_suggestions_enabled = enabled
-          if (!isNaN(delay)) {
-            self.local_auto_send_delay = delay
-            self.stored_auto_send_delay = delay
+          if (!isNaN(suggestion_delay)) {
+            self.local_suggestion_delay = suggestion_delay
+            self.stored_suggestion_delay = suggestion_delay
+          }
+          if (!isNaN(auto_send_delay)) {
+            self.local_auto_send_delay = auto_send_delay
+            self.stored_auto_send_delay = auto_send_delay
           }
         })
         .catch(function () {
@@ -153,9 +191,14 @@ export default {
      */
     on_save() {
       const self = this
-      const delay = parseInt(self.local_auto_send_delay, 10)
-      if (self.local_suggestions_enabled && (isNaN(delay) || delay < 0 || delay > 3600)) {
-        self.error_message = 'El tiempo de espera debe estar entre 0 y 3600 segundos.'
+      const suggestion_delay = parseInt(self.local_suggestion_delay, 10)
+      const auto_send_delay = parseInt(self.local_auto_send_delay, 10)
+      if (self.local_suggestions_enabled && !self.is_suggestion_delay_valid()) {
+        self.error_message = 'La demora antes de pedir sugerencia IA debe estar entre 0 y 3600 segundos.'
+        return
+      }
+      if (self.local_suggestions_enabled && !self.is_auto_send_delay_valid()) {
+        self.error_message = 'El tiempo de espera antes de enviar debe estar entre 0 y 3600 segundos.'
         return
       }
       self.saving = true
@@ -164,16 +207,22 @@ export default {
       api
         .put('/settings/support-ai', {
           suggestions_enabled: self.local_suggestions_enabled,
-          auto_send_delay: self.local_suggestions_enabled ? delay : self.stored_auto_send_delay,
+          suggestion_delay: self.local_suggestions_enabled ? suggestion_delay : self.stored_suggestion_delay,
+          auto_send_delay: self.local_suggestions_enabled ? auto_send_delay : self.stored_auto_send_delay,
         })
         .then(function (res) {
           const data = res.data || {}
           self.local_suggestions_enabled = !!data.suggestions_enabled
           self.stored_suggestions_enabled = self.local_suggestions_enabled
-          const saved_delay = parseInt(data.auto_send_delay, 10)
-          if (!isNaN(saved_delay)) {
-            self.local_auto_send_delay = saved_delay
-            self.stored_auto_send_delay = saved_delay
+          const saved_suggestion_delay = parseInt(data.suggestion_delay, 10)
+          const saved_auto_send_delay = parseInt(data.auto_send_delay, 10)
+          if (!isNaN(saved_suggestion_delay)) {
+            self.local_suggestion_delay = saved_suggestion_delay
+            self.stored_suggestion_delay = saved_suggestion_delay
+          }
+          if (!isNaN(saved_auto_send_delay)) {
+            self.local_auto_send_delay = saved_auto_send_delay
+            self.stored_auto_send_delay = saved_auto_send_delay
           }
           self.saved_message = 'Configuración guardada.'
         })

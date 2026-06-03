@@ -187,6 +187,7 @@ export default {
   },
   mounted() {
     const self = this
+    this.$store.commit(this.model_name + '/set_loading', true)
     this.$store
       .dispatch('meta/fetch_meta', this.model_name)
       .then(function (data) {
@@ -198,6 +199,7 @@ export default {
         return self.$store.dispatch(self.model_name + '/get_models')
       })
       .catch(function () {
+        self.$store.commit(self.model_name + '/set_loading', false)
         return null
       })
   },

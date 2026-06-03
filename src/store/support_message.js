@@ -174,6 +174,22 @@ export default {
         }
       }
     },
+    /**
+     * Quita un mensaje del hilo (borrador IA descartado vía Pusher).
+     */
+    remove_model_by_id(state, message_id) {
+      if (message_id == null) {
+        return
+      }
+      let idx = state.models.length - 1
+      while (idx >= 0) {
+        if (String(state.models[idx].id) === String(message_id)) {
+          state.models.splice(idx, 1)
+          return
+        }
+        idx = idx - 1
+      }
+    },
   },
   actions: {
     /**

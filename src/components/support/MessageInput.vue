@@ -53,20 +53,27 @@
       <!-- Botonera horizontal con iconos y tooltips -->
       <div class="support-input-toolbar">
         <div class="support-input-toolbar-actions">
-          <button
-            type="button"
-            class="btn btn-outline-primary btn-sm support-input-icon-btn"
-            :disabled="!can_send || !ticket_id || loading_suggestion"
-            title="Sugerencia IA"
-            aria-label="Sugerencia IA"
-            @click="request_suggestion">
-            <span
-              v-if="loading_suggestion"
-              class="spinner-border spinner-border-sm"
-              role="status"
-              aria-hidden="true" />
-            <i v-else class="bi bi-stars" aria-hidden="true" />
-          </button>
+          <border-progress-wrap
+            :active="ai_consult_timer_active"
+            :duration_seconds="ai_consult_duration_seconds"
+            :elapsed_seconds="ai_consult_elapsed_seconds"
+            :animation_key="ai_consult_animation_key"
+            variant="button">
+            <button
+              type="button"
+              class="btn btn-outline-primary btn-sm support-input-icon-btn"
+              :disabled="!can_send || !ticket_id || loading_suggestion || ai_generating"
+              title="Sugerencia IA"
+              aria-label="Sugerencia IA"
+              @click="request_suggestion">
+              <span
+                v-if="loading_suggestion || ai_generating"
+                class="spinner-border spinner-border-sm"
+                role="status"
+                aria-hidden="true" />
+              <i v-else class="bi bi-stars" aria-hidden="true" />
+            </button>
+          </border-progress-wrap>
           <!-- Botón de grabación: rojo mientras graba; muestra tiempo en tooltip -->
           <button
             type="button"
@@ -119,12 +126,14 @@
 
 <script>
 import ImageAnnotationEditor from '@/components/support/ImageAnnotationEditor.vue'
+import BorderProgressWrap from '@/components/support/BorderProgressWrap.vue'
 import api from '@/utils/axios'
 
 export default {
   name: 'SupportMessageInput',
   components: {
     ImageAnnotationEditor,
+    BorderProgressWrap,
   },
   emits: ['send-message', 'suggested-title'],
   props: {
@@ -133,6 +142,10 @@ export default {
     ticket_id: { type: [Number, String], default: null },
     /** ISO8601 del envío automático programado (null si no hay timer). */
     ai_suggestion_send_at: { type: String, default: null },
+    /** Timer activo del debounce antes de consultar a Claude. */
+    ai_consult_timer: { type: Object, default: null },
+    /** true mientras el backend consulta a Claude tras el debounce. */
+    ai_generating: { type: Boolean, default: false },
   },
   data() {
     return {
@@ -218,6 +231,49 @@ export default {
         navigator.mediaDevices &&
         typeof navigator.mediaDevices.getUserMedia === 'function'
       )
+    },
+    /**
+     * Indica si debe animarse el borde del botón IA (debounce previo a Claude).
+     *
+     * @returns {boolean}
+     */
+    ai_consult_timer_active() {
+      return !!(this.ai_consult_timer && this.ai_consult_timer.active)
+    },
+    /**
+     * Duración total del debounce en segundos.
+     *
+     * @returns {number}
+     */
+    ai_consult_duration_seconds() {
+      if (!this.ai_consult_timer) {
+        return 0
+      }
+      return parseFloat(this.ai_consult_timer.delay_seconds) || 0
+    },
+    /**
+     * Segundos ya transcurridos del debounce (para reanudar animación).
+     *
+     * @returns {number}
+     */
+    ai_consult_elapsed_seconds() {
+      if (!this.ai_consult_timer) {
+        return 0
+      }
+      return parseFloat(this.ai_consult_timer.elapsed_seconds) || 0
+    },
+    /**
+     * Key que reinicia la animación cuando el debounce se reprograma.
+     *
+     * @returns {string|number}
+     */
+    ai_consult_animation_key() {
+      if (!this.ai_consult_timer) {
+        return '0'
+      }
+      return this.ai_consult_timer.schedule_token != null
+        ? this.ai_consult_timer.schedule_token
+        : '0'
     },
   },
   methods: {

@@ -20,10 +20,14 @@
             v-if="!r.meta || !r.meta.disabled"
             :key="'nav-' + r.path"
             class="nav-link text-white py-1 px-2 rounded d-flex align-items-center flex-wrap"
-            :class="{ 'justify-content-center': collapsed && !is_mobile_viewport }"
-            active-class="bg-primary fw-semibold"
+            :class="[
+              { 'justify-content-center': collapsed && !is_mobile_viewport },
+              { 'bg-primary fw-semibold': is_nav_item_active(r) },
+            ]"
+            active-class=""
             :to="r.path"
             :title="nav_link_title(r)"
+            @mouseenter="on_nav_link_hover(r)"
             @click="on_nav_link_click(r)"
           >
             <i :class="[icon(r), 'nav-link-icon', { 'me-1': show_nav_labels }]" />
@@ -111,7 +115,7 @@
 </template>
 
 <script>
-import routes from '@/router/routes'
+import routes, { prefetch_route_component } from '@/router/routes'
 import { useSupportBadgeSocket } from '@/composables/useSupportBadgeSocket'
 import { useLeadSocket } from '@/composables/useLeadSocket'
 
@@ -249,6 +253,22 @@ export default {
       return r.text || ''
     },
     /**
+     * Resalta el ítem activo de inmediato (pending_nav_path) o según la ruta confirmada.
+     *
+     * @param {object} r Definición de ruta del menú
+     * @returns {boolean}
+     */
+    is_nav_item_active(r) {
+      if (!r || !r.path) {
+        return false
+      }
+      const pending_path = this.$store.state.general.pending_nav_path
+      if (pending_path && pending_path === r.path) {
+        return true
+      }
+      return this.$route.path === r.path
+    },
+    /**
      * Solicita a App.vue alternar el estado colapsado (solo desktop).
      */
     on_toggle_collapsed() {
@@ -270,9 +290,22 @@ export default {
       if (this.is_mobile_viewport) {
         this.on_close_mobile()
       }
+      if (r && r.path) {
+        this.$store.commit('general/set_pending_nav_path', r.path)
+      }
       if (r && r.name && this.$route.name === r.name) {
+        this.$store.commit('general/set_route_navigating', true)
         this.$store.commit('general/bump_route_reload', r.name)
       }
+    },
+    /**
+     * Precarga el chunk de la vista al pasar el mouse (reduce demora al hacer clic).
+     *
+     * @param {object} r Definición de ruta del menú
+     * @returns {void}
+     */
+    on_nav_link_hover(r) {
+      prefetch_route_component(r)
     },
     /**
      * Cierra listeners Pusher de badge de soporte y limpia referencia.

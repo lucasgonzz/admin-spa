@@ -64,6 +64,9 @@ export function useSupportSocket(options) {
   echo.channel(client_channel_name).listen('.SupportMessageRead', handle_read)
 
   const on_ai_suggestion_pending = options.on_ai_suggestion_pending
+  const on_ai_suggestion_scheduled = options.on_ai_suggestion_scheduled
+  const on_ai_suggestion_generating = options.on_ai_suggestion_generating
+  const on_message_removed = options.on_message_removed
   /**
    * Entrega sugerencia IA pendiente al panel de conversación.
    *
@@ -77,6 +80,49 @@ export function useSupportSocket(options) {
 
   if (on_ai_suggestion_pending) {
     echo.channel(client_channel_name).listen('.SupportAiSuggestionPending', handle_ai_pending)
+  }
+
+  /**
+   * Debounce antes de consultar a Claude: reinicia animación del botón IA.
+   *
+   * @param {Object} event_data Payload del evento Pusher.
+   */
+  function handle_ai_scheduled(event_data) {
+    if (on_ai_suggestion_scheduled && event_data) {
+      on_ai_suggestion_scheduled(event_data)
+    }
+  }
+
+  /**
+   * Claude en curso: detiene animación de espera y muestra spinner en el botón.
+   *
+   * @param {Object} event_data Payload del evento Pusher.
+   */
+  function handle_ai_generating(event_data) {
+    if (on_ai_suggestion_generating && event_data) {
+      on_ai_suggestion_generating(event_data)
+    }
+  }
+
+  /**
+   * Elimina borrador obsoleto del hilo (p. ej. nuevo mensaje del cliente).
+   *
+   * @param {Object} event_data Payload del evento Pusher.
+   */
+  function handle_message_removed(event_data) {
+    if (on_message_removed && event_data) {
+      on_message_removed(event_data)
+    }
+  }
+
+  if (on_ai_suggestion_scheduled) {
+    echo.channel(client_channel_name).listen('.SupportAiSuggestionScheduled', handle_ai_scheduled)
+  }
+  if (on_ai_suggestion_generating) {
+    echo.channel(client_channel_name).listen('.SupportAiSuggestionGenerating', handle_ai_generating)
+  }
+  if (on_message_removed) {
+    echo.channel(client_channel_name).listen('.SupportMessageRemoved', handle_message_removed)
   }
 
   return {

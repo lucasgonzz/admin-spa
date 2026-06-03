@@ -52,6 +52,18 @@
       class="app-main-column flex-grow-1 d-flex flex-column min-vh-100 overflow-hidden"
       :class="{ 'app-main-column--mobile-topbar': show_nav && is_mobile_viewport }"
     >
+      <div
+        v-if="route_navigating"
+        class="app-route-loading"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+      >
+        <span class="spinner-border text-primary" aria-hidden="true" />
+        <span class="visually-hidden">Cargando vista…</span>
+        <p v-if="route_navigating_label" class="text-muted small mt-2 mb-0">{{ route_navigating_label }}</p>
+      </div>
+
       <main class="flex-grow-1 p-2 p-md-3 overflow-auto">
         <router-view :key="router_view_key" />
       </main>
@@ -126,17 +138,36 @@ export default {
       const reload_version = versions && versions[route_name] ? versions[route_name] : 0
       return route_name + '-' + String(reload_version)
     },
+    /**
+     * true mientras vue-router resuelve la navegación (chunk lazy + montaje inicial).
+     */
+    route_navigating() {
+      return this.$store.state.general.route_navigating
+    },
+    /**
+     * Etiqueta legible de la ruta destino durante la navegación (spinner global).
+     */
+    route_navigating_label() {
+      const pending_path = this.$store.state.general.pending_nav_path
+      const route_text = this.route_text_for_path(pending_path || this.$route.path)
+      if (!route_text) {
+        return 'Cargando…'
+      }
+      return 'Cargando ' + route_text + '…'
+    },
     current_route_text() {
+      const pending_path = this.$store.state.general.pending_nav_path
+      if (pending_path) {
+        const pending_text = this.route_text_for_path(pending_path)
+        if (pending_text) {
+          return pending_text
+        }
+      }
       const route_name = this.$route.name
       if (!route_name) {
         return 'ComercioCity'
       }
-      let matched_text = ''
-      routes.forEach(function (r) {
-        if (r.name === route_name && r.text) {
-          matched_text = r.text
-        }
-      })
+      const matched_text = this.route_text_for_name(route_name)
       if (matched_text) {
         return matched_text
       }
@@ -152,6 +183,20 @@ export default {
      */
     $route() {
       this.close_mobile_nav()
+    },
+    /**
+     * Recarga del mismo ítem del menú (bump_route_reload): vue-router no dispara afterEach;
+     * limpiamos el spinner cuando router-view remonta la vista.
+     */
+    router_view_key() {
+      if (!this.$store.state.general.route_navigating) {
+        return
+      }
+      const self = this
+      this.$nextTick(function () {
+        self.$store.commit('general/set_route_navigating', false)
+        self.$store.commit('general/set_pending_nav_path', null)
+      })
     },
     /**
      * Al pasar de móvil a desktop, resetea el drawer; al volver a móvil, fuerza cierre.
@@ -178,6 +223,42 @@ export default {
     this.teardown_nav_viewport_listener()
   },
   methods: {
+    /**
+     * Texto legible de una ruta por su path (menú lateral / spinner).
+     *
+     * @param {string|null|undefined} path
+     * @returns {string}
+     */
+    route_text_for_path(path) {
+      if (!path) {
+        return ''
+      }
+      let matched_text = ''
+      routes.forEach(function (r) {
+        if (r.path === path && r.text) {
+          matched_text = r.text
+        }
+      })
+      return matched_text
+    },
+    /**
+     * Texto legible de una ruta por su name.
+     *
+     * @param {string|null|undefined} route_name
+     * @returns {string}
+     */
+    route_text_for_name(route_name) {
+      if (!route_name) {
+        return ''
+      }
+      let matched_text = ''
+      routes.forEach(function (r) {
+        if (r.name === route_name && r.text) {
+          matched_text = r.text
+        }
+      })
+      return matched_text
+    },
     /**
      * Lee preferencia de menú contraído guardada en localStorage (solo desktop).
      */
@@ -308,6 +389,22 @@ export default {
 
 .app-bootstrap-loading {
   background-color: #f8f9fa;
+}
+
+.app-route-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 1020;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(248, 249, 250, 0.88);
+  pointer-events: none;
+}
+
+.app-main-column {
+  position: relative;
 }
 
 /* Barra superior fija en móvil: título de ruta a la izquierda, toggle menú a la derecha. */

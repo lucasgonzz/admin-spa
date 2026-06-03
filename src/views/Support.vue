@@ -43,6 +43,7 @@
           :messages="messages"
           :loading="messages_loading"
           :ticket_source="selected_ticket ? selected_ticket.source : null"
+          :now_tick="now_tick"
           @retry-message="on_retry_message" />
       </div>
       <div class="support-right-bottom flex-shrink-0">
@@ -51,6 +52,8 @@
           :can_send="can_send_message"
           :ticket_id="selected_ticket_id"
           :ai_suggestion_send_at="selected_ticket_ai_send_at"
+          :ai_consult_timer="active_ai_consult_timer_for_input"
+          :ai_generating="ai_generating_for_selected_ticket"
           @send-message="send_message"
           @suggested-title="apply_suggested_title" />
       </div>
@@ -122,6 +125,10 @@ export default {
       now_tick: Date.now(),
       /** Interval id del tick de badges. */
       now_tick_interval_id: null,
+      /** Estado del debounce previo a Claude por ticket (desde Pusher). */
+      ai_consult_timer: null,
+      /** Ticket cuyo job está consultando a Claude en este momento. */
+      ai_generating_ticket_id: null,
     }
   },
   computed: {
@@ -179,6 +186,42 @@ export default {
       return String(this.selected_ticket.ai_suggestion_send_at)
     },
     /**
+     * Timer de debounce antes de Claude para el ticket activo (animación del botón IA).
+     *
+     * @returns {Object|null}
+     */
+    active_ai_consult_timer_for_input() {
+      if (!this.ai_consult_timer || !this.selected_ticket_id) {
+        return null
+      }
+      if (String(this.ai_consult_timer.ticket_id) !== String(this.selected_ticket_id)) {
+        return null
+      }
+      const consult_ms = new Date(this.ai_consult_timer.consult_at).getTime()
+      const delay_seconds = parseFloat(this.ai_consult_timer.delay_seconds) || 0
+      const started_ms = consult_ms - delay_seconds * 1000
+      const elapsed_seconds = Math.max(0, (this.now_tick - started_ms) / 1000)
+      const still_active = !isNaN(consult_ms) && this.now_tick < consult_ms && !this.ai_generating_for_selected_ticket
+
+      return {
+        active: still_active,
+        delay_seconds: delay_seconds,
+        elapsed_seconds: elapsed_seconds,
+        schedule_token: this.ai_consult_timer.schedule_token,
+      }
+    },
+    /**
+     * Indica si Claude está generando sugerencia para el ticket abierto.
+     *
+     * @returns {boolean}
+     */
+    ai_generating_for_selected_ticket() {
+      if (!this.ai_generating_ticket_id || !this.selected_ticket_id) {
+        return false
+      }
+      return String(this.ai_generating_ticket_id) === String(this.selected_ticket_id)
+    },
+    /**
      * UUID del Client (tenant) del ticket abierto: habilita canal support.client.* en Pusher.
      */
     support_socket_client_uuid() {
@@ -222,7 +265,7 @@ export default {
     this.load_support_alert_minutes()
     this.now_tick_interval_id = window.setInterval(function () {
       self.now_tick = Date.now()
-    }, 60000)
+    }, 250)
     this.$store.dispatch('support_ticket/get_models').then(function () {
       if (self.tickets.length) {
         self.select_ticket(self.tickets[0].id)
@@ -365,6 +408,9 @@ export default {
             return
           }
           if (message) {
+            if (message.is_ai_suggestion_draft) {
+              self.ai_generating_ticket_id = null
+            }
             self.$store.commit('support_message/add_model', message)
           }
         },
@@ -389,7 +435,46 @@ export default {
           if (String(payload.ticket_id) !== String(self.selected_ticket_id)) {
             return
           }
+          self.ai_generating_ticket_id = null
           self.sync_ai_pending_to_input(payload.ai_pending_suggestion)
+        },
+        on_ai_suggestion_scheduled(payload) {
+          if (!payload || !payload.ticket_id) {
+            return
+          }
+          self.ai_consult_timer = {
+            ticket_id: payload.ticket_id,
+            delay_seconds: parseFloat(payload.delay_seconds) || 0,
+            consult_at: payload.consult_at,
+            schedule_token: payload.schedule_token,
+          }
+          if (String(payload.ticket_id) === String(self.selected_ticket_id)) {
+            self.ai_generating_ticket_id = null
+          }
+        },
+        on_ai_suggestion_generating(payload) {
+          if (!payload || !payload.ticket_id) {
+            return
+          }
+          if (String(payload.ticket_id) === String(self.selected_ticket_id)) {
+            self.ai_generating_ticket_id = payload.ticket_id
+          }
+          if (
+            self.ai_consult_timer &&
+            String(self.ai_consult_timer.ticket_id) === String(payload.ticket_id)
+          ) {
+            self.ai_consult_timer = null
+          }
+        },
+        on_message_removed(payload) {
+          if (!payload || payload.message_id == null) {
+            return
+          }
+          const active_id = self.$store.state.support_message.active_ticket_id
+          if (payload.ticket_id && active_id && String(payload.ticket_id) !== String(active_id)) {
+            return
+          }
+          self.$store.commit('support_message/remove_model_by_id', payload.message_id)
         },
       })
     },
@@ -399,6 +484,8 @@ export default {
     select_ticket(ticket_id) {
       const self = this
       this.selected_ticket_id = ticket_id
+      this.ai_consult_timer = null
+      this.ai_generating_ticket_id = null
       this.$store.dispatch('support_message/load_ticket_messages', ticket_id)
       const ticket = this.tickets.find((t) => t.id == ticket_id)
       if (ticket) {
@@ -432,6 +519,8 @@ export default {
      */
     deselect_ticket() {
       this.selected_ticket_id = null
+      this.ai_consult_timer = null
+      this.ai_generating_ticket_id = null
       this.ticket_name_draft = ''
       this.ticket_status_draft = 'open'
       this.assigned_admin_id = this.current_admin_id

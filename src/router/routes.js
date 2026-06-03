@@ -1,7 +1,7 @@
 /**
  * Rutas y metadatos del menú lateral.
  */
-export default [
+const routes_def = [
   // {
   //   path: '/',
   //   name: 'home',
@@ -90,3 +90,18 @@ export default [
     meta: { guest: true, nav: false },
   },
 ]
+
+export default routes_def
+
+/**
+ * Precarga el chunk lazy de una ruta (p. ej. al pasar el mouse por el menú lateral).
+ *
+ * @param {object|null} route_def Definición de ruta de routes.js
+ * @returns {void}
+ */
+export function prefetch_route_component(route_def) {
+  if (!route_def || typeof route_def.component !== 'function') {
+    return
+  }
+  route_def.component()
+}
