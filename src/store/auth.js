@@ -1,0 +1,142 @@
+/**
+ * Sesión admin: token Sanctum + perfil mínimo.
+ */
+import api from '@/utils/axios'
+import { log_debug } from '@/utils/logger'
+
+const state = {
+  admin: null,
+  token: null,
+  loading: false,
+  /** false hasta validar token en storage y resolver /me si corresponde. */
+  session_ready: false,
+}
+
+/** Promesa compartida para no ejecutar bootstrap en paralelo (main + guard). */
+let bootstrap_promise = null
+
+const mutations = {
+  set_admin(s, v) {
+    s.admin = v
+  },
+  set_token(s, v) {
+    s.token = v
+    if (v) {
+      window.localStorage.setItem('admin_token', v)
+    } else {
+      window.localStorage.removeItem('admin_token')
+    }
+  },
+  set_loading(s, v) {
+    s.loading = v
+  },
+  set_session_ready(s, v) {
+    s.session_ready = !!v
+  },
+}
+
+const actions = {
+  init_from_storage({ commit }) {
+    const t = window.localStorage.getItem('admin_token')
+    if (t) {
+      commit('set_token', t)
+    }
+  },
+  /**
+   * Arranque de sesión: lee token local y valida con /me antes de mostrar la app.
+   * Idempotente; reutiliza la misma promesa si se invoca más de una vez.
+   *
+   * @returns {Promise<void>}
+   */
+  bootstrap({ commit, dispatch, state }) {
+    if (state.session_ready) {
+      return Promise.resolve()
+    }
+    if (bootstrap_promise) {
+      return bootstrap_promise
+    }
+    bootstrap_promise = dispatch('init_from_storage')
+      .then(function () {
+        if (!state.token) {
+          return null
+        }
+        return dispatch('me').catch(function () {
+          return null
+        })
+      })
+      .finally(function () {
+        commit('set_session_ready', true)
+      })
+    return bootstrap_promise
+  },
+  login({ commit }, { email, password }) {
+    commit('set_loading', true)
+    return api
+      .post('/login', { email, password })
+      .then((res) => {
+        commit('set_token', res.data.token)
+        commit('set_admin', res.data.admin)
+        commit('set_loading', false)
+        return res.data
+      })
+      .catch((err) => {
+        commit('set_loading', false)
+        log_debug(err)
+        throw err
+      })
+  },
+  logout({ commit }) {
+    return api
+      .post('/logout')
+      .then(() => {
+        commit('set_token', null)
+        commit('set_admin', null)
+      })
+      .catch(() => {
+        commit('set_token', null)
+        commit('set_admin', null)
+      })
+  },
+  me({ commit }) {
+    return api
+      .get('/me')
+      .then((res) => {
+        commit('set_admin', res.data.admin)
+        return res.data.admin
+      })
+      .catch((err) => {
+        log_debug(err)
+        commit('set_token', null)
+        commit('set_admin', null)
+        throw err
+      })
+  },
+  /**
+   * Persiste preferencias del perfil del admin autenticado.
+   * Acepta is_default_support_owner y/o is_default_task_assignee.
+   * Solo se envían los campos presentes en el payload.
+   *
+   * @param {Object} payload  Puede contener { is_default_support_owner, is_default_task_assignee }
+   * @returns {Promise}
+   */
+  update_profile({ commit }, payload) {
+    return api
+      .put('/me', payload)
+      .then((res) => {
+        commit('set_admin', res.data.admin)
+        return res.data.admin
+      })
+  },
+}
+
+const getters = {
+  authenticated: (s) => !!s.token && !!s.admin,
+}
+
+export default {
+  namespaced: true,
+  state,
+  mutations,
+  actions,
+  getters,
+}

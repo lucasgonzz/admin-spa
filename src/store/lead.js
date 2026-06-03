@@ -1,0 +1,438 @@
+import __base_store from '@/common-vue/store/__base_store'
+import api from '@/utils/axios'
+
+/**
+ * Fusiona mensajes del hilo conservando adjuntos si el payload nuevo no los trae.
+ *
+ * @param {Array<Object>} previous
+ * @param {Array<Object>} incoming
+ * @returns {Array<Object>}
+ */
+function merge_lead_messages_preserving_attachments(previous, incoming) {
+  const by_id = {}
+  let i = 0
+  for (i = 0; i < previous.length; i = i + 1) {
+    by_id[previous[i].id] = previous[i]
+  }
+  const merged = []
+  for (i = 0; i < incoming.length; i = i + 1) {
+    const msg = incoming[i]
+    const old = by_id[msg.id]
+    if (!old) {
+      merged.push(msg)
+      continue
+    }
+    const row = Object.assign({}, old, msg)
+    if (
+      old.attachments &&
+      old.attachments.length &&
+      (!msg.attachments || !msg.attachments.length)
+    ) {
+      row.attachments = old.attachments
+    }
+    merged.push(row)
+  }
+  return merged
+}
+
+export default __base_store({
+  state: {
+    model_name: 'lead',
+    use_per_page: true,
+    per_page: 50,
+    /** Lead abierto en la pestaña de conversación (para refrescar listas coherentes). */
+    lead_en_conversacion: null,
+    /** Indica llamada en curso a Claude al agregar mensaje del lead. */
+    loading_ai: false,
+    /** Último error de IA (mensaje legible para la UI). */
+    ai_error: null,
+    /** Total global de mensajes del lead sin leer (badge menú Leads). */
+    unread_total: 0,
+    /** Id de lead con GET conversación en curso (evita duplicados). */
+    _conversation_fetch_in_flight: null,
+  },
+  mutations: {
+    /**
+     * @param {Object} state
+     * @param {number|null} lead_id
+     */
+    set_conversation_fetch_in_flight(state, lead_id) {
+      state._conversation_fetch_in_flight = lead_id
+    },
+    /**
+     * @param {Object} state
+     * @param {Object|null} value modelo lead o null
+     */
+    set_lead_en_conversacion(state, value) {
+      state.lead_en_conversacion = value
+    },
+    /**
+     * @param {Object} state
+     * @param {boolean} value
+     */
+    set_loading_ai(state, value) {
+      state.loading_ai = Boolean(value)
+    },
+    /**
+     * @param {Object} state
+     * @param {string|null} value
+     */
+    set_ai_error(state, value) {
+      state.ai_error = value
+    },
+    /**
+     * Fusiona el lead en conversación si coincide el id (tras POST mensaje / aprobar / rechazar).
+     * @param {Object} state
+     * @param {Object} model lead devuelto por la API
+     */
+    update_lead_en_conversacion(state, model) {
+      if (!model || !model.id) {
+        return
+      }
+      if (state.lead_en_conversacion && state.lead_en_conversacion.id == model.id) {
+        const previous_messages = state.lead_en_conversacion.messages
+        state.lead_en_conversacion = Object.assign({}, state.lead_en_conversacion, model)
+        if (
+          previous_messages &&
+          previous_messages.length &&
+          (!model.messages || !model.messages.length)
+        ) {
+          state.lead_en_conversacion.messages = previous_messages
+        } else if (model.messages && model.messages.length && previous_messages && previous_messages.length) {
+          state.lead_en_conversacion.messages = merge_lead_messages_preserving_attachments(
+            previous_messages,
+            model.messages
+          )
+        }
+      }
+    },
+    /**
+     * @param {Object} state
+     * @param {number} value
+     */
+    set_unread_total(state, value) {
+      const n = parseInt(value, 10)
+      state.unread_total = isNaN(n) ? 0 : n
+    },
+    /**
+     * Agrega un mensaje al hilo abierto si no existe (evento Pusher).
+     *
+     * @param {Object} state
+     * @param {{ lead_id: number, message: Object }} payload
+     */
+    append_message_to_open_conversation(state, payload) {
+      if (!payload || !payload.message || !payload.lead_id) {
+        return
+      }
+      const conv = state.lead_en_conversacion
+      if (!conv || conv.id != payload.lead_id) {
+        return
+      }
+      const messages = conv.messages ? conv.messages.slice() : []
+      let exists = false
+      let i = 0
+      for (i = 0; i < messages.length; i = i + 1) {
+        if (messages[i].id == payload.message.id) {
+          exists = true
+          const previous = messages[i]
+          const incoming = payload.message
+          const merged = Object.assign({}, previous, incoming)
+          if (
+            previous.attachments &&
+            previous.attachments.length &&
+            (!incoming.attachments || !incoming.attachments.length)
+          ) {
+            merged.attachments = previous.attachments
+          }
+          messages[i] = merged
+          break
+        }
+      }
+      if (!exists) {
+        messages.push(payload.message)
+        messages.sort(function (a, b) {
+          return (a.id || 0) - (b.id || 0)
+        })
+      }
+      state.lead_en_conversacion = Object.assign({}, conv, { messages: messages })
+    },
+  },
+  actions: {
+    /**
+     * Fusiona fila en listados preservando `messages` si el payload de Pusher no los trae.
+     *
+     * @param {Object} context
+     * @param {Object} model
+     * @returns {void}
+     */
+    upsert_model_in_lists(context, model) {
+      if (!model || !model.id) {
+        return
+      }
+      const state = context.state
+      const commit = context.commit
+
+      const merge_lead_row = function (existing, incoming) {
+        const merged = Object.assign({}, existing || {}, incoming)
+        if (existing && existing.messages && existing.messages.length) {
+          if (!incoming.messages || !incoming.messages.length) {
+            merged.messages = existing.messages
+          }
+        }
+        return merged
+      }
+
+      const in_idx = state.models.findIndex(function (m) {
+        return m.id == model.id
+      })
+      const arr = state.models.slice()
+      if (in_idx === -1) {
+        arr.unshift(model)
+      } else {
+        arr.splice(in_idx, 1, merge_lead_row(arr[in_idx], model))
+      }
+      commit('set_models', arr)
+
+      if (state.is_filtered) {
+        const f_idx = state.filtered.findIndex(function (m) {
+          return m.id == model.id
+        })
+        const filtered_arr = state.filtered.slice()
+        if (f_idx === -1) {
+          filtered_arr.unshift(model)
+        } else {
+          filtered_arr.splice(f_idx, 1, merge_lead_row(filtered_arr[f_idx], model))
+        }
+        commit('set_filtered', filtered_arr)
+      }
+    },
+    /**
+     * Ejecuta envío de mail de presentación para un lead.
+     * @param {Object} context contexto del módulo Vuex.
+     * @param {number} lead_id identificador del lead.
+     * @returns {Promise<Object>} modelo actualizado devuelto por el backend.
+     */
+    send_presentation_mail(context, lead_id) {
+      return api.post('/lead/' + lead_id + '/send-presentation-mail').then((res) => {
+        return res.data.model
+      })
+    },
+    /**
+     * Ejecuta envío de mail de seguimiento para un lead.
+     * @param {Object} context contexto del módulo Vuex.
+     * @param {number} lead_id identificador del lead.
+     * @returns {Promise<Object>} modelo actualizado devuelto por el backend.
+     */
+    send_followup_mail(context, lead_id) {
+      return api.post('/lead/' + lead_id + '/send-followup-mail').then((res) => {
+        return res.data.model
+      })
+    },
+    /**
+     * Dispara el setup de demo en el sistema destino.
+     * @param {Object} context contexto del módulo Vuex.
+     * @param {number} lead_id identificador del lead.
+     * @returns {Promise<Object>} modelo actualizado devuelto por el backend.
+     */
+    run_demo_setup(context, lead_id) {
+      return api.post('/lead/' + lead_id + '/run-demo-setup').then((res) => {
+        return res.data.model
+      })
+    },
+    /**
+     * Promueve un lead a cliente de producción.
+     * @param {Object} context contexto del módulo Vuex.
+     * @param {{ lead_id: number, api_url: string }} payload datos de promoción.
+     * @returns {Promise<Object>} modelo actualizado devuelto por el backend.
+     */
+    promote_lead(context, payload) {
+      return api.post('/lead/' + payload.lead_id + '/promote', { api_url: payload.api_url }).then((res) => {
+        return res.data.model
+      })
+    },
+    /**
+     * Promueve el lead a Client de producción en admin-api y genera las tareas automáticas.
+     * No ejecuta el setup remoto del empresa-api; ese paso continúa siendo `run_user_setup`.
+     * @param {Object} context contexto del módulo Vuex.
+     * @param {number} lead_id identificador del lead.
+     * @returns {Promise<Object>} modelo actualizado devuelto por el backend.
+     */
+    promote_to_client(context, lead_id) {
+      return api.post('/lead/' + lead_id + '/promote-to-client').then((res) => {
+        return res.data.model
+      })
+    },
+
+    /**
+     * Dispara el setup del sistema real para un lead promovido.
+     * @param {Object} context contexto del módulo Vuex.
+     * @param {number} lead_id identificador del lead.
+     * @returns {Promise<Object>} modelo actualizado devuelto por el backend.
+     */
+    run_user_setup(context, lead_id) {
+      return api.post('/lead/' + lead_id + '/run-user-setup').then((res) => {
+        return res.data.model
+      })
+    },
+    /**
+     * Envía el "Mail 1 - DEMO" al prospecto con sus credenciales y horario de demo.
+     * El backend valida que todos los campos obligatorios estén completos.
+     * @param {Object} context contexto del módulo Vuex.
+     * @param {number} lead_id identificador del lead.
+     * @returns {Promise<Object>} modelo actualizado devuelto por el backend.
+     */
+    send_demo_mail(context, lead_id) {
+      return api.post('/lead/' + lead_id + '/send-demo-mail').then((res) => {
+        return res.data.model
+      })
+    },
+    /**
+     * Agrega uno o varios mensajes pegados desde WhatsApp (lead/setter) y solicita sugerencia (Claude).
+     * @param {Object} context
+     * @param {{ lead_id: number, content: string }} payload
+     * @returns {Promise<Object>} modelo lead actualizado
+     */
+    store_message(context, payload) {
+      const commit = context.commit
+      commit('set_loading_ai', true)
+      commit('set_ai_error', null)
+      return api
+        .post('/lead/' + payload.lead_id + '/messages', { content: payload.content })
+        .then((res) => {
+          const model = res.data.model
+          commit('set_loading_ai', false)
+          commit('update_lead_en_conversacion', model)
+          return model
+        })
+        .catch((err) => {
+          commit('set_loading_ai', false)
+          const msg =
+            err && err.response && err.response.data && err.response.data.message
+              ? String(err.response.data.message)
+              : 'Error al generar sugerencia'
+          commit('set_ai_error', msg)
+          return Promise.reject(err)
+        })
+    },
+    /**
+     * Envía por WhatsApp un mensaje sugerido por IA (sin editar).
+     * @param {Object} context
+     * @param {number} message_id id de lead_messages
+     * @returns {Promise<Object>} modelo lead
+     */
+    approve_message(context, message_id) {
+      const commit = context.commit
+      return api.put('/lead-message/' + message_id + '/approve').then((res) => {
+        const model = res.data.model
+        commit('update_lead_en_conversacion', model)
+        return model
+      })
+    },
+    /**
+     * Envía por WhatsApp un mensaje sugerido guardando el texto editado por el setter.
+     * @param {Object} context
+     * @param {{ message_id: number, edited_content: string }} payload id y texto final
+     * @returns {Promise<Object>} modelo lead
+     */
+    approve_message_with_edit(context, payload) {
+      const commit = context.commit
+      return api
+        .put('/lead-message/' + payload.message_id + '/approve-with-edit', {
+          edited_content: payload.edited_content,
+        })
+        .then((res) => {
+          const model = res.data.model
+          commit('update_lead_en_conversacion', model)
+          return model
+        })
+    },
+    /**
+     * Rechaza un mensaje sugerido por IA.
+     * @param {Object} context
+     * @param {number} message_id id de lead_messages
+     * @returns {Promise<Object>} modelo lead
+     */
+    reject_message(context, message_id) {
+      const commit = context.commit
+      return api.put('/lead-message/' + message_id + '/reject').then((res) => {
+        const model = res.data.model
+        commit('update_lead_en_conversacion', model)
+        return model
+      })
+    },
+    /**
+     * Marca como vista la alerta de seguimiento automático en la tabla de leads.
+     * @param {Object} context
+     * @param {number} lead_id id del lead
+     * @returns {Promise<Object>} modelo lead actualizado
+     */
+    mark_followup_suggestion_seen(context, lead_id) {
+      const commit = context.commit
+      return api.post('/lead/' + lead_id + '/mark-followup-suggestion-seen').then((res) => {
+        const model = res.data.model
+        commit('update_lead_en_conversacion', model)
+        return model
+      })
+    },
+    /**
+     * GET totales de mensajes del lead sin leer (badge nav Leads).
+     *
+     * @param {Object} context
+     * @returns {Promise<number>}
+     */
+    fetch_unread_badges(context) {
+      const commit = context.commit
+      return api.get('/lead/unread-badges').then((res) => {
+        if (res.data && res.data.unread_total != null) {
+          commit('set_unread_total', res.data.unread_total)
+        }
+        return context.state.unread_total
+      })
+    },
+    /**
+     * Marca leídos los mensajes entrantes del lead y refresca modelo.
+     *
+     * @param {Object} context
+     * @param {number} lead_id
+     * @returns {Promise<Object>}
+     */
+    mark_whatsapp_messages_read(context, lead_id) {
+      const commit = context.commit
+      const dispatch = context.dispatch
+      return api.post('/lead/' + lead_id + '/mark-whatsapp-messages-read').then((res) => {
+        const model = res.data.model
+        commit('update_lead_en_conversacion', model)
+        return dispatch('fetch_unread_badges').then(function () {
+          return model
+        })
+      })
+    },
+    /**
+     * Carga lead completo con mensajes (conversación abierta tras evento sin message).
+     *
+     * @param {Object} context
+     * @param {number} lead_id
+     * @returns {Promise<Object>}
+     */
+    fetch_lead_for_conversation(context, lead_id) {
+      const commit = context.commit
+      const state = context.state
+      if (state._conversation_fetch_in_flight && state._conversation_fetch_in_flight == lead_id) {
+        return Promise.resolve(state.lead_en_conversacion)
+      }
+      context.commit('set_conversation_fetch_in_flight', lead_id)
+      return api
+        .get('/lead/' + lead_id)
+        .then((res) => {
+          const model = res.data.model
+          commit('set_lead_en_conversacion', model)
+          commit('set_conversation_fetch_in_flight', null)
+          return model
+        })
+        .catch((err) => {
+          commit('set_conversation_fetch_in_flight', null)
+          return Promise.reject(err)
+        })
+    },
+  },
+})

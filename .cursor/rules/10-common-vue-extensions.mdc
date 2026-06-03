@@ -1,0 +1,51 @@
+---
+description: Extensión de vistas con common-vue (admin-spa); props extra fuera de common-vue
+globs:
+  - admin-spa/src/common-vue/**/*
+  - admin-spa/src/components/**/*
+  - admin-spa/src/views/**/*
+alwaysApply: false
+---
+
+# common-vue y funcionalidad extra (admin-spa)
+
+## Qué vive en `src/common-vue`
+
+- Piezas **reutilizables y genéricas**: listado con tabla, filtros por columna, header de vista, modal CRUD con formulario según **meta** (`properties`), store base, etc.
+- **No** incluir lógica o UI específica de un dominio (p. ej. notificaciones de versión, seeders, flujos de un solo cliente).
+- **No** importar desde `common-vue` componentes bajo `src/components/{recurso}/`.
+
+## Dónde va lo “no estándar”
+
+- Bajo `src/components/{nombre_recurso}/`, en convención:
+  - **`src/components/{nombre_recurso}/extra-props/Index.vue`**
+- `{nombre_recurso}` debe alinearse con el **`model_name`** del store / `resource-view` (ej. `version` → carpeta `version`).
+
+## Cómo conectar el Extra al modal
+
+1. En la vista de la página (ej. `src/views/Versions.vue`), usar `resource-view` y el **slot con scope** `model-extra`.
+2. El slot recibe al menos: `draft`, `record`, `all_properties`, `model_name` (mismo contrato que expone `ModelModal`).
+3. El componente extra debe **mutar `draft`** en memoria; la persistencia sigue siendo el botón **Guardar** del modal (un solo POST/PUT).
+
+Ejemplo:
+
+```vue
+<resource-view model_name="version">
+  <template #model-extra="bind">
+    <version-extra-props v-bind="bind" />
+  </template>
+</resource-view>
+```
+
+## Backend
+
+- Si el Extra agrega campos o colecciones anidadas al `draft`, el **admin-api** debe aceptar y persistir ese contrato en el mismo guardado o en endpoints dedicados documentados.
+- No asumir que el JSON anidado se guarda sin lógica explícita en el controlador o servicio.
+
+## Resumen
+
+| Ubicación | Contenido |
+|-----------|-----------|
+| `common-vue` | Solo comportamiento estándar compartido entre recursos |
+| `src/components/{recurso}/extra-props/` | UI y reglas específicas del recurso para la pestaña Extra |
+| `src/views/*.vue` | Orquestación: `resource-view` + slot `model-extra` |

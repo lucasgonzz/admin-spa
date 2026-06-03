@@ -1,0 +1,37 @@
+// Estilos globales mínimos del admin SPA
+body
+  background-color: #f8f9fa
+
+// Sombra sutil en el contenedor (evita que el overflow de .table recorte el box-shadow).
+// No usar `> .table`: en ResourceTable la tabla va dentro de .position-relative (overlay loading).
+.table
+  box-shadow: rgba(99, 99, 99, 0.2) 0px 2px 8px 0px
+  border-radius: 7px
+
+// Estilo global de tablas del sistema:
+// - Cabeceras con color #444
+// - Esquinas redondeadas con radio de 7px
+.table
+  border-collapse: separate
+  border-spacing: 0
+  border-radius: 7px
+  overflow: hidden
+
+.table > thead > tr > th
+  background-color: #444 !important
+  color: #fff
+  border-color: #444
+
+.table > thead > tr:first-child > th:first-child
+  border-top-left-radius: 7px
+
+.table > thead > tr:first-child > th:last-child
+  border-top-right-radius: 7px
+
+.table > tbody > tr:last-child > td:first-child,
+.table > tbody > tr:last-child > th:first-child
+  border-bottom-left-radius: 7px
+
+.table > tbody > tr:last-child > td:last-child,
+.table > tbody > tr:last-child > th:last-child
+  border-bottom-right-radius: 7px
