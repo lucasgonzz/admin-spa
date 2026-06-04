@@ -64,7 +64,7 @@
         <p v-if="route_navigating_label" class="text-muted small mt-2 mb-0">{{ route_navigating_label }}</p>
       </div>
 
-      <main class="flex-grow-1 p-2 p-md-3 overflow-auto">
+      <main :class="main_content_class">
         <router-view :key="router_view_key" />
       </main>
     </div>
@@ -125,6 +125,17 @@ export default {
     },
     show_nav() {
       return this.$route.name !== 'login'
+    },
+    /**
+     * Clases del contenedor principal: sin padding en login para ocupar toda la pantalla.
+     *
+     * @returns {string}
+     */
+    main_content_class() {
+      if (this.$route.name === 'login') {
+        return 'flex-grow-1 overflow-auto app-main--login'
+      }
+      return 'flex-grow-1 p-2 p-md-3 overflow-auto'
     },
     /**
      * Texto de la ruta activa para la barra superior móvil (coincide con el menú lateral).
@@ -405,6 +416,13 @@ export default {
 
 .app-main-column {
   position: relative;
+}
+
+/* Login a pantalla completa: el layout interno centra la tarjeta sin márgenes del main. */
+.app-main--login {
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Barra superior fija en móvil: título de ruta a la izquierda, toggle menú a la derecha. */
