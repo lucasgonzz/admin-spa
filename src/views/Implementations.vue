@@ -316,7 +316,7 @@ export default {
       advancing_stage: false,
 
       /**
-       * Referencia al canal Pusher suscrito (private-admin).
+       * Referencia al canal Pusher suscrito (admin-implementations).
        * Se guarda para poder hacer leave() al desmontar la vista.
        */
       _pusher_channel: null,
@@ -633,11 +633,11 @@ export default {
     },
 
     // -------------------------------------------------------------------------
-    // Pusher: suscripción al canal private-admin
+    // Pusher: suscripción al canal admin-implementations
     // -------------------------------------------------------------------------
 
     /**
-     * Se suscribe al canal `private-admin` y registra el listener para
+     * Se suscribe al canal `admin-implementations` y registra el listener para
      * el evento `implementation.stage.completed`.
      *
      * Reutiliza la instancia global `window.admin_support_echo` creada en main.js.
@@ -656,7 +656,7 @@ export default {
       /**
        * Canal compartido del panel admin donde se emiten los eventos de implementación.
        */
-      const channel_name = 'private-admin'
+      const channel_name = 'admin-implementations'
       self._pusher_channel = echo.channel(channel_name)
 
       self._pusher_channel.listen('.implementation.stage.completed', function (event_data) {
@@ -665,7 +665,7 @@ export default {
     },
 
     /**
-     * Deja el canal `private-admin` y limpia la referencia local.
+     * Deja el canal `admin-implementations` y limpia la referencia local.
      *
      * @returns {void}
      */
@@ -676,7 +676,7 @@ export default {
         return
       }
 
-      echo.leave('private-admin')
+      echo.leave('admin-implementations')
       this._pusher_channel = null
     },
 
