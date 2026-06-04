@@ -120,7 +120,7 @@
               <!-- Ícono emoji según estado de la etapa -->
               <span class="impl-stage-icon flex-shrink-0">{{ stage_icon(stage.status) }}</span>
 
-              <div class="flex-grow-1">
+                <div class="flex-grow-1">
                 <!-- Número y nombre de la etapa desde config -->
                 <span class="fw-semibold small">
                   Etapa {{ stage.stage_number }}
@@ -142,6 +142,25 @@
                 <div v-if="stage.status === 'completed' && stage.completed_at" class="small text-muted">
                   Completada {{ format_date(stage.completed_at) }}
                 </div>
+
+                <!--
+                  Subetapas de la Etapa 1: se muestran cuando la etapa 1
+                  está en progreso o completada y tiene datos recolectados.
+                  Cada subetapa indica con ✅/⬜ si su campo fue completado.
+                -->
+                <div
+                  v-if="stage.stage_number === 1 && (stage.status === 'completed' || stage.status === 'in_progress') && stage.data"
+                  class="impl-stage-1-substeps mt-1"
+                >
+                  <div
+                    v-for="substep in stage_1_substeps_from(stage.data)"
+                    :key="substep.key"
+                    class="impl-stage-substep small"
+                    :class="{ 'text-muted': !substep.done }"
+                  >
+                    {{ substep.done ? '✅' : '⬜' }} {{ substep.label }}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -154,68 +173,87 @@
                 <dl class="row mb-0 small">
 
                   <!-- Nombre de empresa -->
-                  <template v-if="stage_1_data.company_name != null">
+                  <template v-if="'company_name' in stage_1_data">
                     <dt class="col-sm-4 text-muted">Empresa</dt>
                     <dd class="col-sm-8">{{ stage_1_data.company_name || '—' }}</dd>
                   </template>
 
-                  <!-- Listas de precios: sí/no + detalle si aplica -->
-                  <template v-if="stage_1_data.price_lists != null">
+                  <!--
+                    Listas de precios: sí/no según use_price_lists.
+                    Si es verdadero y existe price_lists, se muestra el detalle debajo.
+                  -->
+                  <template v-if="'use_price_lists' in stage_1_data">
                     <dt class="col-sm-4 text-muted">Listas de precios</dt>
                     <dd class="col-sm-8">
-                      <template v-if="is_truthy(stage_1_data.price_lists)">
-                        Sí
-                        <span v-if="stage_1_data.price_lists_detail" class="text-muted ms-1">
-                          — {{ stage_1_data.price_lists_detail }}
-                        </span>
-                      </template>
-                      <template v-else>No</template>
+                      {{ stage_1_data.use_price_lists ? 'Sí' : 'No' }}
+                      <div v-if="stage_1_data.use_price_lists && stage_1_data.price_lists" class="text-muted small mt-1">
+                        {{ stage_1_data.price_lists }}
+                      </div>
                     </dd>
                   </template>
 
-                  <!-- Depósitos: sí/no + nombres si aplica -->
-                  <template v-if="stage_1_data.deposits != null">
-                    <dt class="col-sm-4 text-muted">Depósitos</dt>
+                  <!--
+                    Depósitos/sucursales: sí/no según use_deposits.
+                    Si es verdadero y existe deposit_names, se muestran los nombres debajo.
+                  -->
+                  <template v-if="'use_deposits' in stage_1_data">
+                    <dt class="col-sm-4 text-muted">Depósitos/sucursales</dt>
                     <dd class="col-sm-8">
-                      <template v-if="is_truthy(stage_1_data.deposits)">
-                        Sí
-                        <span v-if="stage_1_data.deposits_names" class="text-muted ms-1">
-                          — {{ stage_1_data.deposits_names }}
-                        </span>
-                      </template>
-                      <template v-else>No</template>
+                      {{ stage_1_data.use_deposits ? 'Sí' : 'No' }}
+                      <div v-if="stage_1_data.use_deposits && stage_1_data.deposit_names" class="text-muted small mt-1">
+                        {{ stage_1_data.deposit_names }}
+                      </div>
                     </dd>
                   </template>
 
-                  <!-- Descuentos por método de pago -->
-                  <template v-if="stage_1_data.payment_method_discounts != null">
+                  <!--
+                    Descuentos por método de pago: se muestra el texto tal cual
+                    salvo que sea "no"/"No", en cuyo caso se muestra "No aplica".
+                  -->
+                  <template v-if="'payment_discounts' in stage_1_data">
                     <dt class="col-sm-4 text-muted">Descuentos por pago</dt>
-                    <dd class="col-sm-8">{{ stage_1_data.payment_method_discounts || '—' }}</dd>
+                    <dd class="col-sm-8">{{ payment_discounts_label(stage_1_data.payment_discounts) }}</dd>
                   </template>
 
-                  <!-- Empleados (texto libre) -->
-                  <template v-if="stage_1_data.employees != null">
+                  <!--
+                    Empleados: texto libre separado por saltos de línea.
+                    Se parsea y se muestra como lista de ítems con bullet, uno por línea.
+                    Solo se muestra si el campo existe y no está vacío.
+                  -->
+                  <template v-if="'employees' in stage_1_data && stage_1_data.employees">
                     <dt class="col-sm-4 text-muted">Empleados</dt>
-                    <dd class="col-sm-8">{{ stage_1_data.employees || '—' }}</dd>
+                    <dd class="col-sm-8">
+                      <ul class="mb-0 ps-3">
+                        <li v-for="(line, idx) in employees_lines(stage_1_data.employees)" :key="idx">{{ line }}</li>
+                      </ul>
+                    </dd>
                   </template>
 
-                  <!-- Logo recibido: sí/no -->
-                  <template v-if="stage_1_data.logo_received != null">
+                  <!-- Logo recibido: sí/no según logo_received === true -->
+                  <template v-if="'logo_received' in stage_1_data">
                     <dt class="col-sm-4 text-muted">Logo recibido</dt>
-                    <dd class="col-sm-8">{{ is_truthy(stage_1_data.logo_received) ? 'Sí' : 'No' }}</dd>
+                    <dd class="col-sm-8">{{ stage_1_data.logo_received === true ? 'Sí' : 'No' }}</dd>
                   </template>
 
-                  <!-- Cantidad en venta: preguntar / 1 unidad -->
-                  <template v-if="stage_1_data.sale_quantity != null">
+                  <!--
+                    Cantidad en venta: si true → "Preguntar cantidad";
+                    si false → "Agregar 1 unidad automáticamente".
+                  -->
+                  <template v-if="'ask_amount_in_vender' in stage_1_data">
                     <dt class="col-sm-4 text-muted">Cantidad en venta</dt>
-                    <dd class="col-sm-8">{{ stage_1_data.sale_quantity || '—' }}</dd>
+                    <dd class="col-sm-8">
+                      {{ stage_1_data.ask_amount_in_vender === true ? 'Preguntar cantidad' : 'Agregar 1 unidad automáticamente' }}
+                    </dd>
                   </template>
 
-                  <!-- Cuenta corriente por defecto: sí/no -->
-                  <template v-if="stage_1_data.default_current_account != null">
+                  <!--
+                    Cuenta corriente por defecto: si true → va a cc por defecto;
+                    si false → indicar manualmente.
+                  -->
+                  <template v-if="'default_cuenta_corriente' in stage_1_data">
                     <dt class="col-sm-4 text-muted">Cuenta corriente</dt>
                     <dd class="col-sm-8">
-                      {{ is_truthy(stage_1_data.default_current_account) ? 'Sí' : 'No' }}
+                      {{ stage_1_data.default_cuenta_corriente === true ? 'Sí, va a cuenta corriente por defecto' : 'No, indicar manualmente' }}
                     </dd>
                   </template>
 
@@ -723,6 +761,83 @@ export default {
     // -------------------------------------------------------------------------
 
     /**
+     * Construye el listado de subetapas de la Etapa 1 a partir de los datos recolectados.
+     *
+     * Cada subetapa indica si fue completada según la presencia o valor de su clave en `data`.
+     *
+     * @param {Object} data Objeto `stage.data` del stage con stage_number === 1.
+     * @returns {Array<{ key: string, label: string, done: boolean }>}
+     */
+    stage_1_substeps_from(data) {
+      if (!data) {
+        return []
+      }
+
+      return [
+        /* Listas de precios: completada si la clave existe en data */
+        { key: 'use_price_lists',        label: 'Listas de precios',       done: 'use_price_lists' in data },
+        /* Depósitos/sucursales: completada si la clave existe en data */
+        { key: 'use_deposits',           label: 'Depósitos/sucursales',    done: 'use_deposits' in data },
+        /* Método de pago: completada si la clave existe en data */
+        { key: 'payment_discounts',      label: 'Método de pago',          done: 'payment_discounts' in data },
+        /* Nombre de empresa: completada si la clave existe en data */
+        { key: 'company_name',           label: 'Nombre de empresa',       done: 'company_name' in data },
+        /* Empleados: completada si la clave existe y el valor no es vacío */
+        { key: 'employees',              label: 'Empleados',               done: 'employees' in data && data.employees !== null && data.employees !== '' },
+        /* Logo: completada solo si logo_received === true */
+        { key: 'logo_received',          label: 'Logo',                    done: data.logo_received === true },
+        /* Cantidad en venta: completada si la clave existe en data */
+        { key: 'ask_amount_in_vender',   label: 'Cantidad en venta',       done: 'ask_amount_in_vender' in data },
+        /* Cuenta corriente: completada si la clave existe en data */
+        { key: 'default_cuenta_corriente', label: 'Cuenta corriente',      done: 'default_cuenta_corriente' in data },
+      ]
+    },
+
+    /**
+     * Formatea el valor del campo `payment_discounts` para mostrar en la UI.
+     *
+     * Si el valor es "no" o "No" (en cualquier capitalización), devuelve "No aplica".
+     * De lo contrario devuelve el texto tal cual.
+     *
+     * @param {string|null} value Valor del campo payment_discounts.
+     * @returns {string}
+     */
+    payment_discounts_label(value) {
+      if (!value) {
+        return '—'
+      }
+
+      /** Versión normalizada para comparar sin distinción de mayúsculas. */
+      const normalized = String(value).toLowerCase().trim()
+
+      if (normalized === 'no') {
+        return 'No aplica'
+      }
+
+      return value
+    },
+
+    /**
+     * Separa el texto libre de empleados en líneas individuales para renderizado como lista.
+     *
+     * Divide por salto de línea y filtra líneas vacías para evitar ítems en blanco.
+     *
+     * @param {string} employees_text Texto libre con los empleados, separados por \n.
+     * @returns {string[]}
+     */
+    employees_lines(employees_text) {
+      if (!employees_text) {
+        return []
+      }
+
+      return String(employees_text).split('\n').filter(function (line) {
+        return line.trim() !== ''
+      })
+    },
+
+    // -------------------------------------------------------------------------
+
+    /**
      * Evalúa si un valor de campo de datos recolectados es equivalente a "sí/verdadero".
      *
      * Normaliza booleanos, strings "true"/"yes"/"1" y números distintos de cero.
@@ -827,6 +942,16 @@ export default {
   font-size: 1rem;
   width: 1.4rem;
   text-align: center;
+}
+
+/* Contenedor de subetapas de la Etapa 1, indentado bajo el nombre de la etapa */
+.impl-stage-1-substeps {
+  padding-left: 1.2rem;
+}
+
+/* Ítem individual de subetapa con pequeño espaciado vertical */
+.impl-stage-substep {
+  line-height: 1.5;
 }
 
 /* Separador visual de etapa entre grupos de mensajes */
