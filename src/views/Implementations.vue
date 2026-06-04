@@ -294,6 +294,103 @@
             </div>
           </template>
 
+          <!-- Sección: archivos recibidos en etapa 4 (si la etapa ya comenzó) -->
+          <template v-if="show_stage_4_panel">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h6 class="impl-section-title mb-0">Archivos recibidos (Etapa 4)</h6>
+              <span
+                v-if="stage_4_data && stage_4_data.files_confirmed_complete === true"
+                class="badge bg-success"
+              >
+                ✅ Cliente confirmó todos los archivos
+              </span>
+              <span v-else class="badge bg-warning text-dark">
+                ⏳ Esperando archivos
+              </span>
+            </div>
+            <div class="card mb-4">
+              <div class="card-body small">
+                <details
+                  v-for="category in stage_4_categories"
+                  :key="category.key"
+                  class="impl-stage4-category mb-3"
+                  open
+                >
+                  <summary class="fw-semibold mb-2">{{ category.label }}</summary>
+
+                  <!-- Estado de archivos por categoría -->
+                  <div class="mb-2">
+                    <span
+                      v-if="stage_4_category_state(category.files_key) === 'skipped'"
+                      class="badge bg-secondary"
+                    >
+                      Sin archivos
+                    </span>
+                    <span
+                      v-else-if="stage_4_category_state(category.files_key) === 'pending'"
+                      class="badge bg-secondary"
+                    >
+                      Pendiente
+                    </span>
+                    <template v-else>
+                      <span
+                        v-for="(file_item, file_idx) in stage_4_category_files_list(category.files_key)"
+                        :key="file_idx"
+                        class="badge bg-light text-dark border me-1 mb-1 impl-stage4-file-chip"
+                      >
+                        {{ file_item.filename || 'archivo' }}
+                        <span
+                          v-if="stage_4_import_status_label(category.key)"
+                          class="ms-1 impl-stage4-import-badge"
+                          :title="stage_4_import_error(category.key) || ''"
+                        >
+                          <span v-if="stage_4_import_status(category.key) === 'importing'">
+                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                            Importando...
+                          </span>
+                          <span v-else-if="stage_4_import_status(category.key) === 'success'">
+                            ✅ Importado
+                          </span>
+                          <span v-else-if="stage_4_import_status(category.key) === 'failed'">
+                            ❌ Error
+                            <span
+                              v-if="stage_4_import_error(category.key)"
+                              class="text-danger d-block small"
+                            >
+                              {{ stage_4_import_error(category.key) }}
+                            </span>
+                          </span>
+                        </span>
+                      </span>
+                    </template>
+                  </div>
+
+                  <!-- Resultado del análisis IA si existe -->
+                  <div
+                    v-if="stage_4_analysis(category.key)"
+                    class="text-muted impl-stage4-analysis"
+                  >
+                    <div>
+                      Registros detectados:
+                      <strong>{{ stage_4_analysis(category.key).record_count ?? '—' }}</strong>
+                    </div>
+                    <div v-if="stage_4_mapped_column_labels(category.key).length" class="mt-1">
+                      Columnas mapeadas:
+                      <ul class="mb-0 ps-3">
+                        <li
+                          v-for="(col_label, col_idx) in stage_4_mapped_column_labels(category.key)"
+                          :key="col_idx"
+                        >
+                          {{ col_label }}
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </details>
+              </div>
+            </div>
+          </template>
+
           </template>
 
           <!-- Conversación: mensajes WhatsApp (sin etapas ni datos recolectados) -->
@@ -358,6 +455,22 @@
 <script>
 import api from '@/utils/axios'
 
+/**
+ * Etiquetas en español de propiedades de sistema (mismo mapa que ImplementationImportService).
+ */
+const STAGE_4_PROPERTY_LABELS = {
+  nombre: 'Nombre',
+  codigo_de_barras: 'Código',
+  codigo_de_proveedor: 'Código de proveedor',
+  sku: 'SKU',
+  precio: 'Precio',
+  costo: 'Costo',
+  stock_actual: 'Stock',
+  descripcion: 'Descripción',
+  categoria: 'Categoría',
+  marca: 'Marca',
+}
+
 export default {
   name: 'ViewImplementations',
 
@@ -404,6 +517,15 @@ export default {
        * Se guarda para poder hacer leave() al desmontar la vista.
        */
       _pusher_channel: null,
+
+      /**
+       * Categorías de archivos de la Etapa 4 para el panel de resumen.
+       */
+      stage_4_categories: [
+        { key: 'articles', label: 'Artículos', files_key: 'articles_files' },
+        { key: 'clients', label: 'Clientes', files_key: 'clients_files' },
+        { key: 'suppliers', label: 'Proveedores', files_key: 'suppliers_files' },
+      ],
     }
   },
 
@@ -431,6 +553,49 @@ export default {
       })
 
       return found
+    },
+
+    /**
+     * Etapa 4 del detalle activo (in_progress o completed), si existe.
+     *
+     * @returns {Object|null}
+     */
+    stage_4_stage() {
+      if (!this.selected_implementation || !this.selected_implementation.stages) {
+        return null
+      }
+
+      let found = null
+
+      this.selected_implementation.stages.forEach(function (stage) {
+        if (stage.stage_number === 4 && stage.status !== 'pending') {
+          found = stage
+        }
+      })
+
+      return found
+    },
+
+    /**
+     * Data JSON de la etapa 4 para el panel de archivos.
+     *
+     * @returns {Object|null}
+     */
+    stage_4_data() {
+      if (!this.stage_4_stage || this.stage_4_stage.data == null) {
+        return null
+      }
+
+      return this.stage_4_stage.data
+    },
+
+    /**
+     * Muestra el bloque de archivos de etapa 4 cuando la etapa ya comenzó.
+     *
+     * @returns {boolean}
+     */
+    show_stage_4_panel() {
+      return this.stage_4_stage !== null
     },
   },
 
@@ -815,6 +980,10 @@ export default {
       self._pusher_channel.listen('.implementation.stage.completed', function (event_data) {
         self.on_stage_completed(event_data)
       })
+
+      self._pusher_channel.listen('.implementation.import.status_updated', function (event_data) {
+        self.on_import_status_updated(event_data)
+      })
     },
 
     /**
@@ -844,6 +1013,186 @@ export default {
      * @param {Object} event_data Payload del evento: { implementation_id, stage_number, client_name }.
      * @returns {void}
      */
+    /**
+     * Refresca el detalle cuando cambia import_status de la implementación abierta.
+     *
+     * @param {Object} event_data Payload: { implementation_id, category, status, error }.
+     * @returns {void}
+     */
+    on_import_status_updated(event_data) {
+      if (!event_data || !this.selected_id) {
+        return
+      }
+
+      if (this.selected_id == event_data.implementation_id) {
+        this.load_detail(this.selected_id)
+      }
+    },
+
+    /**
+     * Estado de archivos de una categoría: skipped | pending | files.
+     *
+     * @param {string} files_key articles_files | clients_files | suppliers_files.
+     * @returns {string}
+     */
+    stage_4_category_state(files_key) {
+      if (!this.stage_4_data) {
+        return 'pending'
+      }
+
+      const value = this.stage_4_data[files_key]
+
+      if (value === 'skipped') {
+        return 'skipped'
+      }
+
+      if (!value || !Array.isArray(value) || value.length === 0) {
+        return 'pending'
+      }
+
+      return 'files'
+    },
+
+    /**
+     * Lista de archivos de una categoría (array de objetos con filename).
+     *
+     * @param {string} files_key Clave en stage.data.
+     * @returns {Array}
+     */
+    stage_4_category_files_list(files_key) {
+      if (!this.stage_4_data) {
+        return []
+      }
+
+      const value = this.stage_4_data[files_key]
+
+      if (!Array.isArray(value)) {
+        return []
+      }
+
+      return value
+    },
+
+    /**
+     * Status de importación de una categoría desde import_status.
+     *
+     * @param {string} category articles | clients | suppliers.
+     * @returns {string|null}
+     */
+    stage_4_import_status(category) {
+      if (!this.stage_4_data || !this.stage_4_data.import_status) {
+        return null
+      }
+
+      const entry = this.stage_4_data.import_status[category]
+
+      if (!entry || !entry.status) {
+        return null
+      }
+
+      return entry.status
+    },
+
+    /**
+     * Etiqueta visible del estado de importación (solo importing, success, failed).
+     *
+     * @param {string} category articles | clients | suppliers.
+     * @returns {boolean}
+     */
+    stage_4_import_status_label(category) {
+      const status = this.stage_4_import_status(category)
+
+      return status === 'importing' || status === 'success' || status === 'failed'
+    },
+
+    /**
+     * Mensaje de error de importación de una categoría.
+     *
+     * @param {string} category articles | clients | suppliers.
+     * @returns {string|null}
+     */
+    stage_4_import_error(category) {
+      if (!this.stage_4_data || !this.stage_4_data.import_status) {
+        return null
+      }
+
+      const entry = this.stage_4_data.import_status[category]
+
+      if (!entry || !entry.error) {
+        return null
+      }
+
+      return entry.error
+    },
+
+    /**
+     * Bloque analysis_result de una categoría.
+     *
+     * @param {string} category articles | clients | suppliers.
+     * @returns {Object|null}
+     */
+    stage_4_analysis(category) {
+      if (!this.stage_4_data || !this.stage_4_data.analysis_result) {
+        return null
+      }
+
+      const result = this.stage_4_data.analysis_result[category]
+
+      if (!result) {
+        return null
+      }
+
+      return result
+    },
+
+    /**
+     * Etiqueta en español de una system_property del mapeo.
+     *
+     * @param {string} property_key Clave de propiedad en empresa-api.
+     * @returns {string}
+     */
+    stage_4_system_property_label(property_key) {
+      if (STAGE_4_PROPERTY_LABELS[property_key]) {
+        return STAGE_4_PROPERTY_LABELS[property_key]
+      }
+
+      return property_key.replace(/_/g, ' ')
+    },
+
+    /**
+     * Lista de etiquetas de columnas mapeadas para mostrar en el panel.
+     *
+     * @param {string} category articles | clients | suppliers.
+     * @returns {Array<string>}
+     */
+    stage_4_mapped_column_labels(category) {
+      const analysis = this.stage_4_analysis(category)
+
+      if (!analysis || !Array.isArray(analysis.column_mapping)) {
+        return []
+      }
+
+      const labels = []
+      const seen = {}
+
+      analysis.column_mapping.forEach(function (mapping_item) {
+        if (!mapping_item || !mapping_item.system_property) {
+          return
+        }
+
+        const key = mapping_item.system_property
+
+        if (seen[key]) {
+          return
+        }
+
+        seen[key] = true
+        labels.push(this.stage_4_system_property_label(key))
+      }.bind(this))
+
+      return labels
+    },
+
     on_stage_completed(event_data) {
       if (!event_data) {
         return
@@ -1181,5 +1530,23 @@ export default {
   margin-top: 3px;
   opacity: 0.7;
   text-align: right;
+}
+
+/* Bloque de categoría en panel Etapa 4 */
+.impl-stage4-category summary {
+  cursor: pointer;
+}
+
+.impl-stage4-file-chip {
+  font-weight: 500;
+}
+
+.impl-stage4-import-badge {
+  font-size: 0.75rem;
+}
+
+.impl-stage4-analysis {
+  border-top: 1px solid #e9ecef;
+  padding-top: 8px;
 }
 </style>
