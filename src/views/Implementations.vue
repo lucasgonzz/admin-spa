@@ -106,8 +106,40 @@
           </div>
         </div>
 
-        <!-- Cuerpo con scroll propio: etapas, datos y conversación -->
-        <div class="impl-right-body flex-grow-1 overflow-auto">
+        <!--
+          Navegación del detalle: alterna entre resumen (etapas + datos)
+          y conversación sin mezclar ambos en un único scroll largo.
+        -->
+        <div class="impl-right-nav flex-shrink-0">
+          <div class="impl-detail-tab-bar" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              class="impl-detail-tab-btn"
+              :class="{ 'impl-detail-tab-btn--active': detail_panel_tab === 'summary' }"
+              :aria-selected="detail_panel_tab === 'summary'"
+              @click="set_detail_panel_tab('summary')"
+            >
+              Resumen
+            </button>
+            <button
+              type="button"
+              role="tab"
+              class="impl-detail-tab-btn"
+              :class="{ 'impl-detail-tab-btn--active': detail_panel_tab === 'conversation' }"
+              :aria-selected="detail_panel_tab === 'conversation'"
+              @click="set_detail_panel_tab('conversation')"
+            >
+              Conversación
+            </button>
+          </div>
+        </div>
+
+        <!-- Cuerpo con scroll propio: contenido según pestaña activa -->
+        <div ref="impl_right_body" class="impl-right-body flex-grow-1 overflow-auto">
+
+          <!-- Resumen: etapas y datos recolectados (sin conversación) -->
+          <template v-if="detail_panel_tab === 'summary'">
 
           <!-- Sección: progreso visual de las 7 etapas -->
           <h6 class="impl-section-title">Etapas</h6>
@@ -262,7 +294,11 @@
             </div>
           </template>
 
-          <!-- Sección: conversación de mensajes WhatsApp del flujo -->
+          </template>
+
+          <!-- Conversación: mensajes WhatsApp (sin etapas ni datos recolectados) -->
+          <template v-if="detail_panel_tab === 'conversation'">
+
           <h6 class="impl-section-title">Conversación</h6>
 
           <!-- Sin mensajes -->
@@ -306,7 +342,11 @@
                 </div>
               </div>
             </template>
+            <!-- Ancla al pie del hilo para scrollIntoView tras renderizar mensajes -->
+            <div ref="conversation_scroll_end" class="impl-conversation-scroll-end" aria-hidden="true"></div>
           </div>
+
+          </template>
 
         </div>
       </template>
@@ -352,6 +392,12 @@ export default {
        * Indicador de operación en curso al avanzar manualmente de etapa.
        */
       advancing_stage: false,
+
+      /**
+       * Sección visible en el panel derecho del detalle: summary (etapas + datos)
+       * o conversation (mensajes WhatsApp).
+       */
+      detail_panel_tab: 'summary',
 
       /**
        * Referencia al canal Pusher suscrito (admin-implementations).
@@ -452,6 +498,8 @@ export default {
 
       this.selected_id = id
       this.selected_implementation = null
+      /* Al cambiar de implementación, mostrar primero el resumen de etapas. */
+      this.detail_panel_tab = 'summary'
       this.load_detail(id)
     },
 
@@ -475,7 +523,74 @@ export default {
         })
         .then(function () {
           self.detail_loading = false
+
+          /*
+           * Si el detalle se recargó estando en Conversación, bajar el scroll
+           * al último mensaje una vez visible el panel.
+           */
+          if (self.detail_panel_tab === 'conversation') {
+            self.schedule_scroll_conversation_to_bottom()
+          }
         })
+    },
+
+    /**
+     * Cambia la pestaña del detalle (resumen o conversación).
+     * En conversación, desplaza el scroll al último mensaje tras pintar el DOM.
+     *
+     * @param {string} tab Clave de pestaña: 'summary' | 'conversation'.
+     * @returns {void}
+     */
+    set_detail_panel_tab(tab) {
+      this.detail_panel_tab = tab
+
+      if (tab === 'conversation') {
+        this.schedule_scroll_conversation_to_bottom()
+      }
+    },
+
+    /**
+     * Programa el scroll al pie del hilo: nextTick + doble rAF por layout tardío.
+     *
+     * @returns {void}
+     */
+    schedule_scroll_conversation_to_bottom() {
+      const self = this
+
+      this.$nextTick(function () {
+        self.scroll_conversation_to_bottom()
+
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            self.scroll_conversation_to_bottom()
+          })
+        })
+      })
+    },
+
+    /**
+     * Desplaza el contenedor del detalle y el ancla al último mensaje visible.
+     *
+     * @returns {void}
+     */
+    scroll_conversation_to_bottom() {
+      if (this.detail_panel_tab !== 'conversation') {
+        return
+      }
+
+      /** Contenedor con overflow del panel derecho. */
+      const container = this.$refs.impl_right_body
+
+      if (container) {
+        container.scrollTop = container.scrollHeight
+      }
+
+      /** Marcador al final de la lista de burbujas. */
+      const anchor = this.$refs.conversation_scroll_end
+
+      if (anchor && typeof anchor.scrollIntoView === 'function') {
+        anchor.scrollIntoView({ block: 'end', inline: 'nearest' })
+      }
     },
 
     /**
@@ -917,6 +1032,68 @@ export default {
   border-bottom: 1px solid #e9ecef;
 }
 
+/*
+  Barra Resumen / Conversación: control segmentado plano, mismo azul que
+  btn-primary, badge "En progreso" y fila seleccionada del listado (#e7f1ff).
+*/
+.impl-right-nav {
+  padding: 10px 16px 12px;
+  background-color: #fff;
+  border-bottom: 1px solid #e9ecef;
+}
+
+/* Pista gris donde se deslizan las dos opciones (estilo pill, sin bordes de carpeta) */
+.impl-detail-tab-bar {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  background-color: #f1f3f5;
+  border-radius: 8px;
+}
+
+/* Botón de pestaña: inactivo en gris secundario como los títulos de sección */
+.impl-detail-tab-btn {
+  flex: 1 1 0;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25;
+  color: #6c757d;
+  background-color: transparent;
+  transition: color 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.impl-detail-tab-btn:hover:not(.impl-detail-tab-btn--active) {
+  color: #0d6efd;
+  background-color: #e7f1ff;
+}
+
+.impl-detail-tab-btn:focus,
+.impl-detail-tab-btn:focus-visible {
+  box-shadow: none;
+  outline: none;
+}
+
+.impl-detail-tab-btn:focus-visible {
+  outline: 2px solid #0d6efd;
+  outline-offset: 2px;
+}
+
+/* Activo: mismo relleno azul sólido que el botón Avanzar etapa y el badge de estado */
+.impl-detail-tab-btn--active {
+  color: #fff;
+  background-color: #0d6efd;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(13, 110, 253, 0.28);
+}
+
+.impl-detail-tab-btn--active:hover {
+  color: #fff;
+  background-color: #0b5ed7;
+}
+
 /* Cuerpo scrolleable del panel derecho */
 .impl-right-body {
   padding: 16px;
@@ -952,6 +1129,13 @@ export default {
 /* Ítem individual de subetapa con pequeño espaciado vertical */
 .impl-stage-substep {
   line-height: 1.5;
+}
+
+/* Marcador cero altura al final del hilo; scrollIntoView alinea al último mensaje */
+.impl-conversation-scroll-end {
+  height: 0;
+  width: 0;
+  overflow: hidden;
 }
 
 /* Separador visual de etapa entre grupos de mensajes */
