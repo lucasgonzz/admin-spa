@@ -49,15 +49,27 @@
       />
     </div>
 
-    <button
-      v-if="show_create_button"
-      type="button"
-      class="btn btn-primary btn-sm mt-3"
-      @click="on_create"
-    >
-      <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-      Agregar {{ singular_child_label() }}
-    </button>
+    <div class="d-flex flex-wrap gap-2 mt-3">
+      <button
+        v-if="show_create_button"
+        type="button"
+        class="btn btn-primary btn-sm"
+        @click="on_create"
+      >
+        <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+        Agregar {{ singular_child_label() }}
+      </button>
+      <button
+        v-if="show_sync_from_empresa_button"
+        type="button"
+        class="btn btn-success btn-sm"
+        :disabled="sync_from_empresa_loading || !parent_is_persisted"
+        @click="on_sync_from_empresa"
+      >
+        <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>
+        {{ sync_from_empresa_button_text }}
+      </button>
+    </div>
 
     <!-- Modal ampliado con la misma tabla -->
     <base-modal
@@ -74,15 +86,27 @@
         @row="on_row_click"
       />
 
-      <button
-        v-if="show_create_button"
-        type="button"
-        class="btn btn-primary btn-sm mt-3"
-        @click="on_create"
-      >
-        <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-        Agregar {{ singular_child_label() }}
-      </button>
+      <div class="d-flex flex-wrap gap-2 mt-3">
+        <button
+          v-if="show_create_button"
+          type="button"
+          class="btn btn-primary btn-sm"
+          @click="on_create"
+        >
+          <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+          Agregar {{ singular_child_label() }}
+        </button>
+        <button
+          v-if="show_sync_from_empresa_button"
+          type="button"
+          class="btn btn-success btn-sm"
+          :disabled="sync_from_empresa_loading || !parent_is_persisted"
+          @click="on_sync_from_empresa"
+        >
+          <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>
+          {{ sync_from_empresa_button_text }}
+        </button>
+      </div>
     </base-modal>
   </div>
 </template>
@@ -90,6 +114,8 @@
 <script>
 import ResourceTable from '@/common-vue/components/table/Index.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
+import api from '@/utils/axios'
+import { resolve_error_message } from '@/utils/axios'
 
 /**
  * Relación has_many embebida en formularios del admin-spa.
@@ -126,6 +152,8 @@ export default {
       loading_child_meta: false,
       /** Definición del modal hijo ya resuelta (no la Promise del dynamic import). */
       child_modal_component: null,
+      /** Indica petición de sincronización desde empresa-api en curso. */
+      sync_from_empresa_loading: false,
     }
   },
   computed: {
@@ -226,6 +254,34 @@ export default {
         return true
       }
       return Boolean(this.has_many_config.show_btn_create)
+    },
+    /**
+     * Configuración opcional de sincronización desde empresa-api (declarada en meta has_many).
+     * @returns {Object|null}
+     */
+    sync_from_empresa_config() {
+      const config = this.has_many_config.sync_from_empresa
+      if (!config || !config.api_path) {
+        return null
+      }
+      return config
+    },
+    /**
+     * Muestra el botón de sincronizar empleados desde empresa-api.
+     * @returns {boolean}
+     */
+    show_sync_from_empresa_button() {
+      return this.sync_from_empresa_config !== null
+    },
+    /**
+     * Texto del botón de sincronización (meta o valor por defecto).
+     * @returns {string}
+     */
+    sync_from_empresa_button_text() {
+      if (this.sync_from_empresa_config && this.sync_from_empresa_config.button_text) {
+        return this.sync_from_empresa_config.button_text
+      }
+      return 'Sincronizar desde empresa'
     },
   },
   mounted() {
@@ -432,6 +488,82 @@ export default {
      * @param {number|string} deleted_id identificador devuelto por el modal
      * @returns {void}
      */
+    /**
+     * Reemplaza la colección has_many del padre tras sincronizar desde empresa-api.
+     *
+     * @param {Array<Object>} employees filas devueltas por admin-api
+     * @returns {void}
+     */
+    apply_synced_employees(employees) {
+      const key = this.prop.key
+      if (!key) {
+        return
+      }
+      this.parent_model[key] = Array.isArray(employees) ? employees.slice() : []
+      this.$emit('modelSaved', null)
+    },
+    /**
+     * Arma la URL del endpoint de sincronización sustituyendo {parent} por el id/uuid del padre.
+     *
+     * @returns {string}
+     */
+    build_sync_from_empresa_path() {
+      const config = this.sync_from_empresa_config
+      if (!config) {
+        return ''
+      }
+      /** Plantilla de ruta desde meta (ej. client/{parent}/employees/sync-from-empresa). */
+      let path = String(config.api_path)
+      const parent_key = this.has_many_config.parent_route_key || 'id'
+      const parent = this.parent_model || {}
+      const parent_value = parent[parent_key]
+      path = path.replace('{parent}', String(parent_value))
+      if (path.indexOf('{') !== -1) {
+        return ''
+      }
+      return path.charAt(0) === '/' ? path : '/' + path
+    },
+    /**
+     * POST a admin-api para importar empleados desde el empresa-api del cliente.
+     *
+     * @returns {void}
+     */
+    on_sync_from_empresa() {
+      if (!this.parent_is_persisted) {
+        alert('Guarde el cliente antes de sincronizar empleados desde empresa.')
+        return
+      }
+      const sync_path = this.build_sync_from_empresa_path()
+      if (!sync_path) {
+        alert('No se pudo armar la ruta de sincronización.')
+        return
+      }
+      if (!confirm('¿Sincronizar empleados desde empresa-api? Se crearán contactos nuevos y se actualizarán los ya vinculados. Los creados manualmente en admin no se modifican.')) {
+        return
+      }
+      const self = this
+      self.sync_from_empresa_loading = true
+      api
+        .post(sync_path)
+        .then(function (res) {
+          /** Lista actualizada de client_employees. */
+          const employees = res.data && res.data.client_employees
+            ? res.data.client_employees
+            : (res.data && res.data.model && res.data.model.client_employees
+              ? res.data.model.client_employees
+              : [])
+          self.apply_synced_employees(employees)
+          const created = res.data && res.data.created != null ? res.data.created : 0
+          const updated = res.data && res.data.updated != null ? res.data.updated : 0
+          alert('Sincronización completada: ' + created + ' nuevo(s), ' + updated + ' actualizado(s).')
+        })
+        .catch(function (err) {
+          alert(resolve_error_message(err))
+        })
+        .then(function () {
+          self.sync_from_empresa_loading = false
+        })
+    },
     on_child_deleted(deleted_id) {
       const key = this.prop.key
       if (!this.parent_model[key] || !Array.isArray(this.parent_model[key])) {

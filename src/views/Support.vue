@@ -63,6 +63,12 @@
       v-if="knowledge_panel_visible"
       class="support-knowledge-sidebar flex-shrink-0"
       @close="knowledge_panel_visible = false" />
+
+    <create-ticket-modal
+      :show="create_ticket_modal_visible"
+      :assigned_admin_id="current_admin_id"
+      @update:show="create_ticket_modal_visible = $event"
+      @created="on_ticket_created" />
     
   </div>
 </template>
@@ -74,6 +80,7 @@ import ConversationHeader from '@/components/support/ConversationHeader/Conversa
 import MessageInput from '@/components/support/MessageInput.vue'
 import UserTicketsNav from '@/components/support/UserTicketsNav.vue'
 import SupportKnowledgeBasePanel from '@/components/support/SupportKnowledgeBasePanel.vue'
+import CreateTicketModal from '@/components/support/CreateTicketModal.vue'
 import { useSupportSocket } from '@/composables/useSupportSocket'
 import api from '@/utils/axios'
 
@@ -86,6 +93,7 @@ export default {
     MessageInput,
     UserTicketsNav,
     SupportKnowledgeBasePanel,
+    CreateTicketModal,
   },
   data() {
     return {
@@ -129,6 +137,8 @@ export default {
       ai_consult_timer: null,
       /** Ticket cuyo job está consultando a Claude en este momento. */
       ai_generating_ticket_id: null,
+      /** Modal de alta manual de ticket (select de cliente). */
+      create_ticket_modal_visible: false,
     }
   },
   computed: {
@@ -584,25 +594,23 @@ export default {
       this.$store.dispatch('support_message/retry_send_message', message)
     },
     /**
-     * Crea ticket manual desde admin con prompts simples.
+     * Abre el modal de creación de ticket (select de cliente).
+     *
+     * @returns {void}
      */
     create_ticket() {
-      const client_id = window.prompt('ID de cliente')
-      const client_user_id = window.prompt('ID de usuario cliente')
-      const name = window.prompt('Nombre del ticket')
-      if (!client_id || !client_user_id) {
-        return
+      this.create_ticket_modal_visible = true
+    },
+    /**
+     * Tras crear ticket desde el modal, abre el hilo recién creado.
+     *
+     * @param {number|string} ticket_id
+     * @returns {void}
+     */
+    on_ticket_created(ticket_id) {
+      if (ticket_id != null) {
+        this.select_ticket(ticket_id)
       }
-      this.$store.dispatch('support_ticket/store', {
-        client_id: Number(client_id),
-        client_user_id: Number(client_user_id),
-        assigned_admin_id: this.current_admin_id,
-        name: name || null,
-      }).then((response) => {
-        if (response && response.id) {
-          this.select_ticket(response.id)
-        }
-      })
     },
   },
 }

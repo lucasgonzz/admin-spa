@@ -1,6 +1,32 @@
 import __base_store from '@/common-vue/store/__base_store'
 import api from '@/utils/axios'
 
+/**
+ * Resuelve status operativo al fusionar filas de bandeja (index, PUT, Pusher).
+ * Evita perder `closed` cuando llega un ticket parcial o un mensaje serializado antes del cierre.
+ *
+ * @param {Object|null|undefined} prev Ticket previo en Vuex
+ * @param {Object|null|undefined} incoming Ticket del evento o respuesta API
+ * @returns {'open'|'closed'}
+ */
+function support_ticket_resolve_status(prev, incoming) {
+  const prev_status = prev && prev.status ? String(prev.status) : ''
+  const incoming_status = incoming && incoming.status ? String(incoming.status) : ''
+  const prev_closed = prev_status === 'closed' || !!(prev && prev.closed_at)
+  const incoming_closed = incoming_status === 'closed' || !!(incoming && incoming.closed_at)
+
+  if (prev_closed || incoming_closed) {
+    return 'closed'
+  }
+  if (incoming_status === 'open' || incoming_status === 'closed') {
+    return incoming_status
+  }
+  if (prev_status === 'open' || prev_status === 'closed') {
+    return prev_status
+  }
+  return 'open'
+}
+
 export default __base_store({
   /**
    * Estado principal de tickets de soporte.
@@ -124,9 +150,19 @@ export default __base_store({
         if (!ticket.last_message && prev.last_message) {
           merged.last_message = prev.last_message
         }
+        /**
+         * Payloads parciales o mensajes Pusher serializados antes del cierre no deben
+         * borrar status ni revertir closed → open en la bandeja.
+         */
+        merged.status = support_ticket_resolve_status(prev, ticket)
+        if (!merged.closed_at && prev.closed_at) {
+          merged.closed_at = prev.closed_at
+        }
         state.models.splice(idx, 1, merged)
       } else {
-        state.models.push(ticket)
+        const normalized = Object.assign({}, ticket)
+        normalized.status = support_ticket_resolve_status(null, ticket)
+        state.models.push(normalized)
       }
       const sorted = state.models.slice().sort(function (a, b) {
         const da = a.updated_at ? new Date(a.updated_at).getTime() : 0

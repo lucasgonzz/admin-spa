@@ -98,6 +98,33 @@ export function useSupportBadgeSocket(options) {
     )
   }
 
+  /**
+   * Escalado de ticket: Claude no pudo resolver el caso y requiere revisión humana.
+   * Emite toast de peligro y evento custom para que otros componentes reaccionen.
+   *
+   * @param {Object} event_data Payload Echo (.SupportTicketEscalated).
+   */
+  function handle_ticket_escalated(event_data) {
+    if (!event_data) {
+      return
+    }
+    /* Nombre visible del ticket con fallback por id. */
+    const name = event_data.ticket_name || ('Ticket #' + event_data.ticket_id)
+    /* Motivo del escalado con fallback genérico. */
+    const reason = event_data.escalation_reason || 'Claude no pudo resolver este caso'
+    const message = 'Requiere revisión: ' + name + ' — ' + reason
+    window.dispatchEvent(
+      new CustomEvent('admin-spa-toast', {
+        detail: { message: message, variant: 'danger' },
+      })
+    )
+    window.dispatchEvent(
+      new CustomEvent('support-ticket-escalated', {
+        detail: event_data,
+      })
+    )
+  }
+
   if (!echo || admin_id == null || admin_id === '') {
     return {
       /**
@@ -115,6 +142,7 @@ export function useSupportBadgeSocket(options) {
   echo.channel(all_admins_channel_name).listen('.SupportMessageRead', handle_message_read)
   echo.channel(all_admins_channel_name).listen('.SupportTicketUpdated', handle_ticket_updated)
   echo.channel(all_admins_channel_name).listen('.SupportTicketAlert', handle_ticket_alert)
+  echo.channel(all_admins_channel_name).listen('.SupportTicketEscalated', handle_ticket_escalated)
 
   return {
     /**

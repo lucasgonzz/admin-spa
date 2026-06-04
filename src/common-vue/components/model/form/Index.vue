@@ -117,6 +117,9 @@
             <div v-else-if="p.type === 'custom' && p.custom_component === 'lead_personalized_demo_videos'">
               <lead-personalized-demo-videos-editor v-model="form[p.key]" :field_label="p.text" />
             </div>
+            <div v-else-if="p.type === 'custom' && p.custom_component === 'client_implementation'">
+              <client-implementation-extra-props :record="form" @record-updated="on_client_implementation_updated" />
+            </div>
           </template>
         </div>
       </div>
@@ -127,6 +130,7 @@
 <script>
 import SearchField from '@/common-vue/components/search/Index.vue'
 import LeadPersonalizedDemoVideosEditor from '@/components/lead/PersonalizedDemoVideosEditor.vue'
+import ClientImplementationExtraProps from '@/components/client/extra-props/Index.vue'
 import HasManyField from '@/common-vue/components/model/form/HasMany.vue'
 import api from '@/utils/axios'
 import { route_string } from '@/utils/route_string'
@@ -147,7 +151,7 @@ import { route_string } from '@/utils/route_string'
  */
 export default {
   name: 'ModelForm',
-  components: { SearchField, LeadPersonalizedDemoVideosEditor, HasManyField },
+  components: { SearchField, LeadPersonalizedDemoVideosEditor, ClientImplementationExtraProps, HasManyField },
   props: {
     form: { type: Object, default: null },
     all_properties: { type: Array, default: () => [] },
@@ -280,6 +284,16 @@ export default {
     },
   },
   methods: {
+    /**
+     * Sincroniza el borrador del cliente tras iniciar implementación (custom field).
+     * @param {Object} record cliente actualizado emitido por el componente hijo.
+     * @returns {void}
+     */
+    on_client_implementation_updated(record) {
+      if (record && record.implementation && this.form) {
+        this.form.implementation = record.implementation
+      }
+    },
     /**
      * Clase Bootstrap de columna según ancho declarado en meta.
      * @param {Object} p definición meta

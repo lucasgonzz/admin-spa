@@ -203,11 +203,22 @@ export default {
         .get('/support-ticket/' + ticket_id)
         .then(function (response) {
           let messages = []
-          if (response.data.model && response.data.model.messages) {
-            messages = response.data.model.messages
+          let ticket_row = null
+          if (response.data.model) {
+            if (response.data.model.messages) {
+              messages = response.data.model.messages
+            }
+            /**
+             * Alinea la fila lateral con el GET del hilo (status, nombre, etc.) sin volcar todos los mensajes al store de tickets.
+             */
+            ticket_row = Object.assign({}, response.data.model)
+            delete ticket_row.messages
           }
           commit('set_models', messages)
           commit('set_messages_loading', false)
+          if (ticket_row && ticket_row.id != null) {
+            dispatch('support_ticket/apply_ticket_row', ticket_row, { root: true })
+          }
           const mark_promises = []
           messages.forEach(function (message) {
             if (message.sender_type == 'user' && !message.read_at) {

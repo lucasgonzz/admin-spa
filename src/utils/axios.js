@@ -17,7 +17,7 @@ const api = axios.create({
  * @param {import('axios').AxiosError} error
  * @returns {string}
  */
-function resolve_error_message(error) {
+export function resolve_error_message(error) {
   /** Mensaje por defecto para fallas sin detalle de backend. */
   const fallback_message = 'Ocurrió un error al comunicarse con el servidor.'
   if (!error || !error.response || !error.response.data) {
