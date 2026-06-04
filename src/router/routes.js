@@ -76,6 +76,13 @@ const routes_def = [
     meta: { requiresAuth: true, nav: false },
   },
   {
+    path: '/implementaciones',
+    name: 'implementations',
+    text: 'Implementaciones',
+    component: () => import('@/views/Implementations.vue'),
+    meta: { requiresAuth: true, nav: true, icon: 'gear' },
+  },
+  {
     path: '/cuenta',
     name: 'account',
     text: 'Cuenta',

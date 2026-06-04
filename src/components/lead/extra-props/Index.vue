@@ -96,6 +96,8 @@
 </template>
 
 <script>
+import { resolve_error_message } from '@/utils/axios'
+
 export default {
   name: 'LeadExtraProps',
   props: {
@@ -308,10 +310,7 @@ export default {
      * @returns {string}
      */
     get_error_message(error) {
-      if (error && error.response && error.response.data && error.response.data.message) {
-        return error.response.data.message
-      }
-      return 'Ocurrió un error inesperado.'
+      return resolve_error_message(error)
     },
     /**
      * Formatea una fecha/hora a texto legible en español.

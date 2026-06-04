@@ -17,7 +17,7 @@
 </template>
 
 <script>
-import api from '@/utils/axios'
+import api, { resolve_error_message } from '@/utils/axios'
 import { route_string } from '@/utils/route_string'
 
 export default {
@@ -93,10 +93,7 @@ export default {
      * @returns {string}
      */
     get_error_message(error) {
-      if (error && error.response && error.response.data && error.response.data.message) {
-        return error.response.data.message
-      }
-      return 'Ocurrió un error inesperado.'
+      return resolve_error_message(error)
     },
     /**
      * Traduce el status de la implementación a texto legible en español.

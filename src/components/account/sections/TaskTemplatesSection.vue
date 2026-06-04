@@ -317,6 +317,8 @@
 </template>
 
 <script>
+import { resolve_error_message } from '@/utils/axios'
+
 /**
  * Sección de cuenta: plantillas de tareas automáticas agrupadas por proceso.
  */
@@ -541,10 +543,7 @@ export default {
      * @returns {string}
      */
     get_error_message(error) {
-      if (error && error.response && error.response.data && error.response.data.message) {
-        return error.response.data.message
-      }
-      return 'Ocurrió un error inesperado.'
+      return resolve_error_message(error)
     },
 
     /**

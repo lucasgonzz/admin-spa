@@ -126,6 +126,13 @@
           <task-templates-section />
         </div>
       </div>
+
+      <div id="implementation-settings" class="card mb-3 account-config-card">
+        <div class="card-body">
+          <h3 class="h6 card-title">Implementaciones</h3>
+          <implementation-settings-section />
+        </div>
+      </div>
     </section>
   </div>
 </template>
@@ -138,6 +145,7 @@ import ProtocolEntriesSection from '@/components/account/sections/ProtocolEntrie
 import AiSystemPromptSection from '@/components/account/sections/AiSystemPromptSection.vue'
 import TaskTemplatesSection from '@/components/account/sections/TaskTemplatesSection.vue'
 import LeadWhatsappOnboardingSection from '@/components/account/sections/LeadWhatsappOnboardingSection.vue'
+import ImplementationSettingsSection from '@/components/account/sections/ImplementationSettingsSection.vue'
 
 /** Anclas de sección admitidas en /cuenta#... (compatibilidad con rutas antiguas). */
 const ACCOUNT_SECTION_HASHES = [
@@ -148,6 +156,7 @@ const ACCOUNT_SECTION_HASHES = [
   'protocol-entries',
   'ai-system-prompt',
   'task-templates',
+  'implementation-settings',
 ]
 
 /**
@@ -163,6 +172,7 @@ export default {
     AiSystemPromptSection,
     TaskTemplatesSection,
     LeadWhatsappOnboardingSection,
+    ImplementationSettingsSection,
   },
   data() {
     return {
