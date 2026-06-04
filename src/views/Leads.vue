@@ -32,6 +32,7 @@ import { markRaw } from 'vue'
 import ResourceView from '@/common-vue/components/view/Index.vue'
 import LeadExtraProps from '@/components/lead/extra-props/Index.vue'
 import LeadConversationTab from '@/components/lead/conversation/Index.vue'
+import LeadContractTab from '@/components/lead/contract/Index.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 
 /**
@@ -46,6 +47,11 @@ const lead_model_extra_tabs = [
     component: markRaw(LeadExtraProps),
   },
   {
+    key: 'contract',
+    label: 'Contrato',
+    component: markRaw(LeadContractTab),
+  },
+  {
     key: 'conversation',
     label: 'Conversación WhatsApp',
     component: markRaw(LeadConversationTab),
@@ -54,7 +60,7 @@ const lead_model_extra_tabs = [
 
 export default {
   name: 'ViewLeads',
-  components: { ResourceView, LeadExtraProps, LeadConversationTab, BaseModal },
+  components: { ResourceView, LeadExtraProps, LeadConversationTab, LeadContractTab, BaseModal },
   data() {
     return {
       /** Controla visibilidad del modal para gestionar catálogo de demos. */
