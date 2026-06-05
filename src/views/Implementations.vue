@@ -484,8 +484,50 @@
                   class="impl-bubble"
                   :class="message.direction === 'outbound' ? 'impl-bubble--outbound' : 'impl-bubble--inbound'"
                 >
-                  <!-- Contenido del mensaje -->
-                  <div class="impl-bubble__body">{{ message.body }}</div>
+                  <!-- Adjunto de archivo: misma tarjeta visual que en Archivos recibidos (Etapa 4) -->
+                  <div v-if="message_file_attachments_by_id[message.id]" class="impl-bubble__attachment">
+                    <div
+                      class="impl-stage4-file-card impl-bubble-file-card d-flex align-items-center gap-2 p-2 border rounded"
+                    >
+                      <i
+                        class="impl-stage4-file-icon bi flex-shrink-0"
+                        :class="file_type_icon_class(message_file_attachments_by_id[message.id].filename)"
+                        :style="{
+                          color: file_type_color(message_file_attachments_by_id[message.id].filename),
+                          fontSize: '1.6rem',
+                        }"
+                        aria-hidden="true"
+                      />
+
+                      <div class="flex-grow-1 min-w-0">
+                        <div
+                          class="text-truncate small fw-semibold"
+                          :title="message_file_attachments_by_id[message.id].filename"
+                        >
+                          {{ message_file_attachments_by_id[message.id].filename }}
+                        </div>
+                        <div
+                          class="text-muted"
+                          style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em;"
+                        >
+                          {{ file_ext(message_file_attachments_by_id[message.id].filename) }}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-outline-secondary flex-shrink-0 impl-stage4-download-btn"
+                        :title="'Descargar ' + message_file_attachments_by_id[message.id].filename"
+                        @click.stop="download_message_file(message)"
+                      >
+                        <i class="bi bi-download" aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Texto plano para mensajes sin adjunto -->
+                  <div v-else class="impl-bubble__body">{{ message.body }}</div>
+
                   <!-- Timestamp del mensaje -->
                   <div class="impl-bubble__time">{{ format_date(message.sent_at) }}</div>
                 </div>
@@ -653,6 +695,32 @@ export default {
      */
     show_stage_4_panel() {
       return this.stage_4_stage !== null
+    },
+
+    /**
+     * Mapa message_id → metadata de adjunto para renderizar tarjetas en la conversación
+     * sin re-parsear el body en cada binding del template.
+     *
+     * @returns {Object.<string, { filename: string, message_id: number|string }>}
+     */
+    message_file_attachments_by_id() {
+      /** Índice de adjuntos detectados por id de mensaje. */
+      const map = {}
+      const self = this
+
+      if (!this.selected_implementation || !this.selected_implementation.messages) {
+        return map
+      }
+
+      this.selected_implementation.messages.forEach(function (message) {
+        const attachment = self.parse_message_file_attachment(message)
+
+        if (attachment) {
+          map[message.id] = attachment
+        }
+      })
+
+      return map
     },
   },
 
@@ -982,6 +1050,88 @@ export default {
       }
       const ext = String(filename).split('.').pop()
       return ext ? ext.toUpperCase() : ''
+    },
+
+    /**
+     * Detecta si un mensaje de conversación contiene un adjunto de archivo (formato Kapso).
+     *
+     * El body guardado por el webhook tiene el patrón:
+     *   [Document attached (archivo.xlsx)]
+     *   [Size: … | Type: …]
+     *   URL: https://…
+     *
+     * @param {Object} message Mensaje de implementation_messages.
+     * @returns {{ filename: string, message_id: number|string }|null}
+     */
+    parse_message_file_attachment(message) {
+      if (!message || !message.body) {
+        return null
+      }
+
+      /** Texto completo del mensaje persistido en la base. */
+      const body = String(message.body)
+
+      // Solo mensajes con patrón de adjunto multimedia.
+      if (!/\b(document|image|video|audio)\s+attached\b/i.test(body)) {
+        return null
+      }
+
+      /** Nombre extraído del patrón "Document attached (nombre.ext)". */
+      let filename = 'archivo'
+      const name_match = body.match(/(?:document|image|video|audio)\s+attached\s*\(([^)]+)\)/i)
+
+      if (name_match && name_match[1]) {
+        filename = name_match[1].trim()
+      }
+
+      // Requiere URL de Kapso para poder descargar vía proxy del backend.
+      const url_match = body.match(/URL:\s*(https?:\/\/\S+)/i)
+
+      if (!url_match || !url_match[1]) {
+        return null
+      }
+
+      return {
+        filename: filename,
+        message_id: message.id,
+      }
+    },
+
+    /**
+     * Descarga el adjunto de un mensaje de conversación vía proxy del backend.
+     *
+     * @param {Object} message Mensaje con adjunto detectado por parse_message_file_attachment.
+     * @returns {void}
+     */
+    download_message_file(message) {
+      const attachment = this.parse_message_file_attachment(message)
+
+      if (!attachment || !this.selected_implementation) {
+        return
+      }
+
+      /** ID de la implementación activa y del mensaje con el adjunto. */
+      const impl_id = this.selected_implementation.id
+      const message_id = attachment.message_id
+      const filename = attachment.filename
+
+      api
+        .get('/implementation/' + impl_id + '/message-file-download/' + message_id, {
+          responseType: 'blob',
+        })
+        .then(function (res) {
+          const blob_url = window.URL.createObjectURL(new Blob([res.data]))
+          const link = document.createElement('a')
+          link.href = blob_url
+          link.setAttribute('download', filename || 'archivo')
+          document.body.appendChild(link)
+          link.click()
+          link.parentNode.removeChild(link)
+          window.URL.revokeObjectURL(blob_url)
+        })
+        .catch(function () {
+          /* El interceptor global de axios ya muestra el toast de error. */
+        })
     },
 
     /**
@@ -1861,6 +2011,35 @@ export default {
 .impl-bubble__body {
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* Tarjeta de archivo dentro de una burbuja de conversación */
+.impl-bubble__attachment {
+  min-width: 220px;
+  max-width: 300px;
+}
+
+.impl-bubble-file-card {
+  background-color: #fff;
+  border-color: #dee2e6 !important;
+}
+
+.impl-bubble--outbound .impl-bubble-file-card {
+  background-color: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.35) !important;
+}
+
+.impl-bubble--outbound .impl-bubble-file-card .text-muted {
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+
+.impl-bubble--outbound .impl-bubble-file-card .fw-semibold {
+  color: #fff;
+}
+
+.impl-bubble--outbound .impl-stage4-download-btn {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.5);
 }
 
 /* Timestamp debajo del mensaje, alineado a la derecha dentro de la burbuja */
