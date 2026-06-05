@@ -103,10 +103,10 @@
 
             <!--
               Botón avanzar etapa: solo visible si la implementación está activa
-              y la etapa actual es menor a 7 (la última etapa cierra automáticamente).
+              y la etapa actual es menor a 8 (la última etapa cierra automáticamente).
             -->
             <button
-              v-if="selected_implementation.status === 'in_progress' && selected_implementation.current_stage < 7"
+              v-if="selected_implementation.status === 'in_progress' && selected_implementation.current_stage < 8"
               class="btn btn-primary btn-sm flex-shrink-0"
               :disabled="advancing_stage"
               @click="on_advance_stage"
@@ -1185,14 +1185,14 @@ export default {
      * sin depender del campo virtual `ready_to_advance` del backend (que puede llegar
      * con race condition cuando el listado se recarga justo al recibir el evento Pusher).
      *
-     * Criterio: current_stage < 7 Y la etapa cuyo stage_number === current_stage
+     * Criterio: current_stage < 8 Y la etapa cuyo stage_number === current_stage
      * tiene status === 'completed' (la conversación automática terminó, falta el avance manual).
      *
      * @param {Object} impl Implementación con relación stages cargada.
      * @returns {boolean}
      */
     check_ready_to_advance(impl) {
-      if (!impl || !impl.stages || impl.current_stage >= 7) {
+      if (!impl || !impl.stages || impl.current_stage >= 8) {
         return false
       }
 
