@@ -6,7 +6,7 @@
     </p>
 
     <!-- Estado: cargando datos iniciales -->
-    <p v-if="loading || loading_file_wait" class="text-muted small mb-0">Cargando…</p>
+    <p v-if="loading || loading_file_wait || loading_employees_wait" class="text-muted small mb-0">Cargando…</p>
 
     <!-- Formulario: visible una vez cargado -->
     <template v-else>
@@ -45,7 +45,7 @@
       </div>
 
       <!-- Campo: segundos de espera antes de procesar archivos recibidos (Etapa 4) -->
-      <div class="row g-2 align-items-end">
+      <div class="row g-2 align-items-end mb-3">
         <div class="col-sm-6">
           <label class="form-label small" for="impl_file_wait_seconds">
             Segundos de espera antes de procesar archivos recibidos
@@ -74,9 +74,43 @@
         </div>
       </div>
 
-      <!-- Mensajes de estado para el campo de espera -->
+      <!-- Mensajes de estado para el campo de espera de archivos -->
       <p v-if="saved_file_wait_message" class="text-success small mt-2 mb-0">{{ saved_file_wait_message }}</p>
       <p v-else-if="error_file_wait_message" class="text-danger small mt-2 mb-0">{{ error_file_wait_message }}</p>
+
+      <!-- Campo: segundos de espera antes de confirmar lista de empleados (Etapa 1) -->
+      <div class="row g-2 align-items-end">
+        <div class="col-sm-6">
+          <label class="form-label small" for="impl_employees_wait_seconds">
+            Segundos de espera antes de confirmar lista de empleados
+          </label>
+          <!-- Input numérico; al expirar el timer sin nuevos mensajes, se pregunta si terminó la carga -->
+          <input
+            id="impl_employees_wait_seconds"
+            v-model.number="local_employees_wait_seconds"
+            type="number"
+            class="form-control form-control-sm"
+            min="1"
+            max="120"
+            :disabled="saving_employees_wait"
+          />
+        </div>
+
+        <div class="col-auto">
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            :disabled="saving_employees_wait || !can_save_employees_wait"
+            @click="on_save_employees_wait"
+          >
+            {{ saving_employees_wait ? 'Guardando…' : 'Guardar' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Mensajes de estado para el campo de espera de empleados -->
+      <p v-if="saved_employees_wait_message" class="text-success small mt-2 mb-0">{{ saved_employees_wait_message }}</p>
+      <p v-else-if="error_employees_wait_message" class="text-danger small mt-2 mb-0">{{ error_employees_wait_message }}</p>
 
       <!-- Mensajes de estado para el selector de admin -->
       <p v-if="saved_message" class="text-success small mt-2 mb-0">{{ saved_message }}</p>
@@ -91,9 +125,10 @@ import api from '@/utils/axios'
 /**
  * Sección en Cuenta: configuración global del flujo de implementaciones.
  *
- * Gestiona dos settings independientes:
+ * Gestiona tres settings independientes:
  * - Admin asignado por defecto: GET/PUT /settings/implementation-assigned-admin
  * - Segundos de espera antes de procesar archivos (Etapa 4): GET/PUT /settings/implementation-file-wait
+ * - Segundos de espera antes de confirmar lista de empleados (Etapa 1): GET/PUT /settings/implementation-employees-wait
  */
 export default {
   name: 'ImplementationSettingsSection',
@@ -171,6 +206,37 @@ export default {
        * Mensaje de error para el campo de segundos de espera.
        */
       error_file_wait_message: '',
+
+      /**
+       * Segundos de espera configurados localmente antes de confirmar lista de empleados (Etapa 1).
+       * Rango: 1–120. Valor inicial del servidor poblado en load_employees_wait_setting().
+       */
+      local_employees_wait_seconds: 30,
+
+      /**
+       * Valor guardado en el servidor para detectar cambios sin guardar (espera de empleados).
+       */
+      stored_employees_wait_seconds: 30,
+
+      /**
+       * Indicador de carga del setting de espera de empleados.
+       */
+      loading_employees_wait: true,
+
+      /**
+       * Indica que hay un PUT del setting de espera de empleados en curso.
+       */
+      saving_employees_wait: false,
+
+      /**
+       * Mensaje de éxito tras guardar los segundos de espera de empleados.
+       */
+      saved_employees_wait_message: '',
+
+      /**
+       * Mensaje de error para el campo de segundos de espera de empleados.
+       */
+      error_employees_wait_message: '',
     }
   },
 
@@ -192,6 +258,15 @@ export default {
     can_save_file_wait() {
       return this.local_file_wait_seconds !== this.stored_file_wait_seconds
     },
+
+    /**
+     * Habilita el botón Guardar de los segundos de espera de empleados solo si el valor cambió.
+     *
+     * @returns {boolean}
+     */
+    can_save_employees_wait() {
+      return this.local_employees_wait_seconds !== this.stored_employees_wait_seconds
+    },
   },
 
   mounted() {
@@ -199,6 +274,7 @@ export default {
     this.load_admins()
     this.load_setting()
     this.load_file_wait_setting()
+    this.load_employees_wait_setting()
   },
 
   methods: {
@@ -353,6 +429,74 @@ export default {
         })
         .then(function () {
           self.saving_file_wait = false
+        })
+    },
+
+    /**
+     * Carga el setting de segundos de espera de empleados desde GET /settings/implementation-employees-wait.
+     *
+     * @returns {void}
+     */
+    load_employees_wait_setting() {
+      const self = this
+      self.loading_employees_wait = true
+      self.error_employees_wait_message = ''
+
+      api
+        .get('/settings/implementation-employees-wait')
+        .then(function (res) {
+          /** Valor de segundos retornado por el servidor; fallback a 30. */
+          const seconds = res.data && res.data.seconds != null ? res.data.seconds : 30
+          self.local_employees_wait_seconds  = seconds
+          self.stored_employees_wait_seconds = seconds
+        })
+        .catch(function () {
+          self.error_employees_wait_message = 'No se pudo cargar la configuración de espera de empleados.'
+        })
+        .then(function () {
+          self.loading_employees_wait = false
+        })
+    },
+
+    /**
+     * Guarda los segundos de espera de empleados via PUT /settings/implementation-employees-wait.
+     *
+     * Valida localmente que el valor esté entre 1 y 120 antes de enviar la solicitud.
+     *
+     * @returns {void}
+     */
+    on_save_employees_wait() {
+      const self = this
+
+      /** Validación local del rango permitido. */
+      const seconds = parseInt(self.local_employees_wait_seconds, 10)
+
+      if (isNaN(seconds) || seconds < 1 || seconds > 120) {
+        self.error_employees_wait_message = 'El valor debe estar entre 1 y 120 segundos.'
+        return
+      }
+
+      self.saving_employees_wait        = true
+      self.saved_employees_wait_message = ''
+      self.error_employees_wait_message = ''
+
+      api
+        .put('/settings/implementation-employees-wait', { seconds: seconds })
+        .then(function (res) {
+          /** Valor confirmado por el servidor. */
+          const saved_seconds = res.data && res.data.seconds != null ? res.data.seconds : seconds
+          self.local_employees_wait_seconds  = saved_seconds
+          self.stored_employees_wait_seconds = saved_seconds
+          self.saved_employees_wait_message  = 'Configuración guardada.'
+        })
+        .catch(function (err) {
+          const msg =
+            (err.response && err.response.data && err.response.data.message) ||
+            'No se pudo guardar.'
+          self.error_employees_wait_message = msg
+        })
+        .then(function () {
+          self.saving_employees_wait = false
         })
     },
   },
