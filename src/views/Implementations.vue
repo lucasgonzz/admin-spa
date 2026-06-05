@@ -1349,12 +1349,15 @@ export default {
         })
       )
 
+      /*
+       * Siempre refrescar el listado para que ready_to_advance se actualice en la fila
+       * del panel izquierdo, independientemente de si la implementación está seleccionada.
+       */
+      this.load_list()
+
       if (this.selected_id && this.selected_id == impl_id) {
-        /* Implementación actualmente abierta: recargar el detalle completo. */
+        /* Implementación actualmente abierta: también recargar el detalle completo. */
         this.load_detail(impl_id)
-      } else {
-        /* Implementación no seleccionada: refrescar la lista para actualizar badges. */
-        this.load_list()
       }
     },
 
@@ -1500,15 +1503,22 @@ export default {
   background-color: #e7f1ff;
 }
 
-/* Fila con etapa lista para avanzar: fondo verde llamativo + borde izquierdo grueso */
+/* Fila con etapa lista para avanzar: verde saturado + borde izquierdo grueso + animación suave */
 .impl-list-row--ready {
-  background-color: #d1fae5;
-  border-left: 4px solid #16a34a;
-  box-shadow: inset 3px 0 0 #16a34a;
+  background-color: #bbf7d0;
+  border-left: 5px solid #16a34a;
+  animation: impl-ready-pulse 2.4s ease-in-out infinite;
 }
 
 .impl-list-row--ready:hover {
-  background-color: #a7f3d0;
+  background-color: #86efac;
+  animation: none;
+}
+
+/* Pulso sutil: alterna entre el verde base y un verde más oscuro */
+@keyframes impl-ready-pulse {
+  0%, 100% { background-color: #bbf7d0; }
+  50%       { background-color: #86efac; }
 }
 
 /* Nombre del cliente en la fila */

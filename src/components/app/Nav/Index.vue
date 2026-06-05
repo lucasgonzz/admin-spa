@@ -56,7 +56,7 @@
             <!-- Badge expandido: implementaciones listas para que el admin avance de etapa -->
             <span
               v-if="show_nav_labels && r.name === 'implementations' && implementations_ready_count > 0"
-              class="badge bg-success rounded-pill ms-1 nav-support-unread-badge"
+              class="badge bg-danger rounded-pill ms-1 nav-support-unread-badge"
               :title="'Implementaciones listas para avanzar: ' + implementations_ready_count"
             >
               {{ implementations_ready_count > 99 ? '99+' : implementations_ready_count }}
@@ -85,7 +85,7 @@
             <!-- Badge colapsado (punto): implementaciones listas para avanzar -->
             <span
               v-if="!show_nav_labels && r.name === 'implementations' && implementations_ready_count > 0"
-              class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-success nav-support-unread-badge nav-support-unread-badge--dot"
+              class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger nav-support-unread-badge nav-support-unread-badge--dot"
               :title="'Implementaciones listas para avanzar: ' + implementations_ready_count"
             >
               {{ implementations_ready_count > 9 ? '9+' : implementations_ready_count }}
