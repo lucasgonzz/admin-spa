@@ -342,36 +342,60 @@
                     >
                       Pendiente
                     </span>
+
+                    <!-- Tarjetas de archivo con ícono, nombre y botón de descarga -->
                     <template v-else>
-                      <span
+                      <div
                         v-for="(file_item, file_idx) in stage_4_category_files_list(category.files_key)"
                         :key="file_idx"
-                        class="badge bg-light text-dark border me-1 mb-1 impl-stage4-file-chip"
+                        class="impl-stage4-file-card d-flex align-items-center gap-2 mb-2 p-2 border rounded"
                       >
-                        {{ file_item.filename || 'archivo' }}
+                        <!-- Ícono del tipo de archivo -->
+                        <i
+                          class="impl-stage4-file-icon bi flex-shrink-0"
+                          :class="file_type_icon_class(file_item.filename)"
+                          :style="{ color: file_type_color(file_item.filename), fontSize: '1.6rem' }"
+                          aria-hidden="true"
+                        />
+
+                        <!-- Nombre y extensión -->
+                        <div class="flex-grow-1 min-w-0">
+                          <div class="text-truncate small fw-semibold" :title="file_item.filename || 'archivo'">
+                            {{ file_item.filename || 'archivo' }}
+                          </div>
+                          <div class="text-muted" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em;">
+                            {{ file_ext(file_item.filename) }}
+                          </div>
+                        </div>
+
+                        <!-- Badge de estado de importación -->
                         <span
                           v-if="stage_4_import_status_label(category.key)"
-                          class="ms-1 impl-stage4-import-badge"
+                          class="impl-stage4-import-badge flex-shrink-0"
                           :title="stage_4_import_error(category.key) || ''"
                         >
-                          <span v-if="stage_4_import_status(category.key) === 'importing'">
-                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                          <span v-if="stage_4_import_status(category.key) === 'importing'" class="badge bg-warning text-dark">
+                            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
                             Importando...
                           </span>
-                          <span v-else-if="stage_4_import_status(category.key) === 'success'">
+                          <span v-else-if="stage_4_import_status(category.key) === 'success'" class="badge bg-success">
                             ✅ Importado
                           </span>
-                          <span v-else-if="stage_4_import_status(category.key) === 'failed'">
+                          <span v-else-if="stage_4_import_status(category.key) === 'failed'" class="badge bg-danger" :title="stage_4_import_error(category.key) || ''">
                             ❌ Error
-                            <span
-                              v-if="stage_4_import_error(category.key)"
-                              class="text-danger d-block small"
-                            >
-                              {{ stage_4_import_error(category.key) }}
-                            </span>
                           </span>
                         </span>
-                      </span>
+
+                        <!-- Botón de descarga -->
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-secondary flex-shrink-0 impl-stage4-download-btn"
+                          :title="'Descargar ' + (file_item.filename || 'archivo')"
+                          @click="download_stage4_file(category.key, file_idx, file_item.filename)"
+                        >
+                          <i class="bi bi-download" aria-hidden="true" />
+                        </button>
+                      </div>
                     </template>
                   </div>
 
@@ -880,6 +904,127 @@ export default {
         })
         .then(function () {
           self.advancing_stage = false
+        })
+    },
+
+    /**
+     * Retorna la clase de Bootstrap Icon correspondiente a la extensión del archivo.
+     *
+     * @param {string} filename Nombre del archivo con extensión.
+     * @returns {string} Clase CSS del ícono bi-*.
+     */
+    file_type_icon_class(filename) {
+      /* Extensión en minúsculas para normalizar la comparación. */
+      const ext = String(filename || '').split('.').pop().toLowerCase()
+
+      if (ext === 'pdf') {
+        return 'bi-file-earmark-pdf-fill'
+      }
+      if (ext === 'xlsx' || ext === 'xls') {
+        return 'bi-file-earmark-spreadsheet-fill'
+      }
+      if (ext === 'csv') {
+        return 'bi-file-earmark-text-fill'
+      }
+      if (ext === 'doc' || ext === 'docx') {
+        return 'bi-file-earmark-word-fill'
+      }
+      if (ext === 'zip' || ext === 'rar' || ext === '7z') {
+        return 'bi-file-earmark-zip-fill'
+      }
+      if (ext === 'jpg' || ext === 'jpeg' || ext === 'png' || ext === 'gif' || ext === 'webp') {
+        return 'bi-file-earmark-image-fill'
+      }
+      if (ext === 'txt') {
+        return 'bi-file-earmark-text-fill'
+      }
+
+      return 'bi-file-earmark-fill'
+    },
+
+    /**
+     * Color del ícono de archivo según la extensión, imitando los colores del software nativo.
+     *
+     * @param {string} filename Nombre del archivo.
+     * @returns {string} Color CSS.
+     */
+    file_type_color(filename) {
+      const ext = String(filename || '').split('.').pop().toLowerCase()
+
+      if (ext === 'pdf') {
+        return '#e53935'
+      }
+      if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+        return '#1d6f42'
+      }
+      if (ext === 'doc' || ext === 'docx') {
+        return '#2b579a'
+      }
+      if (ext === 'zip' || ext === 'rar' || ext === '7z') {
+        return '#f59e0b'
+      }
+      if (ext === 'jpg' || ext === 'jpeg' || ext === 'png' || ext === 'gif' || ext === 'webp') {
+        return '#7c3aed'
+      }
+
+      return '#6c757d'
+    },
+
+    /**
+     * Devuelve la extensión en mayúsculas para mostrar debajo del nombre.
+     *
+     * @param {string} filename Nombre del archivo.
+     * @returns {string}
+     */
+    file_ext(filename) {
+      if (!filename) {
+        return ''
+      }
+      const ext = String(filename).split('.').pop()
+      return ext ? ext.toUpperCase() : ''
+    },
+
+    /**
+     * Descarga un archivo de la Etapa 4 a través del endpoint proxy del backend.
+     *
+     * Usa axios con responseType 'blob' para manejar el auth token en el header
+     * y desencadena la descarga creando un object URL temporal.
+     *
+     * @param {string} category articles | clients | suppliers
+     * @param {number} index    Índice del archivo en el array de la categoría.
+     * @param {string} filename Nombre original del archivo para el atributo download.
+     * @returns {void}
+     */
+    download_stage4_file(category, index, filename) {
+      if (!this.selected_implementation) {
+        return
+      }
+
+      /** ID de la implementación activa en el panel de detalle. */
+      const impl_id = this.selected_implementation.id
+
+      api
+        .get('/implementation/' + impl_id + '/stage4-file-download', {
+          params: { category: category, index: index },
+          responseType: 'blob',
+        })
+        .then(function (res) {
+          /* Crear un object URL temporal a partir del blob recibido. */
+          const blob_url = window.URL.createObjectURL(new Blob([res.data]))
+
+          /* Crear un enlace invisible, simularlo clickeado y luego destruirlo. */
+          const link = document.createElement('a')
+          link.href = blob_url
+          link.setAttribute('download', filename || 'archivo')
+          document.body.appendChild(link)
+          link.click()
+          link.parentNode.removeChild(link)
+
+          /* Liberar el object URL para evitar memory leaks. */
+          window.URL.revokeObjectURL(blob_url)
+        })
+        .catch(function () {
+          /* El interceptor global de axios ya muestra el toast de error. */
         })
     },
 
@@ -1731,8 +1876,26 @@ export default {
   cursor: pointer;
 }
 
-.impl-stage4-file-chip {
-  font-weight: 500;
+/* Tarjeta de archivo: reemplaza el badge de texto anterior */
+.impl-stage4-file-card {
+  background-color: #f8f9fa;
+  transition: background-color 0.1s ease;
+  max-width: 420px;
+}
+
+.impl-stage4-file-card:hover {
+  background-color: #e9ecef;
+}
+
+/* Ícono del tipo de archivo */
+.impl-stage4-file-icon {
+  line-height: 1;
+}
+
+/* Botón de descarga: tamaño compacto, solo visible en hover */
+.impl-stage4-download-btn {
+  font-size: 0.8rem;
+  padding: 0.2rem 0.45rem;
 }
 
 .impl-stage4-import-badge {
