@@ -391,6 +391,24 @@
             </div>
           </template>
 
+          <!--
+            Acción destructiva al pie del resumen: elimina la implementación
+            y toda su información tras confirmación del operador.
+          -->
+          <div class="impl-delete-section mt-4 pt-3 border-top">
+            <button
+              type="button"
+              class="btn btn-outline-danger btn-sm"
+              :disabled="deleting_implementation"
+              @click="on_delete_implementation"
+            >
+              {{ deleting_implementation ? 'Eliminando...' : 'Eliminar implementación' }}
+            </button>
+            <p class="small text-muted mb-0 mt-2">
+              Se borrarán etapas, mensajes y datos recolectados. Esta acción no se puede deshacer.
+            </p>
+          </div>
+
           </template>
 
           <!-- Conversación: mensajes WhatsApp (sin etapas ni datos recolectados) -->
@@ -505,6 +523,11 @@ export default {
        * Indicador de operación en curso al avanzar manualmente de etapa.
        */
       advancing_stage: false,
+
+      /**
+       * Indicador de operación en curso al eliminar la implementación activa.
+       */
+      deleting_implementation: false,
 
       /**
        * Sección visible en el panel derecho del detalle: summary (etapas + datos)
@@ -759,6 +782,53 @@ export default {
     },
 
     /**
+     * Solicita confirmación y elimina la implementación seleccionada con todo su detalle.
+     *
+     * Tras éxito limpia la selección y recarga el listado del panel izquierdo.
+     *
+     * @returns {void}
+     */
+    on_delete_implementation() {
+      if (!this.selected_implementation || this.deleting_implementation) {
+        return
+      }
+
+      /** Nombre del cliente para el mensaje de confirmación. */
+      const client_name = this.client_display_name(this.selected_implementation)
+
+      if (
+        !window.confirm(
+          '¿Eliminar la implementación de "' +
+            client_name +
+            '" y toda su información (etapas, mensajes y datos)? Esta acción no se puede deshacer.'
+        )
+      ) {
+        return
+      }
+
+      const self = this
+
+      /** ID de la implementación que se eliminará en el servidor. */
+      const id = this.selected_implementation.id
+
+      this.deleting_implementation = true
+
+      api
+        .delete('/implementation/' + id)
+        .then(function () {
+          self.selected_id = null
+          self.selected_implementation = null
+          self.load_list()
+        })
+        .catch(function () {
+          /* El interceptor global de axios ya muestra el toast de error. */
+        })
+        .then(function () {
+          self.deleting_implementation = false
+        })
+    },
+
+    /**
      * Solicita confirmación y avanza a la siguiente etapa de la implementación activa.
      *
      * Al confirmar, hace POST /implementation/{id}/advance-stage, actualiza el detalle
@@ -984,6 +1054,10 @@ export default {
       self._pusher_channel.listen('.implementation.import.status_updated', function (event_data) {
         self.on_import_status_updated(event_data)
       })
+
+      self._pusher_channel.listen('.implementation.message.received', function (event_data) {
+        self.on_message_received(event_data)
+      })
     },
 
     /**
@@ -1026,6 +1100,55 @@ export default {
 
       if (this.selected_id == event_data.implementation_id) {
         this.load_detail(this.selected_id)
+      }
+    },
+
+    /**
+     * Agrega un mensaje al hilo si la implementación afectada está cargada en el detalle.
+     *
+     * Evita duplicados por id (re-emisión o recarga concurrente) y hace scroll al pie
+     * cuando la pestaña Conversación está activa.
+     *
+     * @param {Object} event_data Payload: { implementation_id, message }.
+     * @returns {void}
+     */
+    on_message_received(event_data) {
+      if (!event_data || !event_data.message || !event_data.implementation_id) {
+        return
+      }
+
+      if (!this.selected_id || this.selected_id != event_data.implementation_id) {
+        return
+      }
+
+      if (!this.selected_implementation) {
+        return
+      }
+
+      /** Mensaje recién persistido en el backend. */
+      const message = event_data.message
+
+      if (!this.selected_implementation.messages) {
+        this.selected_implementation.messages = []
+      }
+
+      /** Indica si el mensaje ya está en el hilo local. */
+      let already_exists = false
+
+      this.selected_implementation.messages.forEach(function (existing_message) {
+        if (existing_message.id == message.id) {
+          already_exists = true
+        }
+      })
+
+      if (already_exists) {
+        return
+      }
+
+      this.selected_implementation.messages.push(message)
+
+      if (this.detail_panel_tab === 'conversation') {
+        this.schedule_scroll_conversation_to_bottom()
       }
     },
 
@@ -1548,5 +1671,10 @@ export default {
 .impl-stage4-analysis {
   border-top: 1px solid #e9ecef;
   padding-top: 8px;
+}
+
+/* Zona de eliminación al pie del panel Resumen */
+.impl-delete-section {
+  max-width: 320px;
 }
 </style>
