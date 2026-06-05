@@ -1500,14 +1500,15 @@ export default {
   background-color: #e7f1ff;
 }
 
-/* Fila con etapa lista para avanzar: fondo verde muy suave + borde izquierdo verde */
+/* Fila con etapa lista para avanzar: fondo verde llamativo + borde izquierdo grueso */
 .impl-list-row--ready {
-  background-color: #f0fdf4;
-  border-left: 3px solid #198754;
+  background-color: #d1fae5;
+  border-left: 4px solid #16a34a;
+  box-shadow: inset 3px 0 0 #16a34a;
 }
 
 .impl-list-row--ready:hover {
-  background-color: #dcfce7;
+  background-color: #a7f3d0;
 }
 
 /* Nombre del cliente en la fila */
