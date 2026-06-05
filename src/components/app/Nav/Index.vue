@@ -53,6 +53,14 @@
             >
               {{ tasks_pending_assigned_mine > 99 ? '99+' : tasks_pending_assigned_mine }}
             </span>
+            <!-- Badge expandido: implementaciones listas para que el admin avance de etapa -->
+            <span
+              v-if="show_nav_labels && r.name === 'implementations' && implementations_ready_count > 0"
+              class="badge bg-success rounded-pill ms-1 nav-support-unread-badge"
+              :title="'Implementaciones listas para avanzar: ' + implementations_ready_count"
+            >
+              {{ implementations_ready_count > 99 ? '99+' : implementations_ready_count }}
+            </span>
             <span
               v-if="!show_nav_labels && r.name === 'support' && support_unread_mine > 0"
               class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger nav-support-unread-badge nav-support-unread-badge--dot"
@@ -73,6 +81,14 @@
               :title="'Tareas pendientes: ' + tasks_pending_assigned_mine"
             >
               {{ tasks_pending_assigned_mine > 9 ? '9+' : tasks_pending_assigned_mine }}
+            </span>
+            <!-- Badge colapsado (punto): implementaciones listas para avanzar -->
+            <span
+              v-if="!show_nav_labels && r.name === 'implementations' && implementations_ready_count > 0"
+              class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-success nav-support-unread-badge nav-support-unread-badge--dot"
+              :title="'Implementaciones listas para avanzar: ' + implementations_ready_count"
+            >
+              {{ implementations_ready_count > 9 ? '9+' : implementations_ready_count }}
             </span>
           </router-link>
           <span
@@ -123,6 +139,8 @@ import { useLeadSocket } from '@/composables/useLeadSocket'
  * Menú lateral: colapsable en desktop (solo iconos) y drawer en móvil (controlado por App.vue).
  * Mantiene suscripción Pusher a canales admin de soporte para el badge de no leídos en "Soporte".
  * Mantiene suscripción Pusher al canal `leads.admins` para actualizar leads en tiempo real.
+ * Mantiene suscripción Pusher al canal `admin-implementations` para el badge de implementaciones
+ * listas para avanzar de etapa.
  * Precarga tareas (GET /task) con el admin autenticado para el conteo de pendientes en "Tareas".
  */
 export default {
@@ -157,6 +175,12 @@ export default {
        * Instancia devuelta por useLeadSocket; se libera en teardown o al cambiar de admin.
        */
       lead_socket_instance: null,
+
+      /**
+       * Canal Pusher suscrito para el evento `implementation.stage.completed`.
+       * Se guarda para poder hacer leave() en teardown o al cambiar de admin.
+       */
+      _implementations_nav_channel: null,
     }
   },
   computed: {
@@ -207,6 +231,18 @@ export default {
       return isNaN(n) ? 0 : n
     },
     /**
+     * Cantidad de implementaciones que completaron su conversación automática
+     * y están esperando que el admin presione "Avanzar etapa".
+     * Alimenta el badge verde en el ítem "Implementaciones" del menú.
+     *
+     * @returns {number}
+     */
+    implementations_ready_count() {
+      const n = parseInt(this.$store.state.implementation.ready_to_advance_count, 10)
+      return isNaN(n) ? 0 : n
+    },
+
+    /**
      * Tareas pendientes (no realizadas) cuyo asignatario es el admin logueado.
      * @returns {number}
      */
@@ -228,12 +264,15 @@ export default {
         this.rebuild_support_badge_socket()
         this.rebuild_lead_socket()
         this.refresh_task_nav_count()
+        this.refresh_implementations_ready_count()
+        this.rebuild_implementations_nav_socket()
       },
     },
   },
   beforeUnmount() {
     this.teardown_support_badge_socket()
     this.teardown_lead_socket()
+    this.teardown_implementations_nav_socket()
   },
   methods: {
     icon(r) {
@@ -368,6 +407,74 @@ export default {
         return null
       })
     },
+    /**
+     * Consulta al backend el conteo inicial de implementaciones listas para avanzar.
+     * Se llama al montar el Nav y al cambiar de sesión.
+     *
+     * @returns {void}
+     */
+    refresh_implementations_ready_count() {
+      if (!this.current_admin_id) {
+        return
+      }
+      this.$store.dispatch('implementation/fetch_ready_to_advance_count').catch(function () {
+        return null
+      })
+    },
+
+    /**
+     * Libera el canal Pusher de implementaciones y limpia la referencia.
+     *
+     * @returns {void}
+     */
+    teardown_implementations_nav_socket() {
+      const echo = window.admin_support_echo
+
+      if (!echo || !this._implementations_nav_channel) {
+        this._implementations_nav_channel = null
+        return
+      }
+
+      echo.leave('admin-implementations')
+      this._implementations_nav_channel = null
+    },
+
+    /**
+     * Suscribe el Nav al canal `admin-implementations` para incrementar el badge
+     * cuando una etapa se completa automáticamente (evento `.implementation.stage.completed`).
+     *
+     * Si ya existe una suscripción previa (cambio de sesión), la destruye primero.
+     *
+     * @returns {void}
+     */
+    rebuild_implementations_nav_socket() {
+      const self = this
+
+      this.teardown_implementations_nav_socket()
+
+      if (!this.current_admin_id) {
+        return
+      }
+
+      const echo = window.admin_support_echo
+
+      if (!echo) {
+        return
+      }
+
+      /* Suscribirse al canal compartido de implementaciones. */
+      self._implementations_nav_channel = echo.channel('admin-implementations')
+
+      /*
+       * Al completarse una etapa automáticamente: el cliente terminó su conversación
+       * y ahora el admin necesita presionar "Avanzar etapa".
+       * Incrementar el badge del Nav para alertar al admin.
+       */
+      self._implementations_nav_channel.listen('.implementation.stage.completed', function () {
+        self.$store.commit('implementation/increment_ready_to_advance_count')
+      })
+    },
+
     logout() {
       const self = this
       this.on_close_mobile()

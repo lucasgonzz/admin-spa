@@ -14,6 +14,8 @@ import support_ticket from './support_ticket'
 import support_message from './support_message'
 import task from './task'
 import task_template from './task_template'
+// Conteo de implementaciones listas para avanzar (badge Nav).
+import implementation from './implementation'
 
 export default createStore({
   modules: {
@@ -33,5 +35,7 @@ export default createStore({
     task,
     // Plantillas de tareas automáticas para procesos internos.
     task_template,
+    // Estado global de implementaciones (badge "listas para avanzar" en el Nav).
+    implementation,
   },
 })

@@ -32,7 +32,10 @@
           v-for="impl in implementations"
           :key="impl.id"
           class="impl-list-row"
-          :class="{ 'impl-list-row--selected': selected_id == impl.id }"
+          :class="{
+            'impl-list-row--selected': selected_id == impl.id,
+            'impl-list-row--ready': impl.ready_to_advance,
+          }"
           @click="select_implementation(impl.id)"
         >
           <!-- Nombre del cliente -->
@@ -47,6 +50,11 @@
             </span>
             <span class="small text-muted text-truncate">{{ current_stage_name(impl) }}</span>
           </div>
+
+          <!-- Badge visible cuando la etapa completó su conversación y espera al admin -->
+          <span v-if="impl.ready_to_advance" class="badge bg-success mt-1">
+            ✅ Listo para avanzar
+          </span>
 
           <!-- Días desde inicio -->
           <div class="small text-muted mt-1">
@@ -859,6 +867,11 @@ export default {
           self.selected_implementation = res.data.model || self.selected_implementation
           /* Refrescar listado para que el badge de etapa del panel izquierdo quede actualizado. */
           self.load_list()
+          /*
+           * Reducir el badge global del Nav: esta implementación ya fue avanzada y
+           * ya no está esperando al admin. Previene sobreconteo hasta el próximo refresh.
+           */
+          self.$store.commit('implementation/decrement_ready_to_advance_count')
         })
         .catch(function () {
           /* El interceptor global de axios ya muestra el toast de error; no es necesario manejo adicional. */
@@ -1485,6 +1498,16 @@ export default {
 /* Fila activa / seleccionada */
 .impl-list-row--selected {
   background-color: #e7f1ff;
+}
+
+/* Fila con etapa lista para avanzar: fondo verde muy suave + borde izquierdo verde */
+.impl-list-row--ready {
+  background-color: #f0fdf4;
+  border-left: 3px solid #198754;
+}
+
+.impl-list-row--ready:hover {
+  background-color: #dcfce7;
 }
 
 /* Nombre del cliente en la fila */
