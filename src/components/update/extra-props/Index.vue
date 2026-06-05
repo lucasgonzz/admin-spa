@@ -31,6 +31,8 @@
         @configure-system="configure_system"
         @mark-step="on_mark_step"
         @retry-commands="retry_commands"
+        @toggle-skip-seeder="on_toggle_skip_seeder"
+        @toggle-skip-command="on_toggle_skip_command"
       />
 
       <!-- Pestañas secundarias: tareas manuales de versiones y notificaciones -->
@@ -504,6 +506,71 @@ export default {
         .catch(function () {})
         .then(function () {
           self.loading = false
+        })
+    },
+
+    /**
+     * Alterna el flag `skipped` de un UpdateSeeder.
+     * Se puede invocar incluso cuando la sección post-cierre está bloqueada,
+     * de modo que el operador puede preparar los saltos antes de habilitarla.
+     *
+     * @param {Object} seeder  UpdateSeeder completo (con id)
+     * @returns {void}
+     */
+    on_toggle_skip_seeder(seeder) {
+      const self = this
+      self.loading = true
+      self.$store.commit('auth/setMessage', 'Actualizando seeder...')
+      self.$store.commit('auth/setLoading', true)
+      api
+        .post('/update/' + self.local_update.id + '/seeders/' + seeder.id + '/toggle-skip')
+        .then(function (res) {
+          self.local_update = res.data.model
+          self.$emit('record-updated', res.data.model)
+        })
+        .catch(function (err) {
+          const msg =
+            err.response && err.response.data && err.response.data.message
+              ? err.response.data.message
+              : 'No se pudo actualizar el seeder.'
+          alert(msg)
+        })
+        .then(function () {
+          self.loading = false
+          self.$store.commit('auth/setLoading', false)
+          self.$store.commit('auth/setMessage', '')
+        })
+    },
+
+    /**
+     * Alterna el flag `skipped` de un UpdateCommand.
+     * Se puede invocar incluso cuando la sección post-cierre está bloqueada.
+     *
+     * @param {Object} cmd  UpdateCommand completo (con id)
+     * @returns {void}
+     */
+    on_toggle_skip_command(cmd) {
+      const self = this
+      self.loading = true
+      self.$store.commit('auth/setMessage', 'Actualizando comando...')
+      self.$store.commit('auth/setLoading', true)
+      api
+        .post('/update/' + self.local_update.id + '/commands/' + cmd.id + '/toggle-skip')
+        .then(function (res) {
+          self.local_update = res.data.model
+          self.$emit('record-updated', res.data.model)
+        })
+        .catch(function (err) {
+          const msg =
+            err.response && err.response.data && err.response.data.message
+              ? err.response.data.message
+              : 'No se pudo actualizar el comando.'
+          alert(msg)
+        })
+        .then(function () {
+          self.loading = false
+          self.$store.commit('auth/setLoading', false)
+          self.$store.commit('auth/setMessage', '')
         })
     },
   },

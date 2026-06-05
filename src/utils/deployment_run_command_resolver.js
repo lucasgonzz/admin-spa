@@ -1,6 +1,7 @@
 /**
  * Resuelve placeholders de seeders/comandos con datos del cliente del upgrade.
- * Sustituye {user_id?} por clients.user_id y prefija USER_ID= en tareas per_user.
+ * Usa clients.user_id (ComercioCity) del Client asociado al ClientVersionUpgrade.
+ * Sustituye {user_id?} / {user_id} y prefija USER_ID= en tareas per_user sin placeholder.
  */
 
 /**

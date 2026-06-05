@@ -1,143 +1,216 @@
 <template>
   <div class="account-page" v-if="admin">
-    <h1 class="h4 mb-3">Cuenta</h1>
-    <p class="text-muted small mb-4">{{ admin.name }} — {{ admin.email }}</p>
+    <header class="account-page__header mb-3 mb-md-4">
+      <h1 class="h4 mb-1">Cuenta</h1>
+      <p class="text-muted small mb-0">{{ admin.name }} — {{ admin.email }}</p>
+    </header>
 
-    <!-- Preferencias personales -->
-    <section class="account-section account-section--narrow mb-4">
-      <h2 class="h6 text-uppercase text-muted mb-3">Preferencias</h2>
+    <div class="account-page__layout d-flex flex-column flex-md-row gap-3 gap-md-4">
+      <aside class="account-page__nav flex-shrink-0">
+        <account-section-nav
+          :active_section="active_section"
+          @select="on_select_section"
+        />
+      </aside>
 
-      <div class="card mb-3">
-        <div class="card-body">
-          <h3 class="h6 card-title">Soporte</h3>
-          <p class="text-muted small">
-            Los tickets nuevos que se abren cuando un usuario escribe desde empresa se asignan al operador marcado
-            como responsable por defecto. Solo puede haber uno a la vez.
-          </p>
-          <div class="form-check mt-2">
-            <input
-              class="form-check-input"
-              type="checkbox"
-              id="default_support_owner"
-              :disabled="saving_support"
-              :checked="!!admin.is_default_support_owner"
-              @change="on_toggle_default_support"
-            />
-            <label class="form-check-label" for="default_support_owner">
-              Responsable por defecto de los mensajes de soporte
-            </label>
+      <div class="account-page__content flex-grow-1 min-w-0">
+        <!-- Preferencias personales -->
+        <section
+          v-show="active_section === 'preferences'"
+          id="preferences"
+          class="account-section account-section--narrow"
+        >
+          <h2 class="h6 text-uppercase text-muted mb-3">Preferencias</h2>
+
+          <div class="card mb-3">
+            <div class="card-body">
+              <h3 class="h6 card-title">Soporte</h3>
+              <p class="text-muted small">
+                Los tickets nuevos que se abren cuando un usuario escribe desde empresa se asignan al operador marcado
+                como responsable por defecto. Solo puede haber uno a la vez.
+              </p>
+              <div class="form-check mt-2">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="default_support_owner"
+                  :disabled="saving_support"
+                  :checked="!!admin.is_default_support_owner"
+                  @change="on_toggle_default_support"
+                />
+                <label class="form-check-label" for="default_support_owner">
+                  Responsable por defecto de los mensajes de soporte
+                </label>
+              </div>
+              <p v-if="saving_support" class="text-muted small mt-2 mb-0">Guardando…</p>
+              <p v-else-if="error_support" class="text-danger small mt-2 mb-0">{{ error_support }}</p>
+            </div>
           </div>
-          <p v-if="saving_support" class="text-muted small mt-2 mb-0">Guardando…</p>
-          <p v-else-if="error_support" class="text-danger small mt-2 mb-0">{{ error_support }}</p>
-        </div>
-      </div>
 
-      <div class="card">
-        <div class="card-body">
-          <h3 class="h6 card-title">Tareas</h3>
-          <p class="text-muted small">
-            Al crear una nueva tarea, el operador marcado como asignatario por defecto se preselecciona
-            automáticamente. Solo puede haber uno a la vez.
-          </p>
-          <div class="form-check mt-2">
-            <input
-              class="form-check-input"
-              type="checkbox"
-              id="default_task_assignee"
-              :disabled="saving_tasks"
-              :checked="!!admin.is_default_task_assignee"
-              @change="on_toggle_default_task_assignee"
-            />
-            <label class="form-check-label" for="default_task_assignee">
-              Asignatario por defecto de nuevas tareas
-            </label>
+          <div class="card">
+            <div class="card-body">
+              <h3 class="h6 card-title">Tareas</h3>
+              <p class="text-muted small">
+                Al crear una nueva tarea, el operador marcado como asignatario por defecto se preselecciona
+                automáticamente. Solo puede haber uno a la vez.
+              </p>
+              <div class="form-check mt-2">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  id="default_task_assignee"
+                  :disabled="saving_tasks"
+                  :checked="!!admin.is_default_task_assignee"
+                  @change="on_toggle_default_task_assignee"
+                />
+                <label class="form-check-label" for="default_task_assignee">
+                  Asignatario por defecto de nuevas tareas
+                </label>
+              </div>
+              <p v-if="saving_tasks" class="text-muted small mt-2 mb-0">Guardando…</p>
+              <p v-else-if="error_tasks" class="text-danger small mt-2 mb-0">{{ error_tasks }}</p>
+            </div>
           </div>
-          <p v-if="saving_tasks" class="text-muted small mt-2 mb-0">Guardando…</p>
-          <p v-else-if="error_tasks" class="text-danger small mt-2 mb-0">{{ error_tasks }}</p>
-        </div>
-      </div>
-    </section>
+        </section>
 
-    <!-- Configuraciones del sistema -->
-    <section class="account-section mb-4">
-      <h2 class="h6 text-uppercase text-muted mb-3">Configuración</h2>
+        <!-- Configuración de soporte: alertas -->
+        <section
+          v-show="active_section === 'support-alert-settings'"
+          id="support-alert-settings"
+          class="account-section"
+        >
+          <div class="card account-config-card">
+            <div class="card-body">
+              <h2 class="h6 card-title">Configuración de soporte</h2>
+              <support-alert-settings-section />
+            </div>
+          </div>
+        </section>
 
-      <div id="support-alert-settings" class="card mb-3 account-config-card">
-        <div class="card-body">
-          <h3 class="h6 card-title">Configuración de soporte</h3>
-          <support-alert-settings-section />
-        </div>
-      </div>
+        <!-- Configuración de soporte: IA -->
+        <section
+          v-show="active_section === 'support-ai-settings'"
+          id="support-ai-settings"
+          class="account-section"
+        >
+          <div class="card account-config-card">
+            <div class="card-body">
+              <h2 class="h6 card-title">IA de soporte</h2>
+              <support-ai-settings-section />
+            </div>
+          </div>
+        </section>
 
-      <div id="support-ai-settings" class="card mb-3 account-config-card">
-        <div class="card-body">
-          <h3 class="h6 card-title">IA de soporte</h3>
-          <support-ai-settings-section />
-        </div>
-      </div>
+        <!-- Leads: WhatsApp onboarding -->
+        <section
+          v-show="active_section === 'lead-whatsapp-onboarding'"
+          id="lead-whatsapp-onboarding"
+          class="account-section"
+        >
+          <div class="card account-config-card">
+            <div class="card-body">
+              <h2 class="h6 card-title">Mensajes automáticos de leads (WhatsApp)</h2>
+              <lead-whatsapp-onboarding-section ref="lead_whatsapp_onboarding_section" />
+            </div>
+          </div>
+        </section>
 
-      <div id="lead-whatsapp-onboarding" class="card mb-3 account-config-card">
-        <div class="card-body">
-          <h3 class="h6 card-title">Mensajes automáticos de leads (WhatsApp)</h3>
-          <lead-whatsapp-onboarding-section ref="lead_whatsapp_onboarding_section" />
-        </div>
-      </div>
+        <!-- Leads: reglas de seguimiento -->
+        <section
+          v-show="active_section === 'followup-rules'"
+          id="followup-rules"
+          class="account-section"
+        >
+          <div class="card account-config-card">
+            <div class="card-body">
+              <h2 class="h6 card-title">Reglas de seguimiento</h2>
+              <p class="text-muted small mb-3">
+                Tiempo máximo de inactividad del lead por estado antes de que el sistema sugiera un seguimiento
+                automático vía IA.
+              </p>
+              <followup-rules-section />
+            </div>
+          </div>
+        </section>
 
-      <div id="followup-rules" class="card mb-3 account-config-card">
-        <div class="card-body">
-          <h3 class="h6 card-title">Reglas de seguimiento</h3>
-          <p class="text-muted small mb-3">
-            Tiempo máximo de inactividad del lead por estado antes de que el sistema sugiera un seguimiento
-            automático vía IA.
-          </p>
-          <followup-rules-section />
-        </div>
-      </div>
+        <!-- Leads: protocolo de ventas -->
+        <section
+          v-show="active_section === 'protocol-entries'"
+          id="protocol-entries"
+          class="account-section"
+        >
+          <div class="card account-config-card">
+            <div class="card-body">
+              <h2 class="h6 card-title">Protocolo de ventas</h2>
+              <p class="text-muted small mb-3">
+                Entradas del protocolo usadas por la IA para responder leads: etapas, seguimientos y situaciones
+                frecuentes.
+              </p>
+              <protocol-entries-section />
+            </div>
+          </div>
+        </section>
 
-      <div id="protocol-entries" class="card mb-3 account-config-card">
-        <div class="card-body">
-          <h3 class="h6 card-title">Protocolo de ventas</h3>
-          <p class="text-muted small mb-3">
-            Entradas del protocolo usadas por la IA para responder leads: etapas, seguimientos y situaciones
-            frecuentes.
-          </p>
-          <protocol-entries-section />
-        </div>
-      </div>
+        <!-- Leads: system prompt -->
+        <section
+          v-show="active_section === 'ai-system-prompt'"
+          id="ai-system-prompt"
+          class="account-section"
+        >
+          <div class="card account-config-card">
+            <div class="card-body">
+              <h2 class="h6 card-title">System Prompt IA</h2>
+              <p class="text-muted small mb-3">
+                Texto base enviado a Claude como system prompt. Las entradas de protocolo y la sección FAQ post-demo se
+                generan automáticamente en el servidor.
+              </p>
+              <ai-system-prompt-section ref="ai_system_prompt_section" />
+            </div>
+          </div>
+        </section>
 
-      <div id="ai-system-prompt" class="card mb-3 account-config-card">
-        <div class="card-body">
-          <h3 class="h6 card-title">System Prompt IA</h3>
-          <p class="text-muted small mb-3">
-            Texto base enviado a Claude como system prompt. Las entradas de protocolo y la sección FAQ post-demo se
-            generan automáticamente en el servidor.
-          </p>
-          <ai-system-prompt-section ref="ai_system_prompt_section" />
-        </div>
-      </div>
+        <!-- Operaciones: plantillas de tareas -->
+        <section
+          v-show="active_section === 'task-templates'"
+          id="task-templates"
+          class="account-section"
+        >
+          <div class="card account-config-card">
+            <div class="card-body">
+              <h2 class="h6 card-title">Plantillas de tareas</h2>
+              <p class="text-muted small mb-3">
+                Se crean automáticamente al promover un lead a cliente. Podés filtrar por proceso, reordenar y activar o
+                desactivar cada plantilla.
+              </p>
+              <task-templates-section />
+            </div>
+          </div>
+        </section>
 
-      <div id="task-templates" class="card mb-3 account-config-card">
-        <div class="card-body">
-          <h3 class="h6 card-title">Plantillas de tareas</h3>
-          <p class="text-muted small mb-3">
-            Se crean automáticamente al promover un lead a cliente. Podés filtrar por proceso, reordenar y activar o
-            desactivar cada plantilla.
-          </p>
-          <task-templates-section />
-        </div>
+        <!-- Operaciones: implementaciones -->
+        <section
+          v-show="active_section === 'implementation-settings'"
+          id="implementation-settings"
+          class="account-section"
+        >
+          <div class="card account-config-card">
+            <div class="card-body">
+              <h2 class="h6 card-title">Implementaciones</h2>
+              <implementation-settings-section />
+            </div>
+          </div>
+        </section>
       </div>
-
-      <div id="implementation-settings" class="card mb-3 account-config-card">
-        <div class="card-body">
-          <h3 class="h6 card-title">Implementaciones</h3>
-          <implementation-settings-section />
-        </div>
-      </div>
-    </section>
+    </div>
   </div>
 </template>
 
 <script>
+import AccountSectionNav from '@/components/account/AccountSectionNav.vue'
+import {
+  resolve_account_section_from_hash,
+  ACCOUNT_DEFAULT_SECTION_ID,
+} from '@/components/account/account_sections'
 import FollowupRulesSection from '@/components/account/sections/FollowupRulesSection.vue'
 import SupportAlertSettingsSection from '@/components/account/sections/SupportAlertSettingsSection.vue'
 import SupportAiSettingsSection from '@/components/account/sections/SupportAiSettingsSection.vue'
@@ -147,24 +220,13 @@ import TaskTemplatesSection from '@/components/account/sections/TaskTemplatesSec
 import LeadWhatsappOnboardingSection from '@/components/account/sections/LeadWhatsappOnboardingSection.vue'
 import ImplementationSettingsSection from '@/components/account/sections/ImplementationSettingsSection.vue'
 
-/** Anclas de sección admitidas en /cuenta#... (compatibilidad con rutas antiguas). */
-const ACCOUNT_SECTION_HASHES = [
-  'support-alert-settings',
-  'support-ai-settings',
-  'lead-whatsapp-onboarding',
-  'followup-rules',
-  'protocol-entries',
-  'ai-system-prompt',
-  'task-templates',
-  'implementation-settings',
-]
-
 /**
- * Vista de cuenta: preferencias del operador y configuraciones del sistema agrupadas en secciones.
+ * Vista de cuenta: preferencias del operador y configuraciones del sistema en secciones navegables.
  */
 export default {
   name: 'ViewAccount',
   components: {
+    AccountSectionNav,
     FollowupRulesSection,
     SupportAlertSettingsSection,
     SupportAiSettingsSection,
@@ -176,6 +238,8 @@ export default {
   },
   data() {
     return {
+      /** Sección visible según hash de URL o selección en la barra lateral. */
+      active_section: ACCOUNT_DEFAULT_SECTION_ID,
       /** Indica request PUT /me en curso para la sección de soporte. */
       saving_support: false,
       /** Último error de soporte para mostrar bajo su checkbox. */
@@ -195,16 +259,17 @@ export default {
     const self = this
     // Refresca perfil para traer flags actualizados si el token es antiguo.
     this.$store.dispatch('auth/me').catch(function () {})
+    this.sync_active_section_from_route()
     this.$nextTick(function () {
-      self.scroll_to_hash_section()
+      self.ensure_route_hash_matches_section()
     })
   },
   watch: {
     /**
-     * Desplaza al ancla cuando cambia el hash estando ya en Cuenta.
+     * Cambia la sección visible cuando el hash de la URL cambia (redirects antiguos o navegación del browser).
      */
     '$route.hash'() {
-      this.scroll_to_hash_section()
+      this.sync_active_section_from_route()
     },
   },
   beforeRouteLeave(to, from, next) {
@@ -230,18 +295,41 @@ export default {
   },
   methods: {
     /**
-     * Desplaza suavemente a la sección indicada en el hash de la URL (#followup-rules, etc.).
+     * Actualiza active_section leyendo el hash actual de vue-router.
      *
      * @returns {void}
      */
-    scroll_to_hash_section() {
-      const raw = (this.$route.hash || '').replace(/^#/, '')
-      if (!raw || ACCOUNT_SECTION_HASHES.indexOf(raw) === -1) {
+    sync_active_section_from_route() {
+      this.active_section = resolve_account_section_from_hash(this.$route.hash)
+    },
+
+    /**
+     * Si la URL no tiene hash, lo normaliza al id de la sección activa (p. ej. #preferences).
+     *
+     * @returns {void}
+     */
+    ensure_route_hash_matches_section() {
+      const expected_hash = '#' + this.active_section
+      if (this.$route.hash === expected_hash) {
         return
       }
-      const el = document.getElementById(raw)
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      this.$router.replace({ hash: expected_hash }).catch(function () {})
+    },
+
+    /**
+     * Cambia la sección visible y sincroniza el hash para bookmarks y redirects antiguos.
+     *
+     * @param {string} section_id Id de sección (sin #).
+     * @returns {void}
+     */
+    on_select_section(section_id) {
+      if (this.active_section === section_id) {
+        return
+      }
+      this.active_section = section_id
+      const next_hash = '#' + section_id
+      if (this.$route.hash !== next_hash) {
+        this.$router.push({ hash: next_hash }).catch(function () {})
       }
     },
 
@@ -307,5 +395,19 @@ export default {
 
 .account-config-card {
   scroll-margin-top: 1rem;
+}
+
+@media (min-width: 768px) {
+  .account-page__nav {
+    width: 14rem;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .account-page__nav {
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid #dee2e6;
+  }
 }
 </style>

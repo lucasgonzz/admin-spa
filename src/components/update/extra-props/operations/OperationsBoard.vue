@@ -205,6 +205,16 @@
               Completá la etapa pre-cierre (actualizar sistemas y migraciones) para habilitar estas tareas.
             </div>
 
+            <!-- Aviso: faltan user_id del cliente para comandos/seeders per_user -->
+            <div
+              v-if="post_closure_needs_user_id && !deployment_client_user_id"
+              class="alert alert-warning py-2 mb-3 small"
+            >
+              <i class="bi bi-exclamation-triangle me-1"></i>
+              El cliente no tiene <strong>user_id</strong> ComercioCity configurado.
+              Los seeders/comandos por usuario no podrán ejecutarse hasta completarlo en el perfil del cliente.
+            </div>
+
             <!-- Botón para iniciar seeders y comandos (tras marcar crons) -->
             <div
               v-if="can_start_post_closure"
@@ -266,6 +276,9 @@
                     :failure_notes="post_closure_automated_locked ? '' : seeder_failure_notes(seeder)"
                     :run_scope="seeder.version_seeder ? seeder.version_seeder.run_scope : null"
                     :console_logs="post_closure_automated_locked ? [] : seeder_console_logs(seeder)"
+                    :is_skipped="seeder_is_skipped(seeder)"
+                    :allow_skip_toggle="seeder_can_toggle_skip(seeder)"
+                    @toggle-skip="$emit('toggle-skip-seeder', seeder)"
                   />
                 </div>
                 <div v-else class="ms-4 mt-1 small text-muted">Sin seeders para este upgrade</div>
@@ -311,6 +324,9 @@
                     :run_scope="cmd.version_command ? cmd.version_command.run_scope : null"
                     :is_manual="command_is_manual(cmd)"
                     :console_logs="post_closure_automated_locked ? [] : command_console_logs(cmd)"
+                    :is_skipped="command_is_skipped(cmd)"
+                    :allow_skip_toggle="command_can_toggle_skip(cmd)"
+                    @toggle-skip="$emit('toggle-skip-command', cmd)"
                   />
                 </div>
                 <div v-else class="ms-4 mt-1 small text-muted">Sin comandos para este upgrade</div>
@@ -418,7 +434,17 @@ export default {
     /** Si el deployment está siendo monitoreado vía polling. */
     deployment_loading: { type: Boolean, default: false },
   },
-  emits: ['deploy-systems', 'start-post-closure', 'configure-system', 'mark-step', 'retry-commands'],
+  emits: [
+    'deploy-systems',
+    'start-post-closure',
+    'configure-system',
+    'mark-step',
+    'retry-commands',
+    /** Emitido al hacer toggle skip en un seeder; payload: objeto UpdateSeeder. */
+    'toggle-skip-seeder',
+    /** Emitido al hacer toggle skip en un comando; payload: objeto UpdateCommand. */
+    'toggle-skip-command',
+  ],
   data() {
     return {
       /** Controla si el panel de log está expandido o colapsado. */
@@ -460,6 +486,36 @@ export default {
      */
     deployment_client() {
       return this.update && this.update.client ? this.update.client : null
+    },
+    /**
+     * user_id ComercioCity del cliente del upgrade (parámetro en seeders/comandos per_user).
+     * @returns {number|null}
+     */
+    deployment_client_user_id() {
+      if (!this.deployment_client || this.deployment_client.user_id == null) {
+        return null
+      }
+      var parsed = parseInt(this.deployment_client.user_id, 10)
+      if (isNaN(parsed) || parsed <= 0) {
+        return null
+      }
+      return parsed
+    },
+    /**
+     * Hay seeders o comandos que requieren user_id del cliente (per_user o placeholder).
+     * @returns {boolean}
+     */
+    post_closure_needs_user_id() {
+      var self = this
+      var seeders_need = this.update_seeders.some(function (seeder) {
+        return self.seeder_needs_user_id(seeder)
+      })
+      if (seeders_need) {
+        return true
+      }
+      return this.update_commands.some(function (command) {
+        return self.command_needs_user_id(command)
+      })
     },
     /**
      * Lista de seeders del upgrade.
@@ -598,6 +654,8 @@ export default {
     },
     /**
      * Estado del bloque "Seeders ejecutados" (derivado de run_seeders o de los registros individuales).
+     * Los ítems marcados como saltados (skipped + pendiente) se tratan como completados
+     * para el propósito del estado global del bloque.
      * @returns {string}
      */
     seeders_block_status() {
@@ -609,6 +667,10 @@ export default {
         var self = this
 
         seeders.forEach(function (seeder) {
+          // Seeder saltado y aún pendiente: se cuenta como completado en el bloque.
+          if (self.seeder_is_skipped(seeder) && seeder.status === 'pendiente') {
+            return
+          }
           var item_status = self.seeder_item_status(seeder)
           if (item_status === 'running') {
             any_running = true
@@ -636,6 +698,8 @@ export default {
     },
     /**
      * Estado del bloque "Comandos ejecutados".
+     * Los ítems marcados como saltados (skipped + pendiente) se tratan como completados
+     * para el propósito del estado global del bloque.
      * @returns {string}
      */
     commands_block_status() {
@@ -647,6 +711,10 @@ export default {
         var self = this
 
         automated_commands.forEach(function (command) {
+          // Comando saltado y aún pendiente: se cuenta como completado en el bloque.
+          if (self.command_is_skipped(command) && command.status === 'pendiente') {
+            return
+          }
           var item_status = self.command_item_status(command)
           if (item_status === 'running') {
             any_running = true
@@ -680,22 +748,28 @@ export default {
       return this.get_step_status_cached('update_default_version')
     },
     /**
-     * Cantidad de seeders fallidos.
+     * Cantidad de seeders fallidos (excluye los saltados).
      * @returns {number}
      */
     seeders_with_errors() {
       var self = this
       return this.update_seeders.filter(function (seeder) {
+        if (self.seeder_is_skipped(seeder)) {
+          return false
+        }
         return self.seeder_item_status(seeder) === 'failed'
       }).length
     },
     /**
-     * Cantidad de comandos fallidos.
+     * Cantidad de comandos fallidos (excluye los saltados).
      * @returns {number}
      */
     commands_with_errors() {
       var self = this
       return this.automated_update_commands.filter(function (command) {
+        if (self.command_is_skipped(command)) {
+          return false
+        }
         return self.command_item_status(command) === 'failed'
       }).length
     },
@@ -1125,6 +1199,84 @@ export default {
       }
 
       return ''
+    },
+
+    /**
+     * Indica si un seeder requiere user_id del cliente (per_user o placeholder en plantilla).
+     *
+     * @param {Object} seeder
+     * @returns {boolean}
+     */
+    seeder_needs_user_id(seeder) {
+      if (!seeder.version_seeder) {
+        return false
+      }
+      if (seeder.version_seeder.run_scope === 'per_user') {
+        return true
+      }
+      var shell_command = seeder.version_seeder.command
+        || (seeder.version_seeder.seeder_class
+          ? 'php artisan db:seed --class=' + seeder.version_seeder.seeder_class
+          : '')
+      return /\{user_id(\?)?\}/i.test(shell_command)
+    },
+
+    /**
+     * Indica si un comando requiere user_id del cliente (per_user o placeholder en plantilla).
+     *
+     * @param {Object} cmd
+     * @returns {boolean}
+     */
+    command_needs_user_id(cmd) {
+      if (!cmd.version_command || !cmd.version_command.command) {
+        return false
+      }
+      if (cmd.version_command.run_scope === 'per_user') {
+        return true
+      }
+      return /\{user_id(\?)?\}/i.test(cmd.version_command.command)
+    },
+
+    /**
+     * Indica si un seeder está marcado para ser saltado en el deployment.
+     *
+     * @param {Object} seeder  UpdateSeeder
+     * @returns {boolean}
+     */
+    seeder_is_skipped(seeder) {
+      return Boolean(seeder.skipped)
+    },
+
+    /**
+     * Indica si un seeder puede mostrar el botón toggle skip.
+     * Sólo se permite si el seeder aún no fue ejecutado.
+     *
+     * @param {Object} seeder  UpdateSeeder
+     * @returns {boolean}
+     */
+    seeder_can_toggle_skip(seeder) {
+      return seeder.status === 'pendiente'
+    },
+
+    /**
+     * Indica si un comando está marcado para ser saltado en el deployment.
+     *
+     * @param {Object} cmd  UpdateCommand
+     * @returns {boolean}
+     */
+    command_is_skipped(cmd) {
+      return Boolean(cmd.skipped)
+    },
+
+    /**
+     * Indica si un comando puede mostrar el botón toggle skip.
+     * Sólo se permite si el comando aún no fue ejecutado.
+     *
+     * @param {Object} cmd  UpdateCommand
+     * @returns {boolean}
+     */
+    command_can_toggle_skip(cmd) {
+      return cmd.status === 'pendiente'
     },
   },
 }

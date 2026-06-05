@@ -1,9 +1,10 @@
 <template>
   <!-- Ítem de sub-tarea: muestra ícono de estado, etiqueta y detalle de error si aplica -->
   <div class="d-flex align-items-start gap-2 py-1">
-    <!-- Ícono según estado: pendiente / en curso / completado / fallido -->
+    <!-- Ícono según estado: pendiente / en curso / completado / fallido / saltado -->
     <div class="sub-task-icon flex-shrink-0 mt-1">
-      <i v-if="status === 'completed'" class="bi bi-check-circle-fill text-success"></i>
+      <i v-if="is_skipped && status === 'pending'" class="bi bi-dash-circle text-secondary"></i>
+      <i v-else-if="status === 'completed'" class="bi bi-check-circle-fill text-success"></i>
       <i v-else-if="status === 'failed'" class="bi bi-x-circle-fill text-danger"></i>
       <i v-else-if="status === 'running'" class="bi bi-arrow-repeat text-warning rotating-icon"></i>
       <i v-else class="bi bi-circle text-muted"></i>
@@ -17,7 +18,8 @@
           'text-success fw-semibold': status === 'completed',
           'text-danger': status === 'failed',
           'text-warning fw-semibold': status === 'running',
-          'text-muted': status === 'pending',
+          'text-secondary': is_skipped && status === 'pending',
+          'text-muted': !is_skipped && status === 'pending',
         }"
       >
         {{ label }}
@@ -50,6 +52,15 @@
         Manual
       </span>
 
+      <!-- Badge visible cuando el ítem está marcado para saltear -->
+      <span
+        v-if="is_skipped"
+        class="badge text-bg-secondary ms-1 small"
+        title="Este ítem será omitido durante el deployment"
+      >
+        Saltado
+      </span>
+
       <!-- Detalles adicionales opcionales (descripción, clase del seeder, etc.) -->
       <div v-if="detail" class="text-muted" style="font-size: 0.7rem; font-family: monospace">
         {{ detail }}
@@ -58,6 +69,24 @@
       <!-- Notas de fallo cuando el sub-paso falló -->
       <div v-if="status === 'failed' && failure_notes" class="text-danger mt-1" style="font-size: 0.72rem">
         <i class="bi bi-exclamation-circle me-1"></i>{{ failure_notes }}
+      </div>
+
+      <!--
+        Botón toggle "Saltear / Reactivar".
+        Se muestra cuando allow_skip_toggle es true y el ítem aún no fue ejecutado.
+        Usa la clase sub-task-skip-btn para forzar pointer-events: auto,
+        permitiendo la interacción incluso cuando el contenedor padre tiene pointer-events: none.
+      -->
+      <div v-if="allow_skip_toggle && status === 'pending'" class="mt-1">
+        <button
+          type="button"
+          class="btn btn-link btn-sm p-0 text-decoration-none sub-task-skip-btn"
+          :class="is_skipped ? 'text-secondary' : 'text-muted'"
+          @click.stop="$emit('toggle-skip')"
+        >
+          <i class="bi me-1" :class="is_skipped ? 'bi-arrow-counterclockwise' : 'bi-skip-forward'"></i>
+          {{ is_skipped ? 'Reactivar' : 'Saltear' }}
+        </button>
       </div>
 
       <!-- Salida de consola del comando/seeder (colapsable) -->
@@ -123,7 +152,19 @@ export default {
     console_logs: { type: Array, default: () => [] },
     /** Si el ítem está configurado como ejecución manual en la versión. */
     is_manual: { type: Boolean, default: false },
+    /**
+     * Indica si el operador marcó este ítem para ser saltado en el deployment.
+     * Muestra badge "Saltado" y cambia el ícono a guión.
+     */
+    is_skipped: { type: Boolean, default: false },
+    /**
+     * Habilita el botón toggle "Saltear / Reactivar" para que el operador
+     * pueda marcar o desmarcar el skip del ítem.
+     * Debe ser true para seeders y comandos; false para sub-pasos estáticos.
+     */
+    allow_skip_toggle: { type: Boolean, default: false },
   },
+  emits: ['toggle-skip'],
   data() {
     return {
       /** Controla si el panel de consola está expandido. */
@@ -237,6 +278,19 @@ export default {
 }
 .sub-task-console-toggle {
   font-size: 0.72rem;
+}
+/*
+ * Fuerza pointer-events activos en el botón de skip para que funcione
+ * incluso cuando el contenedor padre tiene pointer-events: none
+ * (sección post-cierre bloqueada hasta completar el pre-cierre).
+ */
+.sub-task-skip-btn {
+  pointer-events: auto !important;
+  font-size: 0.72rem;
+  opacity: 0.75;
+}
+.sub-task-skip-btn:hover {
+  opacity: 1;
 }
 .sub-task-console-panel {
   max-height: 180px;

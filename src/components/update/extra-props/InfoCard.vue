@@ -4,6 +4,13 @@
       <div class="col-md-3">
         <small class="text-muted d-block">Cliente</small>
         <span>{{ update.client ? update.client.name : '—' }}</span>
+        <small
+          v-if="update.client && update.client.user_id"
+          class="text-muted d-block"
+          title="user_id ComercioCity usado en seeders/comandos per_user"
+        >
+          user_id: {{ update.client.user_id }}
+        </small>
       </div>
       <div class="col-md-2">
         <small class="text-muted d-block">Versión origen</small>
