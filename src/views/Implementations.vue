@@ -34,7 +34,7 @@
           class="impl-list-row"
           :class="{
             'impl-list-row--selected': selected_id == impl.id,
-            'impl-list-row--ready': impl.ready_to_advance,
+            'impl-list-row--ready': check_ready_to_advance(impl),
           }"
           @click="select_implementation(impl.id)"
         >
@@ -51,10 +51,12 @@
             <span class="small text-muted text-truncate">{{ current_stage_name(impl) }}</span>
           </div>
 
-          <!-- Badge visible cuando la etapa completó su conversación y espera al admin -->
-          <span v-if="impl.ready_to_advance" class="badge bg-success mt-1">
-            ✅ Listo para avanzar
-          </span>
+          <!-- Badge de alerta cuando la conversación automática terminó y espera al admin -->
+          <div v-if="check_ready_to_advance(impl)" class="mt-1">
+            <span class="badge bg-danger">
+              ⚠️ Lista para avanzar etapa
+            </span>
+          </div>
 
           <!-- Días desde inicio -->
           <div class="small text-muted mt-1">
@@ -882,6 +884,36 @@ export default {
     },
 
     /**
+     * Determina si una implementación del listado está lista para avanzar de etapa.
+     *
+     * Computa el estado directamente desde las `stages` cargadas en la fila,
+     * sin depender del campo virtual `ready_to_advance` del backend (que puede llegar
+     * con race condition cuando el listado se recarga justo al recibir el evento Pusher).
+     *
+     * Criterio: current_stage < 7 Y la etapa cuyo stage_number === current_stage
+     * tiene status === 'completed' (la conversación automática terminó, falta el avance manual).
+     *
+     * @param {Object} impl Implementación con relación stages cargada.
+     * @returns {boolean}
+     */
+    check_ready_to_advance(impl) {
+      if (!impl || !impl.stages || impl.current_stage >= 7) {
+        return false
+      }
+
+      /** Indicador de etapa lista encontrada. */
+      let ready = false
+
+      impl.stages.forEach(function (stage) {
+        if (stage.stage_number == impl.current_stage && stage.status === 'completed') {
+          ready = true
+        }
+      })
+
+      return ready
+    },
+
+    /**
      * Retorna el nombre a mostrar del cliente asociado a una implementación.
      *
      * Prefiere company_name sobre name como fallback.
@@ -1349,16 +1381,21 @@ export default {
         })
       )
 
-      /*
-       * Siempre refrescar el listado para que ready_to_advance se actualice en la fila
-       * del panel izquierdo, independientemente de si la implementación está seleccionada.
-       */
-      this.load_list()
+      const self = this
 
-      if (this.selected_id && this.selected_id == impl_id) {
-        /* Implementación actualmente abierta: también recargar el detalle completo. */
-        this.load_detail(impl_id)
-      }
+      /*
+       * Esperar 600ms antes de recargar para que el commit del DB llegue antes que la
+       * consulta API (el evento Pusher puede llegar antes de que la transacción cierre).
+       * Siempre refrescar el listado para que las stages reflejen el nuevo status.
+       */
+      setTimeout(function () {
+        self.load_list()
+
+        if (self.selected_id && self.selected_id == impl_id) {
+          /* Implementación actualmente abierta: también recargar el detalle completo. */
+          self.load_detail(impl_id)
+        }
+      }, 600)
     },
 
     // -------------------------------------------------------------------------
@@ -1503,22 +1540,22 @@ export default {
   background-color: #e7f1ff;
 }
 
-/* Fila con etapa lista para avanzar: verde saturado + borde izquierdo grueso + animación suave */
+/* Fila con etapa lista para avanzar: rojo llamativo + borde izquierdo grueso + pulso */
 .impl-list-row--ready {
-  background-color: #bbf7d0;
-  border-left: 5px solid #16a34a;
+  background-color: #fee2e2;
+  border-left: 5px solid #dc3545;
   animation: impl-ready-pulse 2.4s ease-in-out infinite;
 }
 
 .impl-list-row--ready:hover {
-  background-color: #86efac;
+  background-color: #fecaca;
   animation: none;
 }
 
-/* Pulso sutil: alterna entre el verde base y un verde más oscuro */
+/* Pulso: alterna entre rojo suave y rojo más intenso */
 @keyframes impl-ready-pulse {
-  0%, 100% { background-color: #bbf7d0; }
-  50%       { background-color: #86efac; }
+  0%, 100% { background-color: #fee2e2; }
+  50%       { background-color: #fecaca; }
 }
 
 /* Nombre del cliente en la fila */
