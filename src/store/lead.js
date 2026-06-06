@@ -251,14 +251,32 @@ export default __base_store({
       })
     },
     /**
-     * Promueve el lead a Client de producción en admin-api y genera las tareas automáticas.
-     * No ejecuta el setup remoto del empresa-api; ese paso continúa siendo `run_user_setup`.
+     * Solicita a la API un subdominio sugerido para el nombre de empresa dado.
+     * Llama a POST /client/suggest-subdomain y retorna el string sugerido.
+     *
      * @param {Object} context contexto del módulo Vuex.
-     * @param {number} lead_id identificador del lead.
+     * @param {string} company_name nombre de empresa del lead.
+     * @returns {Promise<string>} subdominio sugerido por Claude.
+     */
+    suggest_subdomain(context, company_name) {
+      return api.post('/client/suggest-subdomain', { company_name }).then(function (res) {
+        return res.data.subdomain || ''
+      })
+    },
+    /**
+     * Promueve el lead a Client de producción en admin-api y genera las tareas automáticas.
+     * Acepta { lead_id, suggested_subdomain } o solo un número (backward compat).
+     * No ejecuta el setup remoto del empresa-api; ese paso continúa siendo `run_user_setup`.
+     *
+     * @param {Object} context contexto del módulo Vuex.
+     * @param {{ lead_id: number, suggested_subdomain?: string }|number} payload identificador del lead con subdominio opcional.
      * @returns {Promise<Object>} modelo actualizado devuelto por el backend.
      */
-    promote_to_client(context, lead_id) {
-      return api.post('/lead/' + lead_id + '/promote-to-client').then((res) => {
+    promote_to_client(context, payload) {
+      /* Soporte para payload como número (backward compat) y como objeto con subdomain. */
+      var lead_id            = typeof payload === 'object' ? payload.lead_id : payload
+      var suggested_subdomain = typeof payload === 'object' ? (payload.suggested_subdomain || '') : ''
+      return api.post('/lead/' + lead_id + '/promote-to-client', { suggested_subdomain }).then(function (res) {
         return res.data.model
       })
     },

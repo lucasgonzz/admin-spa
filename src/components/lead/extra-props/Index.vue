@@ -28,15 +28,61 @@
         type="button"
         class="btn btn-sm btn-success"
         :disabled="loading_action !== '' || !can_promote_to_client"
-        @click="promote_to_client"
+        @click="request_promote_to_client"
         :title="promote_to_client_title"
       >
         <i class="bi bi-person-check-fill me-1" />
-        {{ loading_action === 'promote_to_client' ? 'Promoviendo...' : 'Promover a cliente' }}
+        {{ loading_action === 'fetching_subdomain' ? 'Sugiriendo...' : 'Promover a cliente' }}
       </button>
       <button type="button" class="btn btn-sm btn-outline-success" :disabled="loading_action !== '' || !can_run_user_setup" @click="run_user_setup">
         {{ loading_action === 'user_setup' ? 'Ejecutando...' : 'Correr user setup' }}
       </button>
+    </div>
+
+    <!-- Confirmación de subdominio antes de promover a cliente -->
+    <div v-if="showing_subdomain_confirm" class="alert alert-light border mb-3">
+      <div class="mb-2">
+        <strong>Subdominio sugerido</strong>
+        <small class="text-muted ms-1">(podés editarlo antes de confirmar)</small>
+      </div>
+      <!-- Input editable: el operador puede cambiar el subdominio sugerido -->
+      <div class="mb-3">
+        <input
+          type="text"
+          class="form-control form-control-sm"
+          v-model="subdomain_preview"
+          maxlength="20"
+          placeholder="ej: hb, lamartina, galvan"
+        />
+        <small class="text-muted">Solo letras, números y guiones. Máximo 20 caracteres.</small>
+      </div>
+      <!-- Preview de las URLs que se van a crear -->
+      <div v-if="subdomain_preview" class="small text-muted mb-3">
+        <div class="mb-1"><strong>URLs a crear:</strong></div>
+        <div>SPA 1: https://{{ subdomain_preview }}.comerciocity.com</div>
+        <div>API 1: https://api-{{ subdomain_preview }}.comerciocity.com</div>
+        <div>SPA 2: https://{{ subdomain_preview }}2.comerciocity.com</div>
+        <div>API 2: https://api-{{ subdomain_preview }}2.comerciocity.com</div>
+      </div>
+      <div class="d-flex gap-2">
+        <button
+          type="button"
+          class="btn btn-sm btn-success"
+          :disabled="!subdomain_preview || loading_action !== ''"
+          @click="confirm_promote_to_client"
+        >
+          <i class="bi bi-check-lg me-1" />
+          {{ loading_action === 'promote_to_client' ? 'Promoviendo...' : 'Confirmar y promover' }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm btn-outline-secondary"
+          :disabled="loading_action !== ''"
+          @click="cancel_subdomain_confirm"
+        >
+          Cancelar
+        </button>
+      </div>
     </div>
 
     <!-- Advertencia de campos faltantes para el mail de demo -->
@@ -96,7 +142,7 @@
 </template>
 
 <script>
-import { resolve_error_message } from '@/utils/axios'
+import api, { resolve_error_message } from '@/utils/axios'
 
 export default {
   name: 'LeadExtraProps',
@@ -118,6 +164,14 @@ export default {
        * URL candidata para promover un lead a cliente.
        */
       promotion_api_url: '',
+      /**
+       * Controla si se muestra el panel de confirmación de subdominio antes de promover.
+       */
+      showing_subdomain_confirm: false,
+      /**
+       * Subdominio sugerido por Claude o editado por el operador antes de confirmar la promoción.
+       */
+      subdomain_preview: '',
     }
   },
   computed: {
@@ -528,23 +582,80 @@ export default {
     },
 
     /**
-     * Promueve el lead a Client de producción en admin-api y genera las tareas automáticas.
+     * Primer paso de la promoción: pide subdominio sugerido a la API y muestra el panel de confirmación.
+     * Llama a POST /client/suggest-subdomain con el company_name del lead.
      * @returns {void}
      */
-    promote_to_client() {
+    request_promote_to_client() {
       const self = this
       if (!self.can_promote_to_client) {
         self.open_feedback(self.promote_to_client_title || 'No se puede promover en este momento.')
         return
       }
+
+      /* Nombre de empresa del lead para la sugerencia. */
+      var company_name = (self.record.company_name || self.record.contact_name || '').trim()
+
+      /* Mostrar spinner en el botón mientras se consulta Claude. */
+      self.loading_action = 'fetching_subdomain'
+
+      api.post('/client/suggest-subdomain', { company_name })
+        .then(function (res) {
+          /* Claude respondió: mostrar su sugerencia en el input editable. */
+          self.subdomain_preview = (res.data.subdomain || '').trim()
+          self.showing_subdomain_confirm = true
+        })
+        .catch(function () {
+          /* Si la API falla, usar un slug simple del nombre como fallback local. */
+          var fallback = company_name
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]/g, '')
+            .substring(0, 20)
+          self.subdomain_preview = fallback || 'cliente'
+          self.showing_subdomain_confirm = true
+        })
+        .then(function () {
+          self.loading_action = ''
+        })
+    },
+
+    /**
+     * Segundo paso: confirma la promoción enviando el subdominio editado al backend.
+     * @returns {void}
+     */
+    confirm_promote_to_client() {
+      const self = this
+      var subdomain = (self.subdomain_preview || '').trim()
+      if (!subdomain) {
+        self.open_feedback('El subdominio no puede estar vacío.')
+        return
+      }
+
       self.run_action(
         'promote_to_client',
         function () {
-          return self.$store.dispatch('lead/promote_to_client', self.record.id)
+          return self.$store.dispatch('lead/promote_to_client', {
+            lead_id:            self.record.id,
+            suggested_subdomain: subdomain,
+          })
         },
         'Lead promovido a cliente. Se crearon las tareas automáticas para el equipo.'
       )
+      /* Ocultar el panel de confirmación una vez iniciada la acción. */
+      self.showing_subdomain_confirm = false
     },
+
+    /**
+     * Cancela el panel de confirmación de subdominio y resetea el estado.
+     * @returns {void}
+     */
+    cancel_subdomain_confirm() {
+      this.showing_subdomain_confirm = false
+      this.subdomain_preview = ''
+    },
+
     /**
      * Ejecuta el user setup del sistema real.
      * @returns {void}
