@@ -83,6 +83,13 @@ const routes_def = [
     meta: { requiresAuth: true, nav: true, icon: 'gear' },
   },
   {
+    path: '/env-template',
+    name: 'env_template',
+    text: 'Plantilla .env',
+    component: () => import('@/views/EnvTemplate/Index.vue'),
+    meta: { requiresAuth: true, nav: true, icon: 'file-earmark-code' },
+  },
+  {
     path: '/cuenta',
     name: 'account',
     text: 'Cuenta',

@@ -123,6 +123,15 @@ export default {
     has_many_parent_model_name: { type: String, default: '' },
     /** Propiedad meta del padre que declara la relación has_many. */
     has_many_prop: { type: Object, default: null },
+    /**
+     * Hook opcional ejecutado antes de crear (POST) un registro nuevo.
+     * Recibe el payload y debe devolver una Promise.
+     * Si resuelve, el guardado continúa; si rechaza, se cancela sin mostrar error.
+     * Solo aplica al flujo de creación (no a edición/actualización).
+     *
+     * @type {Function|null}
+     */
+    before_create: { type: Function, default: null },
   },
   emits: ['close', 'saved', 'deleted', 'update:show', 'extra-record-updated'],
   data() {
@@ -850,6 +859,36 @@ export default {
           })
         return
       }
+
+      /**
+       * Flujo de creación: si hay un hook before_create, lo ejecuta antes del POST.
+       * El hook recibe el payload y devuelve una Promise.
+       * Si resuelve, se procede con el guardado normal.
+       * Si rechaza, se cancela la creación sin mostrar error (el hook gestiona su propia UI).
+       */
+      if (typeof this.before_create === 'function') {
+        this.before_create(payload)
+          .then(function () {
+            api
+              .post(path, payload)
+              .then(function (res) {
+                self.$emit('saved', res.data.model)
+                self.open = false
+                self.$emit('update:show', false)
+                self.$emit('close')
+                self.saving = false
+              })
+              .catch(function () {
+                self.saving = false
+              })
+          })
+          .catch(function () {
+            /* Hook canceló el guardado: libera el estado de saving sin notificar error. */
+            self.saving = false
+          })
+        return
+      }
+
       api
         .post(path, payload)
         .then((res) => {

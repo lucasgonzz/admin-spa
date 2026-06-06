@@ -49,6 +49,7 @@
       :all_properties="all_properties"
       :record="edit_record"
       :extra_tabs="resolved_model_extra_tabs"
+      :before_create="before_create_hook"
       @update:show="(v) => (show_model_modal = v)"
       @close="on_model_modal_close"
       @saved="on_model_saved"
@@ -112,6 +113,17 @@ export default {
     resource_api_path: {
       type: String,
       default: '',
+    },
+    /**
+     * Hook opcional ejecutado antes de crear un registro nuevo desde el modal CRUD.
+     * Se pasa directamente a ModelModal como prop `before_create`.
+     * Recibe el payload y debe devolver una Promise; si resuelve, el guardado continúa.
+     *
+     * @type {Function|null}
+     */
+    before_create_hook: {
+      type: Function,
+      default: null,
     },
   },
   data() {
