@@ -1,8 +1,35 @@
 <template>
   <div class="table-responsive">
-    <div class="position-relative">
-      <div v-if="loading" class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center bg-white bg-opacity-75" style="z-index: 2">
-        <div class="spinner-border text-primary" role="status"></div>
+    <!--
+      Carga inicial sin filas: la tabla vacía no da altura al contenedor relativo y el overlay
+      queda minúsculo arriba; usamos un bloque alto centrado hasta el primer listado.
+    -->
+    <div
+      v-if="show_initial_loading"
+      class="resource-table-initial-loading d-flex flex-column align-items-center justify-content-center text-center"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <span
+        class="spinner-border text-primary resource-table-initial-loading__spinner"
+        aria-hidden="true"
+      />
+      <span class="visually-hidden">Cargando datos…</span>
+      <p class="text-muted small mt-3 mb-0">Cargando…</p>
+    </div>
+
+    <div v-else class="position-relative">
+      <!-- Recarga con filas ya visibles: overlay sobre la tabla existente. -->
+      <div
+        v-if="loading"
+        class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center bg-white bg-opacity-75 resource-table-loading-overlay"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+      >
+        <span class="spinner-border text-primary resource-table-loading-overlay__spinner" aria-hidden="true" />
+        <span class="visually-hidden">Actualizando datos…</span>
       </div>
       <table class="table table-sm table-striped table-hover table-bordered align-middle">
         <table-header
@@ -46,5 +73,31 @@ export default {
     selected: { type: Array, default: () => [] },
   },
   emits: ['open-filter', 'clear-filter', 'row', 'toggle'],
+  computed: {
+    /**
+     * true en la primera carga del módulo (sin filas aún): evita overlay diminuto sobre tabla vacía.
+     * @returns {boolean}
+     */
+    show_initial_loading() {
+      return this.loading && (!this.rows || this.rows.length === 0)
+    },
+  },
 }
 </script>
+
+<style scoped>
+.resource-table-initial-loading {
+  min-height: calc(100vh - 11rem);
+  padding: 2rem 1rem;
+}
+
+.resource-table-initial-loading__spinner,
+.resource-table-loading-overlay__spinner {
+  width: 2.75rem;
+  height: 2.75rem;
+}
+
+.resource-table-loading-overlay {
+  z-index: 2;
+}
+</style>
