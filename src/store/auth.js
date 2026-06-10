@@ -60,16 +60,23 @@ const actions = {
         if (!state.token) {
           return null
         }
-        return dispatch('me').catch(function () {
-          return null
-        })
+        return dispatch('me')
+          .catch(function () {
+            return null
+          })
+          .then(function (admin) {
+            if (!admin) {
+              return null
+            }
+            return dispatch('version/load_select_catalog', null, { root: true })
+          })
       })
       .finally(function () {
         commit('set_session_ready', true)
       })
     return bootstrap_promise
   },
-  login({ commit }, { email, password }) {
+  login({ commit, dispatch }, { email, password }) {
     commit('set_loading', true)
     return api
       .post('/login', { email, password })
@@ -77,7 +84,9 @@ const actions = {
         commit('set_token', res.data.token)
         commit('set_admin', res.data.admin)
         commit('set_loading', false)
-        return res.data
+        return dispatch('version/load_select_catalog', null, { root: true }).then(function () {
+          return res.data
+        })
       })
       .catch((err) => {
         commit('set_loading', false)
@@ -85,16 +94,18 @@ const actions = {
         throw err
       })
   },
-  logout({ commit }) {
+  logout({ commit, dispatch }) {
     return api
       .post('/logout')
       .then(() => {
         commit('set_token', null)
         commit('set_admin', null)
+        dispatch('version/reset_select_catalog', null, { root: true })
       })
       .catch(() => {
         commit('set_token', null)
         commit('set_admin', null)
+        dispatch('version/reset_select_catalog', null, { root: true })
       })
   },
   me({ commit }) {

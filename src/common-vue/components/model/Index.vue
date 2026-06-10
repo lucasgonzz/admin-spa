@@ -7,7 +7,11 @@
     @update:show="on_modal_show"
     @close="$emit('close')"
   >
-    <template v-if="draft">
+    <div v-if="fetching_record" class="text-center py-5" role="status" aria-live="polite">
+      <span class="spinner-border text-primary" aria-hidden="true" />
+      <p class="text-muted small mt-2 mb-0">Cargando registro…</p>
+    </div>
+    <template v-else-if="draft">
       <template v-if="show_properties_nav">
         <ul class="nav nav-tabs mb-3" role="tablist">
           <li
@@ -65,16 +69,16 @@
           v-if="can_delete"
           type="button"
           class="btn btn-danger"
-          :disabled="saving || deleting"
+          :disabled="saving || deleting || fetching_record"
           @click="on_delete"
         >
           {{ deleting ? 'Eliminando...' : 'Eliminar' }}
         </button>
         <div class="ms-auto d-flex flex-wrap gap-2">
-          <button type="button" class="btn btn-secondary" :disabled="deleting" @click="on_footer_close">
+          <button type="button" class="btn btn-secondary" :disabled="deleting || fetching_record" @click="on_footer_close">
             Cerrar
           </button>
-          <button type="button" class="btn btn-primary" :disabled="saving || deleting" @click="on_save">
+          <button type="button" class="btn btn-primary" :disabled="saving || deleting || fetching_record || !draft" @click="on_save">
             {{ saving ? 'Guardando...' : 'Guardar' }}
           </button>
         </div>
@@ -142,6 +146,10 @@ export default {
       deleting: false,
       /** Pestaña activa: `group:<name>` o `extra:<key>`. */
       active_tab: null,
+      /** Registro completo obtenido al abrir edición (p. ej. versión con relaciones). */
+      fetched_record: null,
+      /** true mientras se descarga el detalle completo antes de armar el borrador. */
+      fetching_record: false,
     }
   },
   computed: {
@@ -341,8 +349,11 @@ export default {
       handler(v) {
         this.open = v
         if (v) {
-          this.build_draft()
-          this.ensure_active_tab()
+          this.prepare_draft_for_open()
+        } else {
+          this.fetched_record = null
+          this.fetching_record = false
+          this.draft = null
         }
       },
     },
@@ -522,13 +533,69 @@ export default {
       return s.slice(0, 10)
     },
     /**
+     * Prepara el borrador al abrir el modal.
+     * En Versiones edición, descarga el registro completo (seeders, comandos, etc.).
+     *
+     * @returns {void}
+     */
+    prepare_draft_for_open() {
+      const self = this
+      if (self.model_name === 'version' && self.record && self.record.id) {
+        self.fetching_record = true
+        self.fetched_record = null
+        self.draft = null
+        self.$store
+          .dispatch('version/fetch_full_model', self.record.id)
+          .then(function (model) {
+            self.fetched_record = model || self.record
+            self.build_draft()
+            self.ensure_active_tab()
+          })
+          .catch(function () {
+            self.fetched_record = self.record
+            self.build_draft()
+            self.ensure_active_tab()
+          })
+          .then(function () {
+            self.fetching_record = false
+          })
+        return
+      }
+      if (self.model_name === 'lead' && self.record && self.record.id) {
+        self.fetching_record = true
+        self.fetched_record = null
+        self.draft = null
+        self.$store
+          .dispatch('lead/fetch_full_model', self.record.id)
+          .then(function (model) {
+            self.fetched_record = model || self.record
+            self.build_draft()
+            self.ensure_active_tab()
+          })
+          .catch(function () {
+            self.fetched_record = self.record
+            self.build_draft()
+            self.ensure_active_tab()
+          })
+          .then(function () {
+            self.fetching_record = false
+          })
+        return
+      }
+      self.fetched_record = null
+      self.build_draft()
+      self.ensure_active_tab()
+    },
+    /**
      * Construye el borrador desde `record` o valores por defecto del meta.
      * En edición: asegura una clave por cada campo del meta (evita huecos en Vue 2) y normaliza fechas.
      * @returns {void}
      */
     build_draft() {
-      if (this.record && this.record.id) {
-        const o = Object.assign({}, this.record)
+      /** Fuente de datos: detalle completo si se cargó, si no la fila del listado. */
+      const source_record = this.fetched_record || this.record
+      if (source_record && source_record.id) {
+        const o = Object.assign({}, source_record)
         const self = this
         this.all_properties.forEach((p) => {
           if (!p.key || p.only_show) {

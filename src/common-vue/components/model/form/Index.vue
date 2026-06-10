@@ -18,21 +18,22 @@
             />
           </template>
           <template v-else-if="is_only_show_field(p)">
-            <label class="form-label">{{ p.text }}</label>
+            <field-label-with-help :text="p.text" :description="p.description" />
             <p class="mb-0 text-body">{{ only_show_display_text(p) }}</p>
           </template>
           <template v-else>
             <div v-if="p.type === 'text'">
-              <label class="form-label">{{ p.text }}</label>
+              <field-label-with-help :text="p.text" :description="p.description" />
               <input
                 v-model="form[p.key]"
                 type="text"
                 class="form-control"
+                :placeholder="field_placeholder(p)"
                 :readonly="is_readonly_field(p)"
               />
             </div>
             <div v-else-if="p.type === 'search'">
-              <label class="form-label">{{ p.text }}</label>
+              <field-label-with-help :text="p.text" :description="p.description" />
               <search-field
                 v-model="form[p.key]"
                 :relation="p.relation"
@@ -44,7 +45,7 @@
               />
             </div>
             <div v-else-if="p.type === 'textarea'">
-              <label class="form-label">{{ p.text }}</label>
+              <field-label-with-help :text="p.text" :description="p.description" />
               <textarea
                 v-model="form[p.key]"
                 rows="3"
@@ -53,7 +54,7 @@
               ></textarea>
             </div>
             <div v-else-if="p.type === 'number'">
-              <label class="form-label">{{ p.text }}</label>
+              <field-label-with-help :text="p.text" :description="p.description" />
               <input
                 v-model.number="form[p.key]"
                 type="number"
@@ -63,7 +64,7 @@
             </div>
             <!-- Solo fecha (YYYY-MM-DD); más estable que datetime-local con Vue 3. -->
             <div v-else-if="p.type === 'day'">
-              <label class="form-label">{{ p.text }}</label>
+              <field-label-with-help :text="p.text" :description="p.description" />
               <input
                 v-model="form[p.key]"
                 type="date"
@@ -72,7 +73,7 @@
               />
             </div>
             <div v-else-if="p.type === 'date'">
-              <label class="form-label">{{ p.text }}</label>
+              <field-label-with-help :text="p.text" :description="p.description" />
               <!--
                 datetime-local + v-model en Vue 3 con valor inicial null/ISO con Z suele no sincronizar
                 bien; el usuario elige fecha pero el objeto del formulario sigue en null. Control explícito.
@@ -87,7 +88,7 @@
               />
             </div>
             <div v-else-if="p.type === 'select' || p.type === 'pipeline_status'">
-              <label class="form-label">{{ p.text }}</label>
+              <field-label-with-help :text="p.text" :description="p.description" />
               <select
                 v-model="form[p.key]"
                 class="form-select"
@@ -132,8 +133,10 @@ import SearchField from '@/common-vue/components/search/Index.vue'
 import LeadPersonalizedDemoVideosEditor from '@/components/lead/PersonalizedDemoVideosEditor.vue'
 import ClientImplementationExtraProps from '@/components/client/extra-props/Index.vue'
 import HasManyField from '@/common-vue/components/model/form/HasMany.vue'
+import FieldLabelWithHelp from '@/common-vue/components/model/form/FieldLabelWithHelp.vue'
 import api from '@/utils/axios'
 import { route_string } from '@/utils/route_string'
+import { store_catalog_relations } from '@/utils/store_catalog_relations'
 
 /**
  * Formulario estándar del modal: solo tipos declarativos (text, select, etc.) según meta.
@@ -147,11 +150,13 @@ import { route_string } from '@/utils/route_string'
  * `exclude_on_update` sin `only_show`: sigue como control deshabilitado o solo lectura.
  * `from_has_many`: select FK alimentado solo con hijos persistidos del has_many del draft padre.
  * `from_parent_field`: select FK cuyas opciones se cargan desde un recurso padre (ej. client_apis del client_id).
+ * `description`: texto de ayuda bajo la etiqueta (FieldLabelWithHelp).
+ * `placeholder`: hint opcional en inputs de texto.
  * Layout: fila Bootstrap (`row g-3`) con columnas `col-lg-3` (cuatro campos por fila en lg+).
  */
 export default {
   name: 'ModelForm',
-  components: { SearchField, LeadPersonalizedDemoVideosEditor, ClientImplementationExtraProps, HasManyField },
+  components: { SearchField, LeadPersonalizedDemoVideosEditor, ClientImplementationExtraProps, HasManyField, FieldLabelWithHelp },
   props: {
     form: { type: Object, default: null },
     all_properties: { type: Array, default: () => [] },
@@ -223,6 +228,15 @@ export default {
         if (parent_changed) {
           this.refresh_all_from_parent_field_select_options()
         }
+      },
+      deep: true,
+    },
+    /**
+     * Si el catálogo liviano de versiones cambia en Vuex, refresca selects relacionales abiertos.
+     */
+    '$store.state.version.select_catalog': {
+      handler() {
+        this.refresh_store_catalog_relation_options('version')
       },
       deep: true,
     },
@@ -498,6 +512,18 @@ export default {
         return 'Buscar ' + (p.relation || '') + '…'
       }
       return 'Buscar…'
+    },
+    /**
+     * Placeholder opcional declarado en meta (`placeholder`) para inputs de texto.
+     *
+     * @param {Object} p definición de propiedad
+     * @returns {string}
+     */
+    field_placeholder(p) {
+      if (p && p.placeholder != null && String(p.placeholder).trim() !== '') {
+        return String(p.placeholder)
+      }
+      return ''
     },
     /**
      * Carga opciones dinámicas para todos los campos select con relation.
@@ -891,10 +917,16 @@ export default {
       if (!relation) {
         return
       }
+      /** Catálogo global precargado (p. ej. versiones al iniciar sesión). */
+      const catalog_config = store_catalog_relations[relation]
+      if (catalog_config) {
+        this.load_store_catalog_relation_options(property, catalog_config)
+        return
+      }
       if (this.loading_relation_selects[relation]) {
         return
       }
-      if (this.relation_select_options[relation]) {
+      if (Object.prototype.hasOwnProperty.call(this.relation_select_options, relation)) {
         return
       }
 
@@ -911,7 +943,7 @@ export default {
             self.relation_display_key_by_model[relation] = relation_display_key
           }
 
-          return api.get('/' + route_string(relation))
+          return api.get('/' + route_string(relation) + '?for_select=1')
         })
         .then((models_response) => {
           /** Opciones normalizadas para bind del select. */
@@ -937,11 +969,90 @@ export default {
           self.loading_relation_selects[relation] = false
         })
         .catch(() => {
+          /** No cachear [] en error: permite reintentar si el meta/form vuelve a disparar la carga. */
           self.loading_relation_selects[relation] = false
-          self.relation_select_options = Object.assign({}, self.relation_select_options, {
-            [relation]: [],
-          })
         })
+    },
+    /**
+     * Arma opciones de select desde catálogo Vuex (sin GET relacional por modal).
+     *
+     * @param {Object} property definición meta del campo
+     * @param {Object} catalog_config entrada de store_catalog_relations
+     * @returns {void}
+     */
+    load_store_catalog_relation_options(property, catalog_config) {
+      const self = this
+      const relation = property.relation
+      if (!relation || !catalog_config || !catalog_config.store_module) {
+        return
+      }
+      if (this.loading_relation_selects[relation]) {
+        return
+      }
+      this.loading_relation_selects[relation] = true
+
+      this.$store
+        .dispatch(catalog_config.store_module + '/' + catalog_config.load_action)
+        .then(function () {
+          self.apply_store_catalog_relation_options(property, catalog_config)
+          self.loading_relation_selects[relation] = false
+        })
+        .catch(function () {
+          self.loading_relation_selects[relation] = false
+        })
+    },
+    /**
+     * Mapea filas del catálogo Vuex a opciones del select relacional.
+     *
+     * @param {Object} property definición meta del campo
+     * @param {Object} catalog_config entrada de store_catalog_relations
+     * @returns {void}
+     */
+    apply_store_catalog_relation_options(property, catalog_config) {
+      const relation = property.relation
+      if (!relation || !catalog_config || !catalog_config.store_module) {
+        return
+      }
+      /** Módulo Vuex que contiene select_catalog. */
+      const store_module = this.$store.state[catalog_config.store_module]
+      if (!store_module || !Array.isArray(store_module.select_catalog)) {
+        return
+      }
+      /** Key de etiqueta declarada en meta (p. ej. version). */
+      const option_label_key = property.relation_label || 'version'
+      /** Opciones normalizadas para el `<select>`. */
+      const options = []
+      store_module.select_catalog.forEach(function (model) {
+        if (!model || model.id == null) {
+          return
+        }
+        options.push({
+          value: model.id,
+          text: model[option_label_key] != null ? String(model[option_label_key]) : ('ID ' + String(model.id)),
+        })
+      })
+      this.relation_select_options = Object.assign({}, this.relation_select_options, {
+        [relation]: options,
+      })
+    },
+    /**
+     * Refresca opciones de una relación servida por catálogo Vuex.
+     *
+     * @param {string} relation nombre de relación en meta
+     * @returns {void}
+     */
+    refresh_store_catalog_relation_options(relation) {
+      const catalog_config = store_catalog_relations[relation]
+      if (!catalog_config) {
+        return
+      }
+      const self = this
+      this.all_properties.forEach(function (property) {
+        if (!property || property.type !== 'select' || property.relation !== relation) {
+          return
+        }
+        self.apply_store_catalog_relation_options(property, catalog_config)
+      })
     },
     /**
      * Obtiene la key de representación desde model properties del recurso.

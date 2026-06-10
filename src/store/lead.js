@@ -35,6 +35,56 @@ function merge_lead_messages_preserving_attachments(previous, incoming) {
   return merged
 }
 
+/**
+ * Fusiona mensajes del hilo abierto sin perder el historial completo cuando llega un payload liviano.
+ *
+ * @param {Array<Object>|null|undefined} previous
+ * @param {Array<Object>|null|undefined} incoming
+ * @returns {Array<Object>|null|undefined}
+ */
+function merge_conversation_messages(previous, incoming) {
+  if (!incoming || !incoming.length) {
+    return previous
+  }
+  if (!previous || !previous.length) {
+    return incoming
+  }
+  /** Índice por id para conservar todo el hilo previo y actualizar filas puntuales. */
+  const by_id = {}
+  let i = 0
+  for (i = 0; i < previous.length; i = i + 1) {
+    by_id[previous[i].id] = previous[i]
+  }
+  for (i = 0; i < incoming.length; i = i + 1) {
+    /** Mensaje entrante (notificación o actualización puntual). */
+    const msg = incoming[i]
+    const old = by_id[msg.id]
+    if (!old) {
+      by_id[msg.id] = msg
+      continue
+    }
+    const row = Object.assign({}, old, msg)
+    if (
+      old.attachments &&
+      old.attachments.length &&
+      (!msg.attachments || !msg.attachments.length)
+    ) {
+      row.attachments = old.attachments
+    }
+    by_id[msg.id] = row
+  }
+  /** Lista ordenada cronológicamente por id. */
+  const merged = []
+  const keys = Object.keys(by_id)
+  keys.sort(function (a, b) {
+    return parseInt(a, 10) - parseInt(b, 10)
+  })
+  for (i = 0; i < keys.length; i = i + 1) {
+    merged.push(by_id[keys[i]])
+  }
+  return merged
+}
+
 export default __base_store({
   state: {
     model_name: 'lead',
@@ -90,16 +140,13 @@ export default __base_store({
         return
       }
       if (state.lead_en_conversacion && state.lead_en_conversacion.id == model.id) {
+        /** Mensajes previos del hilo completo en la pestaña Conversación. */
         const previous_messages = state.lead_en_conversacion.messages
         state.lead_en_conversacion = Object.assign({}, state.lead_en_conversacion, model)
-        if (
-          previous_messages &&
-          previous_messages.length &&
-          (!model.messages || !model.messages.length)
-        ) {
-          state.lead_en_conversacion.messages = previous_messages
-        } else if (model.messages && model.messages.length && previous_messages && previous_messages.length) {
-          state.lead_en_conversacion.messages = merge_lead_messages_preserving_attachments(
+        if (model.messages_scope === 'full' && model.messages && model.messages.length) {
+          state.lead_en_conversacion.messages = model.messages
+        } else {
+          state.lead_en_conversacion.messages = merge_conversation_messages(
             previous_messages,
             model.messages
           )
@@ -174,10 +221,10 @@ export default __base_store({
 
       const merge_lead_row = function (existing, incoming) {
         const merged = Object.assign({}, existing || {}, incoming)
-        if (existing && existing.messages && existing.messages.length) {
-          if (!incoming.messages || !incoming.messages.length) {
-            merged.messages = existing.messages
-          }
+        if (incoming && incoming.messages && incoming.messages.length) {
+          merged.messages = incoming.messages
+        } else if (existing && existing.messages && existing.messages.length) {
+          merged.messages = existing.messages
         }
         return merged
       }
@@ -333,6 +380,35 @@ export default __base_store({
         })
     },
     /**
+     * Pide sugerencia a Claude sin esperar el debounce automático (mensajes del lead ya cargados en el hilo).
+     *
+     * @param {Object} context
+     * @param {number} lead_id
+     * @returns {Promise<Object>} modelo lead actualizado
+     */
+    request_ai_suggestion(context, lead_id) {
+      const commit = context.commit
+      commit('set_loading_ai', true)
+      commit('set_ai_error', null)
+      return api
+        .post('/lead/' + lead_id + '/request-ai-suggestion')
+        .then((res) => {
+          const model = res.data.model
+          commit('set_loading_ai', false)
+          commit('update_lead_en_conversacion', model)
+          return model
+        })
+        .catch((err) => {
+          commit('set_loading_ai', false)
+          const msg =
+            err && err.response && err.response.data && err.response.data.message
+              ? String(err.response.data.message)
+              : 'Error al generar sugerencia'
+          commit('set_ai_error', msg)
+          return Promise.reject(err)
+        })
+    },
+    /**
      * Envía por WhatsApp un mensaje sugerido por IA (sin editar).
      * @param {Object} context
      * @param {number} message_id id de lead_messages
@@ -426,31 +502,44 @@ export default __base_store({
       })
     },
     /**
-     * Carga lead completo con mensajes (conversación abierta tras evento sin message).
+     * Lead completo con todos los mensajes (modal / conversación).
      *
      * @param {Object} context
-     * @param {number} lead_id
+     * @param {number|string} lead_id
      * @returns {Promise<Object>}
      */
-    fetch_lead_for_conversation(context, lead_id) {
+    fetch_full_model(context, lead_id) {
       const commit = context.commit
       const state = context.state
       if (state._conversation_fetch_in_flight && state._conversation_fetch_in_flight == lead_id) {
         return Promise.resolve(state.lead_en_conversacion)
       }
-      context.commit('set_conversation_fetch_in_flight', lead_id)
+      commit('set_conversation_fetch_in_flight', lead_id)
       return api
         .get('/lead/' + lead_id)
-        .then((res) => {
-          const model = res.data.model
-          commit('set_lead_en_conversacion', model)
+        .then(function (res) {
+          /** Modelo con hilo completo y messages_scope = full. */
+          const model = res.data && res.data.model ? res.data.model : null
+          if (model) {
+            commit('set_lead_en_conversacion', model)
+          }
           commit('set_conversation_fetch_in_flight', null)
           return model
         })
-        .catch((err) => {
+        .catch(function (err) {
           commit('set_conversation_fetch_in_flight', null)
           return Promise.reject(err)
         })
+    },
+    /**
+     * Carga lead completo con mensajes (conversación abierta tras evento sin message).
+     *
+     * @param {Object} context
+     * @param {number|string} lead_id
+     * @returns {Promise<Object>}
+     */
+    fetch_lead_for_conversation(context, lead_id) {
+      return context.dispatch('fetch_full_model', lead_id)
     },
   },
 })

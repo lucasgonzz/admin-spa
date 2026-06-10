@@ -87,7 +87,10 @@
         </template>
       </div>
       <div v-if="show_pending_confirmation_label" class="wa-pending-confirmation text-muted">
-        Esperando confirmación
+        <template v-if="show_auto_send_countdown">
+          Envío automático en <strong>{{ auto_send_remaining_seconds }}</strong> s
+        </template>
+        <template v-else>Esperando confirmación</template>
       </div>
       <div
         v-if="show_sending_indicator"
@@ -126,6 +129,8 @@ export default {
     message: { type: Object, required: true },
     /** true mientras corre aprobar/rechazar para este ítem. */
     busy: { type: Boolean, default: false },
+    /** Timestamp actual (ms) del padre para countdown de auto-envío. */
+    now_tick: { type: Number, default: 0 },
   },
   data() {
     return {
@@ -344,6 +349,58 @@ export default {
         return false
       }
       return this.message.status === 'sugerido'
+    },
+    /**
+     * Timestamp ISO del envío automático programado (null si no aplica).
+     *
+     * @returns {number}
+     */
+    auto_send_at_ms() {
+      const raw = this.message.ai_auto_send_at
+      if (!raw) {
+        return 0
+      }
+      const parsed = new Date(raw).getTime()
+      if (isNaN(parsed)) {
+        return 0
+      }
+      return parsed
+    },
+    /**
+     * true si la sugerencia tiene timer de envío automático aún vigente.
+     *
+     * @returns {boolean}
+     */
+    show_auto_send_countdown() {
+      if (!this.show_pending_suggestion_actions) {
+        return false
+      }
+      if (this.is_followup_suggestion) {
+        return false
+      }
+      if (this.message.requiere_verificacion) {
+        return false
+      }
+      const ends_at = this.auto_send_at_ms
+      if (!ends_at) {
+        return false
+      }
+      return ends_at > this.now_tick
+    },
+    /**
+     * Segundos restantes hasta el envío automático por WhatsApp.
+     *
+     * @returns {number}
+     */
+    auto_send_remaining_seconds() {
+      if (!this.show_auto_send_countdown) {
+        return 0
+      }
+      const remaining_ms = this.auto_send_at_ms - this.now_tick
+      if (remaining_ms <= 0) {
+        return 0
+      }
+      return Math.ceil(remaining_ms / 1000)
     },
     /**
      * Texto no vacío para enviar sin editar.
