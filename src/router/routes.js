@@ -61,6 +61,14 @@ const routes_def = [
     meta: { requiresAuth: true, nav: true, icon: 'arrow-up-circle' },
   },
   {
+    path: '/actualizaciones-demo',
+    name: 'demo_updates',
+    text: 'Actualizaciones Demo',
+    model_name: 'demo_update',
+    component: () => import('@/views/DemoUpdates.vue'),
+    meta: { requiresAuth: true, nav: true, icon: 'play-circle' },
+  },
+  {
     path: '/reglas-seguimiento',
     redirect: { path: '/cuenta', hash: '#followup-rules' },
     meta: { requiresAuth: true, nav: false },
