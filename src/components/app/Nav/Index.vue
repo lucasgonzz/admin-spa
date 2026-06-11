@@ -1,131 +1,139 @@
 <template>
   <aside
-    class="app-nav flex-shrink-0 border-end"
+    class="app-nav"
     :class="nav_root_classes"
     :aria-hidden="is_mobile_viewport && !mobile_open ? 'true' : 'false'"
+    @mouseenter="on_nav_mouse_enter"
+    @mouseleave="on_nav_mouse_leave"
   >
-    <div class="app-nav-inner p-3 text-white min-vh-100 d-flex flex-column">
+    <div class="app-nav-inner d-flex flex-column">
       <div
         v-if="!is_mobile_viewport"
-        class="app-nav-header d-flex align-items-center mb-3"
-        :class="{ 'justify-content-center': collapsed }"
+        class="app-nav-header"
       >
-        <h2 v-show="show_nav_labels" class="h5 mb-0 flex-grow-1 text-truncate">ComercioCity</h2>
-        <h2 v-show="collapsed" class="h5 mb-0" title="ComercioCity">CC</h2>
+        <span v-show="show_nav_labels" class="app-nav-header__title">ComercioCity</span>
+        <span v-show="!show_nav_labels" class="app-nav-header__title app-nav-header__title--compact" title="ComercioCity">CC</span>
       </div>
 
-      <nav class="d-flex flex-column gap-1 flex-grow-1">
+      <nav class="app-nav-menu flex-grow-1">
         <template v-for="r in nav_routes">
           <router-link
             v-if="!r.meta || !r.meta.disabled"
             :key="'nav-' + r.path"
-            class="nav-link text-white py-1 px-2 rounded d-flex align-items-center flex-wrap"
-            :class="[
-              { 'justify-content-center': collapsed && !is_mobile_viewport },
-              { 'bg-primary fw-semibold': is_nav_item_active(r) },
-            ]"
+            class="app-nav-route route"
+            :class="{ 'active-item': is_nav_item_active(r) }"
             active-class=""
             :to="r.path"
             :title="nav_link_title(r)"
             @mouseenter="on_nav_link_hover(r)"
             @click="on_nav_link_click(r)"
           >
-            <i :class="[icon(r), 'nav-link-icon', { 'me-1': show_nav_labels }]" />
-            <span v-show="show_nav_labels" class="nav-link-label">{{ r.text }}</span>
-            <span
-              v-if="show_nav_labels && r.name === 'support' && support_unread_mine > 0"
-              class="badge bg-danger rounded-pill ms-1 nav-support-unread-badge"
-              :title="'Mensajes de usuario sin leer en tus tickets: ' + support_unread_mine"
-            >
-              {{ support_unread_mine > 99 ? '99+' : support_unread_mine }}
-            </span>
-            <span
-              v-if="show_nav_labels && r.name === 'leads' && leads_unread_total > 0"
-              class="badge bg-danger rounded-pill ms-1 nav-support-unread-badge"
-              :title="'Mensajes del lead sin leer: ' + leads_unread_total"
-            >
-              {{ leads_unread_total > 99 ? '99+' : leads_unread_total }}
-            </span>
-            <span
-              v-if="show_nav_labels && r.name === 'tasks' && tasks_pending_assigned_mine > 0"
-              class="badge bg-danger rounded-pill ms-1 nav-support-unread-badge"
-              :title="'Tareas pendientes asignadas a vos: ' + tasks_pending_assigned_mine"
-            >
-              {{ tasks_pending_assigned_mine > 99 ? '99+' : tasks_pending_assigned_mine }}
-            </span>
-            <!-- Badge expandido: implementaciones listas para que el admin avance de etapa -->
-            <span
-              v-if="show_nav_labels && r.name === 'implementations' && implementations_ready_count > 0"
-              class="badge bg-danger rounded-pill ms-1 nav-support-unread-badge"
-              :title="'Implementaciones listas para avanzar: ' + implementations_ready_count"
-            >
-              {{ implementations_ready_count > 99 ? '99+' : implementations_ready_count }}
-            </span>
-            <span
-              v-if="!show_nav_labels && r.name === 'support' && support_unread_mine > 0"
-              class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger nav-support-unread-badge nav-support-unread-badge--dot"
-              :title="'Mensajes sin leer: ' + support_unread_mine"
-            >
-              {{ support_unread_mine > 9 ? '9+' : support_unread_mine }}
-            </span>
-            <span
-              v-if="!show_nav_labels && r.name === 'leads' && leads_unread_total > 0"
-              class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger nav-support-unread-badge nav-support-unread-badge--dot"
-              :title="'Mensajes del lead sin leer: ' + leads_unread_total"
-            >
-              {{ leads_unread_total > 9 ? '9+' : leads_unread_total }}
-            </span>
-            <span
-              v-if="!show_nav_labels && r.name === 'tasks' && tasks_pending_assigned_mine > 0"
-              class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger nav-support-unread-badge nav-support-unread-badge--dot"
-              :title="'Tareas pendientes: ' + tasks_pending_assigned_mine"
-            >
-              {{ tasks_pending_assigned_mine > 9 ? '9+' : tasks_pending_assigned_mine }}
-            </span>
-            <!-- Badge colapsado (punto): implementaciones listas para avanzar -->
-            <span
-              v-if="!show_nav_labels && r.name === 'implementations' && implementations_ready_count > 0"
-              class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger nav-support-unread-badge nav-support-unread-badge--dot"
-              :title="'Implementaciones listas para avanzar: ' + implementations_ready_count"
-            >
-              {{ implementations_ready_count > 9 ? '9+' : implementations_ready_count }}
-            </span>
+            <div class="menu-trigger">
+              <div class="ruta-principal">
+                <div class="route-text-block">
+                  <span class="route-text">{{ r.text }}</span>
+                  <span
+                    v-if="show_nav_labels && r.name === 'support' && support_unread_mine > 0"
+                    class="badge bg-danger rounded-pill nav-support-unread-badge"
+                    :title="'Mensajes de usuario sin leer en tus tickets: ' + support_unread_mine"
+                  >
+                    {{ support_unread_mine > 99 ? '99+' : support_unread_mine }}
+                  </span>
+                  <span
+                    v-if="show_nav_labels && r.name === 'leads' && leads_unread_total > 0"
+                    class="badge bg-danger rounded-pill nav-support-unread-badge"
+                    :title="'Mensajes del lead sin leer: ' + leads_unread_total"
+                  >
+                    {{ leads_unread_total > 99 ? '99+' : leads_unread_total }}
+                  </span>
+                  <span
+                    v-if="show_nav_labels && r.name === 'tasks' && tasks_pending_assigned_mine > 0"
+                    class="badge bg-danger rounded-pill nav-support-unread-badge"
+                    :title="'Tareas pendientes asignadas a vos: ' + tasks_pending_assigned_mine"
+                  >
+                    {{ tasks_pending_assigned_mine > 99 ? '99+' : tasks_pending_assigned_mine }}
+                  </span>
+                  <span
+                    v-if="show_nav_labels && r.name === 'implementations' && implementations_ready_count > 0"
+                    class="badge bg-danger rounded-pill nav-support-unread-badge"
+                    :title="'Implementaciones listas para avanzar: ' + implementations_ready_count"
+                  >
+                    {{ implementations_ready_count > 99 ? '99+' : implementations_ready_count }}
+                  </span>
+                </div>
+                <div class="route-icon-badge-wrap">
+                  <i :class="[icon(r), 'route-icon']" />
+                  <span
+                    v-if="!show_nav_labels && r.name === 'support' && support_unread_mine > 0"
+                    class="badge rounded-pill bg-danger nav-support-unread-badge nav-support-unread-badge--dot"
+                    :title="'Mensajes sin leer: ' + support_unread_mine"
+                  >
+                    {{ support_unread_mine > 9 ? '9+' : support_unread_mine }}
+                  </span>
+                  <span
+                    v-if="!show_nav_labels && r.name === 'leads' && leads_unread_total > 0"
+                    class="badge rounded-pill bg-danger nav-support-unread-badge nav-support-unread-badge--dot"
+                    :title="'Mensajes del lead sin leer: ' + leads_unread_total"
+                  >
+                    {{ leads_unread_total > 9 ? '9+' : leads_unread_total }}
+                  </span>
+                  <span
+                    v-if="!show_nav_labels && r.name === 'tasks' && tasks_pending_assigned_mine > 0"
+                    class="badge rounded-pill bg-danger nav-support-unread-badge nav-support-unread-badge--dot"
+                    :title="'Tareas pendientes: ' + tasks_pending_assigned_mine"
+                  >
+                    {{ tasks_pending_assigned_mine > 9 ? '9+' : tasks_pending_assigned_mine }}
+                  </span>
+                  <span
+                    v-if="!show_nav_labels && r.name === 'implementations' && implementations_ready_count > 0"
+                    class="badge rounded-pill bg-danger nav-support-unread-badge nav-support-unread-badge--dot"
+                    :title="'Implementaciones listas para avanzar: ' + implementations_ready_count"
+                  >
+                    {{ implementations_ready_count > 9 ? '9+' : implementations_ready_count }}
+                  </span>
+                </div>
+              </div>
+            </div>
           </router-link>
+
           <span
             v-else
             :key="'nav-disabled-' + r.path"
-            class="nav-link text-white-50 py-1 px-2 small d-flex align-items-center flex-wrap"
-            :class="{ 'justify-content-center': collapsed && !is_mobile_viewport }"
+            class="app-nav-route route route--disabled"
             :title="nav_link_title(r)"
           >
-            <i :class="[icon(r), 'nav-link-icon', { 'me-1': show_nav_labels }]" />
-            <span v-show="show_nav_labels" class="nav-link-label">{{ r.text }}</span>
-            <span v-show="show_nav_labels" class="badge text-bg-warning ms-1">Próximamente</span>
+            <div class="menu-trigger">
+              <div class="ruta-principal">
+                <div class="route-text-block">
+                  <span class="route-text">{{ r.text }}</span>
+                  <span v-show="show_nav_labels" class="badge text-bg-warning nav-support-unread-badge">Próximamente</span>
+                </div>
+                <div class="route-icon-badge-wrap">
+                  <i :class="[icon(r), 'route-icon']" />
+                </div>
+              </div>
+            </div>
           </span>
         </template>
 
         <a
           href="#"
-          class="nav-link text-white-50 small mt-3 d-flex align-items-center"
-          :class="{ 'justify-content-center': collapsed && !is_mobile_viewport }"
-          :title="collapsed && !is_mobile_viewport ? 'Salir' : ''"
+          class="app-nav-route route route--logout"
+          :title="nav_link_title({ text: 'Salir' })"
           @click.prevent="logout"
         >
-          <i :class="['bi', 'bi-box-arrow-right', 'nav-link-icon', { 'me-1': show_nav_labels }]" />
-          <span v-show="show_nav_labels">Salir</span>
+          <div class="menu-trigger">
+            <div class="ruta-principal">
+              <div class="route-text-block">
+                <span class="route-text">Salir</span>
+              </div>
+              <div class="route-icon-badge-wrap">
+                <i class="bi bi-box-arrow-right route-icon" />
+              </div>
+            </div>
+          </div>
         </a>
       </nav>
-
-      <button
-        v-if="!is_mobile_viewport"
-        type="button"
-        class="btn btn-sm btn-outline-light app-nav-collapse-toggle mt-3"
-        :aria-label="collapsed ? 'Expandir menú lateral' : 'Contraer menú lateral'"
-        :title="collapsed ? 'Expandir menú' : 'Contraer menú'"
-        @click="on_toggle_collapsed"
-      >
-        <i class="bi" :class="collapsed ? 'bi-chevron-right' : 'bi-chevron-left'" aria-hidden="true" />
-      </button>
     </div>
   </aside>
 </template>
@@ -136,7 +144,9 @@ import { useSupportBadgeSocket } from '@/composables/useSupportBadgeSocket'
 import { useLeadSocket } from '@/composables/useLeadSocket'
 
 /**
- * Menú lateral: colapsable en desktop (solo iconos) y drawer en móvil (controlado por App.vue).
+ * Menú lateral fijo: en desktop queda colapsado (solo íconos visibles a la derecha)
+ * y se expande al pasar el mouse, igual que empresa-spa.
+ * En móvil funciona como drawer controlado por App.vue.
  * Mantiene suscripción Pusher a canales admin de soporte para el badge de no leídos en "Soporte".
  * Mantiene suscripción Pusher al canal `leads.admins` para actualizar leads en tiempo real.
  * Mantiene suscripción Pusher al canal `admin-implementations` para el badge de implementaciones
@@ -151,22 +161,21 @@ export default {
       type: Boolean,
       default: false,
     },
-    /** En desktop: barra contraída (solo iconos). */
-    collapsed: {
-      type: Boolean,
-      default: false,
-    },
     /** En móvil: drawer visible. */
     mobile_open: {
       type: Boolean,
       default: false,
     },
   },
-  emits: ['toggle-collapsed', 'close-mobile'],
+  emits: ['close-mobile'],
   data() {
     return {
       // Rutas declaradas con meta.nav para armar el menú.
       routes: routes,
+      /**
+       * true cuando el puntero está sobre la barra en desktop (expande textos y badges completos).
+       */
+      nav_hovered: false,
       /**
        * Instancia devuelta por useSupportBadgeSocket; se libera en teardown o al cambiar de admin.
        */
@@ -188,22 +197,21 @@ export default {
       return this.routes.filter((r) => r.meta && r.meta.nav)
     },
     /**
-     * Clases del contenedor según modo desktop colapsado o drawer móvil abierto.
+     * Clases del contenedor según drawer móvil abierto.
      */
     nav_root_classes() {
       return {
-        'app-nav--collapsed': this.collapsed && !this.is_mobile_viewport,
         'app-nav--mobile-open': this.is_mobile_viewport && this.mobile_open,
       }
     },
     /**
-     * Muestra textos del menú cuando está expandido en desktop o cuando el drawer móvil está abierto.
+     * Muestra textos y badges expandidos en desktop con hover o cuando el drawer móvil está abierto.
      */
     show_nav_labels() {
       if (this.is_mobile_viewport) {
         return this.mobile_open
       }
-      return !this.collapsed
+      return this.nav_hovered
     },
     /**
      * Id del admin autenticado; null hasta que /me resuelva tras F5 con token.
@@ -275,6 +283,26 @@ export default {
     this.teardown_implementations_nav_socket()
   },
   methods: {
+    /**
+     * Marca la barra como expandida en desktop al entrar con el mouse.
+     *
+     * @returns {void}
+     */
+    on_nav_mouse_enter() {
+      if (!this.is_mobile_viewport) {
+        this.nav_hovered = true
+      }
+    },
+    /**
+     * Restaura el estado colapsado en desktop al salir con el mouse.
+     *
+     * @returns {void}
+     */
+    on_nav_mouse_leave() {
+      if (!this.is_mobile_viewport) {
+        this.nav_hovered = false
+      }
+    },
     icon(r) {
       const n = (r.meta && r.meta.icon) || 'dot'
       return 'bi bi-' + n
@@ -306,12 +334,6 @@ export default {
         return true
       }
       return this.$route.path === r.path
-    },
-    /**
-     * Solicita a App.vue alternar el estado colapsado (solo desktop).
-     */
-    on_toggle_collapsed() {
-      this.$emit('toggle-collapsed')
     },
     /**
      * Cierra el drawer móvil (botón X o backdrop).
@@ -486,69 +508,203 @@ export default {
 }
 </script>
 <style lang="sass" scoped>
+/* Tokens visuales alineados con empresa-spa (nav-vertical). */
+$nav_width: 220px
+$nav_collapsed_visible: 56px
+$nav_collapsed_offset: $nav_width - $nav_collapsed_visible
+$nav_bg: #16181d
+$nav_border: rgba(255, 255, 255, 0.06)
+$nav_text: rgba(255, 255, 255, 0.72)
+$nav_text_muted: rgba(255, 255, 255, 0.5)
+$nav_hover_bg: rgba(255, 255, 255, 0.06)
+$nav_active_bg: rgba(#007bff, 0.14)
+$nav_item_radius: 8px
+$nav_blue: #007bff
+
 .app-nav
-  background: #333
-  position: relative
-  transition: width 0.2s ease
+	position: fixed
+	top: 0
+	left: 0
+	width: $nav_width
+	height: 100vh
+	z-index: 1000
+	background: $nav_bg
+	border-right: 1px solid $nav_border
+	overflow-y: auto
+	overflow-x: hidden
+	transition: transform 0.22s ease, box-shadow 0.22s ease
+	-ms-overflow-style: none !important
+	scrollbar-width: none !important
+	&::-webkit-scrollbar
+		display: none !important
 
 .app-nav-inner
-  width: 15rem
-  transition: width 0.2s ease
-  position: relative
+	width: 100%
+	min-height: 100vh
+	padding: 12px 0 16px
 
-.app-nav--collapsed .app-nav-inner
-  width: 3.75rem
-  padding-left: 0.5rem !important
-  padding-right: 0.5rem !important
+.app-nav-header
+	display: flex
+	align-items: center
+	justify-content: flex-end
+	padding: 8px 14px 14px
+	border-bottom: 1px solid $nav_border
+	margin-bottom: 8px
 
-.app-nav .nav-link
-  position: relative
+.app-nav-header__title
+	color: #ffffff
+	font-size: 0.9375rem
+	font-weight: 600
+	letter-spacing: -0.01em
+	white-space: nowrap
 
-.app-nav-collapse-toggle
-  align-self: stretch
+.app-nav-header__title--compact
+	font-size: 0.8125rem
+	opacity: 0.85
 
-/* Badge compacto al lado del texto "Soporte" (coherente con Support.vue). */
+.app-nav-menu
+	display: flex
+	flex-direction: column
+
+.app-nav-route
+	display: block
+	text-decoration: none
+	color: inherit
+
+.route
+	width: calc(100% - 16px)
+	margin: 2px 8px
+	color: $nav_text
+	font-size: 1rem
+	font-weight: 500
+	line-height: 1.35
+	cursor: pointer
+	border-radius: $nav_item_radius
+	transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease
+	&:hover
+		background: $nav_hover_bg
+		color: #ffffff
+		.route-icon
+			color: #ffffff
+
+.route--disabled
+	cursor: default
+	opacity: 0.55
+	&:hover
+		background: transparent
+		color: $nav_text
+
+.route--logout
+	margin-top: 12px
+	color: $nav_text_muted
+
+.menu-trigger
+	width: 100%
+	display: flex
+	flex-direction: column
+
+.ruta-principal
+	display: flex
+	flex-direction: row
+	justify-content: space-between
+	align-items: center
+	padding: 10px 12px 10px 14px
+	cursor: pointer
+	gap: 10px
+
+.route-text-block
+	flex: 1
+	display: flex
+	align-items: center
+	min-width: 0
+	gap: 6px
+
+.route-text
+	flex: 1
+	text-align: left
+	white-space: nowrap
+	overflow: hidden
+	text-overflow: ellipsis
+
+.route-icon-badge-wrap
+	position: relative
+	flex-shrink: 0
+	display: flex
+	align-items: center
+	justify-content: center
+	width: 22px
+	min-height: 22px
+
+.route-icon
+	font-size: 1.1rem
+	width: 20px
+	text-align: center
+	color: $nav_text_muted
+	transition: color 0.15s ease
+
+.active-item
+	background: $nav_active_bg
+	color: #ffffff
+	font-weight: 600
+	box-shadow: inset 3px 0 0 0 $nav_blue
+	.route-icon
+		color: $nav_blue
+
 .nav-support-unread-badge
-  font-size: 0.65rem
-  min-width: 1.1rem
-  line-height: 1.1
-  padding: 0.12em 0.4em
-  vertical-align: text-top
+	font-size: 0.65rem
+	min-width: 1.1rem
+	line-height: 1.1
+	padding: 0.12em 0.4em
+	vertical-align: text-top
 
 .nav-support-unread-badge--dot
-  font-size: 0.55rem
-  min-width: 0.95rem
-  padding: 0.1em 0.25em
+	position: absolute
+	top: -6px
+	right: -8px
+	min-width: 16px
+	height: 16px
+	padding: 0 4px
+	margin: 0
+	display: inline-flex
+	align-items: center
+	justify-content: center
+	font-size: 0.625rem
+	font-weight: 700
+	line-height: 1
+	border-radius: 999px
+	box-shadow: 0 0 0 2px $nav_bg
+
+@media (min-width: 768px)
+	.app-nav
+		transform: translateX(-$nav_collapsed_offset)
+		&:hover
+			transform: translateX(0)
+			box-shadow: 4px 0 24px rgba(15, 23, 42, 0.18)
 
 @media (max-width: 767.98px)
-  .app-nav
-    position: fixed
-    top: 0
-    left: 0
-    height: 100vh
-    width: 80vw
-    max-width: 80vw
-    border: none
-    background: transparent
-    /* Por encima de la barra superior (1030), por debajo de modales Bootstrap (1050+). */
-    z-index: 1040
-    transform: translateX(-100%)
-    visibility: hidden
-    opacity: 0
-    transition: transform 0.25s ease, visibility 0.25s ease, opacity 0.25s ease
-    pointer-events: none
+	.app-nav
+		width: 80vw
+		max-width: 80vw
+		border: none
+		background: transparent
+		z-index: 1040
+		transform: translateX(-100%)
+		visibility: hidden
+		opacity: 0
+		transition: transform 0.25s ease, visibility 0.25s ease, opacity 0.25s ease
+		pointer-events: none
 
-  .app-nav--mobile-open
-    transform: translateX(0)
-    visibility: visible
-    opacity: 1
-    pointer-events: auto
+	.app-nav--mobile-open
+		transform: translateX(0)
+		visibility: visible
+		opacity: 1
+		pointer-events: auto
 
-  .app-nav-inner
-    width: 100%
-    max-width: 80vw
-    height: 100vh
-    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.2)
-    background: #333
-    overflow-y: auto
+	.app-nav-inner
+		width: 100%
+		max-width: 80vw
+		height: 100vh
+		box-shadow: 4px 0 16px rgba(0, 0, 0, 0.2)
+		background: $nav_bg
+		overflow-y: auto
 </style>

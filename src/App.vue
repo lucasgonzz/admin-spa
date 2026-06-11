@@ -25,11 +25,8 @@
 
     <app-nav
       v-if="show_nav"
-      class="flex-shrink-0"
       :is_mobile_viewport="is_mobile_viewport"
-      :collapsed="nav_collapsed"
       :mobile_open="nav_mobile_open"
-      @toggle-collapsed="toggle_nav_collapsed"
       @close-mobile="close_mobile_nav"
     />
 
@@ -88,12 +85,10 @@
 import AppNav from '@/components/app/Nav/Index.vue'
 import routes from '@/router/routes'
 
-/** Clave localStorage para recordar si el menú lateral está contraído en desktop. */
-const NAV_COLLAPSED_STORAGE_KEY = 'admin_spa_nav_collapsed'
-
 /**
- * Layout raíz: barra lateral + contenido. Oculta nav en login.
- * En desktop la barra se puede contraer; en móvil queda oculta hasta abrir el drawer.
+ * Layout raíz: barra lateral fija + contenido. Oculta nav en login.
+ * En desktop la barra queda colapsada y se expande al pasar el mouse (como empresa-spa).
+ * En móvil queda oculta hasta abrir el drawer.
  */
 export default {
   name: 'App',
@@ -110,8 +105,6 @@ export default {
       is_mobile_viewport: false,
       /** Drawer del menú visible en móvil. */
       nav_mobile_open: false,
-      /** Menú lateral contraído (solo iconos) en desktop. */
-      nav_collapsed: false,
       /** MediaQueryList para detectar cambios de viewport sin polling. */
       mobile_media_query: null,
     }
@@ -134,6 +127,9 @@ export default {
     main_content_class() {
       if (this.$route.name === 'login') {
         return 'flex-grow-1 overflow-auto app-main--login'
+      }
+      if (this.show_nav) {
+        return 'flex-grow-1 overflow-auto app-main-with-nav'
       }
       return 'flex-grow-1 p-2 p-md-3 overflow-auto'
     },
@@ -224,7 +220,6 @@ export default {
      */
     window.addEventListener('admin-spa-toast', this.on_global_toast)
     this.init_nav_viewport_listener()
-    this.load_nav_collapsed_from_storage()
   },
   beforeUnmount() {
     /**
@@ -271,15 +266,6 @@ export default {
       return matched_text
     },
     /**
-     * Lee preferencia de menú contraído guardada en localStorage (solo desktop).
-     */
-    load_nav_collapsed_from_storage() {
-      const stored = window.localStorage.getItem(NAV_COLLAPSED_STORAGE_KEY)
-      if (stored === '1') {
-        this.nav_collapsed = true
-      }
-    },
-    /**
      * Registra matchMedia (md) y sincroniza is_mobile_viewport.
      */
     init_nav_viewport_listener() {
@@ -322,13 +308,6 @@ export default {
      */
     close_mobile_nav() {
       this.nav_mobile_open = false
-    },
-    /**
-     * Alterna menú contraído en desktop y persiste la preferencia.
-     */
-    toggle_nav_collapsed() {
-      this.nav_collapsed = !this.nav_collapsed
-      window.localStorage.setItem(NAV_COLLAPSED_STORAGE_KEY, this.nav_collapsed ? '1' : '0')
     },
     /**
      * Normaliza evento global y delega la creación de la toast.
@@ -416,6 +395,24 @@ export default {
 
 .app-main-column {
   position: relative;
+}
+
+/* Desktop: margen mínimo tras la franja colapsada del nav (56px visible + 4px de respiro). */
+@media (min-width: 768px) {
+  .app-root:not(.app-root--mobile) .app-main-column {
+    padding-left: 60px;
+  }
+}
+
+/* Con nav lateral: el margen izquierdo lo define app-main-column; evita sumar padding duplicado. */
+.app-main-with-nav {
+  padding: 0.5rem;
+}
+
+@media (min-width: 768px) {
+  .app-root:not(.app-root--mobile) .app-main-with-nav {
+    padding: 1rem 1rem 1rem 0;
+  }
 }
 
 /* Login a pantalla completa: el layout interno centra la tarjeta sin márgenes del main. */
