@@ -9,6 +9,7 @@
 import { markRaw } from 'vue'
 import ResourceView from '@/common-vue/components/view/Index.vue'
 import ClientInstallationsTab from '@/components/client/InstallationsTab.vue'
+import EcommerceImplementationTab from '@/components/client/EcommerceImplementationTab.vue'
 
 /**
  * Vista principal de clientes.
@@ -30,6 +31,11 @@ export default {
           key: 'installations',
           label: 'Instalaciones',
           component: markRaw(ClientInstallationsTab),
+        },
+        {
+          key: 'ecommerce',
+          label: 'Ecommerce',
+          component: markRaw(EcommerceImplementationTab),
         },
       ],
     }

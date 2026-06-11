@@ -99,11 +99,28 @@ const routes_def = [
     meta: { requiresAuth: true, nav: false },
   },
   {
+    // Ítem padre con submenú: Sistema / Ecommerce. Redirige a Sistema por compatibilidad.
     path: '/implementaciones',
     name: 'implementations',
     text: 'Implementaciones',
-    component: () => import('@/views/Implementations.vue'),
+    redirect: '/implementaciones/sistema',
     meta: { requiresAuth: true, nav: true, icon: 'gear' },
+    children: [
+      {
+        path: '/implementaciones/sistema',
+        name: 'implementations_sistema',
+        text: 'Sistema',
+        component: () => import('@/views/Implementations.vue'),
+        meta: { requiresAuth: true, nav: false },
+      },
+      {
+        path: '/implementaciones/ecommerce',
+        name: 'implementations_ecommerce',
+        text: 'Ecommerce',
+        component: () => import('@/views/EcommerceImplementations.vue'),
+        meta: { requiresAuth: true, nav: false },
+      },
+    ],
   },
   {
     path: '/env-template',

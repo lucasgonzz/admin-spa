@@ -16,6 +16,8 @@ import task from './task'
 import task_template from './task_template'
 // Conteo de implementaciones listas para avanzar (badge Nav).
 import implementation from './implementation'
+// Conteo de implementaciones de ecommerce listas para avanzar (badge Nav).
+import ecommerce_implementation from './ecommerce_implementation'
 // Actualizaciones de demo: pipeline SPA + API sobre demos en hosting.
 import demo_update from './demo_update'
 
@@ -39,6 +41,8 @@ export default createStore({
     task_template,
     // Estado global de implementaciones (badge "listas para avanzar" en el Nav).
     implementation,
+    // Estado global de implementaciones de ecommerce (badge en el Nav).
+    ecommerce_implementation,
     // Actualizaciones de demo (pipeline SPA + API).
     demo_update,
   },

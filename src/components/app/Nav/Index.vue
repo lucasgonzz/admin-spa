@@ -17,8 +17,74 @@
 
       <nav class="app-nav-menu flex-grow-1">
         <template v-for="r in nav_routes">
+          <!-- Ítem con submenú (children): toggle expandible en lugar de router-link -->
+          <div
+            v-if="r.children && r.children.length"
+            :key="'nav-group-' + r.path"
+            class="app-nav-group"
+          >
+            <div
+              class="app-nav-route route app-nav-group-trigger"
+              :class="{ 'active-item': is_group_active(r) }"
+              :title="nav_link_title(r)"
+              @click="toggle_group(r)"
+            >
+              <div class="menu-trigger">
+                <div class="ruta-principal">
+                  <div class="route-text-block">
+                    <span class="route-text">{{ r.text }}</span>
+                    <span
+                      v-if="show_nav_labels && r.name === 'implementations' && implementations_ready_count > 0"
+                      class="badge bg-danger rounded-pill nav-support-unread-badge"
+                      :title="'Implementaciones listas para avanzar: ' + implementations_ready_count"
+                    >
+                      {{ implementations_ready_count > 99 ? '99+' : implementations_ready_count }}
+                    </span>
+                  </div>
+                  <div class="route-icon-badge-wrap">
+                    <i :class="[icon(r), 'route-icon']" />
+                    <span
+                      v-if="!show_nav_labels && r.name === 'implementations' && implementations_ready_count > 0"
+                      class="badge rounded-pill bg-danger nav-support-unread-badge nav-support-unread-badge--dot"
+                      :title="'Implementaciones listas para avanzar: ' + implementations_ready_count"
+                    >
+                      {{ implementations_ready_count > 9 ? '9+' : implementations_ready_count }}
+                    </span>
+                    <i
+                      v-if="show_nav_labels"
+                      class="bi route-caret"
+                      :class="is_group_expanded(r) ? 'bi-chevron-up' : 'bi-chevron-down'"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Submenú con los hijos: visible solo expandido y con labels mostrados -->
+            <div v-show="show_nav_labels && is_group_expanded(r)" class="app-nav-submenu">
+              <router-link
+                v-for="child in r.children"
+                :key="'nav-child-' + child.path"
+                class="app-nav-route route route--child"
+                :class="{ 'active-item': is_nav_item_active(child) }"
+                active-class=""
+                :to="child.path"
+                @mouseenter="on_nav_link_hover(child)"
+                @click="on_nav_link_click(child)"
+              >
+                <div class="menu-trigger">
+                  <div class="ruta-principal">
+                    <div class="route-text-block">
+                      <span class="route-text">{{ child.text }}</span>
+                    </div>
+                  </div>
+                </div>
+              </router-link>
+            </div>
+          </div>
+
           <router-link
-            v-if="!r.meta || !r.meta.disabled"
+            v-else-if="!r.meta || !r.meta.disabled"
             :key="'nav-' + r.path"
             class="app-nav-route route"
             :class="{ 'active-item': is_nav_item_active(r) }"
@@ -190,6 +256,11 @@ export default {
        * Se guarda para poder hacer leave() en teardown o al cambiar de admin.
        */
       _implementations_nav_channel: null,
+
+      /**
+       * Estado expandido/colapsado de los grupos del menú con submenú (keyed por r.name).
+       */
+      expanded_groups: {},
     }
   },
   computed: {
@@ -334,6 +405,52 @@ export default {
         return true
       }
       return this.$route.path === r.path
+    },
+    /**
+     * Indica si algún hijo del grupo es la ruta activa actual.
+     *
+     * @param {object} r Definición de ruta padre con children.
+     * @returns {boolean}
+     */
+    is_group_active(r) {
+      if (!r || !r.children) {
+        return false
+      }
+      const self = this
+      return r.children.some(function (child) {
+        return self.is_nav_item_active(child)
+      })
+    },
+    /**
+     * Indica si el grupo debe mostrarse expandido: por toggle manual o porque
+     * uno de sus hijos es la ruta activa.
+     *
+     * @param {object} r Definición de ruta padre con children.
+     * @returns {boolean}
+     */
+    is_group_expanded(r) {
+      if (!r || !r.name) {
+        return false
+      }
+      if (this.expanded_groups[r.name]) {
+        return true
+      }
+      return this.is_group_active(r)
+    },
+    /**
+     * Alterna el estado expandido/colapsado de un grupo del menú.
+     *
+     * @param {object} r Definición de ruta padre con children.
+     * @returns {void}
+     */
+    toggle_group(r) {
+      if (!r || !r.name) {
+        return
+      }
+      // Reasignar el objeto para asegurar reactividad en Vue 3.
+      this.expanded_groups = Object.assign({}, this.expanded_groups, {
+        [r.name]: !this.is_group_expanded(r),
+      })
     },
     /**
      * Cierra el drawer móvil (botón X o backdrop).
@@ -673,6 +790,38 @@ $nav_blue: #007bff
 	line-height: 1
 	border-radius: 999px
 	box-shadow: 0 0 0 2px $nav_bg
+
+// Grupo del menú con submenú (ítem padre + hijos)
+.app-nav-group
+	display: flex
+	flex-direction: column
+
+// Disparador del grupo: se comporta como un ítem pero no navega
+.app-nav-group-trigger
+	cursor: pointer
+
+// Chevron de expandir/colapsar del grupo
+.route-caret
+	font-size: 0.75rem
+	margin-left: 6px
+	color: $nav_text_muted
+
+// Contenedor de subítems
+.app-nav-submenu
+	display: flex
+	flex-direction: column
+
+// Subítem (hijo) indentado y con tipografía levemente menor
+.route--child
+	font-size: 0.9rem
+	.ruta-principal
+		padding-left: 28px
+	.route-text
+		color: $nav_text_muted
+	&:hover .route-text
+		color: #ffffff
+	&.active-item .route-text
+		color: #ffffff
 
 @media (min-width: 768px)
 	.app-nav
