@@ -122,6 +122,19 @@
       </div>
     </div>
 
+    <!-- Resumen del lead generado por Claude antes del fin de la demo -->
+    <div
+      v-if="record.demo_summary"
+      class="alert alert-light border mb-3"
+    >
+      <div class="small text-muted mb-1">
+        <i class="bi bi-stars me-1" />
+        Resumen del lead (generado por IA antes del fin de la demo)
+      </div>
+      <!-- Texto en prosa generado por Claude; se muestra solo cuando existe -->
+      <p class="mb-0 small" style="white-space: pre-line;">{{ record.demo_summary }}</p>
+    </div>
+
     <div v-if="record.presentation_mail_last_error" class="alert alert-warning py-2">
       <strong>Error mail presentación:</strong> {{ record.presentation_mail_last_error }}
     </div>
