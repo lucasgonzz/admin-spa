@@ -164,7 +164,7 @@ export function useLeadSocket(options) {
       schedule_conversation_refetch(lead_id)
 
       // También refrescar la fila del lead en la tabla (fetch liviano por ID)
-      store.dispatch('lead/fetch_lead_for_list', lead_id)
+      // La fila de la tabla se actualiza cuando el usuario abre la conversación (fetch_lead_for_conversation)
     }
 
     if (event_data.unread_total != null) {
