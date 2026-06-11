@@ -53,6 +53,13 @@ const routes_def = [
     meta: { requiresAuth: true, nav: true, icon: 'people' },
   },
   {
+    /** Ruta de instalaciones iniciales de un cliente específico. */
+    path: '/clientes/:clientId/instalaciones',
+    name: 'client_installations',
+    component: () => import('@/views/ClientInstallations.vue'),
+    meta: { requiresAuth: true, nav: false },
+  },
+  {
     path: '/actualizaciones',
     name: 'updates',
     text: 'Actualizaciones',
