@@ -6,6 +6,7 @@ import store from '@/store'
  * Eventos:
  *  - LeadSuggestionCreated: flags de sugerencia IA / recordatorio demo.
  *  - LeadConversationUpdated: mensajes nuevos, no leídos y conversación en tiempo real.
+ *  - LeadAiSuggestionGenerating / LeadAiSuggestionFinished: spinner del botón de sugerencia IA.
  *
  * @param {Object} options
  * @param {number|string} options.admin_id Id del operador autenticado.
@@ -70,6 +71,45 @@ export function useLeadSocket(options) {
    */
   function handle_suggestion_created(event_data) {
     apply_lead_row(event_data ? event_data.lead : null)
+    if (event_data && event_data.lead && event_data.lead.id != null) {
+      const generating_id = store.state.lead.ai_generating_lead_id
+      if (generating_id != null && String(generating_id) === String(event_data.lead.id)) {
+        store.commit('lead/set_ai_generating_lead_id', null)
+      }
+    }
+  }
+
+  /**
+   * Claude empezó a generar sugerencia para un lead (job automático o pedido manual en otra pestaña).
+   *
+   * @param {Object} event_data
+   * @returns {void}
+   */
+  function handle_ai_suggestion_generating(event_data) {
+    if (!event_data || event_data.lead_id == null) {
+      return
+    }
+    store.commit('lead/set_ai_generating_lead_id', event_data.lead_id)
+  }
+
+  /**
+   * Finalizó la consulta a Claude (éxito, error o sugerencia descartada).
+   *
+   * @param {Object} event_data
+   * @returns {void}
+   */
+  function handle_ai_suggestion_finished(event_data) {
+    if (!event_data || event_data.lead_id == null) {
+      return
+    }
+    const generating_id = store.state.lead.ai_generating_lead_id
+    if (generating_id != null && String(generating_id) === String(event_data.lead_id)) {
+      store.commit('lead/set_ai_generating_lead_id', null)
+    }
+    const conv = store.state.lead.lead_en_conversacion
+    if (conv && conv.id == event_data.lead_id) {
+      schedule_conversation_refetch(event_data.lead_id)
+    }
   }
 
   /**
@@ -97,9 +137,14 @@ export function useLeadSocket(options) {
         message: message,
       })
       const kind = ((message.kind || '') + '').toLowerCase()
+      const is_pending_ai_suggestion =
+        message.sender === 'sistema' &&
+        message.status === 'sugerido' &&
+        !message.is_followup
       const needs_refetch =
-        (kind === 'audio' || kind === 'ptt' || kind === 'voice') &&
-        (!message.attachments || !message.attachments.length)
+        ((kind === 'audio' || kind === 'ptt' || kind === 'voice') &&
+          (!message.attachments || !message.attachments.length)) ||
+        (is_pending_ai_suggestion && !message.ai_auto_send_at)
       if (needs_refetch) {
         schedule_conversation_refetch(lead.id)
       }
@@ -130,6 +175,8 @@ export function useLeadSocket(options) {
   const channel = echo.channel(channel_name)
   channel.listen('.LeadSuggestionCreated', handle_suggestion_created)
   channel.listen('.LeadConversationUpdated', handle_conversation_updated)
+  channel.listen('.LeadAiSuggestionGenerating', handle_ai_suggestion_generating)
+  channel.listen('.LeadAiSuggestionFinished', handle_ai_suggestion_finished)
 
   return {
     disconnect() {

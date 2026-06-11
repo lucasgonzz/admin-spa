@@ -94,6 +94,8 @@ export default __base_store({
     lead_en_conversacion: null,
     /** Indica llamada en curso a Claude al agregar mensaje del lead. */
     loading_ai: false,
+    /** Id del lead cuya sugerencia IA se está generando (automática o manual). */
+    ai_generating_lead_id: null,
     /** Último error de IA (mensaje legible para la UI). */
     ai_error: null,
     /** Total global de mensajes del lead sin leer (badge menú Leads). */
@@ -122,6 +124,17 @@ export default __base_store({
      */
     set_loading_ai(state, value) {
       state.loading_ai = Boolean(value)
+    },
+    /**
+     * @param {Object} state
+     * @param {number|string|null} lead_id
+     */
+    set_ai_generating_lead_id(state, lead_id) {
+      if (lead_id == null || lead_id === '') {
+        state.ai_generating_lead_id = null
+        return
+      }
+      state.ai_generating_lead_id = lead_id
     },
     /**
      * @param {Object} state
@@ -352,31 +365,20 @@ export default __base_store({
       })
     },
     /**
-     * Agrega uno o varios mensajes pegados desde WhatsApp (lead/setter) y solicita sugerencia (Claude).
+     * Envía un mensaje directo al lead por WhatsApp sin pasar por Claude.
+     *
      * @param {Object} context
      * @param {{ lead_id: number, content: string }} payload
      * @returns {Promise<Object>} modelo lead actualizado
      */
-    store_message(context, payload) {
+    send_direct_message(context, payload) {
       const commit = context.commit
-      commit('set_loading_ai', true)
-      commit('set_ai_error', null)
       return api
-        .post('/lead/' + payload.lead_id + '/messages', { content: payload.content })
+        .post('/lead/' + payload.lead_id + '/send-direct-message', { content: payload.content })
         .then((res) => {
           const model = res.data.model
-          commit('set_loading_ai', false)
           commit('update_lead_en_conversacion', model)
           return model
-        })
-        .catch((err) => {
-          commit('set_loading_ai', false)
-          const msg =
-            err && err.response && err.response.data && err.response.data.message
-              ? String(err.response.data.message)
-              : 'Error al generar sugerencia'
-          commit('set_ai_error', msg)
-          return Promise.reject(err)
         })
     },
     /**
@@ -388,18 +390,18 @@ export default __base_store({
      */
     request_ai_suggestion(context, lead_id) {
       const commit = context.commit
-      commit('set_loading_ai', true)
+      commit('set_ai_generating_lead_id', lead_id)
       commit('set_ai_error', null)
       return api
         .post('/lead/' + lead_id + '/request-ai-suggestion')
         .then((res) => {
           const model = res.data.model
-          commit('set_loading_ai', false)
+          commit('set_ai_generating_lead_id', null)
           commit('update_lead_en_conversacion', model)
           return model
         })
         .catch((err) => {
-          commit('set_loading_ai', false)
+          commit('set_ai_generating_lead_id', null)
           const msg =
             err && err.response && err.response.data && err.response.data.message
               ? String(err.response.data.message)
@@ -407,6 +409,21 @@ export default __base_store({
           commit('set_ai_error', msg)
           return Promise.reject(err)
         })
+    },
+    /**
+     * Cancela el debounce automático antes de pedir sugerencia IA a Claude.
+     *
+     * @param {Object} context
+     * @param {number} lead_id
+     * @returns {Promise<Object>} modelo lead actualizado
+     */
+    cancel_scheduled_ai_suggestion(context, lead_id) {
+      const commit = context.commit
+      return api.post('/lead/' + lead_id + '/cancel-scheduled-ai-suggestion').then((res) => {
+        const model = res.data.model
+        commit('update_lead_en_conversacion', model)
+        return model
+      })
     },
     /**
      * Envía por WhatsApp un mensaje sugerido por IA (sin editar).
@@ -449,6 +466,21 @@ export default __base_store({
     reject_message(context, message_id) {
       const commit = context.commit
       return api.put('/lead-message/' + message_id + '/reject').then((res) => {
+        const model = res.data.model
+        commit('update_lead_en_conversacion', model)
+        return model
+      })
+    },
+    /**
+     * Cancela el envío automático de una sugerencia y la marca como no enviada.
+     *
+     * @param {Object} context
+     * @param {number} message_id id de lead_messages
+     * @returns {Promise<Object>} modelo lead
+     */
+    cancel_auto_send_message(context, message_id) {
+      const commit = context.commit
+      return api.put('/lead-message/' + message_id + '/cancel-auto-send').then((res) => {
         const model = res.data.model
         commit('update_lead_en_conversacion', model)
         return model

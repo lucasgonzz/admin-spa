@@ -1,31 +1,48 @@
 <template>
   <div v-if="effective_record && effective_record.id" class="lead-conversation-tab">
-    <p class="text-muted small">
-      Los mensajes automáticos de bienvenida y presentación se envían solos al primer contacto.
-      Cuando el lead responde, Claude sugiere una respuesta: revisala y usá <strong>Enviar</strong> o
-      <strong>Editar</strong> → <strong>Guardar y enviar</strong> para mandarla por WhatsApp.
-      Para identificar al lead, conviene tener cargado su teléfono en la ficha.
-    </p>
 
+    <!-- Alerta de seguimiento automático -->
     <div v-if="has_pending_followup_suggestion" class="alert alert-info py-2 small mb-2">
       <i class="bi bi-clock-history me-1" aria-hidden="true" />
       Hay una <strong>sugerencia de seguimiento automático</strong> por inactividad del lead. Revisá el mensaje marcado en la conversación.
     </div>
 
+    <!-- Error de IA -->
     <div v-if="ai_error" class="alert alert-danger py-2 small mb-2">{{ ai_error }}</div>
 
-    <div
-      v-if="show_ai_consult_countdown"
-      class="alert alert-secondary py-2 small mb-2 d-flex align-items-center gap-2 lead-ai-timer-alert"
-    >
-      <i class="bi bi-stars" aria-hidden="true" />
-      <span>
-        Sugerencia IA automática en
-        <strong>{{ ai_consult_remaining_seconds }}</strong>
-        s
-      </span>
+    <!-- Claude está consultando -->
+    <div v-if="ai_suggestion_request_loading" class="alert alert-secondary py-2 small mb-2 d-flex align-items-center gap-2">
+      <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+      Consultando a Claude…
     </div>
 
+    <!-- Countdown antes de consultar a Claude (versión simple) -->
+    <div
+      v-else-if="show_ai_consult_countdown"
+      class="alert alert-secondary py-2 small mb-2 d-flex align-items-center justify-content-between gap-2"
+    >
+      <span>
+        <i class="bi bi-stars me-1" aria-hidden="true" />
+        Claude consulta en <strong>{{ ai_consult_remaining_seconds }}</strong> s
+      </span>
+      <button
+        type="button"
+        class="btn btn-outline-secondary btn-sm"
+        :disabled="cancelling_auto_consult"
+        title="Cancelar la petición automática a Claude"
+        @click="on_cancel_auto_ai_consult"
+      >
+        <span
+          v-if="cancelling_auto_consult"
+          class="spinner-border spinner-border-sm"
+          role="status"
+          aria-hidden="true"
+        />
+        <template v-else>Cancelar</template>
+      </button>
+    </div>
+
+    <!-- Conversación -->
     <div ref="conversation_scroll_box" class="conversation-scroll border rounded p-2 mb-3 bg-light">
       <div
         v-if="loading_conversation"
@@ -41,58 +58,38 @@
         :message="msg"
         :busy="busy_message_id === msg.id"
         :now_tick="now_tick"
+        :auto_send_delay_seconds="ai_suggestion_auto_send_delay_seconds"
         @enviar="on_enviar_sugerencia(msg.id)"
         @guardar_y_enviar="on_guardar_y_enviar_sugerencia(msg.id, $event)"
+        @cancelar_envio_automatico="on_cancelar_envio_automatico(msg.id)"
       />
     </div>
 
-    <div class="mb-2">
-      <label class="form-label small text-muted">Nuevos mensajes del chat (WhatsApp)</label>
-      <textarea
-        v-model="nuevo_mensaje"
-        class="form-control"
-        rows="5"
-        placeholder="Pegá el bloque copiado desde WhatsApp (varios mensajes del lead y/o del setter)…"
+    <!-- Input para enviar mensaje directo al lead -->
+    <div class="d-flex align-items-center gap-2">
+      <input
+        v-model="mensaje_directo"
+        type="text"
+        class="form-control form-control-sm"
+        placeholder="Escribir mensaje para enviar por WhatsApp…"
+        :disabled="enviando_directo"
+        @keydown.enter.prevent="on_enviar_directo"
       />
-    </div>
-    <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
-      <div class="d-flex align-items-center gap-2 flex-wrap">
-        <button
-          type="button"
-          class="btn btn-primary btn-sm d-inline-flex align-items-center gap-2"
-          :disabled="loading_ai || !has_paste_text"
-          @click="on_add_message"
-        >
-          <template v-if="loading_ai">
-            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-            <span>Enviando a Claude</span>
-          </template>
-          <template v-else> Agregar mensajes y pedir sugerencia </template>
-        </button>
-        <button
-          v-if="show_request_ai_suggestion_button"
-          type="button"
-          class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-2"
-          :disabled="loading_ai || !can_request_manual_ai_suggestion"
-          :title="request_ai_suggestion_button_title"
-          @click="on_request_ai_suggestion"
-        >
-          <span
-            v-if="loading_ai"
-            class="spinner-border spinner-border-sm"
-            role="status"
-            aria-hidden="true"
-          />
-          <i v-else class="bi bi-stars" aria-hidden="true" />
-          <span>Pedir sugerencia a Claude</span>
-        </button>
-      </div>
+      <button
+        type="button"
+        class="btn btn-primary btn-sm d-inline-flex align-items-center gap-2"
+        :disabled="enviando_directo || !has_mensaje_directo"
+        @click="on_enviar_directo"
+      >
+        <span v-if="enviando_directo" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+        <template v-else>Enviar</template>
+      </button>
       <a
         v-if="lead_whatsapp_url"
         :href="lead_whatsapp_url"
         target="_blank"
         rel="noopener noreferrer"
-        class="btn btn-success btn-sm d-inline-flex align-items-center justify-content-center lead-wa-open-btn"
+        class="btn btn-success btn-sm d-inline-flex align-items-center justify-content-center lead-wa-open-btn flex-shrink-0"
         title="Abrir WhatsApp con el lead"
         aria-label="Abrir WhatsApp con el lead"
       >
@@ -101,7 +98,7 @@
       <button
         v-else
         type="button"
-        class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center justify-content-center lead-wa-open-btn"
+        class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center justify-content-center lead-wa-open-btn flex-shrink-0"
         disabled
         title="Cargá el teléfono del lead para abrir WhatsApp"
         aria-label="WhatsApp (sin teléfono del lead)"
@@ -109,6 +106,7 @@
         <i class="bi bi-whatsapp" aria-hidden="true" />
       </button>
     </div>
+
   </div>
   <div v-else class="text-muted small">Guardá el lead primero para habilitar la conversación.</div>
 </template>
@@ -136,8 +134,10 @@ export default {
   emits: ['record-updated'],
   data() {
     return {
-      /** Texto pegado del chat (uno o varios mensajes lead/setter). */
-      nuevo_mensaje: '',
+      /** Texto del mensaje directo a enviar al lead por WhatsApp. */
+      mensaje_directo: '',
+      /** true mientras se envía el mensaje directo (evita doble envío). */
+      enviando_directo: false,
       /** Id del mensaje en acción de aprobar/rechazar (deshabilita botones duplicados). */
       busy_message_id: null,
       /** Evita POST duplicados al marcar seguimiento como visto. */
@@ -158,8 +158,10 @@ export default {
       last_lead_inbound_at_ms: 0,
       /** Id del último mensaje entrante del lead (detecta inbound nuevo aunque no cambie created_at). */
       last_lead_inbound_message_id: 0,
-      /** Tras un pedido manual exitoso, no exigir de nuevo el debounce automático. */
-      manual_ai_suggestion_bypass_debounce: false,
+      /** true si el setter canceló la sugerencia automática en el turno actual (se reinicia con inbound nuevo). */
+      ai_auto_consult_cancelled: false,
+      /** Evita doble POST al cancelar el debounce automático. */
+      cancelling_auto_consult: false,
       /** Intervalo que actualiza now_tick para los countdown visibles. */
       now_tick_interval_id: null,
       /** Timestamp actual (ms) para countdown de debounce y auto-envío. */
@@ -197,18 +199,31 @@ export default {
       })
       return copy
     },
-    loading_ai() {
-      return this.$store.state.lead.loading_ai
+    /**
+     * true mientras Claude genera sugerencia para el lead abierto (automática o manual).
+     *
+     * @returns {boolean}
+     */
+    ai_suggestion_request_loading() {
+      const rec = this.effective_record
+      if (!rec || !rec.id) {
+        return false
+      }
+      const generating_id = this.$store.state.lead.ai_generating_lead_id
+      if (generating_id == null) {
+        return false
+      }
+      return String(generating_id) === String(rec.id)
     },
     ai_error() {
       return this.$store.state.lead.ai_error
     },
     /**
-     * true si el textarea tiene texto para enviar (el botón se deshabilita aparte durante loading_ai).
+     * true si hay texto en el input directo para enviar.
      * @returns {boolean}
      */
-    has_paste_text() {
-      return (this.nuevo_mensaje || '').trim() !== ''
+    has_mensaje_directo() {
+      return (this.mensaje_directo || '').trim() !== ''
     },
     /**
      * Teléfono del lead solo con dígitos (formato requerido por api.whatsapp.com).
@@ -385,10 +400,10 @@ export default {
       if (this.has_pending_non_followup_suggestion) {
         return false
       }
-      if (this.manual_ai_suggestion_bypass_debounce) {
+      if (this.ai_auto_consult_cancelled) {
         return false
       }
-      if (this.loading_ai) {
+      if (this.ai_suggestion_request_loading) {
         return false
       }
       const delay_seconds = parseInt(this.ai_suggestion_delay_seconds, 10)
@@ -423,6 +438,7 @@ export default {
      * @returns {boolean}
      */
     has_active_auto_send_countdown() {
+      const delay_seconds = parseInt(this.ai_suggestion_auto_send_delay_seconds, 10)
       const list = this.sorted_messages
       let i = 0
       for (i = 0; i < list.length; i++) {
@@ -430,67 +446,17 @@ export default {
         if (m.sender !== 'sistema' || m.status !== 'sugerido' || m.is_followup || m.requiere_verificacion) {
           continue
         }
-        if (!m.ai_auto_send_at) {
-          continue
+        if (m.ai_auto_send_at) {
+          const ends_at = new Date(m.ai_auto_send_at).getTime()
+          if (!isNaN(ends_at)) {
+            return true
+          }
         }
-        const ends_at = new Date(m.ai_auto_send_at).getTime()
-        if (!isNaN(ends_at) && ends_at > this.now_tick) {
+        if (!isNaN(delay_seconds) && delay_seconds > 0 && m.created_at) {
           return true
         }
       }
       return false
-    },
-    /**
-     * Muestra el botón cuando hay mensajes sin responder y ya venció el debounce automático
-     * (o el setter ya pidió sugerencia manual en el mismo turno de conversación).
-     *
-     * @returns {boolean}
-     */
-    show_request_ai_suggestion_button() {
-      if (this.lead_inbound_message_count <= 1) {
-        return false
-      }
-      if (!this.has_unanswered_lead_messages) {
-        return false
-      }
-      if (this.has_pending_non_followup_suggestion) {
-        return false
-      }
-      return this.manual_ai_suggestion_bypass_debounce || this.ai_suggestion_debounce_elapsed
-    },
-    /**
-     * Habilita el pedido manual: debounce cumplido o bypass tras un pedido previo en el mismo turno.
-     *
-     * @returns {boolean}
-     */
-    can_request_manual_ai_suggestion() {
-      if (!this.has_unanswered_lead_messages) {
-        return false
-      }
-      if (this.has_pending_non_followup_suggestion) {
-        return false
-      }
-      if (this.manual_ai_suggestion_bypass_debounce) {
-        return true
-      }
-      return this.ai_suggestion_debounce_elapsed
-    },
-    /**
-     * Tooltip del botón según si falta esperar el debounce automático.
-     *
-     * @returns {string}
-     */
-    request_ai_suggestion_button_title() {
-      if (this.can_request_manual_ai_suggestion) {
-        return 'Pedir sugerencia a Claude sin esperar el timer automático'
-      }
-      if (!this.ai_suggestion_debounce_elapsed) {
-        return 'Esperá a que venza la demora automática antes de pedir sugerencia'
-      }
-      if (this.has_pending_non_followup_suggestion) {
-        return 'Revisá o enviá la sugerencia pendiente antes de pedir otra'
-      }
-      return 'Pedir sugerencia a Claude'
     },
   },
   watch: {
@@ -502,6 +468,11 @@ export default {
         }
         this.merge_lead_into_conversation_store(val)
         const id_changed = !old_val || old_val.id != val.id
+        if (id_changed) {
+          this.ai_auto_consult_cancelled = false
+          this.cancelling_auto_consult = false
+          this.$store.commit('lead/set_ai_generating_lead_id', null)
+        }
         if (id_changed && this.parent_active_tab === 'extra:conversation') {
           this.load_conversation_if_needed(true)
         }
@@ -527,7 +498,13 @@ export default {
      * @param {boolean} newVal
      * @param {boolean} oldVal
      */
-    loading_ai(newVal, oldVal) {
+    /**
+     * Al terminar la generación automática o manual, bajar el scroll para ver la sugerencia.
+     *
+     * @param {boolean} newVal
+     * @param {boolean} oldVal
+     */
+    ai_suggestion_request_loading(newVal, oldVal) {
       if (oldVal === true && newVal === false) {
         this.schedule_scroll_to_bottom()
       }
@@ -540,11 +517,6 @@ export default {
       this.schedule_scroll_to_bottom()
       this.sync_manual_ai_suggestion_state()
       this.sync_countdown_clock()
-    },
-    outbound_messages_signature(new_val, old_val) {
-      if (old_val !== undefined && new_val !== old_val) {
-        this.manual_ai_suggestion_bypass_debounce = false
-      }
     },
   },
   mounted() {
@@ -694,26 +666,28 @@ export default {
         })
     },
     /**
-     * Envía el bloque pegado al backend (varios mensajes posibles) y refresca el modelo en el modal.
+     * Envía un mensaje directo al lead por WhatsApp sin pasar por Claude.
+     *
      * @returns {void}
      */
-    on_add_message() {
+    on_enviar_directo() {
       const self = this
-      const id = this.effective_record.id
-      const text = (this.nuevo_mensaje || '').trim()
-      if (!text) {
+      const rec = this.effective_record
+      const text = (this.mensaje_directo || '').trim()
+      if (!text || !rec || !rec.id || this.enviando_directo) {
         return
       }
+      this.enviando_directo = true
       this.$store
-        .dispatch('lead/store_message', { lead_id: id, content: text })
+        .dispatch('lead/send_direct_message', { lead_id: rec.id, content: text })
         .then(function (model) {
-          self.nuevo_mensaje = ''
-          self.manual_ai_suggestion_bypass_debounce = false
+          self.enviando_directo = false
+          self.mensaje_directo = ''
           self.$emit('record-updated', model)
           self.schedule_scroll_to_bottom()
         })
         .catch(function () {
-          /* toast global vía axios */
+          self.enviando_directo = false
         })
     },
     /**
@@ -769,7 +743,7 @@ export default {
         }
       }
       if (last_id > this.last_lead_inbound_message_id) {
-        this.manual_ai_suggestion_bypass_debounce = false
+        this.ai_auto_consult_cancelled = false
       }
       this.last_lead_inbound_message_id = last_id
       this.last_lead_inbound_at_ms = last_ms
@@ -812,25 +786,27 @@ export default {
       this.now_tick_interval_id = null
     },
     /**
-     * Pide sugerencia a Claude sobre el hilo ya cargado (sin pegar mensajes nuevos).
+     * Cancela el job diferido que pediría sugerencia IA automática a Claude.
      *
      * @returns {void}
      */
-    on_request_ai_suggestion() {
+    on_cancel_auto_ai_consult() {
       const self = this
       const rec = this.effective_record
-      if (!rec || !rec.id || !this.can_request_manual_ai_suggestion) {
+      if (!rec || !rec.id || this.cancelling_auto_consult) {
         return
       }
+      this.cancelling_auto_consult = true
       this.$store
-        .dispatch('lead/request_ai_suggestion', rec.id)
+        .dispatch('lead/cancel_scheduled_ai_suggestion', rec.id)
         .then(function (model) {
-          self.manual_ai_suggestion_bypass_debounce = true
+          self.cancelling_auto_consult = false
+          self.ai_auto_consult_cancelled = true
           self.$emit('record-updated', model)
-          self.schedule_scroll_to_bottom()
+          self.sync_countdown_clock()
         })
         .catch(function () {
-          /* toast global vía axios; ai_error en store */
+          self.cancelling_auto_consult = false
         })
     },
     /**
@@ -881,6 +857,26 @@ export default {
           self.busy_message_id = null
         })
     },
+    /**
+     * Cancela el envío automático de una sugerencia y la marca como no enviada.
+     *
+     * @param {number} message_id
+     * @returns {void}
+     */
+    on_cancelar_envio_automatico(message_id) {
+      const self = this
+      this.busy_message_id = message_id
+      this.$store
+        .dispatch('lead/cancel_auto_send_message', message_id)
+        .then(function (model) {
+          self.busy_message_id = null
+          self.$emit('record-updated', model)
+          self.sync_countdown_clock()
+        })
+        .catch(function () {
+          self.busy_message_id = null
+        })
+    },
   },
 }
 </script>
@@ -893,7 +889,7 @@ export default {
   overflow-y: auto;
 }
 
-/* Botón cuadrado con icono WhatsApp alineado a la derecha de la fila de acciones. */
+/* Botón cuadrado con icono WhatsApp. */
 .lead-wa-open-btn {
   width: 2rem;
   height: 2rem;

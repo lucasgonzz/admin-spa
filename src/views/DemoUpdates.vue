@@ -2,6 +2,7 @@
   <div>
     <resource-view
       model_name="demo_update"
+      resource_api_path="demo-update"
       @record-selected="on_record_selected"
     />
 

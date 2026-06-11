@@ -33,7 +33,12 @@
         </a>
       </template>
       <!-- Modo lectura: transcripción / texto (original o editado tras aprobar) -->
-      <div v-if="!editing && show_message_text" class="message-text">{{ effective_content }}</div>
+      <div
+        v-if="!editing && show_message_text"
+        class="message-text"
+        :class="{ 'message-text--not-sent': is_not_sent_suggestion }">
+        {{ effective_content }}
+      </div>
       <!-- Modo edición: textarea precargado con el content original de la sugerencia -->
       <textarea
         v-else
@@ -86,11 +91,33 @@
           </button>
         </template>
       </div>
-      <div v-if="show_pending_confirmation_label" class="wa-pending-confirmation text-muted">
-        <template v-if="show_auto_send_countdown">
-          Envío automático en <strong>{{ auto_send_remaining_seconds }}</strong> s
-        </template>
-        <template v-else>Esperando confirmación</template>
+      <div v-if="show_auto_send_timer_block" class="wa-auto-send-timer mt-1">
+        <div class="wa-auto-send-timer-row d-flex flex-wrap align-items-center justify-content-between gap-2">
+          <span class="wa-auto-send-timer-label text-muted small">
+            <template v-if="show_auto_send_countdown">
+              Envío automático en <strong class="wa-auto-send-seconds">{{ auto_send_remaining_seconds }}</strong> s
+            </template>
+            <template v-else-if="show_auto_send_dispatching">Enviando automáticamente…</template>
+          </span>
+          <button
+            type="button"
+            class="btn btn-outline-secondary btn-sm wa-btn-tight"
+            :disabled="busy"
+            title="Cancelar el envío automático por WhatsApp"
+            @click="on_cancelar_envio_automatico"
+          >
+            Cancelar envío
+          </button>
+        </div>
+      </div>
+      <div
+        v-else-if="show_pending_confirmation_label"
+        class="wa-pending-confirmation text-muted">
+        Esperando confirmación
+      </div>
+      <div v-if="is_not_sent_suggestion" class="wa-not-sent-banner text-muted small mt-1">
+        <i class="bi bi-x-circle me-1" aria-hidden="true" />
+        Sugerencia no enviada al lead
       </div>
       <div
         v-if="show_sending_indicator"
@@ -123,7 +150,7 @@
  */
 export default {
   name: 'LeadMessageBubble',
-  emits: ['enviar', 'guardar_y_enviar'],
+  emits: ['enviar', 'guardar_y_enviar', 'cancelar_envio_automatico'],
   props: {
     /** Fila `lead_messages` desde la API. */
     message: { type: Object, required: true },
@@ -131,6 +158,8 @@ export default {
     busy: { type: Boolean, default: false },
     /** Timestamp actual (ms) del padre para countdown de auto-envío. */
     now_tick: { type: Number, default: 0 },
+    /** Segundos configurados antes del envío automático (fallback si falta ai_auto_send_at en el mensaje). */
+    auto_send_delay_seconds: { type: Number, default: 0 },
   },
   data() {
     return {
@@ -167,7 +196,21 @@ export default {
       if (this.is_followup_suggestion) {
         return 'bg-warning bg-opacity-10 border-warning wa-bubble--out wa-bubble--followup'
       }
+      if (this.is_not_sent_suggestion) {
+        return 'bg-light wa-bubble--out wa-bubble--not-sent'
+      }
       return 'bg-white wa-bubble--out'
+    },
+    /**
+     * true si la sugerencia de Claude quedó marcada como no enviada al lead.
+     *
+     * @returns {boolean}
+     */
+    is_not_sent_suggestion() {
+      if (this.message.sender !== 'sistema') {
+        return false
+      }
+      return this.message.status === 'rechazado'
     },
     /**
      * true si el mensaje fue generado por el chequeo automático de inactividad.
@@ -325,6 +368,9 @@ export default {
      */
     status_badge_text() {
       const st = this.message.status
+      if (st === 'rechazado' && this.message.sender === 'sistema') {
+        return 'No enviado'
+      }
       if (st === 'rechazado') {
         return 'Rechazado'
       }
@@ -335,6 +381,9 @@ export default {
      * @returns {string}
      */
     status_badge_class() {
+      if (this.is_not_sent_suggestion) {
+        return 'bg-secondary text-white'
+      }
       if (this.message.status === 'aprobado' && this.was_sent_with_adjustment) {
         return 'bg-warning text-dark'
       }
@@ -367,11 +416,40 @@ export default {
       return parsed
     },
     /**
-     * true si la sugerencia tiene timer de envío automático aún vigente.
+     * Timestamp efectivo del auto-envío: usa ai_auto_send_at o estima desde created_at + demora configurada.
+     *
+     * @returns {number}
+     */
+    effective_auto_send_at_ms() {
+      if (this.auto_send_at_ms > 0) {
+        return this.auto_send_at_ms
+      }
+      if (!this.show_pending_suggestion_actions) {
+        return 0
+      }
+      if (this.is_followup_suggestion || this.message.requiere_verificacion) {
+        return 0
+      }
+      const delay_seconds = parseInt(this.auto_send_delay_seconds, 10)
+      if (isNaN(delay_seconds) || delay_seconds <= 0) {
+        return 0
+      }
+      const raw_created = this.message.created_at
+      if (!raw_created) {
+        return 0
+      }
+      const created_ms = new Date(raw_created).getTime()
+      if (isNaN(created_ms)) {
+        return 0
+      }
+      return created_ms + delay_seconds * 1000
+    },
+    /**
+     * true si hay envío automático programado para esta sugerencia (con o sin segundos restantes).
      *
      * @returns {boolean}
      */
-    show_auto_send_countdown() {
+    show_auto_send_timer_block() {
       if (!this.show_pending_suggestion_actions) {
         return false
       }
@@ -381,11 +459,24 @@ export default {
       if (this.message.requiere_verificacion) {
         return false
       }
-      const ends_at = this.auto_send_at_ms
-      if (!ends_at) {
+      return this.effective_auto_send_at_ms > 0
+    },
+    show_auto_send_countdown() {
+      if (!this.show_auto_send_timer_block) {
         return false
       }
-      return ends_at > this.now_tick
+      return this.effective_auto_send_at_ms > this.now_tick
+    },
+    /**
+     * true cuando venció el timer y el job de auto-envío debería estar ejecutándose.
+     *
+     * @returns {boolean}
+     */
+    show_auto_send_dispatching() {
+      if (!this.show_auto_send_timer_block) {
+        return false
+      }
+      return this.effective_auto_send_at_ms <= this.now_tick
     },
     /**
      * Segundos restantes hasta el envío automático por WhatsApp.
@@ -396,7 +487,7 @@ export default {
       if (!this.show_auto_send_countdown) {
         return 0
       }
-      const remaining_ms = this.auto_send_at_ms - this.now_tick
+      const remaining_ms = this.effective_auto_send_at_ms - this.now_tick
       if (remaining_ms <= 0) {
         return 0
       }
@@ -502,6 +593,14 @@ export default {
       this.$emit('guardar_y_enviar', text)
     },
     /**
+     * Pide al padre cancelar el envío automático programado de esta sugerencia.
+     *
+     * @returns {void}
+     */
+    on_cancelar_envio_automatico() {
+      this.$emit('cancelar_envio_automatico')
+    },
+    /**
      * URL pública del adjunto en admin-api (/storage/...).
      *
      * @param {Object} attachment Fila lead_message_attachments.
@@ -604,6 +703,33 @@ export default {
   line-height: 1.2;
   margin-top: 0.25rem;
   font-style: italic;
+}
+.wa-auto-send-timer {
+  padding-top: 0.2rem;
+  border-top: 1px dashed rgba(0, 0, 0, 0.08);
+}
+.wa-auto-send-timer-label {
+  font-style: italic;
+  line-height: 1.25;
+}
+.wa-auto-send-seconds {
+  display: inline-block;
+  min-width: 1.4rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.wa-bubble--not-sent {
+  opacity: 0.72;
+  border-style: dashed !important;
+  border-color: #adb5bd !important;
+}
+.message-text--not-sent {
+  text-decoration: line-through;
+  text-decoration-color: rgba(108, 117, 125, 0.75);
+}
+.wa-not-sent-banner {
+  font-style: italic;
+  line-height: 1.25;
 }
 .wa-message-meta {
   font-size: 0.8rem;

@@ -53,7 +53,15 @@ const routes_def = [
     meta: { requiresAuth: true, nav: true, icon: 'people' },
   },
   {
-    /** Ruta de instalaciones iniciales de un cliente específico. */
+    /** Listado global de instalaciones iniciales (menú lateral). */
+    path: '/instalaciones',
+    name: 'installations',
+    text: 'Instalaciones',
+    component: () => import('@/views/Installations.vue'),
+    meta: { requiresAuth: true, nav: true, icon: 'cloud-download' },
+  },
+  {
+    /** Gestión de instalaciones de un cliente específico (sin ítem en el menú). */
     path: '/clientes/:clientId/instalaciones',
     name: 'client_installations',
     component: () => import('@/views/ClientInstallations.vue'),
