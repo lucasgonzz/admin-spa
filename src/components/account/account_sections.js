@@ -19,6 +19,11 @@ export const ACCOUNT_SECTIONS = [
     group: 'Soporte',
   },
   {
+    id: 'agent-identity',
+    label: 'Identidad del agente',
+    group: 'Leads y ventas',
+  },
+  {
     id: 'lead-whatsapp-onboarding',
     label: 'WhatsApp leads',
     group: 'Leads y ventas',

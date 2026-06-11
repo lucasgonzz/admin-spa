@@ -101,6 +101,24 @@
           </div>
         </section>
 
+        <!-- Leads: identidad del agente Martín -->
+        <section
+          v-show="active_section === 'agent-identity'"
+          id="agent-identity"
+          class="account-section"
+        >
+          <div class="card account-config-card">
+            <div class="card-body">
+              <h2 class="h6 card-title">Identidad del agente</h2>
+              <p class="text-muted small mb-3">
+                Nombre y perfil del agente Martín inyectados al inicio del system prompt de Claude
+                en cada conversación de WhatsApp con leads.
+              </p>
+              <agent-identity-section />
+            </div>
+          </div>
+        </section>
+
         <!-- Leads: WhatsApp onboarding -->
         <section
           v-show="active_section === 'lead-whatsapp-onboarding'"
@@ -219,6 +237,7 @@ import AiSystemPromptSection from '@/components/account/sections/AiSystemPromptS
 import TaskTemplatesSection from '@/components/account/sections/TaskTemplatesSection.vue'
 import LeadWhatsappOnboardingSection from '@/components/account/sections/LeadWhatsappOnboardingSection.vue'
 import ImplementationSettingsSection from '@/components/account/sections/ImplementationSettingsSection.vue'
+import AgentIdentitySection from '@/components/account/sections/AgentIdentitySection.vue'
 
 /**
  * Vista de cuenta: preferencias del operador y configuraciones del sistema en secciones navegables.
@@ -235,6 +254,7 @@ export default {
     TaskTemplatesSection,
     LeadWhatsappOnboardingSection,
     ImplementationSettingsSection,
+    AgentIdentitySection,
   },
   data() {
     return {
