@@ -1,42 +1,168 @@
 <template>
-  <div v-if="record && record.id">
-    <div class="alert alert-light border mb-3">
-      <div class="row g-2">
-        <div class="col-md-12">
-          <small class="text-muted d-block">Cliente / producción</small>
-          <strong>{{ production_client_label }}</strong>
+  <div v-if="record && record.id" class="lead-pipeline-panel">
+
+    <!-- Panel principal: pipeline visual de 8 etapas del funnel comercial -->
+    <div class="card border-secondary border-opacity-25 mb-3">
+      <div class="card-header d-flex align-items-center gap-2 bg-light py-2">
+        <i class="bi bi-diagram-3 text-secondary"></i>
+        <span class="small fw-semibold">Pipeline comercial</span>
+        <!-- Badge de progreso: muestra cuántas etapas están completas -->
+        <span class="badge text-bg-secondary ms-auto small">{{ completed_stages }}/{{ total_stages }}</span>
+      </div>
+      <div class="card-body py-2">
+        <!-- Una fila por etapa del funnel -->
+        <div
+          v-for="stage in stages"
+          :key="stage.id"
+          class="pipeline-stage-row py-2"
+          :class="{ 'border-bottom': stage.id < total_stages }"
+        >
+          <div class="d-flex align-items-start gap-2">
+            <!-- Ícono de estado: completado / en curso / fallido / pendiente -->
+            <div class="stage-icon flex-shrink-0 mt-1">
+              <i v-if="stage.status === 'completed'" class="bi bi-check-circle-fill text-success"></i>
+              <i v-else-if="stage.status === 'running'" class="bi bi-arrow-repeat text-warning rotating-icon"></i>
+              <i v-else-if="stage.status === 'failed'" class="bi bi-x-circle-fill text-danger"></i>
+              <i v-else class="bi bi-circle text-muted"></i>
+            </div>
+            <div class="flex-grow-1">
+              <!-- Label de la etapa con color según estado + timestamp cuando aplica -->
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span
+                  class="small fw-semibold"
+                  :class="{
+                    'text-success': stage.status === 'completed',
+                    'text-warning': stage.status === 'running',
+                    'text-danger':  stage.status === 'failed',
+                    'text-muted':   stage.status === 'pending',
+                  }"
+                >{{ stage.label }}</span>
+                <span v-if="stage.timestamp" class="small text-muted">- {{ stage.timestamp }}</span>
+              </div>
+              <!-- Detalle opcional: fecha de demo, error de setup, etc. -->
+              <div v-if="stage.detail" class="small text-muted mt-1">{{ stage.detail }}</div>
+              <!-- Resumen colapsable para la etapa 7 (demo summary generado por Claude) -->
+              <div v-if="stage.id === 7 && record.demo_summary && summary_expanded" class="mt-2 p-2 bg-light rounded small" style="white-space: pre-line;">{{ record.demo_summary }}</div>
+              <div v-if="stage.id === 7 && record.demo_summary" class="mt-1">
+                <button
+                  type="button"
+                  class="btn btn-link btn-sm p-0 text-decoration-none small text-muted"
+                  @click="summary_expanded = !summary_expanded"
+                >
+                  <i class="bi me-1" :class="summary_expanded ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+                  {{ summary_expanded ? 'Ocultar resumen' : 'Ver resumen' }}
+                </button>
+              </div>
+              <!-- Botón de acción manual: solo visible cuando la etapa no está completada y tiene acción -->
+              <div v-if="stage.action && stage.status !== 'completed'" class="mt-1">
+                <button
+                  type="button"
+                  class="btn btn-outline-secondary btn-sm"
+                  :disabled="loading_stage === stage.id"
+                  @click="run_stage_action(stage)"
+                >
+                  <span v-if="loading_stage === stage.id" class="spinner-border spinner-border-sm me-1"></span>
+                  {{ stage.action_label }}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="d-flex flex-wrap gap-2 mb-3">
-      <!-- <button type="button" class="btn btn-sm btn-outline-primary" :disabled="loading_action !== ''" @click="send_presentation_mail">
-        {{ loading_action === 'presentation' ? 'Enviando...' : 'Enviar presentación' }}
-      </button> -->
-      <button type="button" class="btn btn-sm btn-primary" :disabled="loading_action !== ''" @click="send_demo_mail" :title="demo_mail_validation_message || 'Enviar mail de acceso a la demo'">
-        {{ loading_action === 'demo_mail' ? 'Enviando...' : 'Enviar mail 1 - DEMO' }}
-      </button>
-      <button type="button" class="btn btn-sm btn-outline-primary" :disabled="loading_action !== ''" @click="run_demo_setup">
-        {{ loading_action === 'demo' ? 'Ejecutando...' : 'Correr demo setup' }}
-      </button>
-      <button type="button" class="btn btn-sm btn-outline-success" :disabled="loading_action !== ''" @click="send_followup_mail">
-        {{ loading_action === 'followup' ? 'Enviando...' : 'Enviar Mail 2 - Propuesta' }}
-      </button>
-      <!-- Promover a cliente: crea el Client en admin-api, marca el lead como cerrado_ganado
-           y genera automáticamente las tareas del proceso 'lead_a_cliente'. -->
-      <button
-        type="button"
-        class="btn btn-sm btn-success"
-        :disabled="loading_action !== '' || !can_promote_to_client"
-        @click="request_promote_to_client"
-        :title="promote_to_client_title"
-      >
-        <i class="bi bi-person-check-fill me-1" />
-        {{ loading_action === 'fetching_subdomain' ? 'Sugiriendo...' : 'Promover a cliente' }}
-      </button>
-      <button type="button" class="btn btn-sm btn-outline-success" :disabled="loading_action !== '' || !can_run_user_setup" @click="run_user_setup">
-        {{ loading_action === 'user_setup' ? 'Ejecutando...' : 'Correr user setup' }}
-      </button>
+    <!-- Acciones manuales: botones del flujo principal (mail demo, followup, promover, user setup) -->
+    <div class="card border-secondary border-opacity-25 mb-3">
+      <div class="card-header bg-light py-2">
+        <span class="small fw-semibold">Acciones manuales</span>
+      </div>
+      <div class="card-body py-2">
+        <div class="d-flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="btn btn-sm btn-primary"
+            :disabled="loading_action !== ''"
+            :title="demo_mail_validation_message || 'Enviar mail de acceso a la demo'"
+            @click="send_demo_mail"
+          >
+            {{ loading_action === 'demo_mail' ? 'Enviando...' : 'Enviar mail 1 - DEMO' }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-primary"
+            :disabled="loading_action !== ''"
+            @click="send_followup_mail"
+          >
+            {{ loading_action === 'followup' ? 'Enviando...' : 'Enviar Mail 2 - Propuesta' }}
+          </button>
+          <!-- Promover a cliente: crea el Client en admin-api y genera las tareas del equipo -->
+          <button
+            v-if="!record.promoted_client_id"
+            type="button"
+            class="btn btn-sm btn-success"
+            :disabled="loading_action !== '' || !can_promote_to_client"
+            @click="request_promote_to_client"
+          >
+            <i class="bi bi-person-check-fill me-1" />
+            {{ loading_action === 'fetching_subdomain' ? 'Sugiriendo...' : 'Promover a cliente' }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-success"
+            :disabled="loading_action !== '' || !can_run_user_setup"
+            @click="run_user_setup"
+          >
+            {{ loading_action === 'user_setup' ? 'Ejecutando...' : 'Correr user setup' }}
+          </button>
+        </div>
+
+        <!-- Advertencia de campos faltantes para el mail de demo -->
+        <div v-if="demo_mail_validation_message" class="alert alert-warning py-2 mt-2 mb-0 small">
+          <strong>Mail 1 - DEMO:</strong> {{ demo_mail_validation_message }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Estado de los correos comerciales (Mail 1 demo y Mail 2 seguimiento) -->
+    <div class="card border-secondary border-opacity-25 mb-3">
+      <div class="card-header bg-light py-2">
+        <span class="small fw-semibold">Correos comerciales</span>
+      </div>
+      <div class="card-body py-2">
+        <div class="row g-2">
+          <div v-for="mail_status in mail_status_cards" :key="mail_status.key" class="col-md-6">
+            <small class="text-muted d-block">{{ mail_status.title }}</small>
+            <span class="badge" :class="mail_status.badge_class">{{ mail_status.status_text }}</span>
+            <div class="small mt-1">
+              <strong>{{ mail_status.time_label }}:</strong> {{ mail_status.last_sent_at_text }}
+            </div>
+            <div v-if="mail_status.last_error" class="small text-danger mt-1">
+              <strong>Último error:</strong> {{ mail_status.last_error }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Estado del setup remoto: demo setup y user setup -->
+    <div class="card border-secondary border-opacity-25 mb-3">
+      <div class="card-header bg-light py-2">
+        <span class="small fw-semibold">Setup remoto</span>
+      </div>
+      <div class="card-body py-2">
+        <div class="row g-2">
+          <div v-for="setup_row in setup_status_cards" :key="setup_row.key" class="col-md-6">
+            <small class="text-muted d-block">{{ setup_row.title }}</small>
+            <span class="badge" :class="setup_row.badge_class">{{ setup_row.status_text }}</span>
+            <div class="small mt-1">
+              <strong>{{ setup_row.time_label }}:</strong> {{ setup_row.last_sent_at_text }}
+            </div>
+            <div v-if="setup_row.last_error" class="small text-danger mt-1">
+              <strong>Último error:</strong> {{ setup_row.last_error }}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Confirmación de subdominio antes de promover a cliente -->
@@ -45,7 +171,7 @@
         <strong>Subdominio sugerido</strong>
         <small class="text-muted ms-1">(podés editarlo antes de confirmar)</small>
       </div>
-      <!-- Input editable: el operador puede cambiar el subdominio sugerido -->
+      <!-- Input editable: el operador puede cambiar el subdominio sugerido por Claude -->
       <div class="mb-3">
         <input
           type="text"
@@ -56,7 +182,7 @@
         />
         <small class="text-muted">Solo letras, números y guiones. Máximo 20 caracteres.</small>
       </div>
-      <!-- Preview de las URLs que se van a crear -->
+      <!-- Preview de las URLs que se van a crear con el subdominio elegido -->
       <div v-if="subdomain_preview" class="small text-muted mb-3">
         <div class="mb-1"><strong>URLs a crear:</strong></div>
         <div>SPA 1: https://{{ subdomain_preview }}.comerciocity.com</div>
@@ -85,70 +211,10 @@
       </div>
     </div>
 
-    <!-- Advertencia de campos faltantes para el mail de demo -->
-    <div v-if="demo_mail_validation_message" class="alert alert-warning py-2 mb-2 small">
-      <strong>Mail 1 - DEMO:</strong> {{ demo_mail_validation_message }}
-    </div>
-
-    <div class="alert alert-light border mb-3">
-      <div class="small text-muted mb-2">Correos comerciales</div>
-      <div class="row g-2">
-        <div v-for="mail_status in mail_status_cards" :key="mail_status.key" class="col-md-6">
-          <small class="text-muted d-block">{{ mail_status.title }}</small>
-          <span class="badge" :class="mail_status.badge_class">{{ mail_status.status_text }}</span>
-          <div class="small mt-1">
-            <strong>{{ mail_status.time_label }}:</strong> {{ mail_status.last_sent_at_text }}
-          </div>
-          <div v-if="mail_status.last_error" class="small text-danger mt-1">
-            <strong>Último error:</strong> {{ mail_status.last_error }}
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="alert alert-light border mb-3">
-      <div class="small text-muted mb-2">Setup remoto (ERP demo / productiva)</div>
-      <div class="row g-2">
-        <div v-for="setup_row in setup_status_cards" :key="setup_row.key" class="col-md-6">
-          <small class="text-muted d-block">{{ setup_row.title }}</small>
-          <span class="badge" :class="setup_row.badge_class">{{ setup_row.status_text }}</span>
-          <div class="small mt-1">
-            <strong>{{ setup_row.time_label }}:</strong> {{ setup_row.last_sent_at_text }}
-          </div>
-          <div v-if="setup_row.last_error" class="small text-danger mt-1">
-            <strong>Último error:</strong> {{ setup_row.last_error }}
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Resumen del lead generado por Claude antes del fin de la demo -->
-    <div
-      v-if="record.demo_summary"
-      class="alert alert-light border mb-3"
-    >
-      <div class="small text-muted mb-1">
-        <i class="bi bi-stars me-1" />
-        Resumen del lead (generado por IA antes del fin de la demo)
-      </div>
-      <!-- Texto en prosa generado por Claude; se muestra solo cuando existe -->
-      <p class="mb-0 small" style="white-space: pre-line;">{{ record.demo_summary }}</p>
-    </div>
-
-    <div v-if="record.presentation_mail_last_error" class="alert alert-warning py-2">
-      <strong>Error mail presentación:</strong> {{ record.presentation_mail_last_error }}
-    </div>
-    <div
-      v-if="!record.promoted_client_id"
-      class="alert alert-info py-2 small mb-0"
-    >
+    <div v-if="!record.promoted_client_id" class="alert alert-info py-2 small mb-0">
       Usá <strong>Promover a cliente</strong> para crear el perfil del cliente y generar las tareas automáticas del equipo.
-      Después cargá la <strong>API URL</strong> en el perfil del cliente (Clientes) y ejecutá <strong>Correr user setup</strong>.
     </div>
-    <div
-      v-if="record.promoted_client_id && !client_production_api_url"
-      class="alert alert-info py-2 small mb-0"
-    >
+    <div v-if="record.promoted_client_id && !client_production_api_url" class="alert alert-info py-2 small mb-0">
       Cargá la <strong>API URL</strong> en el perfil del cliente (Clientes) para habilitar «Correr user setup».
     </div>
   </div>
@@ -157,6 +223,13 @@
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
 
+/**
+ * Panel de pipeline del lead en el tab Operaciones.
+ *
+ * Muestra las 8 etapas del funnel comercial con íconos de estado y botones de
+ * acción manual para disparar jobs sin esperar los schedulers automáticos.
+ * Mantiene las acciones existentes (mail demo, followup, promover, user setup).
+ */
 export default {
   name: 'LeadExtraProps',
   props: {
@@ -170,9 +243,17 @@ export default {
   data() {
     return {
       /**
-       * Acción actualmente en ejecución para bloquear botones y feedback visual.
+       * Acción del flujo principal actualmente en ejecución (bloquea botones de acciones manuales).
        */
       loading_action: '',
+      /**
+       * Id de etapa del pipeline con acción en ejecución (null = ninguna).
+       */
+      loading_stage: null,
+      /**
+       * Controla si el resumen del closer (etapa 7) está expandido en el panel.
+       */
+      summary_expanded: false,
       /**
        * URL candidata para promover un lead a cliente.
        */
@@ -189,17 +270,140 @@ export default {
   },
   computed: {
     /**
+     * Devuelve las 8 etapas del pipeline con estado dinámico calculado a partir del record.
+     * Cada etapa incluye: id, label, status, timestamp, detail, action y action_label.
+     * @returns {Array<Object>}
+     */
+    stages() {
+      /* Lead actual: si no existe no se puede calcular el estado del pipeline. */
+      var r = this.record
+      if (!r) {
+        return []
+      }
+
+      /* Statuses que indican que el lead ya está calificado en el funnel. */
+      var calificado_statuses = ['calificado', 'demo_agendada', 'demo_realizada', 'cerrado_ganado', 'mail2_enviado', 'cerrado_perdido']
+
+      return [
+        {
+          id: 1,
+          label: 'Nombre capturado',
+          /* Completado automáticamente cuando el lead tiene nombre de contacto cargado. */
+          status: (r.contact_name || '').trim() ? 'completed' : 'pending',
+          timestamp: null,
+          /* Detalle: muestra el nombre capturado como referencia visual. */
+          detail: (r.contact_name || '').trim() || null,
+          action: null,
+          action_label: null,
+        },
+        {
+          id: 2,
+          label: 'Lead calificado',
+          /* Completado cuando el status del lead avanzó más allá de "nuevo" / "contactado". */
+          status: calificado_statuses.indexOf(r.status) !== -1 ? 'completed' : 'pending',
+          timestamp: null,
+          detail: null,
+          action: null,
+          action_label: null,
+        },
+        {
+          id: 3,
+          label: 'Demo agendada',
+          /* Completado cuando se cargó una fecha de demo en el lead. */
+          status: r.demo_date ? 'completed' : 'pending',
+          timestamp: null,
+          /* Detalle: muestra la fecha y hora acordada de la demo. */
+          detail: r.demo_date
+            ? (this.format_date(r.demo_date) + (r.demo_start_time ? ' a las ' + r.demo_start_time : ''))
+            : null,
+          action: null,
+          action_label: null,
+        },
+        {
+          id: 4,
+          label: 'Demo setup corrido',
+          /* El demo setup puede estar en tres estados intermedios además de pendiente. */
+          status: r.demo_setup_status === 'exitoso'
+            ? 'completed'
+            : r.demo_setup_status === 'ejecutandose'
+              ? 'running'
+              : r.demo_setup_status === 'fallido'
+                ? 'failed'
+                : 'pending',
+          /* Timestamp de última ejecución del setup remoto. */
+          timestamp: r.demo_setup_last_run_at ? this.format_datetime(r.demo_setup_last_run_at) : null,
+          /* Detalle: mensaje de error si el setup falló. */
+          detail: r.demo_setup_last_error || null,
+          action: 'run_demo_setup',
+          action_label: 'Correr demo setup ahora',
+        },
+        {
+          id: 5,
+          label: 'Recordatorio enviado',
+          /* Completado cuando el scheduler (o acción manual) envió el recordatorio pre-demo. */
+          status: r.recordatorio_demo_enviado ? 'completed' : 'pending',
+          timestamp: null,
+          detail: null,
+          action: 'send_demo_reminder',
+          action_label: 'Enviar recordatorio ahora',
+        },
+        {
+          id: 6,
+          label: 'Check de ingreso enviado',
+          /* Completado cuando se envió el check de ingreso post-demo al lead. */
+          status: r.demo_check_ingreso_enviado ? 'completed' : 'pending',
+          timestamp: null,
+          detail: null,
+          action: 'check_demo_ingress',
+          action_label: 'Enviar check ahora',
+        },
+        {
+          id: 7,
+          label: 'Resumen para el closer generado',
+          /* Completado cuando Claude generó el resumen del lead para el closer. */
+          status: (r.demo_summary || '').trim() ? 'completed' : 'pending',
+          timestamp: null,
+          detail: null,
+          action: 'generate_demo_summary',
+          action_label: 'Generar resumen ahora',
+        },
+        {
+          id: 8,
+          label: 'Llamada del closer realizada',
+          /* Completado cuando el closer marcó que realizó la llamada post-demo. */
+          status: r.closer_called_at ? 'completed' : 'pending',
+          /* Timestamp del momento de la llamada del closer. */
+          timestamp: r.closer_called_at ? this.format_datetime(r.closer_called_at) : null,
+          detail: null,
+          action: 'mark_closer_called',
+          action_label: 'Marcar llamada realizada',
+        },
+      ]
+    },
+    /**
+     * Cantidad de etapas completadas en el pipeline.
+     * @returns {number}
+     */
+    completed_stages() {
+      return this.stages.filter(function (s) { return s.status === 'completed' }).length
+    },
+    /**
+     * Total de etapas del pipeline (8 fijas).
+     * @returns {number}
+     */
+    total_stages() {
+      return this.stages.length
+    },
+    /**
      * Valida que el lead tenga todos los datos necesarios para enviar el mail de demo.
      * Devuelve un mensaje con los campos faltantes o null si todo está completo.
-     * Campos requeridos: nombre, email, documento, nombre empresa, demo asignada,
-     * fecha demo, hora inicio y hora fin.
      * @returns {string|null}
      */
     demo_mail_validation_message() {
       if (!this.record) {
         return null
       }
-      /** Campos faltantes para habilitar el envío del mail de demo. */
+      /* Campos faltantes para habilitar el envío del mail de demo. */
       var missing = []
       if (!(this.record.contact_name || '').trim())    { missing.push('nombre') }
       if (!(this.record.email || '').trim())            { missing.push('email') }
@@ -224,7 +428,6 @@ export default {
       }
       return (this.record.promoted_client.api_url || '').trim()
     },
-
     /**
      * Habilita "Promover a cliente" si el lead aún no tiene Client vinculado.
      * @returns {boolean}
@@ -235,21 +438,6 @@ export default {
       }
       return !this.record.promoted_client_id
     },
-
-    /**
-     * Texto del tooltip del botón "Promover a cliente" según el estado del lead.
-     * @returns {string}
-     */
-    promote_to_client_title() {
-      if (!this.record) {
-        return ''
-      }
-      if (this.record.promoted_client_id) {
-        return 'Este lead ya tiene un Client de producción vinculado.'
-      }
-      return 'Crear el perfil de cliente en admin-api y generar las tareas automáticas del equipo.'
-    },
-
     /**
      * Habilita user setup cuando el lead está cerrado ganado, tiene Client vinculado
      * y ese Client tiene API URL cargada en su perfil.
@@ -265,36 +453,14 @@ export default {
       return this.client_production_api_url.length > 0
     },
     /**
-     * Etiqueta del Client vinculado o estado de producción (admin-spa es la fuente de verdad).
-     * @returns {string}
-     */
-    production_client_label() {
-      if (!this.record) {
-        return '—'
-      }
-      if (this.record.promoted_client_id && this.record.promoted_client) {
-        var c = this.record.promoted_client
-        var label = c.name || '#' + this.record.promoted_client_id
-        if (c.company_name) {
-          label += ' — ' + c.company_name
-        }
-        return label
-      }
-      if (this.record.status === 'cerrado_ganado') {
-        return 'Cerrado ganado — pendiente Client / user setup'
-      }
-      return 'No promovido'
-    },
-    /**
-     * Tarjetas de estado de los envíos de mail comercial.
-     * Mail 1 = demo, Mail 2 = seguimiento.
+     * Tarjetas de estado de los envíos de mail comercial (Mail 1 demo + Mail 2 seguimiento).
      * @returns {Array<Object>}
      */
     mail_status_cards() {
       if (!this.record) {
         return []
       }
-      /** Arreglo final de tarjetas a renderizar en la UI. */
+      /* Arreglo de tarjetas a renderizar en la sección de correos. */
       var cards = []
       cards.push(
         this.build_mail_status_card(
@@ -322,7 +488,7 @@ export default {
       if (!this.record) {
         return []
       }
-      /** Filas de UI alineadas al formato de mail_status_cards. */
+      /* Filas de UI alineadas al formato de mail_status_cards. */
       var rows = []
       rows.push(
         this.build_setup_status_card(
@@ -360,6 +526,37 @@ export default {
   },
   methods: {
     /**
+     * Ejecuta la acción de una etapa del pipeline sin esperar el scheduler automático.
+     * Despacha la acción del store correspondiente y sincroniza el modelo al terminar.
+     * @param {Object} stage etapa del pipeline con action y id.
+     * @returns {void}
+     */
+    run_stage_action(stage) {
+      var self = this
+      /* Si no hay acción o ya hay una etapa cargando, no hacer nada. */
+      if (!stage.action || self.loading_stage !== null) {
+        return
+      }
+      self.loading_stage = stage.id
+
+      self.$store.dispatch('lead/' + stage.action, self.record.id)
+        .then(function (model) {
+          self.sync_model(model)
+          self.open_feedback('Acción ejecutada.')
+        })
+        .catch(function (error) {
+          /* Algunas acciones devuelven 422 con modelo actualizado en payload. */
+          var payload = error && error.response && error.response.data ? error.response.data : null
+          if (payload && payload.model) {
+            self.sync_model(payload.model)
+          }
+          self.open_feedback(self.get_error_message(error))
+        })
+        .then(function () {
+          self.loading_stage = null
+        })
+    },
+    /**
      * Muestra un toast global si existe, con fallback a alert.
      * @param {string} message mensaje de feedback para el usuario.
      * @returns {void}
@@ -380,6 +577,22 @@ export default {
       return resolve_error_message(error)
     },
     /**
+     * Formatea una fecha ISO a texto legible en español (solo fecha).
+     * @param {string|null} date_value fecha recibida del backend.
+     * @returns {string}
+     */
+    format_date(date_value) {
+      if (!date_value) {
+        return ''
+      }
+      /* Parsear la fecha como local para evitar desfase por zona horaria. */
+      var parts = String(date_value).split('T')[0].split('-')
+      if (parts.length === 3) {
+        return parts[2] + '/' + parts[1] + '/' + parts[0]
+      }
+      return date_value
+    },
+    /**
      * Formatea una fecha/hora a texto legible en español.
      * @param {string|null} date_value fecha recibida del backend.
      * @returns {string}
@@ -388,7 +601,7 @@ export default {
       if (!date_value) {
         return 'Nunca'
       }
-      /** Instancia Date para formatear la fecha local. */
+      /* Instancia Date para formatear la fecha local. */
       var local_date = new Date(date_value)
       if (isNaN(local_date.getTime())) {
         return date_value
@@ -404,7 +617,7 @@ export default {
      * @returns {Object}
      */
     build_mail_status_card(key, title, sent_at, last_error) {
-      /** Objeto base con información común del estado. */
+      /* Objeto base con información común del estado del mail. */
       var card = {
         key: key,
         title: title,
@@ -414,13 +627,13 @@ export default {
         last_error: last_error || '',
         time_label: 'Último envío',
       }
-      // Si hay error guardado, el último intento fue fallido.
+      /* Si hay error guardado, el último intento fue fallido. */
       if (card.last_error) {
         card.status_text = 'Fallido'
         card.badge_class = 'bg-danger'
         return card
       }
-      // Si no hay error y hay fecha de envío, el estado actual es exitoso.
+      /* Si no hay error y hay fecha de envío, el estado actual es exitoso. */
       if (sent_at) {
         card.status_text = 'Exitoso'
         card.badge_class = 'bg-success'
@@ -429,7 +642,6 @@ export default {
     },
     /**
      * Construye tarjeta de estado para una corrida remota (demo setup / user setup).
-     *
      * @param {string} key clave única para v-for.
      * @param {string} title título visible.
      * @param {string|null} status valor persistido (pendiente, ejecutandose, exitoso, fallido).
@@ -438,9 +650,9 @@ export default {
      * @returns {Object}
      */
     build_setup_status_card(key, title, status, last_run_at, last_error) {
-      /** Estado normalizado en minúsculas para comparar con valores del backend. */
+      /* Estado normalizado en minúsculas para comparar con valores del backend. */
       var normalized_status = (status || 'pendiente').toString().toLowerCase()
-      /** Objeto de presentación homogéneo con mail_status_cards. */
+      /* Objeto de presentación homogéneo con mail_status_cards. */
       var card = {
         key: key,
         title: title,
@@ -483,13 +695,14 @@ export default {
     },
     /**
      * Ejecuta una acción remota del lead con manejo uniforme de estado/errores.
+     * Usada por los botones del flujo principal (mail, promover, user setup).
      * @param {string} action_name nombre de acción para spinner.
      * @param {Function} callback función que retorna promise con modelo.
      * @param {string} success_message mensaje de éxito.
      * @returns {void}
      */
     run_action(action_name, callback, success_message) {
-      const self = this
+      var self = this
       self.loading_action = action_name
       callback()
         .then(function (model) {
@@ -497,7 +710,7 @@ export default {
           self.open_feedback(success_message)
         })
         .catch(function (error) {
-          /** Muchas acciones devuelven 422 con `model` actualizado (p. ej. mail fallido o setup fallido). */
+          /* Muchas acciones devuelven 422 con `model` actualizado (p. ej. mail fallido o setup fallido). */
           var payload = error && error.response && error.response.data ? error.response.data : null
           if (payload && payload.model) {
             self.sync_model(payload.model)
@@ -509,42 +722,13 @@ export default {
         })
     },
     /**
-     * Envía el mail de presentación del lead.
-     * @returns {void}
-     */
-    send_presentation_mail() {
-      const self = this
-      self.run_action(
-        'presentation',
-        function () {
-          return self.$store.dispatch('lead/send_presentation_mail', self.record.id)
-        },
-        'Mail de presentación enviado.'
-      )
-    },
-    /**
-     * Envía el mail de seguimiento del lead.
-     * @returns {void}
-     */
-    send_followup_mail() {
-      const self = this
-      self.run_action(
-        'followup',
-        function () {
-          return self.$store.dispatch('lead/send_followup_mail', self.record.id)
-        },
-        'Mail de seguimiento enviado.'
-      )
-    },
-    /**
-     * Envía el "Mail 1 - DEMO" al prospecto con su acceso y horario de demo.
-     * Valida localmente los campos obligatorios antes de llamar al backend.
+     * Envía el "Mail 1 - DEMO" al prospecto con sus credenciales y horario de demo.
      * @returns {void}
      */
     send_demo_mail() {
-      const self = this
-      /** Mensaje de validación local: si hay campos faltantes se interrumpe. */
-      const validation_message = self.demo_mail_validation_message
+      var self = this
+      /* Validación local: interrumpir si faltan campos obligatorios. */
+      var validation_message = self.demo_mail_validation_message
       if (validation_message) {
         self.open_feedback(validation_message)
         return
@@ -558,61 +742,37 @@ export default {
       )
     },
     /**
-     * Ejecuta el demo setup remoto.
+     * Envía el mail de seguimiento del lead.
      * @returns {void}
      */
-    run_demo_setup() {
-      const self = this
+    send_followup_mail() {
+      var self = this
       self.run_action(
-        'demo',
+        'followup',
         function () {
-          return self.$store.dispatch('lead/run_demo_setup', self.record.id)
+          return self.$store.dispatch('lead/send_followup_mail', self.record.id)
         },
-        'Demo setup ejecutado.'
+        'Mail de seguimiento enviado.'
       )
     },
-    /**
-     * Promueve el lead a cliente usando la URL ingresada.
-     * @returns {void}
-     */
-    promote_lead() {
-      const self = this
-      /**
-       * URL normalizada de promoción para evitar espacios en blanco.
-       */
-      const api_url = (self.promotion_api_url || '').trim()
-      if (!api_url) {
-        self.open_feedback('Debés ingresar la URL del sistema.')
-        return
-      }
-      self.run_action(
-        'promote',
-        function () {
-          return self.$store.dispatch('lead/promote_lead', { lead_id: self.record.id, api_url })
-        },
-        'Lead promovido correctamente.'
-      )
-    },
-
     /**
      * Primer paso de la promoción: pide subdominio sugerido a la API y muestra el panel de confirmación.
-     * Llama a POST /client/suggest-subdomain con el company_name del lead.
      * @returns {void}
      */
     request_promote_to_client() {
-      const self = this
+      var self = this
       if (!self.can_promote_to_client) {
-        self.open_feedback(self.promote_to_client_title || 'No se puede promover en este momento.')
+        self.open_feedback('No se puede promover en este momento.')
         return
       }
 
-      /* Nombre de empresa del lead para la sugerencia. */
+      /* Nombre de empresa del lead para la sugerencia de subdominio. */
       var company_name = (self.record.company_name || self.record.contact_name || '').trim()
 
-      /* Mostrar spinner en el botón mientras se consulta Claude. */
+      /* Mostrar spinner mientras se consulta Claude. */
       self.loading_action = 'fetching_subdomain'
 
-      api.post('/client/suggest-subdomain', { company_name })
+      api.post('/client/suggest-subdomain', { company_name: company_name })
         .then(function (res) {
           /* Claude respondió: mostrar su sugerencia en el input editable. */
           self.subdomain_preview = (res.data.subdomain || '').trim()
@@ -633,13 +793,12 @@ export default {
           self.loading_action = ''
         })
     },
-
     /**
-     * Segundo paso: confirma la promoción enviando el subdominio editado al backend.
+     * Segundo paso de la promoción: confirma enviando el subdominio editado al backend.
      * @returns {void}
      */
     confirm_promote_to_client() {
-      const self = this
+      var self = this
       var subdomain = (self.subdomain_preview || '').trim()
       if (!subdomain) {
         self.open_feedback('El subdominio no puede estar vacío.')
@@ -650,16 +809,15 @@ export default {
         'promote_to_client',
         function () {
           return self.$store.dispatch('lead/promote_to_client', {
-            lead_id:            self.record.id,
+            lead_id:             self.record.id,
             suggested_subdomain: subdomain,
           })
         },
         'Lead promovido a cliente. Se crearon las tareas automáticas para el equipo.'
       )
-      /* Ocultar el panel de confirmación una vez iniciada la acción. */
+      /* Ocultar el panel de confirmación al iniciar la acción. */
       self.showing_subdomain_confirm = false
     },
-
     /**
      * Cancela el panel de confirmación de subdominio y resetea el estado.
      * @returns {void}
@@ -668,13 +826,12 @@ export default {
       this.showing_subdomain_confirm = false
       this.subdomain_preview = ''
     },
-
     /**
      * Ejecuta el user setup del sistema real.
      * @returns {void}
      */
     run_user_setup() {
-      const self = this
+      var self = this
       if (!self.can_run_user_setup) {
         if (!self.record.promoted_client_id) {
           self.open_feedback('Primero promové el lead a cliente.')
@@ -694,3 +851,25 @@ export default {
   },
 }
 </script>
+
+<style scoped>
+/* Ícono de estado "en ejecución" con animación de rotación continua */
+.rotating-icon {
+  display: inline-block;
+  animation: spin 1.2s linear infinite;
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+/* Contenedor del ícono de estado con ancho fijo para alinear las filas */
+.stage-icon {
+  width: 1rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+/* Elimina el borde inferior de la última etapa del pipeline */
+.pipeline-stage-row:last-child {
+  border-bottom: none !important;
+}
+</style>

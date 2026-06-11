@@ -365,6 +365,50 @@ export default __base_store({
       })
     },
     /**
+     * Envía el recordatorio pre-demo manualmente sin esperar el scheduler automático.
+     * @param {Object} context contexto del módulo Vuex.
+     * @param {number} lead_id identificador del lead.
+     * @returns {Promise<Object>} modelo actualizado devuelto por el backend.
+     */
+    send_demo_reminder(context, lead_id) {
+      return api.post('/lead/' + lead_id + '/send-demo-reminder').then(function (res) {
+        return res.data.model
+      })
+    },
+    /**
+     * Genera el check de ingreso a la demo manualmente sin esperar el scheduler automático.
+     * @param {Object} context contexto del módulo Vuex.
+     * @param {number} lead_id identificador del lead.
+     * @returns {Promise<Object>} modelo actualizado devuelto por el backend.
+     */
+    check_demo_ingress(context, lead_id) {
+      return api.post('/lead/' + lead_id + '/check-demo-ingress').then(function (res) {
+        return res.data.model
+      })
+    },
+    /**
+     * Genera el resumen del lead con Claude manualmente sin esperar el scheduler automático.
+     * @param {Object} context contexto del módulo Vuex.
+     * @param {number} lead_id identificador del lead.
+     * @returns {Promise<Object>} modelo actualizado devuelto por el backend.
+     */
+    generate_demo_summary(context, lead_id) {
+      return api.post('/lead/' + lead_id + '/generate-demo-summary').then(function (res) {
+        return res.data.model
+      })
+    },
+    /**
+     * Marca que el closer realizó la llamada post-demo al lead.
+     * @param {Object} context contexto del módulo Vuex.
+     * @param {number} lead_id identificador del lead.
+     * @returns {Promise<Object>} modelo actualizado devuelto por el backend.
+     */
+    mark_closer_called(context, lead_id) {
+      return api.post('/lead/' + lead_id + '/mark-closer-called').then(function (res) {
+        return res.data.model
+      })
+    },
+    /**
      * Envía un mensaje directo al lead por WhatsApp sin pasar por Claude.
      *
      * @param {Object} context
