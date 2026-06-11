@@ -3,9 +3,9 @@
     <p class="text-muted small mb-3">
       Cuando un lead nuevo escribe por WhatsApp, el sistema envía primero el mensaje automático (respuesta
       inmediata) y, tras la demora configurada, el mensaje de bienvenida con la presentación de ComercioCity.
-      Tras la segunda respuesta del lead, la sugerencia de Claude se pide solo cuando deja de escribir durante
-      la demora de sugerencia IA (cada mensaje nuevo reinicia el contador). Si el setter no pulsa Enviar,
-      el mensaje sugerido se manda por WhatsApp tras la demora de confirmación automática (0 = solo manual).
+      Tras la segunda respuesta del lead, la sugerencia de Claude se pide tras la demora de sugerencia IA
+      (cada mensaje nuevo reinicia el contador; 0 = consulta inmediata). Si el setter no pulsa Enviar,
+      el mensaje sugerido se manda por WhatsApp tras la demora de confirmación automática (0 = envío inmediato).
       Usá <code>{{ placeholder_nombre }}</code> en las variantes «con nombre» para personalizar el saludo.
     </p>
 
@@ -44,14 +44,15 @@
           type="number"
           class="form-control form-control-sm"
           style="max-width: 8rem"
-          :min="delay_min"
-          :max="delay_max"
+          :min="ai_suggestion_delay_min"
+          :max="ai_suggestion_delay_max"
           :disabled="saving"
           @input="on_input_change"
         />
         <p class="form-text small text-muted mb-0">
           Tras el 2.º mensaje del lead: espera este tiempo sin nuevos mensajes antes de llamar a Claude.
-          Entre {{ delay_min }} y {{ delay_max }} segundos (por defecto 60). Cada mensaje nuevo del lead reinicia el contador.
+          Entre {{ ai_suggestion_delay_min }} y {{ ai_suggestion_delay_max }} segundos (por defecto 60).
+          0 = consulta a Claude de inmediato tras el último mensaje. Cada mensaje nuevo del lead reinicia el contador.
         </p>
       </div>
 
@@ -70,7 +71,8 @@
         />
         <p class="form-text small text-muted mb-0">
           Tras generar la sugerencia de Claude: si el setter no envía manualmente, se manda por WhatsApp al vencer este tiempo.
-          Entre {{ auto_send_delay_min }} (desactivado) y {{ auto_send_delay_max }} segundos (por defecto 120).
+          Entre {{ auto_send_delay_min }} y {{ auto_send_delay_max }} segundos (por defecto 120).
+          0 = envío automático inmediato sin espera del setter.
           No aplica a sugerencias que requieren verificación ni a seguimientos automáticos.
         </p>
       </div>
@@ -135,13 +137,19 @@
 <script>
 import api from '@/utils/axios'
 
-/** Demora mínima en segundos (debe coincidir con admin-api). */
+/** Demora mínima del mensaje de bienvenida (debe coincidir con admin-api). */
 const DELAY_MIN_SECONDS = 5
 
-/** Demora máxima en segundos (debe coincidir con admin-api). */
+/** Demora máxima del mensaje de bienvenida (debe coincidir con admin-api). */
 const DELAY_MAX_SECONDS = 3600
 
-/** Auto-envío: 0 desactiva (debe coincidir con admin-api). */
+/** Demora mínima antes de pedir sugerencia IA: 0 = inmediato (debe coincidir con admin-api). */
+const AI_SUGGESTION_DELAY_MIN_SECONDS = 0
+
+/** Demora máxima antes de pedir sugerencia IA (debe coincidir con admin-api). */
+const AI_SUGGESTION_DELAY_MAX_SECONDS = 3600
+
+/** Auto-envío: 0 = envío inmediato (debe coincidir con admin-api). */
 const AUTO_SEND_DELAY_MIN_SECONDS = 0
 
 /** Auto-envío máximo en segundos (debe coincidir con admin-api). */
@@ -156,9 +164,12 @@ export default {
     return {
       /** Placeholder devuelto por la API para mostrar en la ayuda. */
       placeholder_nombre: '{nombre}',
-      /** Límites de demora (sincronizados con backend). */
+      /** Límites de demora de bienvenida (sincronizados con backend). */
       delay_min: DELAY_MIN_SECONDS,
       delay_max: DELAY_MAX_SECONDS,
+      /** Límites de demora antes de pedir sugerencia IA (sincronizados con backend). */
+      ai_suggestion_delay_min: AI_SUGGESTION_DELAY_MIN_SECONDS,
+      ai_suggestion_delay_max: AI_SUGGESTION_DELAY_MAX_SECONDS,
       auto_send_delay_min: AUTO_SEND_DELAY_MIN_SECONDS,
       auto_send_delay_max: AUTO_SEND_DELAY_MAX_SECONDS,
       /** Valores editables del formulario. */
@@ -201,8 +212,8 @@ export default {
         welcome_delay < this.delay_min ||
         welcome_delay > this.delay_max ||
         isNaN(ai_delay) ||
-        ai_delay < this.delay_min ||
-        ai_delay > this.delay_max ||
+        ai_delay < this.ai_suggestion_delay_min ||
+        ai_delay > this.ai_suggestion_delay_max ||
         isNaN(auto_send_delay) ||
         auto_send_delay < this.auto_send_delay_min ||
         auto_send_delay > this.auto_send_delay_max
@@ -228,6 +239,21 @@ export default {
   },
   methods: {
     /**
+     * Parsea segundos de demora permitiendo 0 (no usar `|| default` porque 0 es válido).
+     *
+     * @param {*} raw Valor crudo de la API.
+     * @param {number} fallback Valor por defecto si el parseo falla.
+     * @returns {number}
+     */
+    parse_delay_seconds(raw, fallback) {
+      const parsed = parseInt(raw, 10)
+      if (isNaN(parsed)) {
+        return fallback
+      }
+      return parsed
+    },
+
+    /**
      * Copia un objeto de configuración al formulario local.
      *
      * @param {object} data Respuesta GET/PUT.
@@ -241,9 +267,14 @@ export default {
         welcome_message_with_name: (data && data.welcome_message_with_name) || '',
         welcome_message_without_name: (data && data.welcome_message_without_name) || '',
         welcome_delay_seconds: parseInt(data && data.welcome_delay_seconds, 10) || 60,
-        ai_suggestion_delay_seconds: parseInt(data && data.ai_suggestion_delay_seconds, 10) || 60,
-        ai_suggestion_auto_send_delay_seconds:
-          parseInt(data && data.ai_suggestion_auto_send_delay_seconds, 10) || 120,
+        ai_suggestion_delay_seconds: self.parse_delay_seconds(
+          data && data.ai_suggestion_delay_seconds,
+          60
+        ),
+        ai_suggestion_auto_send_delay_seconds: self.parse_delay_seconds(
+          data && data.ai_suggestion_auto_send_delay_seconds,
+          120
+        ),
       }
       self.form = JSON.parse(JSON.stringify(snapshot))
       self.stored_form = JSON.parse(JSON.stringify(snapshot))
@@ -302,9 +333,17 @@ export default {
           ' segundos.'
         return
       }
-      if (isNaN(ai_delay) || ai_delay < self.delay_min || ai_delay > self.delay_max) {
+      if (
+        isNaN(ai_delay) ||
+        ai_delay < self.ai_suggestion_delay_min ||
+        ai_delay > self.ai_suggestion_delay_max
+      ) {
         self.error_message =
-          'La demora de sugerencia IA debe estar entre ' + self.delay_min + ' y ' + self.delay_max + ' segundos.'
+          'La demora de sugerencia IA debe estar entre ' +
+          self.ai_suggestion_delay_min +
+          ' y ' +
+          self.ai_suggestion_delay_max +
+          ' segundos.'
         return
       }
 
@@ -319,7 +358,7 @@ export default {
           self.auto_send_delay_min +
           ' y ' +
           self.auto_send_delay_max +
-          ' segundos (0 = desactivado).'
+          ' segundos (0 = envío inmediato).'
         return
       }
 
