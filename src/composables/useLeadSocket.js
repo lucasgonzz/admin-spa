@@ -115,6 +115,9 @@ export function useLeadSocket(options) {
   /**
    * Mensaje nuevo o lectura: actualiza fila, hilo abierto y badge global.
    *
+   * El payload del evento es mínimo (solo IDs) para no superar el límite de 10KB de Pusher.
+   * Si no viene el objeto `lead` completo, se programa un refetch por ID.
+   *
    * @param {Object} event_data
    * @returns {void}
    */
@@ -123,36 +126,45 @@ export function useLeadSocket(options) {
       return
     }
 
-    const lead = event_data.lead
-    const message = event_data.message
+    const lead = event_data.lead || null
+    const message = event_data.message || null
+    const lead_id = event_data.lead_id || (lead && lead.id) || null
+    const lead_message_id = event_data.lead_message_id || (message && message.id) || null
 
     if (lead) {
+      // Payload completo (compatibilidad con versiones anteriores del evento)
       store.dispatch('lead/upsert_model_in_lists', lead)
       store.commit('lead/update_lead_en_conversacion', lead)
-    }
 
-    if (message && lead && lead.id) {
-      store.commit('lead/append_message_to_open_conversation', {
-        lead_id: lead.id,
-        message: message,
-      })
-      const kind = ((message.kind || '') + '').toLowerCase()
-      const is_pending_ai_suggestion =
-        message.sender === 'sistema' &&
-        message.status === 'sugerido' &&
-        !message.is_followup
-      const needs_refetch =
-        ((kind === 'audio' || kind === 'ptt' || kind === 'voice') &&
-          (!message.attachments || !message.attachments.length)) ||
-        (is_pending_ai_suggestion && !message.ai_auto_send_at)
-      if (needs_refetch) {
-        schedule_conversation_refetch(lead.id)
+      if (message && lead.id) {
+        store.commit('lead/append_message_to_open_conversation', {
+          lead_id: lead.id,
+          message: message,
+        })
+        const kind = ((message.kind || '') + '').toLowerCase()
+        const is_pending_ai_suggestion =
+          message.sender === 'sistema' &&
+          message.status === 'sugerido' &&
+          !message.is_followup
+        const needs_refetch =
+          ((kind === 'audio' || kind === 'ptt' || kind === 'voice') &&
+            (!message.attachments || !message.attachments.length)) ||
+          (is_pending_ai_suggestion && !message.ai_auto_send_at)
+        if (needs_refetch) {
+          schedule_conversation_refetch(lead.id)
+        }
+      } else if (lead.id) {
+        const conv = store.state.lead.lead_en_conversacion
+        if (conv && conv.id == lead.id && (!conv.messages || !conv.messages.length)) {
+          schedule_conversation_refetch(lead.id)
+        }
       }
-    } else if (lead && lead.id) {
-      const conv = store.state.lead.lead_en_conversacion
-      if (conv && conv.id == lead.id && (!conv.messages || !conv.messages.length)) {
-        schedule_conversation_refetch(lead.id)
-      }
+    } else if (lead_id != null) {
+      // Payload mínimo (solo IDs): refetch para obtener datos actualizados
+      schedule_conversation_refetch(lead_id)
+
+      // También refrescar la fila del lead en la tabla (fetch liviano por ID)
+      store.dispatch('lead/fetch_lead_for_list', lead_id)
     }
 
     if (event_data.unread_total != null) {
