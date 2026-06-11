@@ -24,6 +24,11 @@ export const ACCOUNT_SECTIONS = [
     group: 'Leads y ventas',
   },
   {
+    id: 'lead-demo-settings',
+    label: 'Configuración de demos',
+    group: 'Leads y ventas',
+  },
+  {
     id: 'lead-whatsapp-onboarding',
     label: 'WhatsApp leads',
     group: 'Leads y ventas',

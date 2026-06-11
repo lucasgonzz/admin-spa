@@ -119,6 +119,24 @@
           </div>
         </section>
 
+        <!-- Leads: configuración de demos -->
+        <section
+          v-show="active_section === 'lead-demo-settings'"
+          id="lead-demo-settings"
+          class="account-section"
+        >
+          <div class="card account-config-card">
+            <div class="card-body">
+              <h2 class="h6 card-title">Configuración de demos</h2>
+              <p class="text-muted small mb-3">
+                Parámetros que controlan la duración, márgenes de setup/gracia y tiempos de
+                automatizaciones (recordatorio, check de ingreso, resumen del lead).
+              </p>
+              <lead-demo-settings-section />
+            </div>
+          </div>
+        </section>
+
         <!-- Leads: WhatsApp onboarding -->
         <section
           v-show="active_section === 'lead-whatsapp-onboarding'"
@@ -238,6 +256,7 @@ import TaskTemplatesSection from '@/components/account/sections/TaskTemplatesSec
 import LeadWhatsappOnboardingSection from '@/components/account/sections/LeadWhatsappOnboardingSection.vue'
 import ImplementationSettingsSection from '@/components/account/sections/ImplementationSettingsSection.vue'
 import AgentIdentitySection from '@/components/account/sections/AgentIdentitySection.vue'
+import LeadDemoSettingsSection from '@/components/account/sections/LeadDemoSettingsSection.vue'
 
 /**
  * Vista de cuenta: preferencias del operador y configuraciones del sistema en secciones navegables.
@@ -255,6 +274,7 @@ export default {
     LeadWhatsappOnboardingSection,
     ImplementationSettingsSection,
     AgentIdentitySection,
+    LeadDemoSettingsSection,
   },
   data() {
     return {
