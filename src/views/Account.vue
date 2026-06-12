@@ -205,6 +205,24 @@
           </div>
         </section>
 
+        <!-- Leads: sincronizar prompts desde GitHub -->
+        <section
+          v-show="active_section === 'agent-prompt-sync'"
+          id="agent-prompt-sync"
+          class="account-section"
+        >
+          <div class="card account-config-card">
+            <div class="card-body">
+              <h2 class="h6 card-title">Prompts de agentes (GitHub)</h2>
+              <p class="text-muted small mb-3">
+                Sincronizá los textos de identidad y system prompt del agente Martín
+                directamente desde el repositorio de GitHub.
+              </p>
+              <agent-prompt-sync-section />
+            </div>
+          </div>
+        </section>
+
         <!-- Operaciones: plantillas de tareas -->
         <section
           v-show="active_section === 'task-templates'"
@@ -256,6 +274,7 @@ import TaskTemplatesSection from '@/components/account/sections/TaskTemplatesSec
 import LeadWhatsappOnboardingSection from '@/components/account/sections/LeadWhatsappOnboardingSection.vue'
 import ImplementationSettingsSection from '@/components/account/sections/ImplementationSettingsSection.vue'
 import AgentIdentitySection from '@/components/account/sections/AgentIdentitySection.vue'
+import AgentPromptSyncSection from '@/components/account/sections/AgentPromptSyncSection.vue'
 import LeadDemoSettingsSection from '@/components/account/sections/LeadDemoSettingsSection.vue'
 
 /**
@@ -274,6 +293,7 @@ export default {
     LeadWhatsappOnboardingSection,
     ImplementationSettingsSection,
     AgentIdentitySection,
+    AgentPromptSyncSection,
     LeadDemoSettingsSection,
   },
   data() {

@@ -49,6 +49,11 @@ export const ACCOUNT_SECTIONS = [
     group: 'Leads y ventas',
   },
   {
+    id: 'agent-prompt-sync',
+    label: 'Prompts desde GitHub',
+    group: 'Leads y ventas',
+  },
+  {
     id: 'task-templates',
     label: 'Plantillas de tareas',
     group: 'Operaciones',
