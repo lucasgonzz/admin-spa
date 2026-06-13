@@ -39,6 +39,11 @@ export const ACCOUNT_SECTIONS = [
     group: 'Leads y ventas',
   },
   {
+    id: 'followup-templates',
+    label: 'Plantillas de seguimiento WhatsApp',
+    group: 'Leads y ventas',
+  },
+  {
     id: 'protocol-entries',
     label: 'Protocolo de ventas',
     group: 'Leads y ventas',

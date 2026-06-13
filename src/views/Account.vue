@@ -169,6 +169,24 @@
           </div>
         </section>
 
+        <!-- Leads: plantillas de seguimiento WhatsApp -->
+        <section
+          v-show="active_section === 'followup-templates'"
+          id="followup-templates"
+          class="account-section"
+        >
+          <div class="card account-config-card">
+            <div class="card-body">
+              <h2 class="h6 card-title">Plantillas de seguimiento WhatsApp</h2>
+              <p class="text-muted small mb-3">
+                Nombre exacto de cada plantilla aprobada en Meta usada para los seguimientos automáticos,
+                según el estado del lead y el número de día. Editá el nombre o desactivá las que no quieras enviar.
+              </p>
+              <followup-templates-section />
+            </div>
+          </div>
+        </section>
+
         <!-- Leads: protocolo de ventas -->
         <section
           v-show="active_section === 'protocol-entries'"
@@ -266,6 +284,7 @@ import {
   ACCOUNT_DEFAULT_SECTION_ID,
 } from '@/components/account/account_sections'
 import FollowupRulesSection from '@/components/account/sections/FollowupRulesSection.vue'
+import FollowupTemplatesSection from '@/components/account/sections/FollowupTemplatesSection.vue'
 import SupportAlertSettingsSection from '@/components/account/sections/SupportAlertSettingsSection.vue'
 import SupportAiSettingsSection from '@/components/account/sections/SupportAiSettingsSection.vue'
 import ProtocolEntriesSection from '@/components/account/sections/ProtocolEntriesSection.vue'
@@ -285,6 +304,7 @@ export default {
   components: {
     AccountSectionNav,
     FollowupRulesSection,
+    FollowupTemplatesSection,
     SupportAlertSettingsSection,
     SupportAiSettingsSection,
     ProtocolEntriesSection,

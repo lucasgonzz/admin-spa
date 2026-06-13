@@ -8,6 +8,7 @@ import update from './update'
 import lead from './lead'
 import demo from './demo'
 import followup_rule from './followup_rule'
+import followup_template from './followup_template'
 import protocol_entry from './protocol_entry'
 import ai_system_prompt from './ai_system_prompt'
 import support_ticket from './support_ticket'
@@ -32,6 +33,8 @@ export default createStore({
     lead,
     demo,
     followup_rule,
+    // Plantillas de seguimiento de WhatsApp (Meta) por estado y día.
+    followup_template,
     protocol_entry,
     ai_system_prompt,
     support_ticket,
