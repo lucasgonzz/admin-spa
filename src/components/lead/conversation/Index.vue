@@ -647,7 +647,9 @@ export default {
       if (!rec || !rec.id) {
         return
       }
-      const unread = parseInt(rec.unread_messages_count, 10)
+      // Usar unread_count (per-usuario) para detectar si hay mensajes pendientes de leer.
+      // unread_messages_count es el campo global legacy basado en read_at.
+      const unread = parseInt(rec.unread_count, 10)
       if (isNaN(unread) || unread < 1) {
         return
       }
