@@ -33,12 +33,20 @@
         </a>
       </template>
       <!-- Modo lectura: transcripción / texto (original o editado tras aprobar) -->
-      <div
-        v-if="!editing && show_message_text"
-        class="message-text"
-        :class="{ 'message-text--not-sent': is_not_sent_suggestion }">
-        {{ effective_content }}
-      </div>
+      <!-- Si el contenido tiene separadores ---, se renderiza como múltiples bloques -->
+      <template v-if="!editing && show_message_text">
+        <div
+          v-for="(part, idx) in message_parts"
+          :key="idx"
+          class="message-text"
+          :class="[
+            { 'message-text--not-sent': is_not_sent_suggestion },
+            { 'mt-2 pt-2 border-top border-opacity-25': idx > 0 }
+          ]"
+        >
+          {{ part }}
+        </div>
+      </template>
       <!-- Modo edición: textarea precargado con el content original de la sugerencia -->
       <textarea
         v-else
@@ -271,6 +279,18 @@ export default {
         return edited
       }
       return (this.message.content || '') + ''
+    },
+    /**
+     * Partes del mensaje partidas por el separador "\n---\n" (múltiples mensajes en uno).
+     * Si no hay separador, devuelve un array de un solo elemento.
+     * @returns {string[]}
+     */
+    message_parts() {
+      const text = (this.effective_content || '') + ''
+      return text
+        .split(/\n---\n/)
+        .map(function (p) { return p.trim() })
+        .filter(function (p) { return p !== '' })
     },
     /**
      * true si el mensaje fue aprobado con texto distinto al sugerido original.
@@ -767,3 +787,4 @@ export default {
   font-size: 0.75rem;
 }
 </style>
+
