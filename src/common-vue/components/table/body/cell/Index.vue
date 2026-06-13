@@ -10,6 +10,15 @@
     </span>
     <span v-else class="text-muted">—</span>
   </span>
+  <span v-else-if="prop.type === 'unread_badge'">
+    <!-- Badge per-usuario: cantidad de mensajes del lead sin leer para el admin logueado. -->
+    <span
+      v-if="unread_badge_count > 0"
+      class="badge bg-danger"
+      :title="'Mensajes sin leer: ' + unread_badge_count"
+    >{{ unread_badge_count > 99 ? '99+' : unread_badge_count }}</span>
+    <span v-else class="text-muted">—</span>
+  </span>
   <span v-else-if="prop.type === 'pipeline_status'">
     <span
       v-if="pipeline_status_label"
@@ -35,6 +44,14 @@ export default {
   computed: {
     raw() {
       return this.row[this.prop.key]
+    },
+    /**
+     * Conteo numérico de mensajes sin leer para el badge `unread_badge`.
+     * @returns {number}
+     */
+    unread_badge_count() {
+      const n = parseInt(this.raw, 10)
+      return isNaN(n) ? 0 : n
     },
     link_text() {
       const k = this.prop.key
