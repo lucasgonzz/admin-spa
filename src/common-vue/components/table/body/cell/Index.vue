@@ -4,9 +4,21 @@
     :class="raw ? 'text-success' : 'text-muted'"
   >{{ raw ? 'Sí' : 'No' }}</span>
   <span v-else-if="prop.type === 'alert_badge'">
-    <span v-if="raw" class="badge bg-warning text-dark" title="Sugerencia de seguimiento automático sin revisar">
+    <span
+      v-if="raw"
+      class="badge bg-warning text-dark"
+      :title="'Seguimientos sin revisar' + (followup_count > 0 ? ': ' + followup_count + ' enviados' : '')"
+    >
       <i class="bi bi-clock-history me-1" aria-hidden="true" />
-      Seguimiento
+      Seg. <template v-if="followup_count > 0">({{ followup_count }})</template>
+    </span>
+    <span
+      v-else-if="followup_count > 0"
+      class="badge bg-secondary"
+      :title="followup_count + ' seguimiento(s) enviado(s), ya revisados'"
+    >
+      <i class="bi bi-clock-history me-1" aria-hidden="true" />
+      {{ followup_count }}
     </span>
     <span v-else class="text-muted">—</span>
   </span>
@@ -54,6 +66,17 @@ export default {
      */
     raw_unread_count() {
       const n = parseInt(this.row[this.prop.key], 10)
+      return isNaN(n) ? 0 : n
+    },
+    /**
+     * Cantidad de seguimientos enviados para el badge de alerta.
+     * Lee la clave declarada en `prop.badge_count_key` del row; 0 si no aplica o no es numérico.
+     *
+     * @returns {number}
+     */
+    followup_count() {
+      if (!this.prop.badge_count_key) return 0
+      const n = parseInt(this.row[this.prop.badge_count_key], 10)
       return isNaN(n) ? 0 : n
     },
     link_text() {

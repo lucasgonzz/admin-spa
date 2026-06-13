@@ -541,6 +541,8 @@ export default __base_store({
       return api.post('/lead/' + lead_id + '/mark-followup-suggestion-seen').then((res) => {
         const model = res.data.model
         commit('update_lead_en_conversacion', model)
+        // Refresca la fila en la tabla para que el badge amarillo de seguimiento desaparezca al instante.
+        context.dispatch('upsert_model_in_lists', model)
         return model
       })
     },
@@ -572,6 +574,8 @@ export default __base_store({
       return api.post('/lead/' + lead_id + '/mark-whatsapp-messages-read').then((res) => {
         const model = res.data.model
         commit('update_lead_en_conversacion', model)
+        // Refresca la fila en la tabla con el unread_count y followup_count actualizados.
+        dispatch('upsert_model_in_lists', model)
         return dispatch('fetch_unread_badges').then(function () {
           return model
         })
