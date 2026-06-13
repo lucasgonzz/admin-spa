@@ -42,6 +42,16 @@
           >
             {{ task.title }}
           </p>
+
+          <!-- Alerta de lead: solo visible en tareas creadas automáticamente por Claude -->
+          <div
+            v-if="task.lead"
+            class="task-card__lead-alert"
+            :title="'Alerta generada por la conversación con este lead'"
+          >
+            <i class="bi bi-robot" />
+            <span>Lead: {{ task.lead.contact_name || task.lead.company_name || 'Sin nombre' }}</span>
+          </div>
         </div>
 
         <!-- Indicador de arrastre -->
@@ -272,5 +282,20 @@ export default {
   word-break: break-word;
   max-height: 4.5rem;
   overflow: hidden;
+}
+
+/* Alerta de lead vinculado: badge discreto en ámbar con ícono de robot. */
+.task-card__lead-alert {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: #f59e0b;
+  margin-top: 4px;
+  opacity: 0.85;
+}
+
+.task-card__lead-alert i {
+  font-size: 0.8rem;
 }
 </style>

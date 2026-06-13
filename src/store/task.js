@@ -38,16 +38,16 @@ export default __base_store({
         if (isNaN(target_id)) {
           return 0
         }
-        /** Contador de tareas no realizadas con asignación explícita a ese admin. */
+        /** Contador de tareas no realizadas asignadas a ese admin o sin asignar. */
         var count = 0
         state.models.forEach(function (t) {
           if (t.is_done) {
             return
           }
-          if (t.assigned_admin_id == null) {
-            return
-          }
-          if (Number(t.assigned_admin_id) === target_id) {
+          // Contar tareas asignadas a este admin O sin asignar (visibles para todos).
+          const is_mine       = t.assigned_admin_id != null && Number(t.assigned_admin_id) === target_id
+          const is_unassigned = t.assigned_admin_id == null
+          if (is_mine || is_unassigned) {
             count += 1
           }
         })
