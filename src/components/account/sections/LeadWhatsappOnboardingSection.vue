@@ -92,6 +92,7 @@
         />
         <p class="form-text small text-muted mb-0">
           Entre {{ delay_min }} y {{ delay_max }} segundos (por defecto 60).
+          0 = envío inmediato del mensaje de bienvenida tras el automático.
         </p>
       </div>
 
@@ -137,8 +138,8 @@
 <script>
 import api from '@/utils/axios'
 
-/** Demora mínima del mensaje de bienvenida (debe coincidir con admin-api). */
-const DELAY_MIN_SECONDS = 5
+/** Demora mínima del mensaje de bienvenida: 0 = inmediato (debe coincidir con admin-api). */
+const DELAY_MIN_SECONDS = 0
 
 /** Demora máxima del mensaje de bienvenida (debe coincidir con admin-api). */
 const DELAY_MAX_SECONDS = 3600
@@ -266,7 +267,10 @@ export default {
         auto_message_without_name: (data && data.auto_message_without_name) || '',
         welcome_message_with_name: (data && data.welcome_message_with_name) || '',
         welcome_message_without_name: (data && data.welcome_message_without_name) || '',
-        welcome_delay_seconds: parseInt(data && data.welcome_delay_seconds, 10) || 60,
+        welcome_delay_seconds: self.parse_delay_seconds(
+          data && data.welcome_delay_seconds,
+          60
+        ),
         ai_suggestion_delay_seconds: self.parse_delay_seconds(
           data && data.ai_suggestion_delay_seconds,
           60
