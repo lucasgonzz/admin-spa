@@ -107,6 +107,27 @@
       </button>
     </div>
 
+    <!-- Input para simular un mensaje entrante del lead (testing, sin pasar por WhatsApp) -->
+    <div class="d-flex align-items-center gap-2 mt-2">
+      <input
+        v-model="mensaje_simulado"
+        type="text"
+        class="form-control form-control-sm"
+        placeholder="Simular mensaje del lead (test)…"
+        :disabled="enviando_simulado"
+        @keydown.enter.prevent="on_simular_inbound"
+      />
+      <button
+        type="button"
+        class="btn btn-outline-warning btn-sm d-inline-flex align-items-center gap-2"
+        :disabled="enviando_simulado || !has_mensaje_simulado"
+        @click="on_simular_inbound"
+      >
+        <span v-if="enviando_simulado" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+        <template v-else>Simular</template>
+      </button>
+    </div>
+
   </div>
   <div v-else class="text-muted small">Guardá el lead primero para habilitar la conversación.</div>
 </template>
@@ -138,6 +159,10 @@ export default {
       mensaje_directo: '',
       /** true mientras se envía el mensaje directo (evita doble envío). */
       enviando_directo: false,
+      /** Texto del mensaje simulado del lead (testing, no pasa por WhatsApp). */
+      mensaje_simulado: '',
+      /** true mientras se simula el mensaje entrante (evita doble envío). */
+      enviando_simulado: false,
       /** Id del mensaje en acción de aprobar/rechazar (deshabilita botones duplicados). */
       busy_message_id: null,
       /** Evita POST duplicados al marcar seguimiento como visto. */
@@ -224,6 +249,13 @@ export default {
      */
     has_mensaje_directo() {
       return (this.mensaje_directo || '').trim() !== ''
+    },
+    /**
+     * true si hay texto en el input de simulación de mensaje del lead.
+     * @returns {boolean}
+     */
+    has_mensaje_simulado() {
+      return (this.mensaje_simulado || '').trim() !== ''
     },
     /**
      * Teléfono del lead solo con dígitos (formato requerido por api.whatsapp.com).
@@ -690,6 +722,32 @@ export default {
         })
         .catch(function () {
           self.enviando_directo = false
+        })
+    },
+    /**
+     * Simula un mensaje entrante del lead (testing) sin pasar por WhatsApp.
+     * Dispara en el backend el mismo flujo que el webhook real (sugerencia IA con debounce).
+     *
+     * @returns {void}
+     */
+    on_simular_inbound() {
+      const self = this
+      const rec = this.effective_record
+      const text = (this.mensaje_simulado || '').trim()
+      if (!text || !rec || !rec.id || this.enviando_simulado) {
+        return
+      }
+      this.enviando_simulado = true
+      this.$store
+        .dispatch('lead/simulate_inbound_message', { lead_id: rec.id, content: text })
+        .then(function (model) {
+          self.enviando_simulado = false
+          self.mensaje_simulado = ''
+          self.$emit('record-updated', model)
+          self.schedule_scroll_to_bottom()
+        })
+        .catch(function () {
+          self.enviando_simulado = false
         })
     },
     /**

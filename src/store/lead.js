@@ -426,6 +426,24 @@ export default __base_store({
         })
     },
     /**
+     * Simula un mensaje entrante del lead (testing) sin pasar por WhatsApp.
+     * Dispara en el backend el mismo flujo que el webhook real (sugerencia IA con debounce).
+     *
+     * @param {Object} context
+     * @param {{ lead_id: number, content: string }} payload
+     * @returns {Promise<Object>} modelo lead actualizado
+     */
+    simulate_inbound_message(context, payload) {
+      const commit = context.commit
+      return api
+        .post('/lead/' + payload.lead_id + '/simulate-inbound', { content: payload.content })
+        .then((res) => {
+          const model = res.data.model
+          commit('update_lead_en_conversacion', model)
+          return model
+        })
+    },
+    /**
      * Pide sugerencia a Claude sin esperar el debounce automático (mensajes del lead ya cargados en el hilo).
      *
      * @param {Object} context
