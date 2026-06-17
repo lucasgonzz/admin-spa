@@ -387,6 +387,21 @@ export default __base_store({
       })
     },
     /**
+     * Fuerza el seguimiento que corresponde al lead ahora mismo (testing manual),
+     * sin esperar horas_espera ni estar bloqueado por sugerencia pendiente.
+     *
+     * @param {Object} context
+     * @param {number} lead_id
+     * @returns {Promise<{model: Object, outcome: Object}>}
+     */
+    force_followup(context, lead_id) {
+      const commit = context.commit
+      return api.post('/lead/' + lead_id + '/force-followup').then(function (res) {
+        commit('update_lead_en_conversacion', res.data.model)
+        return res.data
+      })
+    },
+    /**
      * Genera el resumen del lead con Claude manualmente sin esperar el scheduler automático.
      * @param {Object} context contexto del módulo Vuex.
      * @param {number} lead_id identificador del lead.

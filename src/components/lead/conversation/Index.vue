@@ -128,6 +128,21 @@
       </button>
     </div>
 
+    <!-- Forzar seguimiento manual (testing): dispara el seguimiento que corresponda ahora mismo -->
+    <div class="d-flex align-items-center gap-2 mt-2">
+      <button
+        type="button"
+        class="btn btn-outline-info btn-sm d-inline-flex align-items-center gap-2"
+        :disabled="forzando_seguimiento"
+        title="Dispara ahora el seguimiento que corresponda según el estado y los seguimientos ya enviados, sin esperar el tiempo configurado"
+        @click="on_forzar_seguimiento"
+      >
+        <span v-if="forzando_seguimiento" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+        <template v-else>Forzar seguimiento</template>
+      </button>
+      <span v-if="forzar_seguimiento_resultado" class="small text-muted">{{ forzar_seguimiento_resultado }}</span>
+    </div>
+
   </div>
   <div v-else class="text-muted small">Guardá el lead primero para habilitar la conversación.</div>
 </template>
@@ -163,6 +178,10 @@ export default {
       mensaje_simulado: '',
       /** true mientras se simula el mensaje entrante (evita doble envío). */
       enviando_simulado: false,
+      /** true mientras se fuerza el seguimiento manual (testing) (evita doble click). */
+      forzando_seguimiento: false,
+      /** Texto descriptivo del último resultado de forzar seguimiento (testing). */
+      forzar_seguimiento_resultado: '',
       /** Id del mensaje en acción de aprobar/rechazar (deshabilita botones duplicados). */
       busy_message_id: null,
       /** Evita POST duplicados al marcar seguimiento como visto. */
@@ -793,6 +812,42 @@ export default {
         })
         .catch(function () {
           self.enviando_simulado = false
+        })
+    },
+    /**
+     * Fuerza el seguimiento que corresponde al lead ahora mismo (testing), sin esperar
+     * el tiempo configurado ni estar bloqueado por una sugerencia pendiente.
+     *
+     * @returns {void}
+     */
+    on_forzar_seguimiento() {
+      const self = this
+      const rec = this.effective_record
+      if (!rec || !rec.id || this.forzando_seguimiento) {
+        return
+      }
+      this.forzando_seguimiento = true
+      this.forzar_seguimiento_resultado = ''
+      this.$store
+        .dispatch('lead/force_followup', rec.id)
+        .then(function (data) {
+          self.forzando_seguimiento = false
+          self.$emit('record-updated', data.model)
+          self.schedule_scroll_to_bottom()
+
+          const outcome = data.outcome || {}
+          if (outcome.result === 'no_rule') {
+            self.forzar_seguimiento_resultado = 'No hay regla de seguimiento activa para este estado.'
+          } else if (outcome.result === 'paused') {
+            self.forzar_seguimiento_resultado = 'Se alcanzó el máximo de seguimientos: el lead pasó a en_pausa.'
+          } else if (outcome.result === 'suggestion') {
+            const via = outcome.via === 'template' ? 'plantilla de WhatsApp' : 'sugerencia de Claude'
+            self.forzar_seguimiento_resultado = 'Seguimiento #' + outcome.followup_number + ' disparado vía ' + via + '.'
+          }
+        })
+        .catch(function () {
+          self.forzando_seguimiento = false
+          self.forzar_seguimiento_resultado = 'Error al forzar el seguimiento.'
         })
     },
     /**
