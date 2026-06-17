@@ -143,6 +143,26 @@
       <span v-if="forzar_seguimiento_resultado" class="small text-muted">{{ forzar_seguimiento_resultado }}</span>
     </div>
 
+    <!-- Toggle por lead: notificar al admin por push cada mensaje entrante de este lead -->
+    <div class="d-flex align-items-center gap-2 mt-2">
+      <div class="form-check form-switch mb-0">
+        <input
+          id="notify-messages-toggle"
+          type="checkbox"
+          class="form-check-input"
+          :checked="effective_record.notificar_mensajes"
+          :disabled="toggling_notify"
+          @change="on_toggle_notify_messages($event.target.checked)"
+        >
+        <label class="form-check-label small" for="notify-messages-toggle">
+          Notificarme los mensajes de este lead
+        </label>
+      </div>
+      <span v-if="effective_record.notificar_mensajes && effective_record.notify_admin_id" class="text-muted small">
+        (activado)
+      </span>
+    </div>
+
   </div>
   <div v-else class="text-muted small">Guardá el lead primero para habilitar la conversación.</div>
 </template>
@@ -182,6 +202,8 @@ export default {
       forzando_seguimiento: false,
       /** Texto descriptivo del último resultado de forzar seguimiento (testing). */
       forzar_seguimiento_resultado: '',
+      /** Evita doble click mientras se persiste el toggle de notificaciones. */
+      toggling_notify: false,
       /** Id del mensaje en acción de aprobar/rechazar (deshabilita botones duplicados). */
       busy_message_id: null,
       /** Evita POST duplicados al marcar seguimiento como visto. */
@@ -848,6 +870,33 @@ export default {
         .catch(function () {
           self.forzando_seguimiento = false
           self.forzar_seguimiento_resultado = 'Error al forzar el seguimiento.'
+        })
+    },
+    /**
+     * Activa o desactiva las notificaciones push para el lead abierto.
+     * El admin autenticado queda como destinatario al activar (backend toma Auth::id()).
+     * Se mantiene la convención del componente (.then/.catch, sin async/await).
+     *
+     * @param {boolean} enabled
+     * @returns {void}
+     */
+    on_toggle_notify_messages(enabled) {
+      const self = this
+      const rec = this.effective_record
+      if (!rec || !rec.id || this.toggling_notify) {
+        return
+      }
+      this.toggling_notify = true
+      api
+        .post('/lead/' + rec.id + '/toggle-notify-messages', { enabled: enabled })
+        .then(function (res) {
+          self.toggling_notify = false
+          /** Fusiona la respuesta parcial (notificar_mensajes, notify_admin_id) sobre el registro actual. */
+          self.$emit('record-updated', Object.assign({}, rec, res.data))
+        })
+        .catch(function (error) {
+          self.toggling_notify = false
+          console.error('Error al actualizar notificaciones del lead', error)
         })
     },
     /**
