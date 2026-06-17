@@ -204,7 +204,12 @@ export default {
       }
       const conv = this.$store.state.lead.lead_en_conversacion
       if (conv && conv.id == this.record.id) {
-        return Object.assign({}, this.record, conv)
+        /** Fusión modal + store; el contador de no leídos toma el máximo para no quedar en 0 por estado obsoleto. */
+        const merged = Object.assign({}, this.record, conv)
+        const unread = this.resolve_effective_unread_count(this.record, conv)
+        merged.unread_count = unread
+        merged.unread_messages_count = unread
+        return merged
       }
       return this.record
     },
@@ -505,8 +510,13 @@ export default {
           this.cancelling_auto_consult = false
           this.$store.commit('lead/set_ai_generating_lead_id', null)
         }
-        if (id_changed && this.parent_active_tab === 'extra:conversation') {
-          this.load_conversation_if_needed(true)
+        if (this.parent_active_tab === 'extra:conversation') {
+          if (id_changed) {
+            this.load_conversation_if_needed(true)
+          } else {
+            /** Borrador actualizado (p. ej. fetch del modal): reintentar marcar leídos si ahora hay contador. */
+            this.try_mark_whatsapp_messages_read()
+          }
         }
       },
     },
@@ -615,6 +625,8 @@ export default {
           self.last_conversation_fetch_ms = Date.now()
           self.last_conversation_fetch_lead_id = rec.id
           self.$emit('record-updated', model)
+          /** Tras GET con unread_count fresco: marcar leídos si el intento al cambiar de pestaña fue demasiado pronto. */
+          self.try_mark_whatsapp_messages_read()
           self.schedule_scroll_to_bottom()
         })
         .catch(function () {
@@ -673,16 +685,49 @@ export default {
      *
      * @returns {void}
      */
+    /**
+     * Mayor contador de no leídos entre borrador del modal y lead en store (per-usuario).
+     *
+     * @param {Object|null|undefined} record_row Fila o borrador del modal.
+     * @param {Object|null|undefined} conv_row Lead abierto en Vuex.
+     * @returns {number}
+     */
+    resolve_effective_unread_count(record_row, conv_row) {
+      const candidates = []
+      if (record_row) {
+        candidates.push(record_row.unread_count, record_row.unread_messages_count)
+      }
+      if (conv_row) {
+        candidates.push(conv_row.unread_count, conv_row.unread_messages_count)
+      }
+      let max_unread = 0
+      let i = 0
+      for (i = 0; i < candidates.length; i = i + 1) {
+        const n = parseInt(candidates[i], 10)
+        if (!isNaN(n) && n > max_unread) {
+          max_unread = n
+        }
+      }
+      return max_unread
+    },
+    /**
+     * Marca como leídos los mensajes entrantes del lead al abrir la pestaña de conversación.
+     *
+     * @returns {void}
+     */
     try_mark_whatsapp_messages_read() {
       const self = this
       const rec = this.effective_record
       if (!rec || !rec.id) {
         return
       }
-      // Usar unread_count (per-usuario) para detectar si hay mensajes pendientes de leer.
-      // unread_messages_count es el campo global legacy basado en read_at.
-      const unread = parseInt(rec.unread_count, 10)
-      if (isNaN(unread) || unread < 1) {
+      if (this.parent_active_tab !== 'extra:conversation') {
+        return
+      }
+      /** Contador per-usuario: unread_count y unread_messages_count son alias del mismo withCount. */
+      const conv = this.$store.state.lead.lead_en_conversacion
+      const unread = this.resolve_effective_unread_count(this.record, conv && conv.id == rec.id ? conv : null)
+      if (unread < 1) {
         return
       }
       if (this.marking_whatsapp_read) {

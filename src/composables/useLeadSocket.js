@@ -1,4 +1,5 @@
 import store from '@/store'
+import api from '@/utils/axios'
 
 /**
  * Suscripción Pusher al canal compartido `leads.admins`.
@@ -18,6 +19,30 @@ export function useLeadSocket(options) {
   const channels_to_leave = []
   let unread_badges_debounce_timer = null
   let conversation_refetch_debounce_timer = null
+  let list_row_refetch_debounce_timer = null
+
+  /**
+   * GET /lead/{id} con debounce para actualizar unread_count en la grilla (payload Pusher mínimo).
+   *
+   * @param {number|string} lead_id
+   * @returns {void}
+   */
+  function schedule_list_row_refetch(lead_id) {
+    if (list_row_refetch_debounce_timer) {
+      clearTimeout(list_row_refetch_debounce_timer)
+    }
+    list_row_refetch_debounce_timer = setTimeout(function () {
+      list_row_refetch_debounce_timer = null
+      api.get('/lead/' + lead_id).then(function (res) {
+        const model = res.data && res.data.model ? res.data.model : null
+        if (model && model.id) {
+          store.dispatch('lead/upsert_model_in_lists', model)
+        }
+      }).catch(function () {
+        return null
+      })
+    }, 800)
+  }
 
   /**
    * GET /lead/{id} con debounce para no disparar 429 (throttle Laravel).
@@ -162,9 +187,7 @@ export function useLeadSocket(options) {
     } else if (lead_id != null) {
       // Payload mínimo (solo IDs): refetch para obtener datos actualizados
       schedule_conversation_refetch(lead_id)
-
-      // También refrescar la fila del lead en la tabla (fetch liviano por ID)
-      // La fila de la tabla se actualiza cuando el usuario abre la conversación (fetch_lead_for_conversation)
+      schedule_list_row_refetch(lead_id)
     }
 
     if (event_data.unread_total != null) {
@@ -199,6 +222,10 @@ export function useLeadSocket(options) {
       if (conversation_refetch_debounce_timer) {
         clearTimeout(conversation_refetch_debounce_timer)
         conversation_refetch_debounce_timer = null
+      }
+      if (list_row_refetch_debounce_timer) {
+        clearTimeout(list_row_refetch_debounce_timer)
+        list_row_refetch_debounce_timer = null
       }
       let i = 0
       for (i = 0; i < channels_to_leave.length; i = i + 1) {
