@@ -130,6 +130,14 @@ const routes_def = [
     meta: { requiresAuth: true, nav: true, icon: 'file-earmark-code' },
   },
   {
+    /** Gestión de usuarios admin del equipo interno (CRUD + Google Calendar para closers). */
+    path: '/usuarios-admin',
+    name: 'admin_users',
+    text: 'Usuarios admin',
+    component: () => import('@/views/AdminUsers.vue'),
+    meta: { requiresAuth: true, nav: true, icon: 'people-fill' },
+  },
+  {
     path: '/cuenta',
     name: 'account',
     text: 'Cuenta',
