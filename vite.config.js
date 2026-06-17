@@ -9,6 +9,12 @@ export default defineConfig({
     vue(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Estrategia injectManifest: usamos nuestro propio Service Worker (src/sw.js) para poder
+      // manejar los eventos `push` y `notificationclick` de Web Push, manteniendo el precache
+      // de Workbox y el comportamiento autoUpdate intactos.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.js',
       includeAssets: ['favicon.ico', 'icons/*.png'],
       manifest: {
         name: 'Admin ComercioCity',
@@ -22,7 +28,8 @@ export default defineConfig({
           { src: '/icons/pwa-512.png', sizes: '512x512', type: 'image/png' },
         ],
       },
-      workbox: {
+      // Con injectManifest los patrones de precache se configuran bajo la clave injectManifest.
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
       },
     }),

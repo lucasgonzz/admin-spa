@@ -73,6 +73,20 @@
           </div>
         </section>
 
+        <!-- Notificaciones push del dispositivo actual -->
+        <section
+          v-show="active_section === 'push-notifications'"
+          id="push-notifications"
+          class="account-section"
+        >
+          <div class="card account-config-card">
+            <div class="card-body">
+              <h2 class="h6 card-title">Notificaciones push</h2>
+              <push-notifications-section />
+            </div>
+          </div>
+        </section>
+
         <!-- Configuración de soporte: alertas -->
         <section
           v-show="active_section === 'support-alert-settings'"
@@ -295,6 +309,7 @@ import ImplementationSettingsSection from '@/components/account/sections/Impleme
 import AgentIdentitySection from '@/components/account/sections/AgentIdentitySection.vue'
 import AgentPromptSyncSection from '@/components/account/sections/AgentPromptSyncSection.vue'
 import LeadDemoSettingsSection from '@/components/account/sections/LeadDemoSettingsSection.vue'
+import PushNotificationsSection from '@/components/account/sections/PushNotificationsSection.vue'
 
 /**
  * Vista de cuenta: preferencias del operador y configuraciones del sistema en secciones navegables.
@@ -315,6 +330,7 @@ export default {
     AgentIdentitySection,
     AgentPromptSyncSection,
     LeadDemoSettingsSection,
+    PushNotificationsSection,
   },
   data() {
     return {
