@@ -2,8 +2,8 @@
   <div class="ai-system-prompt-section">
     <div class="alert alert-info py-2 small mb-3" role="alert">
       Este texto es solo el esqueleto (contexto y formato JSON). El protocolo completo de ventas
-      se carga desde GitHub en cada sugerencia; usá «Actualizar protocolo» para forzar la última
-      versión.
+      se sincroniza desde GitHub a la base de datos con el botón «Sincronizar desde GitHub»
+      (sección «Prompts de agentes»), no se edita acá.
     </div>
 
     <div v-if="loading && !contenido_local" class="d-flex align-items-center gap-2 text-muted">
@@ -30,28 +30,6 @@
         spellcheck="false"
         @input="on_input_change"
       />
-
-      <div class="mt-3">
-        <button
-          type="button"
-          class="btn btn-outline-secondary btn-sm"
-          :disabled="protocol_refresh_loading"
-          @click="on_refresh_protocol"
-        >
-          <span
-            v-if="protocol_refresh_loading"
-            class="spinner-border spinner-border-sm me-1"
-            role="status"
-            aria-hidden="true"
-          />
-          <i v-else class="bi bi-arrow-clockwise me-1" aria-hidden="true" />
-          Actualizar protocolo
-        </button>
-        <p class="form-text small text-muted mb-0 mt-2">
-          El protocolo se carga automáticamente desde GitHub cada 10 minutos. Usá este botón para
-          forzar una actualización inmediata.
-        </p>
-      </div>
 
       <div class="d-flex align-items-center gap-3 mt-3">
         <button
@@ -87,8 +65,6 @@ export default {
       guardado_visible: false,
       /** Timer para ocultar el mensaje de guardado. */
       guardado_timer: null,
-      /** Spinner del botón "Actualizar protocolo". */
-      protocol_refresh_loading: false,
     }
   },
   computed: {
@@ -184,34 +160,6 @@ export default {
         .catch(function () {})
     },
 
-    /**
-     * Fuerza invalidación de caché del protocolo en GitHub vía admin-api.
-     *
-     * @returns {void}
-     */
-    on_refresh_protocol() {
-      const self = this
-      this.protocol_refresh_loading = true
-      this.$store
-        .dispatch('ai_system_prompt/refresh_protocol_cache')
-        .then(function () {
-          window.dispatchEvent(
-            new CustomEvent('admin-spa-toast', {
-              detail: {
-                message:
-                  'Protocolo actualizado correctamente. Los próximos mensajes usarán la versión más reciente.',
-                variant: 'success',
-              },
-            })
-          )
-        })
-        .catch(function () {
-          /* El interceptor de axios ya muestra toast de error. */
-        })
-        .then(function () {
-          self.protocol_refresh_loading = false
-        })
-    },
   },
 }
 </script>

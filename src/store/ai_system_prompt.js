@@ -49,17 +49,6 @@ const actions = {
   },
 
   /**
-   * Invalida la caché del protocolo de GitHub (POST /protocol/refresh-cache).
-   *
-   * @returns {Promise<Object>}
-   */
-  refresh_protocol_cache() {
-    return api.post('/protocol/refresh-cache').then(function (res) {
-      return res.data
-    })
-  },
-
-  /**
    * Persiste el contenido del prompt vía PUT /ai-system-prompt.
    *
    * @param {{ commit: Function }} context

@@ -1,16 +1,19 @@
 <template>
   <div class="agent-prompt-sync-section">
     <p class="text-muted small mb-3">
-      Descarga desde GitHub los archivos de identidad y system prompt del agente Martín
-      y los guarda en la base de datos. Usá este botón después de editar los archivos
-      en el repositorio <code>lucasgonzz/claude-comerciocity/prompts_agentes/</code>.
+      Descarga desde GitHub <strong>todos</strong> los archivos relevantes del agente Martín
+      (identidad, system prompt y protocolo de WhatsApp) y los guarda en la base de datos.
+      Usá este botón después de editar los archivos en el repositorio
+      <code>lucasgonzz/claude-comerciocity</code>. La sincronización también corre sola en
+      background cada 10 minutos.
     </p>
 
     <div class="mb-3">
       <p class="small mb-1"><strong>Archivos sincronizados:</strong></p>
       <ul class="small text-muted mb-0">
-        <li><code>setter_identidad.md</code> → identidad del agente (quién es Martín)</li>
-        <li><code>setter_system_prompt.md</code> → system prompt base (formato JSON de respuesta)</li>
+        <li><code>prompts_agentes/setter_identidad.md</code> → identidad del agente (quién es Martín)</li>
+        <li><code>prompts_agentes/setter_system_prompt.md</code> → system prompt base (formato JSON de respuesta)</li>
+        <li><code>comercial/leads_protocolo_whatsapp.md</code> → protocolo de ventas por WhatsApp</li>
       </ul>
     </div>
 
