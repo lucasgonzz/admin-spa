@@ -107,6 +107,23 @@
         </div>
       </div>
 
+      <!-- Campo: duración de la llamada del closer post-demo -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-5">
+          <label class="form-label small" for="demo_duracion_llamada_closer_minutos">Minutos de llamada del closer post-demo</label>
+          <!-- Cuánto tiempo necesita el closer para atender a un lead; ningún otro lead puede liberar su demo dentro de esta ventana -->
+          <input
+            id="demo_duracion_llamada_closer_minutos"
+            v-model.number="local.duracion_llamada_closer_minutos"
+            type="number"
+            class="form-control form-control-sm"
+            min="0"
+            max="240"
+            :disabled="saving"
+          />
+        </div>
+      </div>
+
       <!-- Botón guardar: único para todos los campos -->
       <div class="d-flex align-items-center gap-2">
         <button
@@ -132,8 +149,9 @@ import api from '@/utils/axios'
 /**
  * Sección en Cuenta: configuración de demos.
  *
- * Gestiona los 6 parámetros que controlan duración, márgenes de setup/gracia
- * y tiempos de automatizaciones (recordatorio, check de ingreso, resumen del lead).
+ * Gestiona los 7 parámetros que controlan duración, márgenes de setup/gracia,
+ * tiempos de automatizaciones (recordatorio, check de ingreso, resumen del lead)
+ * y la duración de la llamada del closer para el bloqueo global de disponibilidad.
  */
 export default {
   name: 'LeadDemoSettingsSection',
@@ -147,6 +165,8 @@ export default {
         recordatorio_minutos_antes: 15,
         check_ingreso_minutos_post: 5,
         resumen_minutos_antes_fin: 10,
+        /** Minutos que el closer necesita para atender al lead post-demo; bloquea la ventana en otras demos. */
+        duracion_llamada_closer_minutos: 30,
       },
       /** Valores persistidos en servidor (para detectar cambios). */
       stored: {
@@ -156,6 +176,8 @@ export default {
         recordatorio_minutos_antes: 15,
         check_ingreso_minutos_post: 5,
         resumen_minutos_antes_fin: 10,
+        /** Espejo del servidor para detectar si el campo fue modificado localmente. */
+        duracion_llamada_closer_minutos: 30,
       },
       /** Carga inicial GET settings. */
       loading: true,
@@ -232,12 +254,13 @@ export default {
       self.error_message = ''
       api
         .put('/settings/lead-demo', {
-          duracion_minutos:           self.local.duracion_minutos,
-          setup_minutos_antes:        self.local.setup_minutos_antes,
-          gracia_minutos_post:        self.local.gracia_minutos_post,
-          recordatorio_minutos_antes: self.local.recordatorio_minutos_antes,
-          check_ingreso_minutos_post: self.local.check_ingreso_minutos_post,
-          resumen_minutos_antes_fin:  self.local.resumen_minutos_antes_fin,
+          duracion_minutos:                self.local.duracion_minutos,
+          setup_minutos_antes:             self.local.setup_minutos_antes,
+          gracia_minutos_post:             self.local.gracia_minutos_post,
+          recordatorio_minutos_antes:      self.local.recordatorio_minutos_antes,
+          check_ingreso_minutos_post:      self.local.check_ingreso_minutos_post,
+          resumen_minutos_antes_fin:       self.local.resumen_minutos_antes_fin,
+          duracion_llamada_closer_minutos: self.local.duracion_llamada_closer_minutos,
         })
         .then(function (res) {
           /* Actualizar los valores de referencia para que can_save vuelva a false. */
