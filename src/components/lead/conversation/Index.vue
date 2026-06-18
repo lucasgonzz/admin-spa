@@ -4,7 +4,31 @@
     <!-- Toggle respuesta automática de Claude por lead + pedido manual de sugerencia -->
     <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
       <span class="small text-muted">Respuesta automática de Claude</span>
-      <div class="d-flex align-items-center gap-2">
+      <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+        <button
+          type="button"
+          class="btn btn-sm d-inline-flex align-items-center gap-1"
+          :class="export_conversation_feedback ? 'btn-success' : 'btn-outline-secondary'"
+          :disabled="export_conversation_loading || !sorted_messages.length"
+          :title="sorted_messages.length
+            ? 'Copiar toda la conversación al portapapeles con fecha, emisor y contenido'
+            : 'No hay mensajes para exportar'"
+          @click="on_export_conversation"
+        >
+          <span
+            v-if="export_conversation_loading"
+            class="spinner-border spinner-border-sm"
+            role="status"
+            aria-hidden="true"
+          />
+          <i
+            v-else
+            class="bi"
+            :class="export_conversation_feedback ? 'bi-check-lg' : 'bi-clipboard'"
+            aria-hidden="true"
+          />
+          <span>{{ export_conversation_feedback ? 'Copiado' : 'Exportar conversación' }}</span>
+        </button>
         <button
           type="button"
           class="btn btn-sm d-inline-flex align-items-center gap-1"
@@ -219,6 +243,7 @@
 <script>
 import MessageBubble from './MessageBubble.vue'
 import api from '@/utils/axios'
+import { copy_lead_conversation_to_clipboard } from '@/utils/lead_conversation_clipboard'
 
 /**
  * Pestaña "Conversación WhatsApp" dentro del modal de edición del lead.
@@ -283,6 +308,12 @@ export default {
       now_tick_interval_id: null,
       /** Timestamp actual (ms) para countdown de debounce y auto-envío. */
       now_tick: Date.now(),
+      /** true mientras se copia la conversación al portapapeles. */
+      export_conversation_loading: false,
+      /** Feedback visual breve tras exportar con éxito. */
+      export_conversation_feedback: false,
+      /** Timer para resetear el feedback del botón de exportación. */
+      export_conversation_feedback_timer: null,
     }
   },
   computed: {
@@ -728,6 +759,10 @@ export default {
   },
   beforeUnmount() {
     this.stop_countdown_clock()
+    if (this.export_conversation_feedback_timer) {
+      clearTimeout(this.export_conversation_feedback_timer)
+      this.export_conversation_feedback_timer = null
+    }
   },
   methods: {
     /**
@@ -1295,6 +1330,36 @@ export default {
           self.busy_message_id = null
         })
     },
+    /**
+     * Formatea la conversación completa y la copia al portapapeles.
+     *
+     * @returns {void}
+     */
+    on_export_conversation() {
+      const self = this
+      const rec = this.effective_record
+      if (!rec || !this.sorted_messages.length || this.export_conversation_loading) {
+        return
+      }
+      this.export_conversation_loading = true
+      copy_lead_conversation_to_clipboard(rec, this.sorted_messages)
+        .then(function () {
+          self.export_conversation_feedback = true
+          if (self.export_conversation_feedback_timer) {
+            clearTimeout(self.export_conversation_feedback_timer)
+          }
+          self.export_conversation_feedback_timer = setTimeout(function () {
+            self.export_conversation_feedback = false
+            self.export_conversation_feedback_timer = null
+          }, 2000)
+        })
+        .catch(function () {
+          alert('No se pudo copiar la conversación al portapapeles.')
+        })
+        .then(function () {
+          self.export_conversation_loading = false
+        })
+    },
   },
 }
 </script>
@@ -1302,6 +1367,8 @@ export default {
 <style scoped>
 /* Más alto en pantalla: aprovecha el alto del viewport dentro del modal. */
 .conversation-scroll {
+  display: flex;
+  flex-direction: column;
   min-height: 280px;
   max-height: min(62vh, calc(100vh - 170px));
   overflow-y: auto;

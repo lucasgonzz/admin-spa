@@ -1,5 +1,5 @@
 <template>
-  <div class="wa-bubble-row d-flex flex-column" :class="bubble_column_align">
+  <div class="wa-bubble-row" :class="'wa-bubble-row--' + bubble_side">
     <div class="wa-meta text-muted d-flex align-items-center gap-1">
       <span>{{ sender_label }} · {{ formatted_time }}</span>
       <!-- Botón para marcar/desmarcar el mensaje como excluido del contexto de IA -->
@@ -20,7 +20,7 @@
         />
       </button>
     </div>
-    <div class="wa-bubble-shell" :class="bubble_column_align === 'align-items-start' ? 'wa-bubble-shell--in' : 'wa-bubble-shell--out'">
+    <div class="wa-bubble-shell" :class="'wa-bubble-shell--' + bubble_side">
     <div class="wa-bubble border" :class="bubble_style_class">
       <div v-if="is_followup_suggestion" class="wa-extra mb-1">
         <span class="badge bg-warning text-dark wa-badge-tight">
@@ -230,14 +230,15 @@ export default {
   },
   computed: {
     /**
-     * Columna alineada como WhatsApp Web: lead (entrante) a la izquierda; cloud/saliente a la derecha.
-     * @returns {string}
+     * Lado del hilo estilo WhatsApp: entrante (lead) izquierda; saliente (setter/sistema) derecha.
+     *
+     * @returns {'in'|'out'}
      */
-    bubble_column_align() {
+    bubble_side() {
       if (this.message.sender === 'lead') {
-        return 'align-items-start'
+        return 'in'
       }
-      return 'align-items-end'
+      return 'out'
     },
     /**
      * Estilo de fondo según emisor + esquinas tipo burbuja entrante (izq.) / saliente (der.).
@@ -845,10 +846,21 @@ export default {
 </script>
 
 <style scoped>
-/* Burbujas compactas estilo WhatsApp (tipografía chica, poco padding). */
+/* Burbujas estilo WhatsApp: ancho flexible hasta ~78% del panel, sin tope px artificial. */
 .wa-bubble-row {
+  display: flex;
+  flex-direction: column;
   margin-bottom: 0.35rem;
-  max-width: 100%;
+  max-width: 78%;
+  width: fit-content;
+}
+.wa-bubble-row--in {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+.wa-bubble-row--out {
+  align-self: flex-end;
+  align-items: flex-end;
 }
 .wa-meta {
   font-size: 0.65rem;
@@ -858,7 +870,8 @@ export default {
   padding: 0 1px;
 }
 .wa-bubble {
-  max-width: min(92%, 440px);
+  width: fit-content;
+  max-width: 100%;
   font-size: 1rem;
   line-height: 1.38;
   padding: 0.32rem 0.55rem;
@@ -878,19 +891,21 @@ export default {
 }
 .message-text {
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .wa-message-audio {
   display: block;
   width: 100%;
-  max-width: 280px;
+  min-width: 220px;
+  max-width: min(100%, 360px);
   height: 36px;
   margin-bottom: 0.25rem;
 }
 .wa-attachment-image-link {
   display: inline-block;
   margin-bottom: 0.25rem;
-  max-width: 220px;
+  max-width: min(100%, 320px);
 }
 .wa-attachment-image {
   display: block;
@@ -930,6 +945,9 @@ export default {
   line-height: 1.38;
   resize: vertical;
   min-height: 4rem;
+  min-width: 240px;
+  width: 100%;
+  box-sizing: border-box;
 }
 .wa-extra {
   font-size: 1rem;
@@ -1050,9 +1068,10 @@ export default {
 /* Contenedor burbuja + pill de reacción (pill superpuesta al borde inferior). */
 .wa-bubble-shell {
   position: relative;
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
-  max-width: min(92%, 440px);
+  width: fit-content;
+  max-width: 100%;
 }
 .wa-bubble-shell--in {
   align-items: flex-start;
