@@ -169,6 +169,38 @@
               </div>
             </div>
 
+            <!-- Campo: Notificar escalaciones por WhatsApp -->
+            <div class="mb-3 form-check">
+              <input
+                v-model="form.notify_lead_escalation_whatsapp"
+                type="checkbox"
+                class="form-check-input"
+                id="notify_escalation_check"
+              />
+              <label class="form-check-label" for="notify_escalation_check">
+                Notificar escalaciones por WhatsApp
+              </label>
+              <div class="form-text text-muted">
+                Recibir un WhatsApp cuando el agente no puede resolver una conversación y escala al equipo humano.
+              </div>
+            </div>
+
+            <!-- Campo: Notificar demos agendadas por WhatsApp -->
+            <div class="mb-3 form-check">
+              <input
+                v-model="form.notify_demo_scheduled_whatsapp"
+                type="checkbox"
+                class="form-check-input"
+                id="notify_demo_check"
+              />
+              <label class="form-check-label" for="notify_demo_check">
+                Notificar demos agendadas por WhatsApp
+              </label>
+              <div class="form-text text-muted">
+                Recibir un WhatsApp cuando un lead confirma y agenda una demo.
+              </div>
+            </div>
+
             <!-- Panel de Google Calendar: solo al editar un admin con is_closer = true -->
             <div v-if="editing_admin && form.is_closer" class="mt-4">
               <hr />
@@ -231,6 +263,10 @@ export default {
         is_closer: false,
         /* Teléfono en formato E.164; requerido para notificar al closer por WhatsApp. */
         phone_number: '',
+        /* Flag para recibir WhatsApp cuando el agente escala una conversación de lead. */
+        notify_lead_escalation_whatsapp: false,
+        /* Flag para recibir WhatsApp cuando se agenda una demo. */
+        notify_demo_scheduled_whatsapp: false,
       },
       /** Errores de validación por campo. */
       form_errors: {},
@@ -274,8 +310,16 @@ export default {
      */
     open_create_modal() {
       this.editing_admin = null
-      /* Resetear form completo incluyendo phone_number. */
-      this.form = { name: '', email: '', password: '', is_closer: false, phone_number: '' }
+      /* Resetear form completo incluyendo phone_number y flags de notificación. */
+      this.form = {
+        name: '',
+        email: '',
+        password: '',
+        is_closer: false,
+        phone_number: '',
+        notify_lead_escalation_whatsapp: false,
+        notify_demo_scheduled_whatsapp: false,
+      }
       this.form_errors = {}
       this.save_error = ''
       this.show_modal = true
@@ -295,6 +339,9 @@ export default {
         is_closer:    !!admin.is_closer,
         /* Cargar teléfono existente para que el setter pueda editarlo. */
         phone_number: admin.phone_number || '',
+        /* Cargar flags de notificación WhatsApp existentes. */
+        notify_lead_escalation_whatsapp: !!admin.notify_lead_escalation_whatsapp,
+        notify_demo_scheduled_whatsapp:  !!admin.notify_demo_scheduled_whatsapp,
       }
       this.form_errors = {}
       this.save_error = ''
@@ -327,6 +374,9 @@ export default {
         is_closer:    self.form.is_closer,
         /* Teléfono del admin; se envía siempre (puede estar vacío para borrarlo). */
         phone_number: self.form.phone_number,
+        /* Flags de notificación WhatsApp; se envían siempre para permitir desactivarlos. */
+        notify_lead_escalation_whatsapp: self.form.notify_lead_escalation_whatsapp,
+        notify_demo_scheduled_whatsapp:  self.form.notify_demo_scheduled_whatsapp,
       }
       if (self.form.password) {
         payload.password = self.form.password
