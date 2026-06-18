@@ -73,6 +73,20 @@
           </div>
         </section>
 
+        <!-- Instalar la PWA en el dispositivo actual (antes de activar notificaciones) -->
+        <section
+          v-show="active_section === 'pwa-install'"
+          id="pwa-install"
+          class="account-section"
+        >
+          <div class="card account-config-card">
+            <div class="card-body">
+              <h2 class="h6 card-title">Instalar aplicación</h2>
+              <pwa-install-section />
+            </div>
+          </div>
+        </section>
+
         <!-- Notificaciones push del dispositivo actual -->
         <section
           v-show="active_section === 'push-notifications'"
@@ -310,6 +324,7 @@ import AgentIdentitySection from '@/components/account/sections/AgentIdentitySec
 import AgentPromptSyncSection from '@/components/account/sections/AgentPromptSyncSection.vue'
 import LeadDemoSettingsSection from '@/components/account/sections/LeadDemoSettingsSection.vue'
 import PushNotificationsSection from '@/components/account/sections/PushNotificationsSection.vue'
+import PwaInstallSection from '@/components/account/sections/PwaInstallSection.vue'
 
 /**
  * Vista de cuenta: preferencias del operador y configuraciones del sistema en secciones navegables.
@@ -331,6 +346,7 @@ export default {
     AgentPromptSyncSection,
     LeadDemoSettingsSection,
     PushNotificationsSection,
+    PwaInstallSection,
   },
   data() {
     return {

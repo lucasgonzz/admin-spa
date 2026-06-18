@@ -220,6 +220,12 @@ export default {
      */
     window.addEventListener('admin-spa-toast', this.on_global_toast)
     this.init_nav_viewport_listener()
+
+    // Captura el evento nativo de instalación PWA lo antes posible, para que
+    // PwaInstallSection (pantalla de Cuenta) pueda disparar el diálogo después.
+    window.addEventListener('beforeinstallprompt', this.on_pwa_before_install_prompt)
+    // Confirmación de que la app quedó instalada: limpia el evento guardado.
+    window.addEventListener('appinstalled', this.on_pwa_app_installed)
   },
   beforeUnmount() {
     /**
@@ -227,6 +233,8 @@ export default {
      */
     window.removeEventListener('admin-spa-toast', this.on_global_toast)
     this.teardown_nav_viewport_listener()
+    window.removeEventListener('beforeinstallprompt', this.on_pwa_before_install_prompt)
+    window.removeEventListener('appinstalled', this.on_pwa_app_installed)
   },
   methods: {
     /**
@@ -309,6 +317,33 @@ export default {
     close_mobile_nav() {
       this.nav_mobile_open = false
     },
+    /**
+     * Intercepta el evento nativo beforeinstallprompt: evita que el navegador
+     * muestre su mini-infobar y guarda el evento en window para que
+     * PwaInstallSection pueda dispararlo manualmente desde el botón de Cuenta.
+     *
+     * @param {Event} event Evento beforeinstallprompt diferido.
+     * @returns {void}
+     */
+    on_pwa_before_install_prompt(event) {
+      event.preventDefault()
+      // Acceso simple y global desde cualquier componente sin store dedicado.
+      window.__pwa_install_prompt = event
+      // Aviso reactivo (sin polling) para que la sección muestre el botón.
+      window.dispatchEvent(new Event('pwa-install-available'))
+    },
+
+    /**
+     * La app terminó de instalarse: descarta el evento guardado y avisa a la
+     * sección para que oculte el botón de instalación.
+     *
+     * @returns {void}
+     */
+    on_pwa_app_installed() {
+      window.__pwa_install_prompt = null
+      window.dispatchEvent(new Event('pwa-installed'))
+    },
+
     /**
      * Normaliza evento global y delega la creación de la toast.
      *

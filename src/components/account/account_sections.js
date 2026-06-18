@@ -9,6 +9,11 @@ export const ACCOUNT_SECTIONS = [
     group: null,
   },
   {
+    id: 'pwa-install',
+    label: 'Instalar aplicación',
+    group: null,
+  },
+  {
     id: 'push-notifications',
     label: 'Notificaciones push',
     group: null,
