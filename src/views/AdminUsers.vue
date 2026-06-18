@@ -33,6 +33,7 @@
             <th style="width: 64px">N°</th>
             <th>Nombre</th>
             <th>Email</th>
+            <th>Teléfono</th>
             <th>Es closer</th>
             <th style="width: 100px">Acciones</th>
           </tr>
@@ -42,6 +43,8 @@
             <td class="text-muted small">{{ admin.id }}</td>
             <td>{{ admin.name }}</td>
             <td>{{ admin.email }}</td>
+            <!-- Teléfono del admin; visible para verificar que el closer lo tiene cargado. -->
+            <td class="text-muted small">{{ admin.phone_number || '—' }}</td>
             <td>
               <!-- Indicador visual del flag is_closer -->
               <span
@@ -71,7 +74,7 @@
             </td>
           </tr>
           <tr v-if="!admins.length">
-            <td colspan="5" class="text-muted text-center py-4">No hay usuarios registrados.</td>
+            <td colspan="6" class="text-muted text-center py-4">No hay usuarios registrados.</td>
           </tr>
         </tbody>
       </table>
@@ -134,6 +137,20 @@
                 placeholder="Mínimo 8 caracteres"
               />
               <div v-if="form_errors.password" class="invalid-feedback">{{ form_errors.password }}</div>
+            </div>
+
+            <!-- Campo: Teléfono (formato E.164, ej: +5491112345678); necesario para notificar al closer por WhatsApp -->
+            <div class="mb-3">
+              <label class="form-label">Teléfono</label>
+              <input
+                v-model="form.phone_number"
+                type="text"
+                class="form-control"
+                placeholder="+5491112345678"
+              />
+              <div class="form-text text-muted">
+                En formato E.164 (ej: +5491112345678). Se usa para notificar al closer por WhatsApp cuando una demo se confirma.
+              </div>
             </div>
 
             <!-- Campo: Es closer -->
@@ -212,6 +229,8 @@ export default {
         email: '',
         password: '',
         is_closer: false,
+        /* Teléfono en formato E.164; requerido para notificar al closer por WhatsApp. */
+        phone_number: '',
       },
       /** Errores de validación por campo. */
       form_errors: {},
@@ -255,7 +274,8 @@ export default {
      */
     open_create_modal() {
       this.editing_admin = null
-      this.form = { name: '', email: '', password: '', is_closer: false }
+      /* Resetear form completo incluyendo phone_number. */
+      this.form = { name: '', email: '', password: '', is_closer: false, phone_number: '' }
       this.form_errors = {}
       this.save_error = ''
       this.show_modal = true
@@ -269,10 +289,12 @@ export default {
     open_edit_modal(admin) {
       this.editing_admin = admin
       this.form = {
-        name:      admin.name,
-        email:     admin.email,
-        password:  '',
-        is_closer: !!admin.is_closer,
+        name:         admin.name,
+        email:        admin.email,
+        password:     '',
+        is_closer:    !!admin.is_closer,
+        /* Cargar teléfono existente para que el setter pueda editarlo. */
+        phone_number: admin.phone_number || '',
       }
       this.form_errors = {}
       this.save_error = ''
@@ -301,8 +323,10 @@ export default {
 
       // Construir payload; solo incluir password si no está vacío.
       var payload = {
-        name:      self.form.name,
-        is_closer: self.form.is_closer,
+        name:         self.form.name,
+        is_closer:    self.form.is_closer,
+        /* Teléfono del admin; se envía siempre (puede estar vacío para borrarlo). */
+        phone_number: self.form.phone_number,
       }
       if (self.form.password) {
         payload.password = self.form.password
