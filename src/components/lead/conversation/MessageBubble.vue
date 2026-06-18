@@ -1,6 +1,26 @@
 <template>
   <div class="wa-bubble-row d-flex flex-column" :class="bubble_column_align">
-    <div class="wa-meta text-muted">{{ sender_label }} · {{ formatted_time }}</div>
+    <div class="wa-meta text-muted d-flex align-items-center gap-1">
+      <span>{{ sender_label }} · {{ formatted_time }}</span>
+      <!-- Botón para marcar/desmarcar el mensaje como excluido del contexto de IA -->
+      <button
+        type="button"
+        class="btn btn-link wa-ctx-toggle p-0 ms-1"
+        :class="message.deleted_from_context ? 'wa-ctx-toggle--excluded text-danger' : 'wa-ctx-toggle--included text-muted'"
+        :title="message.deleted_from_context
+          ? 'Este mensaje está excluido del contexto de Claude. Clic para volver a incluirlo.'
+          : 'Excluir este mensaje del contexto de Claude (no lo verá al generar sugerencias)'"
+        :disabled="busy"
+        @click="on_toggle_deleted_from_context"
+      >
+        <i
+          class="bi"
+          :class="message.deleted_from_context ? 'bi-trash-fill' : 'bi-trash'"
+          aria-hidden="true"
+        />
+      </button>
+    </div>
+    <div class="wa-bubble-shell" :class="bubble_column_align === 'align-items-start' ? 'wa-bubble-shell--in' : 'wa-bubble-shell--out'">
     <div class="wa-bubble border" :class="bubble_style_class">
       <div v-if="is_followup_suggestion" class="wa-extra mb-1">
         <span class="badge bg-warning text-dark wa-badge-tight">
@@ -13,23 +33,37 @@
         class="wa-audio-missing text-muted small mb-1">
         🎤 Audio recibido — transcripción abajo. El archivo aún no está en el servidor.
       </div>
-      <!-- Reproductor de audio (mismo patrón que soporte) -->
+      <!-- Reproductor de audio o enlace al adjunto (documento, imagen, video) -->
       <template v-if="has_local_attachment">
         <audio
           v-if="is_audio_message"
           controls
-          :src="attachment_url(message.attachments[0])"
+          :src="attachment_open_url(message.attachments[0])"
           class="wa-message-audio"
           preload="metadata">
           Tu navegador no soporta reproducción de audio.
         </audio>
         <a
-          v-else
-          :href="attachment_url(message.attachments[0])"
+          v-else-if="is_image_message"
+          :href="attachment_open_url(message.attachments[0])"
           target="_blank"
           rel="noopener noreferrer"
-          class="wa-attachment-link small">
-          Ver adjunto
+          class="wa-attachment-image-link"
+          title="Abrir imagen en nueva pestaña">
+          <img
+            :src="attachment_open_url(message.attachments[0])"
+            class="wa-attachment-image"
+            :alt="attachment_display_name(message.attachments[0])" />
+        </a>
+        <a
+          v-else
+          :href="attachment_open_url(message.attachments[0])"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="wa-file-attachment"
+          :title="'Abrir ' + attachment_display_name(message.attachments[0])">
+          <i class="bi wa-file-attachment-icon" :class="attachment_icon_class(message.attachments[0])" aria-hidden="true" />
+          <span class="wa-file-attachment-name">{{ attachment_display_name(message.attachments[0]) }}</span>
         </a>
       </template>
       <!-- Modo lectura: transcripción / texto (original o editado tras aprobar) -->
@@ -127,6 +161,11 @@
         <i class="bi bi-x-circle me-1" aria-hidden="true" />
         Sugerencia no enviada al lead
       </div>
+      <!-- Banner que indica que el mensaje está excluido del historial enviado a Claude -->
+      <div v-if="message.deleted_from_context" class="wa-excluded-banner text-danger small mt-1">
+        <i class="bi bi-trash-fill me-1" aria-hidden="true" />
+        Excluido del contexto de IA
+      </div>
       <div
         v-if="show_sending_indicator"
         class="wa-message-meta d-flex align-items-center justify-content-end mt-1"
@@ -149,6 +188,16 @@
         <span class="badge wa-badge-tight" :class="status_badge_class">{{ status_badge_text }}</span>
       </div>
     </div>
+    <!-- Reacción del lead sobre este mensaje (estilo pill de WhatsApp) -->
+    <div
+      v-if="has_lead_reaction"
+      class="wa-reaction-pill"
+      :title="lead_reaction_title"
+      aria-label="Reacción del lead"
+    >
+      {{ message.lead_reaction_emoji }}
+    </div>
+    </div>
   </div>
 </template>
 
@@ -158,7 +207,7 @@
  */
 export default {
   name: 'LeadMessageBubble',
-  emits: ['enviar', 'guardar_y_enviar', 'cancelar_envio_automatico'],
+  emits: ['enviar', 'guardar_y_enviar', 'cancelar_envio_automatico', 'toggle_deleted_from_context'],
   props: {
     /** Fila `lead_messages` desde la API. */
     message: { type: Object, required: true },
@@ -192,22 +241,25 @@ export default {
     },
     /**
      * Estilo de fondo según emisor + esquinas tipo burbuja entrante (izq.) / saliente (der.).
+     * Si el mensaje está excluido del contexto de IA se aplica además la clase de excluido.
      * @returns {string}
      */
     bubble_style_class() {
+      /* Sufijo de exclusión del contexto: reduce opacidad y cambia borde. */
+      var excluded_class = this.message.deleted_from_context ? ' wa-bubble--excluded' : ''
       if (this.message.sender === 'lead') {
-        return 'bg-primary bg-opacity-10 border-primary wa-bubble--in'
+        return 'bg-primary bg-opacity-10 border-primary wa-bubble--in' + excluded_class
       }
       if (this.message.sender === 'setter') {
-        return 'bg-light wa-bubble--out'
+        return 'bg-light wa-bubble--out' + excluded_class
       }
       if (this.is_followup_suggestion) {
-        return 'bg-warning bg-opacity-10 border-warning wa-bubble--out wa-bubble--followup'
+        return 'bg-warning bg-opacity-10 border-warning wa-bubble--out wa-bubble--followup' + excluded_class
       }
       if (this.is_not_sent_suggestion) {
-        return 'bg-light wa-bubble--out wa-bubble--not-sent'
+        return 'bg-light wa-bubble--out wa-bubble--not-sent' + excluded_class
       }
-      return 'bg-white wa-bubble--out'
+      return 'bg-white wa-bubble--out' + excluded_class
     },
     /**
      * true si la sugerencia de Claude quedó marcada como no enviada al lead.
@@ -374,6 +426,35 @@ export default {
         return false
       }
       return !this.message.whatsapp_message_id
+    },
+    /**
+     * true si el lead reaccionó a este mensaje con un emoji de WhatsApp.
+     * @returns {boolean}
+     */
+    has_lead_reaction() {
+      var emoji = this.message.lead_reaction_emoji
+      return typeof emoji === 'string' && emoji.trim() !== ''
+    },
+    /**
+     * Tooltip de la reacción del lead (fecha si está disponible).
+     * @returns {string}
+     */
+    lead_reaction_title() {
+      if (!this.has_lead_reaction) {
+        return ''
+      }
+      var at = this.message.lead_reaction_at
+      if (at) {
+        try {
+          var d = new Date(at)
+          if (!isNaN(d.getTime())) {
+            return 'El lead reaccionó · ' + d.toLocaleString('es-AR')
+          }
+        } catch (e) {
+          /* fallback abajo */
+        }
+      }
+      return 'El lead reaccionó a este mensaje'
     },
     /**
      * Tooltip del check de WhatsApp.
@@ -550,11 +631,57 @@ export default {
       return false
     },
     /**
-     * Muestra el bloque de texto salvo placeholders vacíos en audio solo con reproductor.
+     * true si el mensaje es una imagen con adjunto local.
+     * @returns {boolean}
+     */
+    is_image_message() {
+      const kind = ((this.message.kind || '') + '').toLowerCase()
+      if (kind === 'image') {
+        return true
+      }
+      const att = this.message.attachments && this.message.attachments[0]
+      if (att && att.mime && String(att.mime).indexOf('image/') === 0) {
+        return true
+      }
+      return false
+    },
+    /**
+     * true si el contenido es el placeholder legado de Kapso (Document attached… URL: …).
+     * @returns {boolean}
+     */
+    is_kapso_media_placeholder() {
+      const text = ((this.effective_content || '') + '').trim()
+      if (text === '') {
+        return false
+      }
+      return /\b(document|image|video|audio)\s+attached\b/i.test(text)
+    },
+    /**
+     * true si el contenido es el placeholder genérico del webhook ([DOCUMENT recibido…]).
+     * @returns {boolean}
+     */
+    is_generic_media_placeholder() {
+      const text = ((this.effective_content || '') + '').trim()
+      if (text === '') {
+        return false
+      }
+      return /^\[[A-Z_ ]+ recibido por WhatsApp\]$/i.test(text)
+    },
+    /**
+     * Muestra el bloque de texto: oculta placeholders de Kapso cuando ya hay adjunto local.
      * @returns {boolean}
      */
     show_message_text() {
-      return ((this.effective_content || '') + '').trim() !== ''
+      const text = ((this.effective_content || '') + '').trim()
+      if (text === '') {
+        return false
+      }
+      if (this.has_local_attachment && !this.is_audio_message) {
+        if (this.is_kapso_media_placeholder() || this.is_generic_media_placeholder()) {
+          return false
+        }
+      }
+      return true
     },
   },
   watch: {
@@ -621,7 +748,84 @@ export default {
       this.$emit('cancelar_envio_automatico')
     },
     /**
-     * URL pública del adjunto en admin-api (/storage/...).
+     * Solicita al padre alternar si el mensaje se incluye o excluye del contexto de Claude.
+     *
+     * @returns {void}
+     */
+    on_toggle_deleted_from_context() {
+      this.$emit('toggle_deleted_from_context')
+    },
+    /**
+     * URL para abrir el adjunto: prioriza public_url firmada de la API.
+     *
+     * @param {Object} attachment Fila lead_message_attachments.
+     * @returns {string}
+     */
+    attachment_open_url(attachment) {
+      const signed_url = ((attachment && attachment.public_url) || '') + ''
+      if (signed_url.trim() !== '') {
+        return signed_url.trim()
+      }
+      return this.attachment_url(attachment)
+    },
+    /**
+     * Nombre legible del archivo para la UI.
+     *
+     * @param {Object} attachment Fila lead_message_attachments.
+     * @returns {string}
+     */
+    attachment_display_name(attachment) {
+      const from_api = ((attachment && attachment.display_filename) || '') + ''
+      if (from_api.trim() !== '') {
+        return from_api.trim()
+      }
+      const path = ((attachment && attachment.path) || '') + ''
+      if (path) {
+        const parts = path.split('/')
+        const basename = parts[parts.length - 1]
+        if (basename) {
+          return basename
+        }
+      }
+      return 'Adjunto'
+    },
+    /**
+     * Ícono Bootstrap según extensión o mime del adjunto.
+     *
+     * @param {Object} attachment Fila lead_message_attachments.
+     * @returns {string}
+     */
+    attachment_icon_class(attachment) {
+      const filename = this.attachment_display_name(attachment).toLowerCase()
+      const mime = (((attachment && attachment.mime) || '') + '').toLowerCase()
+      let extension = ''
+      const dot_index = filename.lastIndexOf('.')
+      if (dot_index >= 0) {
+        extension = filename.substring(dot_index + 1)
+      }
+
+      if (extension === 'pdf' || mime.indexOf('pdf') >= 0) {
+        return 'bi-file-earmark-pdf-fill text-danger'
+      }
+      if (extension === 'xls' || extension === 'xlsx' || extension === 'csv' || mime.indexOf('spreadsheet') >= 0 || mime.indexOf('excel') >= 0) {
+        return 'bi-file-earmark-excel-fill text-success'
+      }
+      if (extension === 'doc' || extension === 'docx' || mime.indexOf('word') >= 0) {
+        return 'bi-file-earmark-word-fill text-primary'
+      }
+      if (extension === 'ppt' || extension === 'pptx' || mime.indexOf('presentation') >= 0 || mime.indexOf('powerpoint') >= 0) {
+        return 'bi-file-earmark-ppt-fill text-warning'
+      }
+      if (extension === 'zip' || extension === 'rar' || extension === '7z' || mime.indexOf('zip') >= 0) {
+        return 'bi-file-earmark-zip-fill text-secondary'
+      }
+      if (mime.indexOf('video/') === 0 || extension === 'mp4' || extension === 'mov' || extension === 'webm') {
+        return 'bi-file-earmark-play-fill text-info'
+      }
+      return 'bi-file-earmark-fill text-secondary'
+    },
+    /**
+     * URL pública del adjunto en admin-api (/storage/...), fallback si no hay public_url.
      *
      * @param {Object} attachment Fila lead_message_attachments.
      * @returns {string}
@@ -683,9 +887,43 @@ export default {
   height: 36px;
   margin-bottom: 0.25rem;
 }
-.wa-attachment-link {
+.wa-attachment-image-link {
   display: inline-block;
   margin-bottom: 0.25rem;
+  max-width: 220px;
+}
+.wa-attachment-image {
+  display: block;
+  max-width: 100%;
+  max-height: 180px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+.wa-file-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.25rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.65);
+  color: inherit;
+  text-decoration: none;
+  max-width: 100%;
+}
+.wa-file-attachment:hover {
+  background: rgba(255, 255, 255, 0.9);
+  color: inherit;
+  text-decoration: none;
+}
+.wa-file-attachment-icon {
+  font-size: 1.35rem;
+  flex-shrink: 0;
+}
+.wa-file-attachment-name {
+  font-size: 0.85rem;
+  line-height: 1.25;
+  word-break: break-word;
 }
 .wa-edit-textarea {
   font-size: 1rem;
@@ -785,6 +1023,64 @@ export default {
 }
 .wa-delivery-error {
   font-size: 0.75rem;
+}
+/* Burbuja cuyo mensaje fue excluido del contexto de Claude: opacidad reducida y borde punteado rojo. */
+.wa-bubble--excluded {
+  opacity: 0.55;
+  border-style: dashed !important;
+  border-color: #dc3545 !important;
+}
+/* Banner de exclusión del contexto de IA dentro de la burbuja. */
+.wa-excluded-banner {
+  font-style: italic;
+  line-height: 1.25;
+}
+/* Botón de papelera para toggle excluido del contexto — tamaño reducido, sin decoración. */
+.wa-ctx-toggle {
+  font-size: 0.7rem;
+  line-height: 1;
+  opacity: 0.55;
+  text-decoration: none !important;
+  vertical-align: middle;
+}
+.wa-ctx-toggle:hover,
+.wa-ctx-toggle--excluded {
+  opacity: 1;
+}
+/* Contenedor burbuja + pill de reacción (pill superpuesta al borde inferior). */
+.wa-bubble-shell {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  max-width: min(92%, 440px);
+}
+.wa-bubble-shell--in {
+  align-items: flex-start;
+}
+.wa-bubble-shell--out {
+  align-items: flex-end;
+}
+.wa-reaction-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.65rem;
+  min-height: 1.35rem;
+  margin-top: -0.55rem;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.95rem;
+  line-height: 1;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  z-index: 1;
+}
+.wa-bubble-shell--in .wa-reaction-pill {
+  margin-left: 0.45rem;
+}
+.wa-bubble-shell--out .wa-reaction-pill {
+  margin-right: 0.45rem;
 }
 </style>
 

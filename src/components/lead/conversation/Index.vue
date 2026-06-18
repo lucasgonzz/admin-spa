@@ -1,6 +1,55 @@
 <template>
   <div v-if="effective_record && effective_record.id" class="lead-conversation-tab">
 
+    <!-- Toggle respuesta automática de Claude por lead + pedido manual de sugerencia -->
+    <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+      <span class="small text-muted">Respuesta automática de Claude</span>
+      <div class="d-flex align-items-center gap-2">
+        <button
+          type="button"
+          class="btn btn-sm d-inline-flex align-items-center gap-1"
+          :class="can_request_ai_suggestion ? 'btn-outline-primary' : 'btn-outline-secondary'"
+          :disabled="!can_request_ai_suggestion"
+          :title="request_ai_suggestion_button_title"
+          @click="on_request_ai_suggestion"
+        >
+          <span
+            v-if="ai_suggestion_request_loading"
+            class="spinner-border spinner-border-sm"
+            role="status"
+            aria-hidden="true"
+          />
+          <i v-else class="bi bi-lightning-charge" aria-hidden="true" />
+          <span>Pedir respuesta</span>
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm d-inline-flex align-items-center gap-1"
+          :class="claude_auto_reply_enabled ? 'btn-success' : 'btn-outline-secondary'"
+          :disabled="toggling_claude_auto_reply"
+          :title="claude_auto_reply_enabled
+            ? 'Claude responde automáticamente a este lead. Clic para desactivar y responder vos.'
+            : 'Claude no intercepta mensajes de este lead. Clic para reactivar.'"
+          @click="on_toggle_claude_auto_reply"
+        >
+          <span
+            v-if="toggling_claude_auto_reply"
+            class="spinner-border spinner-border-sm"
+            role="status"
+            aria-hidden="true"
+          />
+          <i v-else class="bi bi-stars" aria-hidden="true" />
+          <span>Claude: {{ claude_auto_reply_enabled ? 'ON' : 'OFF' }}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Alerta cuando Claude está desactivado para este lead -->
+    <div v-if="!claude_auto_reply_enabled" class="alert alert-warning py-2 small mb-2">
+      <i class="bi bi-person-check me-1" aria-hidden="true" />
+      Respondés vos a este lead. Claude <strong>no</strong> generará sugerencias ni enviará respuestas automáticas.
+    </div>
+
     <!-- Alerta de seguimiento automático -->
     <div v-if="has_pending_followup_suggestion" class="alert alert-info py-2 small mb-2">
       <i class="bi bi-clock-history me-1" aria-hidden="true" />
@@ -62,18 +111,18 @@
         @enviar="on_enviar_sugerencia(msg.id)"
         @guardar_y_enviar="on_guardar_y_enviar_sugerencia(msg.id, $event)"
         @cancelar_envio_automatico="on_cancelar_envio_automatico(msg.id)"
+        @toggle_deleted_from_context="on_toggle_deleted_from_context(msg.id)"
       />
     </div>
 
-    <!-- Input para enviar mensaje directo al lead -->
-    <div class="d-flex align-items-center gap-2">
-      <input
+    <!-- Textarea para enviar mensaje directo al lead (Enter = nueva línea; solo el botón envía). -->
+    <div class="d-flex align-items-end gap-2 lead-direct-compose">
+      <textarea
         v-model="mensaje_directo"
-        type="text"
-        class="form-control form-control-sm"
+        class="form-control form-control-sm lead-direct-textarea"
+        rows="3"
         placeholder="Escribir mensaje para enviar por WhatsApp…"
         :disabled="enviando_directo"
-        @keydown.enter.prevent="on_enviar_directo"
       />
       <button
         type="button"
@@ -228,6 +277,8 @@ export default {
       ai_auto_consult_cancelled: false,
       /** Evita doble POST al cancelar el debounce automático. */
       cancelling_auto_consult: false,
+      /** Evita doble POST al activar/desactivar Claude por lead. */
+      toggling_claude_auto_reply: false,
       /** Intervalo que actualiza now_tick para los countdown visibles. */
       now_tick_interval_id: null,
       /** Timestamp actual (ms) para countdown de debounce y auto-envío. */
@@ -255,6 +306,21 @@ export default {
       return this.record
     },
     /**
+     * true si Claude puede actuar automáticamente en este lead (default true si el campo no viene aún).
+     *
+     * @returns {boolean}
+     */
+    claude_auto_reply_enabled() {
+      const rec = this.effective_record
+      if (!rec) {
+        return true
+      }
+      if (rec.claude_auto_reply === undefined || rec.claude_auto_reply === null) {
+        return true
+      }
+      return Boolean(rec.claude_auto_reply)
+    },
+    /**
      * Mensajes ordenados cronológicamente por id.
      * @returns {Array<Object>}
      */
@@ -268,7 +334,10 @@ export default {
       copy.sort(function (a, b) {
         return (a.id || 0) - (b.id || 0)
       })
-      return copy
+      const self = this
+      return copy.filter(function (msg) {
+        return !self.is_legacy_whatsapp_reaction_message(msg)
+      })
     },
     /**
      * true mientras Claude genera sugerencia para el lead abierto (automática o manual).
@@ -446,6 +515,49 @@ export default {
       return false
     },
     /**
+     * true si se puede pedir sugerencia a Claude manualmente (mismas reglas que el backend).
+     *
+     * @returns {boolean}
+     */
+    can_request_ai_suggestion() {
+      if (!this.effective_record || !this.effective_record.id) {
+        return false
+      }
+      if (this.ai_suggestion_request_loading) {
+        return false
+      }
+      if (this.lead_inbound_message_count <= 1) {
+        return false
+      }
+      if (!this.has_unanswered_lead_messages) {
+        return false
+      }
+      if (this.has_pending_non_followup_suggestion) {
+        return false
+      }
+      return true
+    },
+    /**
+     * Tooltip del botón "Pedir respuesta" según por qué está habilitado o deshabilitado.
+     *
+     * @returns {string}
+     */
+    request_ai_suggestion_button_title() {
+      if (this.ai_suggestion_request_loading) {
+        return 'Consultando a Claude…'
+      }
+      if (this.lead_inbound_message_count <= 1) {
+        return 'La sugerencia IA aplica desde el segundo mensaje del lead.'
+      }
+      if (!this.has_unanswered_lead_messages) {
+        return 'No hay mensajes del lead sin responder.'
+      }
+      if (this.has_pending_non_followup_suggestion) {
+        return 'Ya hay una sugerencia pendiente de revisión.'
+      }
+      return 'Pedir sugerencia a Claude ahora y continuar con el envío automático si corresponde.'
+    },
+    /**
      * true cuando ya transcurrió la demora configurada desde el último mensaje del lead.
      *
      * @returns {boolean}
@@ -467,6 +579,9 @@ export default {
      */
     show_ai_consult_countdown() {
       if (this.parent_active_tab !== 'extra:conversation') {
+        return false
+      }
+      if (!this.claude_auto_reply_enabled) {
         return false
       }
       if (this.lead_inbound_message_count <= 1) {
@@ -615,6 +730,29 @@ export default {
     this.stop_countdown_clock()
   },
   methods: {
+    /**
+     * Oculta mensajes espurios creados antes de soportar reacciones (texto "Reacted with … to message wamid.…").
+     *
+     * @param {Object} msg Fila lead_messages.
+     * @returns {boolean}
+     */
+    is_legacy_whatsapp_reaction_message(msg) {
+      if (!msg) {
+        return false
+      }
+      if (msg.kind === 'reaction') {
+        return true
+      }
+      if (msg.sender !== 'lead') {
+        return false
+      }
+      const text = ((msg.content || '') + '').trim()
+      if (!text) {
+        return false
+      }
+      return /^Reacted(?: with)? .+ to message wamid\./i.test(text)
+        || /^Removed reaction from message wamid\./i.test(text)
+    },
     /**
      * Actualiza el lead en store sin perder mensajes/adjuntos ya cargados.
      *
@@ -1019,6 +1157,56 @@ export default {
         })
     },
     /**
+     * Pide sugerencia a Claude de inmediato (sin esperar el debounce automático).
+     * Tras generarla, el backend programa el envío automático por WhatsApp como siempre.
+     *
+     * @returns {void}
+     */
+    on_request_ai_suggestion() {
+      const self = this
+      const rec = this.effective_record
+      if (!rec || !rec.id || !this.can_request_ai_suggestion) {
+        return
+      }
+      this.$store
+        .dispatch('lead/request_ai_suggestion', rec.id)
+        .then(function (model) {
+          self.ai_auto_consult_cancelled = false
+          self.$emit('record-updated', model)
+          self.schedule_scroll_to_bottom()
+          self.sync_countdown_clock()
+        })
+        .catch(function () {
+          /* ai_error queda en store para el alert rojo. */
+        })
+    },
+    /**
+     * Activa o desactiva la respuesta automática de Claude para el lead de esta conversación.
+     *
+     * @returns {void}
+     */
+    on_toggle_claude_auto_reply() {
+      const self = this
+      const rec = this.effective_record
+      if (!rec || !rec.id || this.toggling_claude_auto_reply) {
+        return
+      }
+      this.toggling_claude_auto_reply = true
+      this.$store
+        .dispatch('lead/toggle_claude_auto_reply', rec.id)
+        .then(function (model) {
+          self.toggling_claude_auto_reply = false
+          if (!model.claude_auto_reply) {
+            self.ai_auto_consult_cancelled = true
+          }
+          self.$emit('record-updated', model)
+          self.sync_countdown_clock()
+        })
+        .catch(function () {
+          self.toggling_claude_auto_reply = false
+        })
+    },
+    /**
      * Envía por WhatsApp la sugerencia de Claude sin modificar el texto.
      *
      * @param {number} message_id
@@ -1086,6 +1274,27 @@ export default {
           self.busy_message_id = null
         })
     },
+    /**
+     * Alterna si el mensaje se incluye o excluye del historial enviado a Claude.
+     * Marca el mensaje como ocupado durante la petición para deshabilitar los botones.
+     *
+     * @param {number} message_id Id del mensaje de lead a alternar.
+     * @returns {void}
+     */
+    on_toggle_deleted_from_context(message_id) {
+      const self = this
+      /* Marca el mensaje como ocupado para evitar doble clic. */
+      this.busy_message_id = message_id
+      this.$store
+        .dispatch('lead/toggle_message_deleted_from_context', message_id)
+        .then(function (model) {
+          self.busy_message_id = null
+          self.$emit('record-updated', model)
+        })
+        .catch(function () {
+          self.busy_message_id = null
+        })
+    },
   },
 }
 </script>
@@ -1103,5 +1312,16 @@ export default {
   width: 2rem;
   height: 2rem;
   padding: 0;
+}
+
+/* Área de redacción manual: multilínea; Enter no envía. */
+.lead-direct-compose {
+  width: 100%;
+}
+.lead-direct-textarea {
+  flex: 1 1 auto;
+  min-height: 4.5rem;
+  resize: vertical;
+  line-height: 1.35;
 }
 </style>

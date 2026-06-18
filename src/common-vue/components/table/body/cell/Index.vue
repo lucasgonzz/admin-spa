@@ -45,11 +45,14 @@
 </template>
 
 <script>
+import generals from '@/common-vue/mixins/generals'
+
 /**
  * Render de celda: fechas, FK con etiqueta si viene la relación en el row.
  */
 export default {
   name: 'CellRenderer',
+  mixins: [generals],
   props: {
     prop: { type: Object, required: true },
     row: { type: Object, required: true },
@@ -102,11 +105,18 @@ export default {
       return null
     },
     text() {
-      if (this.raw == null) {
+      if (this.raw == null || this.raw === '') {
         return '—'
       }
+      // `is_date` viene declarado en ModelProperties del backend (mismo criterio que empresa-spa).
+      if (this.prop.is_date) {
+        if (this.prop.show_full_date) {
+          return this.date(this.raw, true)
+        }
+        return this.date(this.raw)
+      }
       if (this.prop.type === 'date' && this.raw) {
-        return String(this.raw).replace('T', ' ').substring(0, 19)
+        return this.date(this.raw)
       }
       return this.raw
     },

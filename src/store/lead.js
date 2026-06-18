@@ -475,6 +475,7 @@ export default __base_store({
           const model = res.data.model
           commit('set_ai_generating_lead_id', null)
           commit('update_lead_en_conversacion', model)
+          context.dispatch('upsert_model_in_lists', model)
           return model
         })
         .catch((err) => {
@@ -499,6 +500,22 @@ export default __base_store({
       return api.post('/lead/' + lead_id + '/cancel-scheduled-ai-suggestion').then((res) => {
         const model = res.data.model
         commit('update_lead_en_conversacion', model)
+        return model
+      })
+    },
+    /**
+     * Activa o desactiva la respuesta automática de Claude para el lead abierto en conversación.
+     *
+     * @param {Object} context
+     * @param {number} lead_id id del lead
+     * @returns {Promise<Object>} modelo lead actualizado
+     */
+    toggle_claude_auto_reply(context, lead_id) {
+      const commit = context.commit
+      return api.post('/lead/' + lead_id + '/toggle-claude-auto-reply').then((res) => {
+        const model = res.data.model
+        commit('update_lead_en_conversacion', model)
+        context.dispatch('upsert_model_in_lists', model)
         return model
       })
     },
@@ -558,6 +575,23 @@ export default __base_store({
     cancel_auto_send_message(context, message_id) {
       const commit = context.commit
       return api.put('/lead-message/' + message_id + '/cancel-auto-send').then((res) => {
+        const model = res.data.model
+        commit('update_lead_en_conversacion', model)
+        return model
+      })
+    },
+    /**
+     * Alterna si el mensaje se incluye o excluye del historial enviado a Claude.
+     * Los mensajes excluidos siguen siendo visibles en la UI pero no interfieren
+     * con las sugerencias de la IA.
+     *
+     * @param {Object} context
+     * @param {number} message_id id de lead_messages
+     * @returns {Promise<Object>} modelo lead
+     */
+    toggle_message_deleted_from_context(context, message_id) {
+      const commit = context.commit
+      return api.put('/lead-message/' + message_id + '/toggle-deleted-from-context').then((res) => {
         const model = res.data.model
         commit('update_lead_en_conversacion', model)
         return model

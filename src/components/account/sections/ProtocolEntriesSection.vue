@@ -122,6 +122,7 @@
 <script>
 import ViewHeader from '@/common-vue/components/view/header/Index.vue'
 import ModelModal from '@/common-vue/components/model/Index.vue'
+import { resolve_props_to_show } from '@/common-vue/helpers/column_preferences_helper'
 
 /** Prefijo guardado en `notas_setter` al crear correcciones automáticas del setter. */
 const CLAUDE_ORIGINAL_PREFIX = 'Mensaje original de Claude: '
@@ -188,10 +189,10 @@ export default {
     this.$store
       .dispatch('meta/fetch_meta', 'protocol_entry')
       .then(function (data) {
-        const first = (data && data.properties) || []
-        const vis = first.filter(
-          (p) => p.show && !p.not_show_on_table && !(p.group_title && !p.key),
-        )
+        const meta_properties = (data && data.properties) || []
+        return resolve_props_to_show('protocol_entry', meta_properties)
+      })
+      .then(function (vis) {
         self.$store.commit('protocol_entry/set_props_to_show', vis)
         return self.$store.dispatch('protocol_entry/get_models')
       })

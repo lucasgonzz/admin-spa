@@ -19,6 +19,8 @@
       </template>
     </view-header>
 
+    <slot name="header"></slot>
+
     <view-list
       :model_name="model_name"
       :rows="display_rows"
@@ -78,6 +80,7 @@ import ViewList from './List.vue'
 import ColumnFilterModal from '../table/header/column-filter/modal/Index.vue'
 import ModelModal from '../model/Index.vue'
 import TableFab from '../table-fab/Index.vue'
+import { resolve_props_to_show } from '../../helpers/column_preferences_helper'
 
 /**
  * Vista reutilizable: header, tabla, filtros por columna, modal CRUD, FAB.
@@ -203,10 +206,10 @@ export default {
     this.$store
       .dispatch('meta/fetch_meta', this.model_name)
       .then(function (data) {
-        const first = (data && data.properties) || []
-        const vis = first.filter(
-          (p) => p.show && !p.not_show_on_table && !(p.group_title && !p.key),
-        )
+        const meta_properties = (data && data.properties) || []
+        return resolve_props_to_show(self.model_name, meta_properties)
+      })
+      .then(function (vis) {
         self.$store.commit(self.model_name + '/set_props_to_show', vis)
         return self.$store.dispatch(self.model_name + '/get_models')
       })

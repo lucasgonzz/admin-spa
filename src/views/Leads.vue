@@ -19,74 +19,78 @@
           <i class="bi bi-window-sidebar me-1" /> Gestionar demos
         </button>
       </template>
+
+      <template #header>
+        <!-- Panel de demos del día: visible solo cuando el toggle está activo -->
+        <div v-if="show_demos_hoy" class="card mt-3 mb-3">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+              <h6 class="card-title mb-0">
+                <i class="bi bi-calendar-check me-1" />
+                Demos de hoy
+              </h6>
+              <!-- Botón para refrescar la lista manualmente -->
+              <button
+                type="button"
+                class="btn btn-outline-secondary btn-sm"
+                :disabled="loading_demos_hoy"
+                @click="load_demos_hoy"
+              >
+                <i class="bi bi-arrow-clockwise" />
+              </button>
+            </div>
+
+            <!-- Estado de carga -->
+            <p v-if="loading_demos_hoy" class="text-muted small mb-0">Cargando demos...</p>
+
+            <!-- Sin demos hoy -->
+            <p v-else-if="!demos_hoy.length" class="text-muted small mb-0">No hay demos agendadas para hoy.</p>
+
+            <!-- Tabla de demos del día ordenadas por hora de inicio -->
+            <table v-else class="table table-sm table-hover mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th class="small">Hora inicio</th>
+                  <th class="small">Llamar a las</th>
+                  <th class="small">Lead</th>
+                  <th class="small">Empresa</th>
+                  <th class="small">Estado setup</th>
+                  <th class="small">Resumen IA</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="lead in demos_hoy" :key="lead.id">
+                  <!-- Hora de inicio de la demo -->
+                  <td class="small">{{ lead.demo_start_time || '—' }}</td>
+                  <!-- Hora estimada de llamada = inicio + duración configurada -->
+                  <td class="small fw-semibold text-primary">{{ calc_llamar_a_las(lead) }}</td>
+                  <!-- Nombre del contacto -->
+                  <td class="small">{{ lead.contact_name || '(sin nombre)' }}</td>
+                  <!-- Empresa -->
+                  <td class="small">{{ lead.company_name || '—' }}</td>
+                  <!-- Estado del demo setup -->
+                  <td class="small">
+                    <span
+                      class="badge"
+                      :class="demo_setup_badge_class(lead.demo_setup_status)"
+                    >{{ lead.demo_setup_status || '—' }}</span>
+                  </td>
+                  <!-- Indicador de resumen IA disponible -->
+                  <td class="small">
+                    <span v-if="lead.demo_summary" class="badge bg-success">
+                      <i class="bi bi-stars me-1" /> Disponible
+                    </span>
+                    <span v-else class="text-muted">Pendiente</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
     </resource-view>
 
-    <!-- Panel de demos del día: visible solo cuando el toggle está activo -->
-    <div v-if="show_demos_hoy" class="card mt-3">
-      <div class="card-body">
-        <div class="d-flex align-items-center justify-content-between mb-3">
-          <h6 class="card-title mb-0">
-            <i class="bi bi-calendar-check me-1" />
-            Demos de hoy
-          </h6>
-          <!-- Botón para refrescar la lista manualmente -->
-          <button
-            type="button"
-            class="btn btn-outline-secondary btn-sm"
-            :disabled="loading_demos_hoy"
-            @click="load_demos_hoy"
-          >
-            <i class="bi bi-arrow-clockwise" />
-          </button>
-        </div>
-
-        <!-- Estado de carga -->
-        <p v-if="loading_demos_hoy" class="text-muted small mb-0">Cargando demos...</p>
-
-        <!-- Sin demos hoy -->
-        <p v-else-if="!demos_hoy.length" class="text-muted small mb-0">No hay demos agendadas para hoy.</p>
-
-        <!-- Tabla de demos del día ordenadas por hora de inicio -->
-        <table v-else class="table table-sm table-hover mb-0">
-          <thead class="table-light">
-            <tr>
-              <th class="small">Hora inicio</th>
-              <th class="small">Llamar a las</th>
-              <th class="small">Lead</th>
-              <th class="small">Empresa</th>
-              <th class="small">Estado setup</th>
-              <th class="small">Resumen IA</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="lead in demos_hoy" :key="lead.id">
-              <!-- Hora de inicio de la demo -->
-              <td class="small">{{ lead.demo_start_time || '—' }}</td>
-              <!-- Hora estimada de llamada = inicio + duración configurada -->
-              <td class="small fw-semibold text-primary">{{ calc_llamar_a_las(lead) }}</td>
-              <!-- Nombre del contacto -->
-              <td class="small">{{ lead.contact_name || '(sin nombre)' }}</td>
-              <!-- Empresa -->
-              <td class="small">{{ lead.company_name || '—' }}</td>
-              <!-- Estado del demo setup -->
-              <td class="small">
-                <span
-                  class="badge"
-                  :class="demo_setup_badge_class(lead.demo_setup_status)"
-                >{{ lead.demo_setup_status || '—' }}</span>
-              </td>
-              <!-- Indicador de resumen IA disponible -->
-              <td class="small">
-                <span v-if="lead.demo_summary" class="badge bg-success">
-                  <i class="bi bi-stars me-1" /> Disponible
-                </span>
-                <span v-else class="text-muted">Pendiente</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+    
 
     <base-modal
       :show="show_demo_modal"
