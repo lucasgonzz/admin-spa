@@ -102,6 +102,8 @@ export default __base_store({
     unread_total: 0,
     /** Id de lead con GET conversación en curso (evita duplicados). */
     _conversation_fetch_in_flight: null,
+    /** Criterio de ordenamiento activo: 'last_message' | 'created_at'. Por defecto último mensaje. */
+    sort_by: 'last_message',
   },
   mutations: {
     /**
@@ -175,6 +177,13 @@ export default __base_store({
       state.unread_total = isNaN(n) ? 0 : n
     },
     /**
+     * @param {Object} state
+     * @param {'last_message'|'created_at'} value
+     */
+    set_sort_by(state, value) {
+      state.sort_by = value === 'created_at' ? 'created_at' : 'last_message'
+    },
+    /**
      * Agrega un mensaje al hilo abierto si no existe (evento Pusher).
      *
      * @param {Object} state
@@ -218,6 +227,50 @@ export default __base_store({
     },
   },
   actions: {
+    /**
+     * Listado paginado incluyendo criterio sort_by para la bandeja de leads.
+     *
+     * @param {Object} context
+     * @returns {Promise<void>}
+     */
+    _get_models(context) {
+      const commit = context.commit
+      const state = context.state
+      commit('set_loading', true)
+      const path = '/lead'
+      const q = state.use_per_page
+        ? '?page=' + state.page + '&per_page=' + state.per_page + '&sort_by=' + state.sort_by
+        : '?sort_by=' + state.sort_by
+      return api
+        .get(path + q)
+        .then(function (res) {
+          const body = res.data
+          const pack = body.models
+          if (pack && pack.data) {
+            commit('set_models', pack.data)
+            commit('set_total_pages', pack.last_page || 1)
+            commit('set_total_results', pack.total != null ? pack.total : pack.data.length)
+          } else {
+            commit('set_models', pack || [])
+            commit('set_total_results', (pack && pack.length) || 0)
+          }
+          commit('set_loading', false)
+        })
+        .catch(function () {
+          commit('set_loading', false)
+        })
+    },
+    /**
+     * Cambia el criterio de orden y recarga el listado base (sin filtros de columna).
+     *
+     * @param {Object} context
+     * @param {'last_message'|'created_at'} sort_by
+     * @returns {Promise<void>}
+     */
+    change_sort_by(context, sort_by) {
+      context.commit('set_sort_by', sort_by)
+      return context.dispatch('get_models')
+    },
     /**
      * Fusiona fila en listados preservando `messages` si el payload de Pusher no los trae.
      *

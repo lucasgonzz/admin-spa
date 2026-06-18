@@ -7,6 +7,25 @@
       @extra-record-updated="on_record_updated"
     >
       <template #right>
+        <!-- Selector de orden: último mensaje (WhatsApp) vs leads más nuevos por created_at -->
+        <div class="btn-group btn-sm me-2">
+          <button
+            type="button"
+            class="btn btn-sm"
+            :class="lead_sort_by === 'last_message' ? 'btn-secondary' : 'btn-outline-secondary'"
+            @click="on_sort_change('last_message')"
+          >
+            <i class="bi bi-chat-dots me-1" /> Último mensaje
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm"
+            :class="lead_sort_by === 'created_at' ? 'btn-secondary' : 'btn-outline-secondary'"
+            @click="on_sort_change('created_at')"
+          >
+            <i class="bi bi-sort-down me-1" /> Más nuevos
+          </button>
+        </div>
         <!-- Botón toggle para el panel de demos agendadas (desde hoy en adelante) -->
         <button
           type="button"
@@ -198,7 +217,24 @@ export default {
       duracion_minutos: 60,
     }
   },
+  computed: {
+    /**
+     * Criterio de orden activo en el store de leads.
+     * @returns {'last_message'|'created_at'}
+     */
+    lead_sort_by() {
+      return this.$store.state.lead.sort_by
+    },
+  },
   methods: {
+    /**
+     * Cambia el orden del listado base y recarga desde la API.
+     * @param {'last_message'|'created_at'} sort_by
+     * @returns {void}
+     */
+    on_sort_change(sort_by) {
+      this.$store.dispatch('lead/change_sort_by', sort_by)
+    },
     /**
      * Abre modal fullscreen con el CRUD de demos.
      * @returns {void}
