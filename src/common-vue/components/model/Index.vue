@@ -13,23 +13,26 @@
     </div>
     <template v-else-if="draft">
       <template v-if="show_properties_nav">
-        <ul class="nav nav-tabs mb-3" role="tablist">
-          <li
-            v-for="item in properties_nav_items"
-            :key="item.key"
-            class="nav-item"
-            role="presentation"
-          >
-            <button
-              type="button"
-              class="nav-link"
-              :class="{ active: active_tab === item.key }"
-              @click="active_tab = item.key"
+        <!-- Contenedor con scroll horizontal cuando las pestañas no entran (p. ej. móvil). -->
+        <div class="model-properties-nav mb-3">
+          <ul class="nav nav-tabs model-properties-nav__tabs" role="tablist">
+            <li
+              v-for="item in properties_nav_items"
+              :key="item.key"
+              class="nav-item"
+              role="presentation"
             >
-              {{ item.label }}
-            </button>
-          </li>
-        </ul>
+              <button
+                type="button"
+                class="nav-link"
+                :class="{ active: active_tab === item.key }"
+                @click="active_tab = item.key"
+              >
+                {{ item.label }}
+              </button>
+            </li>
+          </ul>
+        </div>
         <div v-show="should_show_group_form">
           <model-form
             :form="draft"
@@ -1049,3 +1052,28 @@ export default {
   },
 }
 </script>
+
+<style scoped>
+/* Barra de grupos/extras del modal: scroll horizontal si no caben en una fila. */
+.model-properties-nav {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+  padding-bottom: 0.15rem;
+}
+
+.model-properties-nav__tabs {
+  flex-wrap: nowrap;
+  width: max-content;
+  min-width: 100%;
+}
+
+.model-properties-nav__tabs .nav-item {
+  flex-shrink: 0;
+}
+
+.model-properties-nav__tabs .nav-link {
+  white-space: nowrap;
+}
+</style>

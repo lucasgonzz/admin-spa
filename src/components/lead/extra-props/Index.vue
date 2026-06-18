@@ -26,7 +26,7 @@
               <i v-else class="bi bi-circle text-muted"></i>
             </div>
             <div class="flex-grow-1">
-              <!-- Label de la etapa con color según estado + timestamp cuando aplica -->
+              <!-- Label de la etapa con color según estado -->
               <div class="d-flex align-items-center gap-2 flex-wrap">
                 <span
                   class="small fw-semibold"
@@ -37,7 +37,11 @@
                     'text-muted':   stage.status === 'pending',
                   }"
                 >{{ stage.label }}</span>
-                <span v-if="stage.timestamp" class="small text-muted">- {{ stage.timestamp }}</span>
+              </div>
+              <!-- Última ejecución: fecha/hora y origen manual o automático -->
+              <div v-if="stage.execution_at" class="small text-muted mt-1">
+                Última ejecución: {{ stage.execution_at }}
+                <span v-if="stage.execution_source"> — {{ stage.execution_source }}</span>
               </div>
               <!-- Detalle opcional: fecha de demo, error de setup, etc. -->
               <div v-if="stage.detail" class="small text-muted mt-1">{{ stage.detail }}</div>
@@ -53,8 +57,11 @@
                   {{ summary_expanded ? 'Ocultar resumen' : 'Ver resumen' }}
                 </button>
               </div>
-              <!-- Botón de acción manual: solo visible cuando la etapa no está completada y tiene acción -->
-              <div v-if="stage.action && stage.status !== 'completed'" class="mt-1">
+              <!-- Botón de acción manual: visible si la etapa tiene acción, permite repetir o aún no completó -->
+              <div
+                v-if="stage.action && stage.status !== 'running' && (stage.status !== 'completed' || stage.allow_repeat)"
+                class="mt-1"
+              >
                 <button
                   type="button"
                   class="btn btn-outline-secondary btn-sm"
@@ -62,7 +69,7 @@
                   @click="run_stage_action(stage)"
                 >
                   <span v-if="loading_stage === stage.id" class="spinner-border spinner-border-sm me-1"></span>
-                  {{ stage.action_label }}
+                  {{ stage_action_button_label(stage) }}
                 </button>
               </div>
             </div>
@@ -330,42 +337,55 @@ export default {
               : r.demo_setup_status === 'fallido'
                 ? 'failed'
                 : 'pending',
-          /* Timestamp de última ejecución del setup remoto. */
-          timestamp: r.demo_setup_last_run_at ? this.format_datetime(r.demo_setup_last_run_at) : null,
           /* Detalle: mensaje de error si el setup falló. */
           detail: r.demo_setup_last_error || null,
           action: 'run_demo_setup',
           action_label: 'Correr demo setup ahora',
+          action_label_repeat: 'Volver a correr demo setup',
+          allow_repeat: true,
+          execution_at: r.demo_setup_last_run_at ? this.format_datetime(r.demo_setup_last_run_at) : null,
+          execution_source: this.format_execution_source(r.demo_setup_last_run_manual),
         },
         {
           id: 5,
           label: 'Recordatorio enviado',
           /* Completado cuando el scheduler (o acción manual) envió el recordatorio pre-demo. */
           status: r.recordatorio_demo_enviado ? 'completed' : 'pending',
-          timestamp: null,
           detail: null,
           action: 'send_demo_reminder',
           action_label: 'Enviar recordatorio ahora',
+          action_label_repeat: 'Volver a enviar recordatorio',
+          allow_repeat: true,
+          execution_at: r.recordatorio_demo_enviado_at ? this.format_datetime(r.recordatorio_demo_enviado_at) : null,
+          execution_source: this.format_execution_source(r.recordatorio_demo_manual),
         },
         {
           id: 6,
           label: 'Check de ingreso enviado',
           /* Completado cuando se envió el check de ingreso post-demo al lead. */
           status: r.demo_check_ingreso_enviado ? 'completed' : 'pending',
-          timestamp: null,
           detail: null,
           action: 'check_demo_ingress',
           action_label: 'Enviar check ahora',
+          action_label_repeat: 'Volver a enviar check',
+          allow_repeat: true,
+          execution_at: r.demo_check_ingreso_enviado_at ? this.format_datetime(r.demo_check_ingreso_enviado_at) : null,
+          execution_source: this.format_execution_source(r.demo_check_ingreso_manual),
         },
         {
           id: 7,
           label: 'Resumen para el closer generado',
           /* Completado cuando Claude generó el resumen del lead para el closer. */
           status: (r.demo_summary || '').trim() ? 'completed' : 'pending',
-          timestamp: null,
           detail: null,
           action: 'generate_demo_summary',
           action_label: 'Generar resumen ahora',
+          action_label_repeat: 'Volver a generar resumen',
+          allow_repeat: true,
+          execution_at: r.demo_summary_generated_at
+            ? this.format_datetime(r.demo_summary_generated_at)
+            : null,
+          execution_source: this.format_execution_source(r.demo_summary_manual),
         },
         {
           id: 8,
@@ -373,10 +393,13 @@ export default {
           /* Completado cuando el closer marcó que realizó la llamada post-demo. */
           status: r.closer_called_at ? 'completed' : 'pending',
           /* Timestamp del momento de la llamada del closer. */
-          timestamp: r.closer_called_at ? this.format_datetime(r.closer_called_at) : null,
+          execution_at: r.closer_called_at ? this.format_datetime(r.closer_called_at) : null,
+          execution_source: null,
           detail: null,
           action: 'mark_closer_called',
           action_label: 'Marcar llamada realizada',
+          action_label_repeat: null,
+          allow_repeat: false,
         },
       ]
     },
@@ -575,6 +598,34 @@ export default {
      */
     get_error_message(error) {
       return resolve_error_message(error)
+    },
+    /**
+     * Texto del botón de acción de una etapa: primera ejecución o re-ejecución.
+     * @param {Object} stage etapa del pipeline.
+     * @returns {string}
+     */
+    stage_action_button_label(stage) {
+      if (!stage) {
+        return ''
+      }
+      if (stage.status === 'completed' && stage.allow_repeat && stage.action_label_repeat) {
+        return stage.action_label_repeat
+      }
+      return stage.action_label || ''
+    },
+    /**
+     * Formatea el origen de ejecución (manual / automático) para mostrar en UI.
+     * @param {boolean|null|undefined} is_manual true = manual, false = automático, null = desconocido.
+     * @returns {string|null}
+     */
+    format_execution_source(is_manual) {
+      if (is_manual === true) {
+        return 'Manual'
+      }
+      if (is_manual === false) {
+        return 'Automático'
+      }
+      return null
     },
     /**
      * Formatea una fecha ISO a texto legible en español (solo fecha).

@@ -20,7 +20,7 @@
       <i class="bi bi-clock-history me-1" aria-hidden="true" />
       {{ followup_count }}
     </span>
-    <span v-else class="text-muted">—</span>
+    <span v-else class="text-muted"></span>
   </span>
   <!-- Badge numérico de mensajes sin leer per-usuario: rojo cuando hay no leídos, guión si no -->
   <span v-else-if="prop.type === 'unread_badge'">
@@ -30,7 +30,7 @@
       style="font-size: 0.75em;"
       :title="'Mensajes sin leer: ' + raw_unread_count"
     >{{ raw_unread_count }}</span>
-    <span v-else class="text-muted">—</span>
+    <span v-else class="text-muted"></span>
   </span>
   <span v-else-if="prop.type === 'pipeline_status'">
     <span
@@ -38,7 +38,7 @@
       class="badge pipeline-status-badge"
       :style="pipeline_status_badge_style"
     >{{ pipeline_status_label }}</span>
-    <span v-else class="text-muted">—</span>
+    <span v-else class="text-muted"></span>
   </span>
   <span v-else-if="link_text !== null" class="text-break">{{ link_text }}</span>
   <span v-else class="text-break">{{ text }}</span>
