@@ -130,14 +130,15 @@ import api from '@/utils/axios'
 /**
  * Panel de conexión de Google Calendar para admins closers.
  *
- * Gestiona el flujo completo:
- *   1. Consultar estado actual de la conexión (GET calendar/google/status)
- *   2. Iniciar OAuth (GET calendar/google/connect → redirigir al usuario)
- *   3. Después del callback, listar calendarios (GET calendar/google/list-calendars)
- *   4. Guardar el calendario elegido (PUT calendar/google/select-calendar)
- *   5. Desconectar (DELETE calendar/google)
+ * Gestiona el flujo completo. Todas las rutas incluyen el admin_id del prop
+ * para que el backend opere sobre el admin objetivo, no sobre el admin logueado:
+ *   1. Consultar estado actual de la conexión (GET calendar/google/{admin_id}/status)
+ *   2. Iniciar OAuth (GET calendar/google/{admin_id}/connect → redirigir al usuario)
+ *   3. Después del callback, listar calendarios (GET calendar/google/{admin_id}/list-calendars)
+ *   4. Guardar el calendario elegido (PUT calendar/google/{admin_id}/select-calendar)
+ *   5. Desconectar (DELETE calendar/google/{admin_id})
  *
- * @prop {Object} admin  Objeto del admin que se está editando.
+ * @prop {Object} admin  Objeto del admin que se está editando; se interpola su id en las URLs.
  */
 export default {
   name: 'AdminCalendarConnectionPanel',
@@ -196,14 +197,15 @@ export default {
 
   methods: {
     /**
-     * Carga el estado actual de la conexión de Google Calendar del admin.
+     * Carga el estado actual de la conexión de Google Calendar del admin objetivo.
+     * Usa this.admin.id en la URL para consultar el admin correcto, no el de la sesión.
      */
     load_status() {
       var self = this
       self.loading_status = true
       self.error_message = ''
 
-      api.get('/calendar/google/status')
+      api.get('/calendar/google/' + self.admin.id + '/status')
         .then(function (res) {
           self.status = res.data
           // Si está conectado pero sin calendario, cargar la lista para que elija.
@@ -221,13 +223,14 @@ export default {
 
     /**
      * Inicia el flujo OAuth redirigiendo al usuario a la URL de autorización de Google.
+     * Envía el admin_id del admin objetivo para que el OAuth quede asociado correctamente.
      */
     on_connect() {
       var self = this
       self.connecting = true
       self.error_message = ''
 
-      api.get('/calendar/google/connect')
+      api.get('/calendar/google/' + self.admin.id + '/connect')
         .then(function (res) {
           // Redirigir al usuario a Google para que autorice el acceso.
           window.location.href = res.data.authorization_url
@@ -239,14 +242,14 @@ export default {
     },
 
     /**
-     * Carga la lista de calendarios disponibles en la cuenta Google del closer.
+     * Carga la lista de calendarios disponibles en la cuenta Google del admin objetivo.
      */
     load_calendars() {
       var self = this
       self.loading_calendars = true
       self.error_message = ''
 
-      api.get('/calendar/google/list-calendars')
+      api.get('/calendar/google/' + self.admin.id + '/list-calendars')
         .then(function (res) {
           self.calendars = res.data.calendars || []
         })
@@ -269,7 +272,7 @@ export default {
       self.saving_calendar = true
       self.error_message = ''
 
-      api.put('/calendar/google/select-calendar', {
+      api.put('/calendar/google/' + self.admin.id + '/select-calendar', {
         calendar_id: self.selected_calendar_id,
       })
         .then(function (res) {
@@ -295,7 +298,7 @@ export default {
       self.disconnecting = true
       self.error_message = ''
 
-      api.delete('/calendar/google')
+      api.delete('/calendar/google/' + self.admin.id)
         .then(function () {
           // Resetear el estado local al estado desconectado.
           self.status = {
