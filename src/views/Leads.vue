@@ -226,7 +226,66 @@ export default {
       return this.$store.state.lead.sort_by
     },
   },
+  mounted() {
+    /* Al montar la vista, verificar si la URL trae ?lead_id para abrir el modal directo. */
+    this.open_lead_from_query_param()
+  },
   methods: {
+    /**
+     * Si la URL trae ?lead_id=N (ej. al entrar desde un link de notificación WhatsApp),
+     * busca ese lead completo y abre su modal automáticamente. Limpia el query param
+     * después de abrir para que un refresh posterior no lo vuelva a disparar.
+     * @returns {void}
+     */
+    open_lead_from_query_param() {
+      /* Leer el query param lead_id de la URL actual. */
+      var lead_id = this.$route.query.lead_id
+      if (!lead_id) {
+        return
+      }
+      var self = this
+      /* Pedir el lead completo (con mensajes y relaciones) al store. */
+      this.$store.dispatch('lead/fetch_full_model', lead_id).then(function (lead) {
+        if (!lead) {
+          self.$root.$emit('open_toast', 'No se encontró el lead solicitado.')
+          return
+        }
+        /* Esperar a que el ResourceView esté listo antes de abrir el modal. */
+        self.wait_for_resource_view_and_open(lead)
+      }).catch(function () {
+        self.$root.$emit('open_toast', 'Error al cargar el lead solicitado.')
+      }).then(function () {
+        /* Limpiar el query param sin recargar, para que un refresh no reabra el modal. */
+        var query = Object.assign({}, self.$route.query)
+        delete query.lead_id
+        self.$router.replace({ query: query })
+      })
+    },
+    /**
+     * Espera (con reintentos cortos) a que el ref del ResourceView esté disponible
+     * antes de abrir el modal, evitando la carrera con el montaje inicial del componente.
+     * @param {Object} lead Objeto lead completo a abrir en el modal.
+     * @param {number} [attempts] Reintentos restantes (default 10, ~1s total).
+     * @returns {void}
+     */
+    wait_for_resource_view_and_open(lead, attempts) {
+      var self = this
+      /* Cantidad máxima de reintentos, cada uno espera 100ms → 1s total. */
+      var remaining = attempts == null ? 10 : attempts
+      var resource_view = this.$refs.lead_resource_view
+      if (resource_view && typeof resource_view.on_row === 'function') {
+        /* El ResourceView ya está montado y listo: abrir el modal. */
+        self.on_demo_row_click(lead)
+        return
+      }
+      if (remaining <= 0) {
+        return
+      }
+      /* Reintentar en 100ms si el ref todavía no está disponible. */
+      setTimeout(function () {
+        self.wait_for_resource_view_and_open(lead, remaining - 1)
+      }, 100)
+    },
     /**
      * Cambia el orden del listado base y recarga desde la API.
      * @param {'last_message'|'created_at'} sort_by
