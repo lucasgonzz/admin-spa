@@ -12,6 +12,7 @@
             <th>Estado</th>
             <th>Día #</th>
             <th>Nombre de plantilla en Meta</th>
+            <th>Texto del mensaje</th>
             <th>Activa</th>
             <th></th>
           </tr>
@@ -31,6 +32,17 @@
                 type="text"
                 class="form-control form-control-sm"
                 placeholder="ej: cc_seg_nuevo_d2"
+              />
+            </td>
+
+            <!-- Texto literal aprobado en Meta ({{1}} = nombre del contacto). Editable inline. -->
+            <td>
+              <textarea
+                v-model="row.body_template"
+                class="form-control form-control-sm"
+                rows="3"
+                placeholder="Texto aprobado en Meta. Usá {{1}} donde va el nombre del contacto."
+                style="min-width: 260px; resize: vertical;"
               />
             </td>
 
@@ -130,6 +142,7 @@ export default {
           template_name: row.template_name,
           language_code: row.language_code,
           activa: row.activa,
+          body_template: row.body_template != null ? row.body_template : null,
         })
         .then(function (model) {
           // Refresca la copia local con la respuesta del servidor.

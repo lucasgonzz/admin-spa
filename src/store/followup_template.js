@@ -41,19 +41,21 @@ export default {
     },
 
     /**
-     * Persiste el `template_name`, `language_code` y `activa` de una plantilla
+     * Persiste el `template_name`, `language_code`, `activa` y `body_template` de una plantilla
      * y actualiza el registro localmente con la respuesta del servidor.
      *
      * @param {Object} context contexto Vuex
-     * @param {{ id: number, template_name: string, language_code: string, activa: boolean }} model plantilla editada
+     * @param {{ id: number, template_name: string, language_code: string, activa: boolean, body_template: string|null }} model plantilla editada
      * @returns {Promise<Object>} plantilla actualizada
      */
     update(context, model) {
-      // Cuerpo del PUT: solo los campos editables más el idioma existente.
+      // Cuerpo del PUT: campos editables incluido el texto literal de la plantilla.
       const body = {
         template_name: model.template_name,
         language_code: model.language_code,
         activa: model.activa,
+        /* body_template puede ser null (para plantillas del closer sin texto automático). */
+        body_template: model.body_template != null ? model.body_template : null,
       }
       return api.put('/followup-template/' + model.id, body).then(function (res) {
         const updated = res.data.model
