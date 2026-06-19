@@ -164,6 +164,7 @@ import { markRaw } from 'vue'
 import api from '@/utils/axios'
 import ResourceView from '@/common-vue/components/view/Index.vue'
 import LeadExtraProps from '@/components/lead/extra-props/Index.vue'
+import LeadResumenTab from '@/components/lead/resumen/Index.vue'
 import LeadConversationTab from '@/components/lead/conversation/Index.vue'
 import LeadContractTab from '@/components/lead/contract/Index.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
@@ -174,6 +175,12 @@ import BaseModal from '@/components/ui/BaseModal.vue'
  * y `<component :is>` puede dejar de resolver bien, afectando el modal al guardar).
  */
 const lead_model_extra_tabs = [
+  {
+    /* Tab Resumen: primero para que aparezca inmediatamente después del tab Demo */
+    key: 'resumen',
+    label: 'Resumen',
+    component: markRaw(LeadResumenTab),
+  },
   {
     key: 'extra',
     label: 'Operaciones',
@@ -200,7 +207,7 @@ const lead_model_extra_tabs = [
  */
 export default {
   name: 'ViewLeads',
-  components: { ResourceView, LeadExtraProps, LeadConversationTab, LeadContractTab, BaseModal },
+  components: { ResourceView, LeadExtraProps, LeadResumenTab, LeadConversationTab, LeadContractTab, BaseModal },
   data() {
     return {
       /** Controla visibilidad del modal para gestionar catálogo de demos. */
