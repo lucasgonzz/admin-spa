@@ -678,7 +678,7 @@ export default {
         return false
       }
       if (this.has_local_attachment && !this.is_audio_message) {
-        if (this.is_kapso_media_placeholder() || this.is_generic_media_placeholder()) {
+        if (this.is_kapso_media_placeholder || this.is_generic_media_placeholder) {
           return false
         }
       }

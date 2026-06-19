@@ -122,6 +122,12 @@ export default {
      * @type {Array<{ key: string, label: string, component?: Object }>}
      */
     extra_tabs: { type: Array, default: () => [] },
+    /**
+     * Orden opcional de pestañas del modal (`group:<título>` o `extra:<key>`).
+     * Si falta una clave definida en el meta/extras, se omite; ítems no listados quedan al final.
+     * @type {string[]}
+     */
+    properties_nav_order: { type: Array, default: () => [] },
     /** Modal hijo abierto desde un campo has_many del formulario padre. */
     from_has_many: { type: Boolean, default: false },
     /** Borrador del modelo padre (Client, etc.). */
@@ -277,7 +283,29 @@ export default {
           extra_key: extra_tab.key,
         })
       })
-      return items
+      if (!this.properties_nav_order || !this.properties_nav_order.length) {
+        return items
+      }
+      /* Reordenar según `properties_nav_order`; claves desconocidas van al final en orden original. */
+      const items_by_key = {}
+      items.forEach((item) => {
+        items_by_key[item.key] = item
+      })
+      const ordered_items = []
+      const used_keys = {}
+      this.properties_nav_order.forEach((nav_key) => {
+        const nav_item = items_by_key[nav_key]
+        if (nav_item) {
+          ordered_items.push(nav_item)
+          used_keys[nav_key] = true
+        }
+      })
+      items.forEach((item) => {
+        if (!used_keys[item.key]) {
+          ordered_items.push(item)
+        }
+      })
+      return ordered_items
     },
     /**
      * Mostrar barra cuando hay grupos en ModelProperties y/o pestañas extra (`extra_tabs`).

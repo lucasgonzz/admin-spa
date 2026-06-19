@@ -77,9 +77,12 @@ const actions = {
     return bootstrap_promise
   },
   login({ commit, dispatch }, { email, password }) {
+    // Normalizar credenciales antes de enviarlas al backend.
+    const normalized_email = ((email || '') + '').trim()
+    const normalized_password = ((password || '') + '').trim()
     commit('set_loading', true)
     return api
-      .post('/login', { email, password })
+      .post('/login', { email: normalized_email, password: normalized_password })
       .then((res) => {
         commit('set_token', res.data.token)
         commit('set_admin', res.data.admin)

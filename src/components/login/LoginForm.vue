@@ -118,11 +118,11 @@ export default {
      * @returns {boolean}
      */
     check_fields() {
-      if (!this.email.trim()) {
+      if (!(this.email || '').trim()) {
         this.error_message = 'Ingresá el email.'
         return false
       }
-      if (!this.password) {
+      if (!(this.password || '').trim()) {
         this.error_message = 'Ingresá la contraseña.'
         return false
       }
@@ -135,6 +135,9 @@ export default {
      */
     submit() {
       const self = this
+      // Normalizar credenciales: quitar espacios accidentales al inicio/fin.
+      self.email = (self.email || '').trim()
+      self.password = (self.password || '').trim()
       if (!self.check_fields() || self.loading) {
         return
       }

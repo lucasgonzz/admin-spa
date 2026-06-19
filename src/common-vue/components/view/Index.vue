@@ -51,6 +51,7 @@
       :all_properties="all_properties"
       :record="edit_record"
       :extra_tabs="resolved_model_extra_tabs"
+      :properties_nav_order="model_properties_nav_order"
       :before_create="before_create_hook"
       @update:show="(v) => (show_model_modal = v)"
       @close="on_model_modal_close"
@@ -107,6 +108,14 @@ export default {
      * @type {Array<{ key: string, label: string, component?: Object }>}
      */
     model_extra_tabs: {
+      type: Array,
+      default: () => [],
+    },
+    /**
+     * Orden opcional de pestañas del modal CRUD (`group:<título>` o `extra:<key>`).
+     * @type {string[]}
+     */
+    model_properties_nav_order: {
       type: Array,
       default: () => [],
     },
