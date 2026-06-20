@@ -856,13 +856,14 @@ export default {
     /**
      * Cualquier cambio en mensajes (alta, aprobación, rechazo) mantiene el foco
      * al final del hilo y sincroniza el estado de la IA.
-     * También intenta marcar como leídos los mensajes entrantes nuevos.
+     * El marcado como leídos no va aquí: se hace en mounted() y desde el socket.
+     * Llamarlo en este watcher genera un bucle infinito (cada respuesta del backend
+     * actualiza el modelo, cambia la firma, dispara otro POST y termina en 429).
      */
     conversation_messages_signature() {
       this.schedule_scroll_to_bottom()
       this.sync_manual_ai_suggestion_state()
       this.sync_countdown_clock()
-      this.try_mark_whatsapp_messages_read()
     },
   },
 
