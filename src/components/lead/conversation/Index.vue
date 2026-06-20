@@ -125,18 +125,27 @@
         Cargando conversación…
       </div>
       <div v-else-if="!sorted_messages.length" class="text-muted small p-2">Sin mensajes todavía.</div>
-      <message-bubble
-        v-for="msg in sorted_messages"
-        :key="msg.id"
-        :message="msg"
-        :busy="busy_message_id === msg.id"
-        :now_tick="now_tick"
-        :auto_send_delay_seconds="ai_suggestion_auto_send_delay_seconds"
-        @enviar="on_enviar_sugerencia(msg.id)"
-        @guardar_y_enviar="on_guardar_y_enviar_sugerencia(msg.id, $event)"
-        @cancelar_envio_automatico="on_cancelar_envio_automatico(msg.id)"
-        @toggle_deleted_from_context="on_toggle_deleted_from_context(msg.id)"
-      />
+      <template v-for="item in messages_with_date_dividers">
+        <div
+          v-if="item.type === 'date_divider'"
+          :key="item.key"
+          class="wa-date-divider"
+        >
+          <span class="wa-date-divider-label">{{ item.date_label }}</span>
+        </div>
+        <message-bubble
+          v-else
+          :key="item.key"
+          :message="item.message"
+          :busy="busy_message_id === item.message.id"
+          :now_tick="now_tick"
+          :auto_send_delay_seconds="ai_suggestion_auto_send_delay_seconds"
+          @enviar="on_enviar_sugerencia(item.message.id)"
+          @guardar_y_enviar="on_guardar_y_enviar_sugerencia(item.message.id, $event)"
+          @cancelar_envio_automatico="on_cancelar_envio_automatico(item.message.id)"
+          @toggle_deleted_from_context="on_toggle_deleted_from_context(item.message.id)"
+        />
+      </template>
     </div>
 
     <!-- Textarea para enviar mensaje directo al lead (Enter = nueva línea; solo el botón envía). -->
@@ -330,6 +339,84 @@ export default {
       return copy.filter(function (msg) {
         return !self.is_legacy_whatsapp_reaction_message(msg)
       })
+    },
+    /**
+     * Lista intercalada de mensajes y divisores de fecha (estilo WhatsApp).
+     * Inserta un marcador cuando cambia el día entre mensajes consecutivos.
+     *
+     * @returns {Array<{type: string, key: string, date_label?: string, message?: Object}>}
+     */
+    messages_with_date_dividers() {
+      /* Items finales: mensajes y divisores de fecha. */
+      const items = []
+      /* Fecha ISO (YYYY-MM-DD) del último divisor insertado. */
+      let last_date_str = null
+
+      /**
+       * Normaliza un timestamp a medianoche en hora local del navegador.
+       *
+       * @param {string|number|Date} raw
+       * @returns {Date|null}
+       */
+      function normalize_to_midnight(raw) {
+        const d = new Date(raw)
+        if (isNaN(d.getTime())) {
+          return null
+        }
+        d.setHours(0, 0, 0, 0)
+        return d
+      }
+
+      /**
+       * Etiqueta legible para el divisor según distancia respecto a hoy.
+       *
+       * @param {Date} date
+       * @returns {string}
+       */
+      function get_date_label(date) {
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const diff_days = Math.round((today - date) / 86400000)
+        if (diff_days === 0) {
+          return 'Hoy'
+        }
+        if (diff_days === 1) {
+          return 'Ayer'
+        }
+        if (diff_days >= 2 && diff_days <= 6) {
+          const name = date.toLocaleDateString('es-AR', { weekday: 'long' })
+          return name.charAt(0).toUpperCase() + name.slice(1)
+        }
+        return date.toLocaleDateString('es-AR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        })
+      }
+
+      for (let i = 0; i < this.sorted_messages.length; i++) {
+        const msg = this.sorted_messages[i]
+        const d = normalize_to_midnight(msg.created_at)
+        const date_str = d ? d.toISOString().slice(0, 10) : null
+
+        /* Solo inserta divisor cuando cambia el día respecto al mensaje anterior. */
+        if (date_str && date_str !== last_date_str) {
+          items.push({
+            type: 'date_divider',
+            key: 'divider-' + msg.id,
+            date_label: get_date_label(d),
+          })
+          last_date_str = date_str
+        }
+
+        items.push({
+          type: 'message',
+          key: 'msg-' + msg.id,
+          message: msg,
+        })
+      }
+
+      return items
     },
     /**
      * true mientras Claude genera sugerencia para el lead abierto (automática o manual).
@@ -1353,5 +1440,26 @@ export default {
   min-height: 4.5rem;
   resize: vertical;
   line-height: 1.35;
+}
+
+/* Divisor de fecha estilo WhatsApp */
+.wa-date-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0.6rem 0 0.4rem;
+  pointer-events: none;
+  user-select: none;
+}
+.wa-date-divider-label {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #54656f;
+  background: #e1f3fb;
+  border-radius: 7px;
+  padding: 0.18rem 0.65rem;
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 </style>
