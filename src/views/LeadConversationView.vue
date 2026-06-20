@@ -1481,10 +1481,13 @@ export default {
   max-width: 60vw;
 }
 
-/* Área de mensajes ocupa el espacio restante y scrollea internamente */
+/* Área de mensajes ocupa el espacio restante y scrollea internamente.
+   Debe ser flex column para que align-self de las burbujas (--in / --out) funcione. */
 .conversation-messages {
   flex: 1;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Alertas pegadas al tope del área de scroll (no del viewport) */
