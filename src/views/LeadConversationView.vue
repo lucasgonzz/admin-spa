@@ -175,19 +175,30 @@
       <!-- Sin mensajes en el hilo -->
       <div v-else-if="!sorted_messages.length" class="text-muted small p-2">Sin mensajes todavía.</div>
 
-      <!-- Burbujas de mensajes (reutiliza MessageBubble sin cambios) -->
-      <message-bubble
-        v-for="msg in sorted_messages"
-        :key="msg.id"
-        :message="msg"
-        :busy="busy_message_id === msg.id"
-        :now_tick="now_tick"
-        :auto_send_delay_seconds="ai_suggestion_auto_send_delay_seconds"
-        @enviar="on_enviar_sugerencia(msg.id)"
-        @guardar_y_enviar="on_guardar_y_enviar_sugerencia(msg.id, $event)"
-        @cancelar_envio_automatico="on_cancelar_envio_automatico(msg.id)"
-        @toggle_deleted_from_context="on_toggle_deleted_from_context(msg.id)"
-      />
+      <!-- Burbujas y divisores de fecha (sticky por sección, estilo WhatsApp) -->
+      <div v-else class="conversation-messages-flow">
+        <div
+          v-for="section in message_date_sections"
+          :key="section.key"
+          class="wa-date-section"
+        >
+          <div v-if="section.date_label" class="wa-date-divider">
+            <span class="wa-date-divider-label">{{ section.date_label }}</span>
+          </div>
+          <message-bubble
+            v-for="msg in section.messages"
+            :key="msg.id"
+            :message="msg"
+            :busy="busy_message_id === msg.id"
+            :now_tick="now_tick"
+            :auto_send_delay_seconds="ai_suggestion_auto_send_delay_seconds"
+            @enviar="on_enviar_sugerencia(msg.id)"
+            @guardar_y_enviar="on_guardar_y_enviar_sugerencia(msg.id, $event)"
+            @cancelar_envio_automatico="on_cancelar_envio_automatico(msg.id)"
+            @toggle_deleted_from_context="on_toggle_deleted_from_context(msg.id)"
+          />
+        </div>
+      </div>
 
     </div>
 
@@ -295,7 +306,9 @@
 import MessageBubble from '@/components/lead/conversation/MessageBubble.vue'
 import api from '@/utils/axios'
 import { copy_lead_conversation_to_clipboard } from '@/utils/lead_conversation_clipboard'
+import lead_conversation_date_dividers from '@/mixins/lead_conversation_date_dividers'
 import '@/styles/whatsapp-conversation-wallpaper.css'
+import '@/styles/whatsapp-date-divider.css'
 
 /**
  * Vista de pantalla completa para la conversación WhatsApp de un lead.
@@ -310,6 +323,7 @@ import '@/styles/whatsapp-conversation-wallpaper.css'
 export default {
   name: 'LeadConversationView',
   components: { MessageBubble },
+  mixins: [lead_conversation_date_dividers],
 
   data() {
     return {
@@ -444,8 +458,17 @@ export default {
       }
       const conv = this.$store.state.lead.lead_en_conversacion
       if (conv && conv.id == this.lead_record.id) {
-        /* Fusión local + store; el contador de no leídos toma el máximo. */
+        /* Fusión local + store; el contador de no leídos toma el máximo salvo que la vista esté activa. */
         const merged = Object.assign({}, this.lead_record, conv)
+        const visible_id = this.$store.state.lead.lead_conversation_visible_id
+        const viewing_this_lead =
+          visible_id != null
+          && String(visible_id) === String(this.lead_record.id)
+        if (viewing_this_lead) {
+          merged.unread_count = 0
+          merged.unread_messages_count = 0
+          return merged
+        }
         const unread = this.resolve_effective_unread_count(this.lead_record, conv)
         merged.unread_count = unread
         merged.unread_messages_count = unread
@@ -847,6 +870,7 @@ export default {
     const self = this
     /* Cargar el lead completo (con mensajes) usando el param de la ruta. */
     const lead_id = this.$route.params.lead_id
+    this.$store.commit('lead/set_lead_conversation_visible_id', lead_id)
     this.loading_conversation = true
     this.$store
       .dispatch('lead/fetch_lead_for_conversation', lead_id)
@@ -872,6 +896,11 @@ export default {
   },
 
   beforeUnmount() {
+    const lead_id = this.$route.params.lead_id
+    const visible_id = this.$store.state.lead.lead_conversation_visible_id
+    if (lead_id != null && visible_id != null && String(visible_id) === String(lead_id)) {
+      this.$store.commit('lead/set_lead_conversation_visible_id', null)
+    }
     this.stop_countdown_clock()
     if (this.export_conversation_feedback_timer) {
       clearTimeout(this.export_conversation_feedback_timer)
@@ -1716,11 +1745,14 @@ export default {
   max-width: 60vw;
 }
 
-/* Área de mensajes ocupa el espacio restante y scrollea internamente.
-   Debe ser flex column para que align-self de las burbujas (--in / --out) funcione. */
+/* Área de mensajes ocupa el espacio restante y scrollea internamente. */
 .conversation-messages {
   flex: 1;
   overflow-y: auto;
+}
+
+/* Columna flex para alinear burbujas; el scroll vive en .conversation-messages. */
+.conversation-messages-flow {
   display: flex;
   flex-direction: column;
 }
@@ -1729,7 +1761,7 @@ export default {
 .sticky-top-alerts {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 4;
 }
 
 /* Botones circulares de solo ícono (header y footer) */

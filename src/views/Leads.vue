@@ -291,14 +291,15 @@ const lead_model_extra_tabs = [
 
 /**
  * Orden de pestañas del modal de lead: extras intercalados con grupos del meta (Demo, Basico).
+ * WhatsApp queda al final para priorizar Resumen y campos operativos al abrir el modal.
  */
 const lead_model_properties_nav_order = [
-  'extra:conversation',
   'extra:resumen',
   'extra:extra',
   'group:Demo',
   'group:Basico',
   'extra:contract',
+  'extra:conversation',
 ]
 
 /**
@@ -317,7 +318,7 @@ export default {
       show_demo_modal: false,
       /** Pestañas extra del modal de leads usando la API nueva `model_extra_tabs`. */
       model_extra_tabs: lead_model_extra_tabs,
-      /** Orden de la barra de pestañas del modal (WhatsApp → Resumen → Operaciones → Demo → Basico → Contrato). */
+      /** Orden de la barra de pestañas del modal (Resumen → Operaciones → Demo → Basico → Contrato → WhatsApp). */
       model_properties_nav_order: lead_model_properties_nav_order,
       /** Controla visibilidad del panel de demos agendadas. */
       show_demos_agendadas: false,

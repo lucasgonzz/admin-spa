@@ -85,6 +85,30 @@ function merge_conversation_messages(previous, incoming) {
   return merged
 }
 
+/**
+ * Si el admin está viendo la conversación WhatsApp de ese lead, fuerza contadores de no leídos a 0
+ * en el payload local hasta que el POST mark-whatsapp-messages-read confirme en backend.
+ *
+ * @param {Object} state Estado del módulo lead.
+ * @param {Object|null|undefined} model Lead entrante desde API o Pusher.
+ * @returns {Object|null|undefined}
+ */
+function apply_viewing_unread_override(state, model) {
+  if (!model || model.id == null) {
+    return model
+  }
+  if (state.lead_conversation_visible_id == null) {
+    return model
+  }
+  if (String(state.lead_conversation_visible_id) !== String(model.id)) {
+    return model
+  }
+  return Object.assign({}, model, {
+    unread_count: 0,
+    unread_messages_count: 0,
+  })
+}
+
 export default __base_store({
   state: {
     model_name: 'lead',
@@ -92,6 +116,11 @@ export default __base_store({
     per_page: 50,
     /** Lead abierto en la pestaña de conversación (para refrescar listas coherentes). */
     lead_en_conversacion: null,
+    /**
+     * Id del lead cuya conversación WhatsApp está visible ahora (modal pestaña o vista fullscreen).
+     * null si el operador no está mirando el hilo de ese lead.
+     */
+    lead_conversation_visible_id: null,
     /** Indica llamada en curso a Claude al agregar mensaje del lead. */
     loading_ai: false,
     /** Id del lead cuya sugerencia IA se está generando (automática o manual). */
@@ -118,7 +147,20 @@ export default __base_store({
      * @param {Object|null} value modelo lead o null
      */
     set_lead_en_conversacion(state, value) {
-      state.lead_en_conversacion = value
+      state.lead_en_conversacion = value ? apply_viewing_unread_override(state, value) : value
+    },
+    /**
+     * Registra qué lead tiene la conversación WhatsApp visible (para suprimir badges de no leídos).
+     *
+     * @param {Object} state
+     * @param {number|string|null} lead_id
+     */
+    set_lead_conversation_visible_id(state, lead_id) {
+      if (lead_id == null || lead_id === '') {
+        state.lead_conversation_visible_id = null
+        return
+      }
+      state.lead_conversation_visible_id = lead_id
     },
     /**
      * @param {Object} state
@@ -154,16 +196,17 @@ export default __base_store({
       if (!model || !model.id) {
         return
       }
-      if (state.lead_en_conversacion && state.lead_en_conversacion.id == model.id) {
+      const normalized = apply_viewing_unread_override(state, model)
+      if (state.lead_en_conversacion && state.lead_en_conversacion.id == normalized.id) {
         /** Mensajes previos del hilo completo en la pestaña Conversación. */
         const previous_messages = state.lead_en_conversacion.messages
-        state.lead_en_conversacion = Object.assign({}, state.lead_en_conversacion, model)
-        if (model.messages_scope === 'full' && model.messages && model.messages.length) {
-          state.lead_en_conversacion.messages = model.messages
+        state.lead_en_conversacion = Object.assign({}, state.lead_en_conversacion, normalized)
+        if (normalized.messages_scope === 'full' && normalized.messages && normalized.messages.length) {
+          state.lead_en_conversacion.messages = normalized.messages
         } else {
           state.lead_en_conversacion.messages = merge_conversation_messages(
             previous_messages,
-            model.messages
+            normalized.messages
           )
         }
       }
@@ -284,6 +327,7 @@ export default __base_store({
       }
       const state = context.state
       const commit = context.commit
+      const row_model = apply_viewing_unread_override(state, model)
 
       const merge_lead_row = function (existing, incoming) {
         const merged = Object.assign({}, existing || {}, incoming)
@@ -296,25 +340,25 @@ export default __base_store({
       }
 
       const in_idx = state.models.findIndex(function (m) {
-        return m.id == model.id
+        return m.id == row_model.id
       })
       const arr = state.models.slice()
       if (in_idx === -1) {
-        arr.unshift(model)
+        arr.unshift(row_model)
       } else {
-        arr.splice(in_idx, 1, merge_lead_row(arr[in_idx], model))
+        arr.splice(in_idx, 1, merge_lead_row(arr[in_idx], row_model))
       }
       commit('set_models', arr)
 
       if (state.is_filtered) {
         const f_idx = state.filtered.findIndex(function (m) {
-          return m.id == model.id
+          return m.id == row_model.id
         })
         const filtered_arr = state.filtered.slice()
         if (f_idx === -1) {
-          filtered_arr.unshift(model)
+          filtered_arr.unshift(row_model)
         } else {
-          filtered_arr.splice(f_idx, 1, merge_lead_row(filtered_arr[f_idx], model))
+          filtered_arr.splice(f_idx, 1, merge_lead_row(filtered_arr[f_idx], row_model))
         }
         commit('set_filtered', filtered_arr)
       }

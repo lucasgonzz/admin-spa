@@ -1,0 +1,38 @@
+/*
+ * Sección de un día: acota el sticky del divisor para que solo flote
+ * mientras sus mensajes están en pantalla; la siguiente sección lo empuja.
+ */
+.wa-date-section {
+  display: flex;
+  flex-direction: column;
+}
+
+/*
+ * Divisor de fecha estilo WhatsApp Web.
+ * position: sticky dentro de .wa-date-section evita superponer varios flotantes.
+ */
+.wa-date-divider {
+  position: -webkit-sticky;
+  position: sticky;
+  top: 0.35rem;
+  z-index: 3;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6rem 0 0.4rem;
+  pointer-events: none;
+  user-select: none;
+}
+
+.wa-date-divider-label {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #54656f;
+  background: #e1f3fb;
+  border-radius: 7px;
+  padding: 0.18rem 0.65rem;
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}

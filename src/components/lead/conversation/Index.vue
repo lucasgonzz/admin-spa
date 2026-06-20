@@ -125,27 +125,29 @@
         Cargando conversación…
       </div>
       <div v-else-if="!sorted_messages.length" class="text-muted small p-2">Sin mensajes todavía.</div>
-      <template v-for="item in messages_with_date_dividers">
+      <div v-else class="conversation-messages-flow">
         <div
-          v-if="item.type === 'date_divider'"
-          :key="item.key"
-          class="wa-date-divider"
+          v-for="section in message_date_sections"
+          :key="section.key"
+          class="wa-date-section"
         >
-          <span class="wa-date-divider-label">{{ item.date_label }}</span>
+          <div v-if="section.date_label" class="wa-date-divider">
+            <span class="wa-date-divider-label">{{ section.date_label }}</span>
+          </div>
+          <message-bubble
+            v-for="msg in section.messages"
+            :key="msg.id"
+            :message="msg"
+            :busy="busy_message_id === msg.id"
+            :now_tick="now_tick"
+            :auto_send_delay_seconds="ai_suggestion_auto_send_delay_seconds"
+            @enviar="on_enviar_sugerencia(msg.id)"
+            @guardar_y_enviar="on_guardar_y_enviar_sugerencia(msg.id, $event)"
+            @cancelar_envio_automatico="on_cancelar_envio_automatico(msg.id)"
+            @toggle_deleted_from_context="on_toggle_deleted_from_context(msg.id)"
+          />
         </div>
-        <message-bubble
-          v-else
-          :key="item.key"
-          :message="item.message"
-          :busy="busy_message_id === item.message.id"
-          :now_tick="now_tick"
-          :auto_send_delay_seconds="ai_suggestion_auto_send_delay_seconds"
-          @enviar="on_enviar_sugerencia(item.message.id)"
-          @guardar_y_enviar="on_guardar_y_enviar_sugerencia(item.message.id, $event)"
-          @cancelar_envio_automatico="on_cancelar_envio_automatico(item.message.id)"
-          @toggle_deleted_from_context="on_toggle_deleted_from_context(item.message.id)"
-        />
-      </template>
+      </div>
     </div>
 
     <!-- Textarea para enviar mensaje directo al lead (Enter = nueva línea; solo el botón envía). -->
@@ -213,7 +215,9 @@
 import MessageBubble from './MessageBubble.vue'
 import api from '@/utils/axios'
 import { copy_lead_conversation_to_clipboard } from '@/utils/lead_conversation_clipboard'
+import lead_conversation_date_dividers from '@/mixins/lead_conversation_date_dividers'
 import '@/styles/whatsapp-conversation-wallpaper.css'
+import '@/styles/whatsapp-date-divider.css'
 
 /**
  * Pestaña "Conversación WhatsApp" dentro del modal de edición del lead.
@@ -221,6 +225,7 @@ import '@/styles/whatsapp-conversation-wallpaper.css'
 export default {
   name: 'LeadConversationTab',
   components: { MessageBubble },
+  mixins: [lead_conversation_date_dividers],
   props: {
     /** Registro lead mostrado en la pestaña (scope del ModelModal). */
     record: { type: Object, default: null },
@@ -299,6 +304,16 @@ export default {
       if (conv && conv.id == this.record.id) {
         /** Fusión modal + store; el contador de no leídos toma el máximo para no quedar en 0 por estado obsoleto. */
         const merged = Object.assign({}, this.record, conv)
+        const visible_id = this.$store.state.lead.lead_conversation_visible_id
+        const viewing_this_lead =
+          this.parent_active_tab === 'extra:conversation'
+          && visible_id != null
+          && String(visible_id) === String(this.record.id)
+        if (viewing_this_lead) {
+          merged.unread_count = 0
+          merged.unread_messages_count = 0
+          return merged
+        }
         const unread = this.resolve_effective_unread_count(this.record, conv)
         merged.unread_count = unread
         merged.unread_messages_count = unread
@@ -339,84 +354,6 @@ export default {
       return copy.filter(function (msg) {
         return !self.is_legacy_whatsapp_reaction_message(msg)
       })
-    },
-    /**
-     * Lista intercalada de mensajes y divisores de fecha (estilo WhatsApp).
-     * Inserta un marcador cuando cambia el día entre mensajes consecutivos.
-     *
-     * @returns {Array<{type: string, key: string, date_label?: string, message?: Object}>}
-     */
-    messages_with_date_dividers() {
-      /* Items finales: mensajes y divisores de fecha. */
-      const items = []
-      /* Fecha ISO (YYYY-MM-DD) del último divisor insertado. */
-      let last_date_str = null
-
-      /**
-       * Normaliza un timestamp a medianoche en hora local del navegador.
-       *
-       * @param {string|number|Date} raw
-       * @returns {Date|null}
-       */
-      function normalize_to_midnight(raw) {
-        const d = new Date(raw)
-        if (isNaN(d.getTime())) {
-          return null
-        }
-        d.setHours(0, 0, 0, 0)
-        return d
-      }
-
-      /**
-       * Etiqueta legible para el divisor según distancia respecto a hoy.
-       *
-       * @param {Date} date
-       * @returns {string}
-       */
-      function get_date_label(date) {
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-        const diff_days = Math.round((today - date) / 86400000)
-        if (diff_days === 0) {
-          return 'Hoy'
-        }
-        if (diff_days === 1) {
-          return 'Ayer'
-        }
-        if (diff_days >= 2 && diff_days <= 6) {
-          const name = date.toLocaleDateString('es-AR', { weekday: 'long' })
-          return name.charAt(0).toUpperCase() + name.slice(1)
-        }
-        return date.toLocaleDateString('es-AR', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-        })
-      }
-
-      for (let i = 0; i < this.sorted_messages.length; i++) {
-        const msg = this.sorted_messages[i]
-        const d = normalize_to_midnight(msg.created_at)
-        const date_str = d ? d.toISOString().slice(0, 10) : null
-
-        /* Solo inserta divisor cuando cambia el día respecto al mensaje anterior. */
-        if (date_str && date_str !== last_date_str) {
-          items.push({
-            type: 'date_divider',
-            key: 'divider-' + msg.id,
-            date_label: get_date_label(d),
-          })
-          last_date_str = date_str
-        }
-
-        items.push({
-          type: 'message',
-          key: 'msg-' + msg.id,
-          message: msg,
-        })
-      }
-
-      return items
     },
     /**
      * true mientras Claude genera sugerencia para el lead abierto (automática o manual).
@@ -736,6 +673,7 @@ export default {
       immediate: true,
       handler(val, old_val) {
         if (!val || !val.id) {
+          this.sync_conversation_visible_id()
           return
         }
         this.merge_lead_into_conversation_store(val)
@@ -753,6 +691,7 @@ export default {
             this.try_mark_whatsapp_messages_read()
           }
         }
+        this.sync_conversation_visible_id()
       },
     },
     /**
@@ -760,6 +699,7 @@ export default {
      * @param {string|null} tab
      */
     parent_active_tab(tab) {
+      this.sync_conversation_visible_id()
       if (tab === 'extra:conversation') {
         this.load_conversation_if_needed(true)
         this.try_mark_followup_suggestion_seen()
@@ -789,15 +729,18 @@ export default {
     },
     /**
      * Cualquier cambio en mensajes (alta, aprobar, rechazar) mantiene el foco al final del hilo.
+     * Si la pestaña está activa, marca leídos los entrantes nuevos (mismo criterio que vista fullscreen).
      */
     conversation_messages_signature() {
       this.schedule_scroll_to_bottom()
       this.sync_manual_ai_suggestion_state()
       this.sync_countdown_clock()
+      this.try_mark_whatsapp_messages_read()
     },
   },
   mounted() {
     const self = this
+    this.sync_conversation_visible_id()
     this.load_ai_suggestion_settings()
     this.sync_manual_ai_suggestion_state()
     this.sync_countdown_clock()
@@ -806,6 +749,7 @@ export default {
     })
   },
   beforeUnmount() {
+    this.clear_conversation_visible_id_if_mine()
     this.stop_countdown_clock()
     if (this.export_conversation_feedback_timer) {
       clearTimeout(this.export_conversation_feedback_timer)
@@ -813,6 +757,34 @@ export default {
     }
   },
   methods: {
+    /**
+     * Publica en Vuex qué lead tiene la conversación visible (solo pestaña WhatsApp activa).
+     *
+     * @returns {void}
+     */
+    sync_conversation_visible_id() {
+      const rec = this.record
+      if (this.parent_active_tab === 'extra:conversation' && rec && rec.id) {
+        this.$store.commit('lead/set_lead_conversation_visible_id', rec.id)
+        return
+      }
+      this.clear_conversation_visible_id_if_mine()
+    },
+    /**
+     * Limpia el flag global de conversación visible si corresponde a este lead/modal.
+     *
+     * @returns {void}
+     */
+    clear_conversation_visible_id_if_mine() {
+      const rec = this.record
+      const visible_id = this.$store.state.lead.lead_conversation_visible_id
+      if (!rec || !rec.id || visible_id == null) {
+        return
+      }
+      if (String(visible_id) === String(rec.id)) {
+        this.$store.commit('lead/set_lead_conversation_visible_id', null)
+      }
+    },
     /**
      * Oculta mensajes espurios creados antes de soportar reacciones (texto "Reacted with … to message wamid.…").
      *
@@ -1416,12 +1388,16 @@ export default {
 <style scoped>
 /* Más alto en pantalla: aprovecha el alto del viewport dentro del modal. */
 .conversation-scroll {
-  display: flex;
-  flex-direction: column;
   min-height: 280px;
   max-height: min(62vh, calc(100vh - 170px));
   overflow-y: auto;
   border-color: rgba(11, 20, 26, 0.08) !important;
+}
+
+/* Columna flex interna: burbujas alineadas in/out; el scroll vive en el contenedor padre. */
+.conversation-messages-flow {
+  display: flex;
+  flex-direction: column;
 }
 
 /* Botón cuadrado con icono WhatsApp. */
@@ -1440,26 +1416,5 @@ export default {
   min-height: 4.5rem;
   resize: vertical;
   line-height: 1.35;
-}
-
-/* Divisor de fecha estilo WhatsApp */
-.wa-date-divider {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0.6rem 0 0.4rem;
-  pointer-events: none;
-  user-select: none;
-}
-.wa-date-divider-label {
-  font-size: 0.72rem;
-  font-weight: 500;
-  color: #54656f;
-  background: #e1f3fb;
-  border-radius: 7px;
-  padding: 0.18rem 0.65rem;
-  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
-  letter-spacing: 0.01em;
-  white-space: nowrap;
 }
 </style>

@@ -20,6 +20,46 @@ export function useLeadSocket(options) {
   let unread_badges_debounce_timer = null
   let conversation_refetch_debounce_timer = null
   let list_row_refetch_debounce_timer = null
+  /** Debounce del POST mark-whatsapp-messages-read mientras el operador mira el hilo. */
+  let mark_read_if_viewing_debounce_timer = null
+
+  /**
+   * true si el admin tiene visible la conversación WhatsApp del lead indicado.
+   *
+   * @param {number|string|null|undefined} lead_id
+   * @returns {boolean}
+   */
+  function is_viewing_lead_conversation(lead_id) {
+    if (lead_id == null || lead_id === '') {
+      return false
+    }
+    const visible_id = store.state.lead.lead_conversation_visible_id
+    if (visible_id == null || visible_id === '') {
+      return false
+    }
+    return String(visible_id) === String(lead_id)
+  }
+
+  /**
+   * Marca leídos los mensajes del lead si el operador está viendo su conversación (evita badges falsos).
+   *
+   * @param {number|string} lead_id
+   * @returns {void}
+   */
+  function schedule_mark_read_if_viewing(lead_id) {
+    if (!is_viewing_lead_conversation(lead_id)) {
+      return
+    }
+    if (mark_read_if_viewing_debounce_timer) {
+      clearTimeout(mark_read_if_viewing_debounce_timer)
+    }
+    mark_read_if_viewing_debounce_timer = setTimeout(function () {
+      mark_read_if_viewing_debounce_timer = null
+      store.dispatch('lead/mark_whatsapp_messages_read', lead_id).catch(function () {
+        return null
+      })
+    }, 250)
+  }
 
   /**
    * GET /lead/{id} con debounce para actualizar unread_count en la grilla (payload Pusher mínimo).
@@ -155,6 +195,7 @@ export function useLeadSocket(options) {
     const message = event_data.message || null
     const lead_id = event_data.lead_id || (lead && lead.id) || null
     const lead_message_id = event_data.lead_message_id || (message && message.id) || null
+    const viewing_this_lead = is_viewing_lead_conversation(lead_id)
 
     if (lead) {
       // Payload completo (compatibilidad con versiones anteriores del evento)
@@ -190,7 +231,10 @@ export function useLeadSocket(options) {
       schedule_list_row_refetch(lead_id)
     }
 
-    if (event_data.unread_total != null) {
+    if (viewing_this_lead && lead_id != null) {
+      /** El operador ya ve el hilo: marcar leído en backend en lugar de sumar badges locales. */
+      schedule_mark_read_if_viewing(lead_id)
+    } else if (event_data.unread_total != null) {
       store.commit('lead/set_unread_total', event_data.unread_total)
     } else {
       schedule_refresh_unread_badges()
@@ -226,6 +270,10 @@ export function useLeadSocket(options) {
       if (list_row_refetch_debounce_timer) {
         clearTimeout(list_row_refetch_debounce_timer)
         list_row_refetch_debounce_timer = null
+      }
+      if (mark_read_if_viewing_debounce_timer) {
+        clearTimeout(mark_read_if_viewing_debounce_timer)
+        mark_read_if_viewing_debounce_timer = null
       }
       let i = 0
       for (i = 0; i < channels_to_leave.length; i = i + 1) {
