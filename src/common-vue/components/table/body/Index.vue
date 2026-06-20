@@ -23,6 +23,10 @@
       >
         <cell-renderer :prop="p" :row="row" />
       </td>
+      <!-- Columna opcional de acciones por fila: solo se renderiza si el consumidor define el slot. -->
+      <td v-if="$slots['row-actions']" class="text-center text-nowrap" @click.stop>
+        <slot name="row-actions" :row="row" />
+      </td>
     </tr>
   </tbody>
 </template>
