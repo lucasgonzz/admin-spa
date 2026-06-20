@@ -36,6 +36,7 @@
           :table_properties="table_properties"
           :is_selectable="is_selectable"
           :filters="filters"
+          :has_row_actions="has_row_actions"
           @open-filter="$emit('open-filter', $event)"
           @clear-filter="$emit('clear-filter', $event)"
         />
@@ -46,7 +47,12 @@
           :selected="selected"
           @row="$emit('row', $event)"
           @toggle="$emit('toggle', $event)"
-        />
+        >
+          <!-- Reenvía el slot de acciones por fila hacia el cuerpo de la tabla. -->
+          <template v-if="$slots['row-actions']" #row-actions="slot_props">
+            <slot name="row-actions" v-bind="slot_props" />
+          </template>
+        </table-body>
       </table>
     </div>
   </div>
@@ -80,6 +86,13 @@ export default {
      */
     show_initial_loading() {
       return this.loading && (!this.rows || this.rows.length === 0)
+    },
+    /**
+     * true cuando el consumidor define el slot de acciones por fila (columna extra).
+     * @returns {boolean}
+     */
+    has_row_actions() {
+      return Boolean(this.$slots['row-actions'])
     },
   },
 }

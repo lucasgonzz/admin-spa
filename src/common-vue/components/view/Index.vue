@@ -33,7 +33,12 @@
       @clear-filter="on_clear_filter"
       @row="on_row"
       @toggle="on_toggle"
-    />
+    >
+      <!-- Reenvía el slot de acciones por fila definido por el consumidor de ResourceView. -->
+      <template v-if="$slots['row-actions']" #row-actions="slot_props">
+        <slot name="row-actions" v-bind="slot_props" />
+      </template>
+    </view-list>
 
     <column-filter-modal
       :show="show_filter_modal"

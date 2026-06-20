@@ -17,6 +17,8 @@
           />
         </span>
       </th>
+      <!-- Cabecera de la columna opcional de acciones por fila. -->
+      <th v-if="has_row_actions" class="text-center" style="width: 3rem">Acciones</th>
     </tr>
   </thead>
 </template>
@@ -34,6 +36,8 @@ export default {
     table_properties: { type: Array, default: () => [] },
     is_selectable: { type: Boolean, default: false },
     filters: { type: Array, default: () => [] },
+    /** true cuando la tabla muestra una columna de acciones por fila (slot row-actions). */
+    has_row_actions: { type: Boolean, default: false },
   },
   emits: ['open-filter', 'clear-filter'],
   methods: {

@@ -13,7 +13,12 @@
       @clear-filter="$emit('clear-filter', $event)"
       @row="$emit('row', $event)"
       @toggle="$emit('toggle', $event)"
-    />
+    >
+      <!-- Reenvía el slot de acciones por fila hacia la tabla de recursos. -->
+      <template v-if="$slots['row-actions']" #row-actions="slot_props">
+        <slot name="row-actions" v-bind="slot_props" />
+      </template>
+    </resource-table>
   </div>
 </template>
 

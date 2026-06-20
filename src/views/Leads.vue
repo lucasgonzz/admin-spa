@@ -7,6 +7,19 @@
       :model_properties_nav_order="model_properties_nav_order"
       @extra-record-updated="on_record_updated"
     >
+      <!-- Acción rápida por fila: abrir la conversación WhatsApp del lead en pantalla completa. -->
+      <template #row-actions="{ row }">
+        <button
+          type="button"
+          class="btn btn-outline-success btn-sm"
+          title="Abrir conversación de WhatsApp"
+          aria-label="Abrir conversación de WhatsApp"
+          @click="on_open_conversation(row)"
+        >
+          <i class="bi bi-whatsapp" aria-hidden="true" />
+        </button>
+      </template>
+
       <template #right>
         <!-- Selector de orden: último mensaje (WhatsApp) vs leads más nuevos por created_at -->
         <div class="btn-group btn-sm me-2">
@@ -370,6 +383,17 @@ export default {
       setTimeout(function () {
         self.wait_for_resource_view_and_open(lead, remaining - 1)
       }, 100)
+    },
+    /**
+     * Navega a la vista de pantalla completa de la conversación WhatsApp del lead.
+     * @param {Object} lead Lead de la fila clickeada en la tabla.
+     * @returns {void}
+     */
+    on_open_conversation(lead) {
+      if (!lead || !lead.id) {
+        return
+      }
+      this.$router.push({ name: 'lead_conversation', params: { lead_id: lead.id } })
     },
     /**
      * Cambia el orden del listado base y recarga desde la API.
