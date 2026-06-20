@@ -145,6 +145,13 @@ const routes_def = [
     meta: { requiresAuth: true, nav: true, icon: 'person-circle' },
   },
   {
+    /** Vista de pantalla completa de la conversación WhatsApp de un lead específico. */
+    path: '/leads/:lead_id/conversacion',
+    name: 'lead_conversation',
+    component: () => import('@/views/LeadConversationView.vue'),
+    meta: { requiresAuth: true, nav: false },
+  },
+  {
     path: '/login',
     name: 'login',
     text: 'Ingresar',

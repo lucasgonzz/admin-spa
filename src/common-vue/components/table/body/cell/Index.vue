@@ -40,6 +40,18 @@
     >{{ pipeline_status_label }}</span>
     <span v-else class="text-muted"></span>
   </span>
+  <!-- Botón ícono que navega a una ruta interna (router-link): usado p. ej. para ir a la conversación WhatsApp -->
+  <span v-else-if="prop.type === 'router_link_btn'">
+    <router-link
+      v-if="row.id"
+      :to="resolve_router_link(prop, row)"
+      class="btn btn-sm btn-outline-success icon-cell-btn"
+      :title="prop.btn_title || ''"
+      @click.stop
+    >
+      <i :class="'bi ' + (prop.btn_icon || 'bi-link')" aria-hidden="true" />
+    </router-link>
+  </span>
   <span v-else-if="link_text !== null" class="text-break">{{ link_text }}</span>
   <span v-else class="text-break">{{ text }}</span>
 </template>
@@ -162,6 +174,29 @@ export default {
       }
     },
   },
+  methods: {
+    /**
+     * Construye el objeto de ruta para `router-link` a partir de los metadatos de la prop.
+     * Permite configurar la ruta y sus params desde ModelProperties (ej. LeadProperties)
+     * sin tocar el CellRenderer.
+     *
+     * @param {Object} prop Definición de propiedad con route_name, route_param_key, route_param_value_key.
+     * @param {Object} row Fila de la tabla.
+     * @returns {Object} Objeto de ruta compatible con vue-router ({ name, params }).
+     */
+    resolve_router_link(prop, row) {
+      if (!prop.route_name) {
+        return '/'
+      }
+      /* Construir los params dinámicos: la clave del param se toma de `route_param_key`
+         y su valor se lee de la columna `route_param_value_key` en la fila. */
+      const params = {}
+      if (prop.route_param_key && prop.route_param_value_key) {
+        params[prop.route_param_key] = row[prop.route_param_value_key]
+      }
+      return { name: prop.route_name, params: params }
+    },
+  },
 }
 
 /**
@@ -191,5 +226,16 @@ function contrast_text_for_hex(hex) {
   font-weight: 500;
   padding: 0.2em 0.5em;
   white-space: nowrap;
+}
+
+/* Botón circular de ícono para el tipo router_link_btn */
+.icon-cell-btn {
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 </style>

@@ -1,18 +1,54 @@
 <template>
-  <div v-if="effective_record && effective_record.id" class="lead-conversation-tab">
+  <div class="conversation-view">
 
-    <!-- Toggle respuesta automática de Claude por lead + pedido manual de sugerencia -->
-    <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
-      <span class="small text-muted">Respuesta automática de Claude</span>
-      <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+    <!-- ====================================================
+         HEADER FIJO: atrás | nombre del lead | 4 botones icono
+         ==================================================== -->
+    <div class="conversation-header d-flex align-items-center justify-content-between px-3 py-2 border-bottom bg-white">
+
+      <!-- Izquierda: botón atrás + nombre del lead -->
+      <div class="d-flex align-items-center gap-2 overflow-hidden">
         <button
           type="button"
-          class="btn btn-sm d-inline-flex align-items-center gap-1"
-          :class="export_conversation_feedback ? 'btn-success' : 'btn-outline-secondary'"
+          class="icon-btn"
+          title="Volver a Leads"
+          @click="$router.push({ name: 'leads' })"
+        >
+          <i class="bi bi-arrow-left" aria-hidden="true" />
+        </button>
+        <span class="fw-semibold text-truncate conversation-lead-name">
+          {{ lead_name }}
+        </span>
+      </div>
+
+      <!-- Derecha: 4 botones de acción (solo ícono) -->
+      <div class="d-flex align-items-center gap-1 flex-shrink-0">
+
+        <!-- Notificar mensajes: campana llena si activo, vacía si no -->
+        <button
+          type="button"
+          class="icon-btn"
+          :class="notify_active ? 'text-primary' : 'text-muted'"
+          :title="notify_active ? 'Notificando los mensajes de este lead' : 'No notificado'"
+          :disabled="toggling_notify || !effective_record"
+          @click="on_toggle_notify_messages(!notify_active)"
+        >
+          <span
+            v-if="toggling_notify"
+            class="spinner-border spinner-border-sm"
+            role="status"
+            aria-hidden="true"
+          />
+          <i v-else class="bi" :class="notify_active ? 'bi-bell-fill' : 'bi-bell'" aria-hidden="true" />
+        </button>
+
+        <!-- Exportar conversación: feedback verde 2s tras copiar -->
+        <button
+          type="button"
+          class="icon-btn"
+          :class="export_conversation_feedback ? 'text-success' : 'text-muted'"
+          :title="sorted_messages.length ? 'Copiar conversación al portapapeles' : 'No hay mensajes para exportar'"
           :disabled="export_conversation_loading || !sorted_messages.length"
-          :title="sorted_messages.length
-            ? 'Copiar toda la conversación al portapapeles con fecha, emisor y contenido'
-            : 'No hay mensajes para exportar'"
           @click="on_export_conversation"
         >
           <span
@@ -21,20 +57,16 @@
             role="status"
             aria-hidden="true"
           />
-          <i
-            v-else
-            class="bi"
-            :class="export_conversation_feedback ? 'bi-check-lg' : 'bi-clipboard'"
-            aria-hidden="true"
-          />
-          <span>{{ export_conversation_feedback ? 'Copiado' : 'Exportar conversación' }}</span>
+          <i v-else class="bi" :class="export_conversation_feedback ? 'bi-check-lg' : 'bi-clipboard'" aria-hidden="true" />
         </button>
+
+        <!-- Pedir sugerencia IA a Claude manualmente -->
         <button
           type="button"
-          class="btn btn-sm d-inline-flex align-items-center gap-1"
-          :class="can_request_ai_suggestion ? 'btn-outline-primary' : 'btn-outline-secondary'"
-          :disabled="!can_request_ai_suggestion"
+          class="icon-btn"
+          :class="can_request_ai_suggestion ? 'text-primary' : 'text-muted'"
           :title="request_ai_suggestion_button_title"
+          :disabled="!can_request_ai_suggestion"
           @click="on_request_ai_suggestion"
         >
           <span
@@ -44,16 +76,17 @@
             aria-hidden="true"
           />
           <i v-else class="bi bi-lightning-charge" aria-hidden="true" />
-          <span>Pedir respuesta</span>
         </button>
+
+        <!-- Toggle respuesta automática de Claude por lead -->
         <button
           type="button"
-          class="btn btn-sm d-inline-flex align-items-center gap-1"
-          :class="claude_auto_reply_enabled ? 'btn-success' : 'btn-outline-secondary'"
-          :disabled="toggling_claude_auto_reply"
+          class="icon-btn"
+          :class="claude_auto_reply_enabled ? 'text-success' : 'text-muted'"
           :title="claude_auto_reply_enabled
-            ? 'Claude responde automáticamente a este lead. Clic para desactivar y responder vos.'
-            : 'Claude no intercepta mensajes de este lead. Clic para reactivar.'"
+            ? 'Claude responde automáticamente. Clic para desactivar.'
+            : 'Claude desactivado. Clic para reactivar.'"
+          :disabled="toggling_claude_auto_reply"
           @click="on_toggle_claude_auto_reply"
         >
           <span
@@ -63,60 +96,72 @@
             aria-hidden="true"
           />
           <i v-else class="bi bi-stars" aria-hidden="true" />
-          <span>Claude: {{ claude_auto_reply_enabled ? 'ON' : 'OFF' }}</span>
         </button>
+
       </div>
     </div>
 
-    <!-- Alerta cuando Claude está desactivado para este lead -->
-    <div v-if="!claude_auto_reply_enabled" class="alert alert-warning py-2 small mb-2">
-      <i class="bi bi-person-check me-1" aria-hidden="true" />
-      Respondés vos a este lead. Claude <strong>no</strong> generará sugerencias ni enviará respuestas automáticas.
-    </div>
+    <!-- ====================================================
+         ÁREA DE MENSAJES: scroll vertical, alertas sticky al tope
+         ==================================================== -->
+    <div ref="conversation_scroll_box" class="conversation-messages px-3 py-2">
 
-    <!-- Alerta de seguimiento automático -->
-    <div v-if="has_pending_followup_suggestion" class="alert alert-info py-2 small mb-2">
-      <i class="bi bi-clock-history me-1" aria-hidden="true" />
-      Hay una <strong>sugerencia de seguimiento automático</strong> por inactividad del lead. Revisá el mensaje marcado en la conversación.
-    </div>
+      <!-- Alertas contextuales pegadas al tope del scroll -->
+      <div class="conversation-alerts sticky-top-alerts">
 
-    <!-- Error de IA -->
-    <div v-if="ai_error" class="alert alert-danger py-2 small mb-2">{{ ai_error }}</div>
+        <!-- Alerta cuando Claude está desactivado para este lead -->
+        <div v-if="!claude_auto_reply_enabled" class="alert alert-warning py-2 small mb-2">
+          <i class="bi bi-person-check me-1" aria-hidden="true" />
+          Respondés vos a este lead. Claude <strong>no</strong> generará sugerencias ni enviará respuestas automáticas.
+        </div>
 
-    <!-- Claude está consultando -->
-    <div v-if="ai_suggestion_request_loading" class="alert alert-secondary py-2 small mb-2 d-flex align-items-center gap-2">
-      <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-      Consultando a Claude…
-    </div>
+        <!-- Seguimiento automático pendiente de revisión -->
+        <div v-if="has_pending_followup_suggestion" class="alert alert-info py-2 small mb-2">
+          <i class="bi bi-clock-history me-1" aria-hidden="true" />
+          Hay una <strong>sugerencia de seguimiento automático</strong> por inactividad del lead. Revisá el mensaje marcado en la conversación.
+        </div>
 
-    <!-- Countdown antes de consultar a Claude (versión simple) -->
-    <div
-      v-else-if="show_ai_consult_countdown"
-      class="alert alert-secondary py-2 small mb-2 d-flex align-items-center justify-content-between gap-2"
-    >
-      <span>
-        <i class="bi bi-stars me-1" aria-hidden="true" />
-        Claude consulta en <strong>{{ ai_consult_remaining_seconds }}</strong> s
-      </span>
-      <button
-        type="button"
-        class="btn btn-outline-secondary btn-sm"
-        :disabled="cancelling_auto_consult"
-        title="Cancelar la petición automática a Claude"
-        @click="on_cancel_auto_ai_consult"
-      >
-        <span
-          v-if="cancelling_auto_consult"
-          class="spinner-border spinner-border-sm"
-          role="status"
-          aria-hidden="true"
-        />
-        <template v-else>Cancelar</template>
-      </button>
-    </div>
+        <!-- Error de IA -->
+        <div v-if="ai_error" class="alert alert-danger py-2 small mb-2">{{ ai_error }}</div>
 
-    <!-- Conversación -->
-    <div ref="conversation_scroll_box" class="conversation-scroll border rounded p-2 mb-3 bg-light">
+        <!-- Claude está consultando (spinner) -->
+        <div
+          v-if="ai_suggestion_request_loading"
+          class="alert alert-secondary py-2 small mb-2 d-flex align-items-center gap-2"
+        >
+          <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+          Consultando a Claude…
+        </div>
+
+        <!-- Countdown antes de consultar a Claude (mutuamente excluyente con el spinner) -->
+        <div
+          v-else-if="show_ai_consult_countdown"
+          class="alert alert-secondary py-2 small mb-2 d-flex align-items-center justify-content-between gap-2"
+        >
+          <span>
+            <i class="bi bi-stars me-1" aria-hidden="true" />
+            Claude consulta en <strong>{{ ai_consult_remaining_seconds }}</strong> s
+          </span>
+          <button
+            type="button"
+            class="btn btn-outline-secondary btn-sm"
+            :disabled="cancelling_auto_consult"
+            title="Cancelar la petición automática a Claude"
+            @click="on_cancel_auto_ai_consult"
+          >
+            <span
+              v-if="cancelling_auto_consult"
+              class="spinner-border spinner-border-sm"
+              role="status"
+              aria-hidden="true"
+            />
+            <template v-else>Cancelar</template>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Spinner de carga inicial de la conversación -->
       <div
         v-if="loading_conversation"
         class="text-muted small p-2 d-flex align-items-center gap-2"
@@ -124,7 +169,11 @@
         <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
         Cargando conversación…
       </div>
+
+      <!-- Sin mensajes en el hilo -->
       <div v-else-if="!sorted_messages.length" class="text-muted small p-2">Sin mensajes todavía.</div>
+
+      <!-- Burbujas de mensajes (reutiliza MessageBubble sin cambios) -->
       <message-bubble
         v-for="msg in sorted_messages"
         :key="msg.id"
@@ -137,167 +186,259 @@
         @cancelar_envio_automatico="on_cancelar_envio_automatico(msg.id)"
         @toggle_deleted_from_context="on_toggle_deleted_from_context(msg.id)"
       />
+
     </div>
 
-    <!-- Textarea para enviar mensaje directo al lead (Enter = nueva línea; solo el botón envía). -->
-    <div class="d-flex align-items-end gap-2 lead-direct-compose">
-      <textarea
-        v-model="mensaje_directo"
-        class="form-control form-control-sm lead-direct-textarea"
-        rows="3"
-        placeholder="Escribir mensaje para enviar por WhatsApp…"
-        :disabled="enviando_directo"
-      />
-      <button
-        type="button"
-        class="btn btn-primary btn-sm d-inline-flex align-items-center gap-2"
-        :disabled="enviando_directo || !has_mensaje_directo"
-        @click="on_enviar_directo"
-      >
-        <span v-if="enviando_directo" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-        <template v-else>Enviar</template>
-      </button>
-    </div>
+    <!-- ====================================================
+         FOOTER FIJO: textarea auto-expandible + botón mic/enviar
+         (+ herramientas DEV solo en import.meta.env.DEV)
+         ==================================================== -->
+    <div class="conversation-footer border-top bg-white px-3 py-2">
 
-    <!-- Input para simular un mensaje entrante del lead (testing, sin pasar por WhatsApp) -->
-    <div class="d-flex align-items-center gap-2 mt-2">
-      <input
-        v-model="mensaje_simulado"
-        type="text"
-        class="form-control form-control-sm"
-        placeholder="Simular mensaje del lead (test)…"
-        :disabled="enviando_simulado"
-        @keydown.enter.prevent="on_simular_inbound"
-      />
-      <button
-        type="button"
-        class="btn btn-outline-warning btn-sm d-inline-flex align-items-center gap-2"
-        :disabled="enviando_simulado || !has_mensaje_simulado"
-        @click="on_simular_inbound"
-      >
-        <span v-if="enviando_simulado" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-        <template v-else>Simular</template>
-      </button>
-    </div>
+      <!-- Área de redacción tipo WhatsApp -->
+      <div class="d-flex align-items-end gap-2">
+        <textarea
+          v-model="mensaje_directo"
+          class="message-input"
+          rows="1"
+          placeholder="Mensaje."
+          :disabled="enviando_directo"
+          @input="on_input_resize"
+        />
 
-    <!-- Forzar seguimiento manual (testing): dispara el seguimiento que corresponda ahora mismo -->
-    <div class="d-flex align-items-center gap-2 mt-2">
-      <button
-        type="button"
-        class="btn btn-outline-info btn-sm d-inline-flex align-items-center gap-2"
-        :disabled="forzando_seguimiento"
-        title="Dispara ahora el seguimiento que corresponda según el estado y los seguimientos ya enviados, sin esperar el tiempo configurado"
-        @click="on_forzar_seguimiento"
-      >
-        <span v-if="forzando_seguimiento" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-        <template v-else>Forzar seguimiento</template>
-      </button>
-      <span v-if="forzar_seguimiento_resultado" class="small text-muted">{{ forzar_seguimiento_resultado }}</span>
-    </div>
+        <!-- Botón mic cuando no hay texto (audio próximamente) -->
+        <button
+          v-if="!has_mensaje_directo"
+          type="button"
+          class="icon-btn flex-shrink-0 text-muted"
+          disabled
+          title="Grabación de audio próximamente"
+        >
+          <i class="bi bi-mic" aria-hidden="true" />
+        </button>
 
+        <!-- Botón enviar cuando hay texto -->
+        <button
+          v-else
+          type="button"
+          class="icon-btn flex-shrink-0 text-primary"
+          :disabled="enviando_directo"
+          title="Enviar mensaje"
+          @click="on_enviar_directo"
+        >
+          <span
+            v-if="enviando_directo"
+            class="spinner-border spinner-border-sm"
+            role="status"
+            aria-hidden="true"
+          />
+          <i v-else class="bi bi-send" aria-hidden="true" />
+        </button>
+      </div>
+
+      <!-- Herramientas de desarrollo (solo en entorno DEV, no se muestran en producción) -->
+      <div v-if="is_dev" class="dev-tools border-top mt-2 pt-2">
+
+        <!-- Simular mensaje entrante del lead (testing sin pasar por WhatsApp) -->
+        <div class="d-flex gap-2 mb-2">
+          <input
+            v-model="mensaje_simulado"
+            type="text"
+            class="form-control form-control-sm"
+            placeholder="Simular mensaje del lead."
+            :disabled="enviando_simulado"
+            @keydown.enter.prevent="on_simular_inbound"
+          />
+          <button
+            type="button"
+            class="btn btn-outline-warning btn-sm d-inline-flex align-items-center gap-2"
+            :disabled="enviando_simulado || !has_mensaje_simulado"
+            @click="on_simular_inbound"
+          >
+            <span v-if="enviando_simulado" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+            <template v-else>Simular</template>
+          </button>
+        </div>
+
+        <!-- Forzar seguimiento manual (testing) -->
+        <div class="d-flex gap-2 align-items-center">
+          <button
+            type="button"
+            class="btn btn-outline-info btn-sm d-inline-flex align-items-center gap-2"
+            :disabled="forzando_seguimiento"
+            title="Dispara el seguimiento correspondiente ahora mismo, sin esperar el tiempo configurado"
+            @click="on_forzar_seguimiento"
+          >
+            <span v-if="forzando_seguimiento" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+            <template v-else>Forzar seguimiento</template>
+          </button>
+          <span v-if="forzar_seguimiento_resultado" class="small text-muted">{{ forzar_seguimiento_resultado }}</span>
+        </div>
+
+      </div>
+    </div>
 
   </div>
-  <div v-else class="text-muted small">Guardá el lead primero para habilitar la conversación.</div>
 </template>
 
 <script>
-import MessageBubble from './MessageBubble.vue'
+import MessageBubble from '@/components/lead/conversation/MessageBubble.vue'
 import api from '@/utils/axios'
 import { copy_lead_conversation_to_clipboard } from '@/utils/lead_conversation_clipboard'
 
 /**
- * Pestaña "Conversación WhatsApp" dentro del modal de edición del lead.
+ * Vista de pantalla completa para la conversación WhatsApp de un lead.
+ *
+ * Accesible desde /leads/:lead_id/conversacion. Replica toda la lógica de
+ * LeadConversationTab (modal) pero como vista independiente con layout WhatsApp:
+ * header fijo, área de mensajes scrolleable y footer fijo con textarea auto-expandible.
+ *
+ * El lead se carga al montar la vista usando el param :lead_id de la ruta.
+ * No depende de ResourceView ni de ningún componente de common-vue.
  */
 export default {
-  name: 'LeadConversationTab',
+  name: 'LeadConversationView',
   components: { MessageBubble },
-  props: {
-    /** Registro lead mostrado en la pestaña (scope del ModelModal). */
-    record: { type: Object, default: null },
-    /** Borrador completo del modal (misma fila que `record` en edición). */
-    draft: { type: Object, default: null },
-    /** Nombre del recurso padre (siempre lead en este flujo). */
-    model_name: { type: String, default: 'lead' },
-    /** Pestaña activa del modal (`group:…` o `extra:conversation`). */
-    parent_active_tab: { type: String, default: null },
-  },
-  emits: ['record-updated'],
+
   data() {
     return {
+      /**
+       * Registro completo del lead cargado desde la API al montar la vista.
+       * Equivale al prop `record` del componente de modal, pero aquí es estado local.
+       */
+      lead_record: null,
+
+      /** true mientras la vista espera el primer GET del lead con mensajes. */
+      loading_conversation: false,
+
       /** Texto del mensaje directo a enviar al lead por WhatsApp. */
       mensaje_directo: '',
+
       /** true mientras se envía el mensaje directo (evita doble envío). */
       enviando_directo: false,
+
       /** Texto del mensaje simulado del lead (testing, no pasa por WhatsApp). */
       mensaje_simulado: '',
+
       /** true mientras se simula el mensaje entrante (evita doble envío). */
       enviando_simulado: false,
-      /** true mientras se fuerza el seguimiento manual (testing) (evita doble click). */
+
+      /** true mientras se fuerza el seguimiento manual (testing). */
       forzando_seguimiento: false,
+
       /** Texto descriptivo del último resultado de forzar seguimiento (testing). */
       forzar_seguimiento_resultado: '',
-      /** Evita doble click mientras se persiste el toggle de notificaciones. */
+
+      /** Evita doble click mientras se persiste el toggle de notificaciones push. */
       toggling_notify: false,
+
       /** Id del mensaje en acción de aprobar/rechazar (deshabilita botones duplicados). */
       busy_message_id: null,
+
       /** Evita POST duplicados al marcar seguimiento como visto. */
       marking_followup_seen: false,
+
       /** Evita POST duplicados al marcar mensajes WhatsApp como leídos. */
       marking_whatsapp_read: false,
-      /** GET /lead/{id} con messages al abrir la pestaña. */
-      loading_conversation: false,
-      /** Evita GET duplicados por watcher deep / Pusher (rate limit 429). */
+
+      /** Evita GET duplicados por Pusher (rate limit 429). */
       last_conversation_fetch_ms: 0,
+
       /** Id del lead del último fetch exitoso de conversación. */
       last_conversation_fetch_lead_id: null,
-      /** Segundos de debounce antes de pedir sugerencia IA (settings de cuenta). */
+
+      /** Segundos de debounce antes de pedir sugerencia IA (cargado desde settings). */
       ai_suggestion_delay_seconds: 60,
-      /** Segundos antes del envío automático de la sugerencia generada (settings de cuenta). */
+
+      /** Segundos antes del envío automático de la sugerencia generada. */
       ai_suggestion_auto_send_delay_seconds: 120,
+
       /** Timestamp del último mensaje entrante del lead (ms) para evaluar debounce. */
       last_lead_inbound_at_ms: 0,
+
       /** Id del último mensaje entrante del lead (detecta inbound nuevo aunque no cambie created_at). */
       last_lead_inbound_message_id: 0,
-      /** true si el setter canceló la sugerencia automática en el turno actual (se reinicia con inbound nuevo). */
+
+      /** true si el setter canceló la sugerencia automática en el turno actual. */
       ai_auto_consult_cancelled: false,
+
       /** Evita doble POST al cancelar el debounce automático. */
       cancelling_auto_consult: false,
+
       /** Evita doble POST al activar/desactivar Claude por lead. */
       toggling_claude_auto_reply: false,
+
       /** Intervalo que actualiza now_tick para los countdown visibles. */
       now_tick_interval_id: null,
+
       /** Timestamp actual (ms) para countdown de debounce y auto-envío. */
       now_tick: Date.now(),
+
       /** true mientras se copia la conversación al portapapeles. */
       export_conversation_loading: false,
-      /** Feedback visual breve tras exportar con éxito. */
+
+      /** Feedback visual breve (2s) tras exportar con éxito. */
       export_conversation_feedback: false,
+
       /** Timer para resetear el feedback del botón de exportación. */
       export_conversation_feedback_timer: null,
+
+      /**
+       * true si estamos corriendo en entorno de desarrollo (Vite DEV).
+       * Controla la visibilidad de las herramientas de testing en el footer.
+       */
+      is_dev: import.meta.env.DEV,
     }
   },
+
   computed: {
     /**
-     * Registro efectivo: fusiona `record` del modal con mensajes cargados en store.
+     * Nombre visible del lead en el header. Usa contact_name si está disponible,
+     * o cae a 'Lead #ID' como fallback mientras carga o si está vacío.
+     *
+     * @returns {string}
+     */
+    lead_name() {
+      const rec = this.lead_record
+      if (!rec) {
+        return 'Cargando…'
+      }
+      return (rec.contact_name || '').trim() || 'Lead #' + rec.id
+    },
+
+    /**
+     * Registro efectivo: fusiona lead_record local con los mensajes del store
+     * (que pueden haber llegado vía Pusher sin un GET explícito).
+     *
      * @returns {Object|null}
      */
     effective_record() {
-      if (!this.record || !this.record.id) {
+      if (!this.lead_record || !this.lead_record.id) {
         return null
       }
       const conv = this.$store.state.lead.lead_en_conversacion
-      if (conv && conv.id == this.record.id) {
-        /** Fusión modal + store; el contador de no leídos toma el máximo para no quedar en 0 por estado obsoleto. */
-        const merged = Object.assign({}, this.record, conv)
-        const unread = this.resolve_effective_unread_count(this.record, conv)
+      if (conv && conv.id == this.lead_record.id) {
+        /* Fusión local + store; el contador de no leídos toma el máximo. */
+        const merged = Object.assign({}, this.lead_record, conv)
+        const unread = this.resolve_effective_unread_count(this.lead_record, conv)
         merged.unread_count = unread
         merged.unread_messages_count = unread
         return merged
       }
-      return this.record
+      return this.lead_record
     },
+
     /**
-     * true si Claude puede actuar automáticamente en este lead (default true si el campo no viene aún).
+     * true si las notificaciones push están activas para este lead en el admin logueado.
+     *
+     * @returns {boolean}
+     */
+    notify_active() {
+      return Boolean(this.effective_record && this.effective_record.notificar_mensajes)
+    },
+
+    /**
+     * true si Claude puede actuar automáticamente en este lead (default true si campo ausente).
      *
      * @returns {boolean}
      */
@@ -311,8 +452,10 @@ export default {
       }
       return Boolean(rec.claude_auto_reply)
     },
+
     /**
-     * Mensajes ordenados cronológicamente por id.
+     * Mensajes ordenados cronológicamente por id, sin reacciones legacy.
+     *
      * @returns {Array<Object>}
      */
     sorted_messages() {
@@ -330,8 +473,9 @@ export default {
         return !self.is_legacy_whatsapp_reaction_message(msg)
       })
     },
+
     /**
-     * true mientras Claude genera sugerencia para el lead abierto (automática o manual).
+     * true mientras Claude genera sugerencia para este lead.
      *
      * @returns {boolean}
      */
@@ -346,45 +490,37 @@ export default {
       }
       return String(generating_id) === String(rec.id)
     },
+
+    /**
+     * Mensaje de error de IA desde el store global.
+     *
+     * @returns {string|null}
+     */
     ai_error() {
       return this.$store.state.lead.ai_error
     },
+
     /**
-     * true si hay texto en el input directo para enviar.
+     * true si hay texto en el input de mensaje directo.
+     *
      * @returns {boolean}
      */
     has_mensaje_directo() {
       return (this.mensaje_directo || '').trim() !== ''
     },
+
     /**
-     * true si hay texto en el input de simulación de mensaje del lead.
+     * true si hay texto en el input de simulación.
+     *
      * @returns {boolean}
      */
     has_mensaje_simulado() {
       return (this.mensaje_simulado || '').trim() !== ''
     },
+
     /**
-     * Teléfono del lead solo con dígitos (formato requerido por api.whatsapp.com).
-     * @returns {string}
-     */
-    lead_phone_digits() {
-      const rec = this.effective_record
-      const raw = rec && rec.phone != null ? String(rec.phone).trim() : ''
-      return raw.replace(/\D/g, '')
-    },
-    /**
-     * Enlace para abrir el chat de WhatsApp con el lead; vacío si no hay teléfono usable.
-     * @returns {string}
-     */
-    lead_whatsapp_url() {
-      const digits = this.lead_phone_digits
-      if (!digits) {
-        return ''
-      }
-      return 'https://api.whatsapp.com/send?phone=' + digits
-    },
-    /**
-     * true si hay al menos un mensaje sugerido generado por el chequeo de seguimiento.
+     * true si hay al menos una sugerencia de seguimiento automático pendiente.
+     *
      * @returns {boolean}
      */
     has_pending_followup_suggestion() {
@@ -398,8 +534,10 @@ export default {
       }
       return false
     },
+
     /**
-     * Firma estable de la lista de mensajes para detectar cambios (altas o cambio de estado).
+     * Firma estable de la lista de mensajes para detectar altas o cambios de estado.
+     *
      * @returns {string}
      */
     conversation_messages_signature() {
@@ -411,14 +549,14 @@ export default {
       let i = 0
       for (i = 0; i < list.length; i++) {
         const m = list[i]
-        const att_count =
-        m.attachments && m.attachments.length ? String(m.attachments.length) : '0'
-      parts.push(String(m.id) + ':' + String(m.status || '') + ':' + String(m.kind || '') + ':' + att_count)
+        const att_count = m.attachments && m.attachments.length ? String(m.attachments.length) : '0'
+        parts.push(String(m.id) + ':' + String(m.status || '') + ':' + String(m.kind || '') + ':' + att_count)
       }
       return parts.join('|')
     },
+
     /**
-     * Firma del último mensaje saliente del setter o sugerencia ya enviada.
+     * Id del último mensaje saliente aprobado del setter/sistema.
      *
      * @returns {string}
      */
@@ -439,6 +577,7 @@ export default {
       }
       return last_outbound_id
     },
+
     /**
      * Cantidad de mensajes entrantes del lead en el hilo.
      *
@@ -458,8 +597,9 @@ export default {
       }
       return count
     },
+
     /**
-     * true si hay mensajes del lead sin respuesta del setter tras el último envío saliente.
+     * true si hay mensajes del lead sin respuesta tras el último envío saliente.
      *
      * @returns {boolean}
      */
@@ -489,6 +629,7 @@ export default {
       }
       return false
     },
+
     /**
      * true si existe una sugerencia de Claude pendiente (no seguimiento automático).
      *
@@ -505,8 +646,9 @@ export default {
       }
       return false
     },
+
     /**
-     * true si se puede pedir sugerencia a Claude manualmente (mismas reglas que el backend).
+     * true si se puede pedir sugerencia a Claude manualmente.
      *
      * @returns {boolean}
      */
@@ -528,8 +670,9 @@ export default {
       }
       return true
     },
+
     /**
-     * Tooltip del botón "Pedir respuesta" según por qué está habilitado o deshabilitado.
+     * Tooltip del botón "Pedir IA" según el estado actual.
      *
      * @returns {string}
      */
@@ -548,6 +691,7 @@ export default {
       }
       return 'Pedir sugerencia a Claude ahora y continuar con el envío automático si corresponde.'
     },
+
     /**
      * true cuando ya transcurrió la demora configurada desde el último mensaje del lead.
      *
@@ -563,15 +707,14 @@ export default {
       }
       return this.now_tick - this.last_lead_inbound_at_ms >= delay_seconds * 1000
     },
+
     /**
-     * true mientras corre el debounce antes de pedir sugerencia automática a Claude.
+     * true mientras corre el debounce antes de pedir sugerencia automática.
+     * La vista siempre está activa (sin guard de parent_active_tab).
      *
      * @returns {boolean}
      */
     show_ai_consult_countdown() {
-      if (this.parent_active_tab !== 'extra:conversation') {
-        return false
-      }
       if (!this.claude_auto_reply_enabled) {
         return false
       }
@@ -596,8 +739,9 @@ export default {
       }
       return !this.ai_suggestion_debounce_elapsed
     },
+
     /**
-     * Segundos restantes hasta que se pida automáticamente la sugerencia a Claude.
+     * Segundos restantes hasta la petición automática a Claude.
      *
      * @returns {number}
      */
@@ -616,6 +760,7 @@ export default {
       }
       return Math.ceil(remaining_ms / 1000)
     },
+
     /**
      * true si alguna sugerencia pendiente tiene timer de auto-envío activo.
      *
@@ -643,52 +788,10 @@ export default {
       return false
     },
   },
+
   watch: {
-    record: {
-      immediate: true,
-      handler(val, old_val) {
-        if (!val || !val.id) {
-          return
-        }
-        this.merge_lead_into_conversation_store(val)
-        const id_changed = !old_val || old_val.id != val.id
-        if (id_changed) {
-          this.ai_auto_consult_cancelled = false
-          this.cancelling_auto_consult = false
-          this.$store.commit('lead/set_ai_generating_lead_id', null)
-        }
-        if (this.parent_active_tab === 'extra:conversation') {
-          if (id_changed) {
-            this.load_conversation_if_needed(true)
-          } else {
-            /** Borrador actualizado (p. ej. fetch del modal): reintentar marcar leídos si ahora hay contador. */
-            this.try_mark_whatsapp_messages_read()
-          }
-        }
-      },
-    },
     /**
-     * Al entrar a la pestaña Conversación, carga mensajes y marca alertas.
-     * @param {string|null} tab
-     */
-    parent_active_tab(tab) {
-      if (tab === 'extra:conversation') {
-        this.load_conversation_if_needed(true)
-        this.try_mark_followup_suggestion_seen()
-        this.try_mark_whatsapp_messages_read()
-        this.schedule_scroll_to_bottom()
-        this.sync_countdown_clock()
-      } else {
-        this.stop_countdown_clock()
-      }
-    },
-    /**
-     * Al terminar el análisis de Claude, bajar el scroll para ver la sugerencia nueva.
-     * @param {boolean} newVal
-     * @param {boolean} oldVal
-     */
-    /**
-     * Al terminar la generación automática o manual, bajar el scroll para ver la sugerencia.
+     * Al terminar la generación de Claude, bajar el scroll para ver la sugerencia.
      *
      * @param {boolean} newVal
      * @param {boolean} oldVal
@@ -699,24 +802,48 @@ export default {
       }
       this.sync_countdown_clock()
     },
+
     /**
-     * Cualquier cambio en mensajes (alta, aprobar, rechazar) mantiene el foco al final del hilo.
+     * Cualquier cambio en mensajes (alta, aprobación, rechazo) mantiene el foco
+     * al final del hilo y sincroniza el estado de la IA.
+     * También intenta marcar como leídos los mensajes entrantes nuevos.
      */
     conversation_messages_signature() {
       this.schedule_scroll_to_bottom()
       this.sync_manual_ai_suggestion_state()
       this.sync_countdown_clock()
+      this.try_mark_whatsapp_messages_read()
     },
   },
+
   mounted() {
     const self = this
-    this.load_ai_suggestion_settings()
-    this.sync_manual_ai_suggestion_state()
-    this.sync_countdown_clock()
-    this.$nextTick(function () {
-      self.schedule_scroll_to_bottom()
-    })
+    /* Cargar el lead completo (con mensajes) usando el param de la ruta. */
+    const lead_id = this.$route.params.lead_id
+    this.loading_conversation = true
+    this.$store
+      .dispatch('lead/fetch_lead_for_conversation', lead_id)
+      .then(function (model) {
+        /* Almacenar el lead y sincronizar el store de conversación. */
+        self.lead_record = model
+        self.merge_lead_into_conversation_store(model)
+        /* Inicializar el estado del debounce de IA y el reloj de countdown. */
+        self.load_ai_suggestion_settings()
+        self.sync_manual_ai_suggestion_state()
+        self.sync_countdown_clock()
+        self.$nextTick(function () {
+          self.schedule_scroll_to_bottom()
+        })
+        /* Marcar alertas de seguimiento como vistas y mensajes como leídos. */
+        self.try_mark_followup_suggestion_seen()
+        self.try_mark_whatsapp_messages_read()
+        self.loading_conversation = false
+      })
+      .catch(function () {
+        self.loading_conversation = false
+      })
   },
+
   beforeUnmount() {
     this.stop_countdown_clock()
     if (this.export_conversation_feedback_timer) {
@@ -724,9 +851,38 @@ export default {
       this.export_conversation_feedback_timer = null
     }
   },
+
   methods: {
     /**
-     * Oculta mensajes espurios creados antes de soportar reacciones (texto "Reacted with … to message wamid.…").
+     * Centraliza la actualización del registro local y del store tras cualquier
+     * operación que modifique el lead (envío, aprobación, toggle, etc.).
+     *
+     * @param {Object} model Lead actualizado devuelto por la API.
+     * @returns {void}
+     */
+    on_record_updated(model) {
+      if (!model) {
+        return
+      }
+      this.lead_record = model
+      this.merge_lead_into_conversation_store(model)
+    },
+
+    /**
+     * Ajusta el alto del textarea al contenido escrito (comportamiento tipo WhatsApp).
+     * Máximo 128px antes de activar el scroll interno.
+     *
+     * @param {Event} event Evento `input` del textarea.
+     * @returns {void}
+     */
+    on_input_resize(event) {
+      const el = event.target
+      el.style.height = 'auto'
+      el.style.height = Math.min(el.scrollHeight, 128) + 'px'
+    },
+
+    /**
+     * Oculta mensajes espurios creados antes de soportar reacciones.
      *
      * @param {Object} msg Fila lead_messages.
      * @returns {boolean}
@@ -748,10 +904,11 @@ export default {
       return /^Reacted(?: with)? .+ to message wamid\./i.test(text)
         || /^Removed reaction from message wamid\./i.test(text)
     },
+
     /**
      * Actualiza el lead en store sin perder mensajes/adjuntos ya cargados.
      *
-     * @param {Object} val Registro del modal o de la API.
+     * @param {Object} val Registro del lead a sincronizar.
      * @returns {void}
      */
     merge_lead_into_conversation_store(val) {
@@ -762,53 +919,10 @@ export default {
       }
       this.$store.commit('lead/set_lead_en_conversacion', val)
     },
+
     /**
-     * Carga el lead completo con `messages` desde la API (el listado/Pusher no incluye el hilo).
+     * Programa scroll al final del hilo tras actualizar el DOM.
      *
-     * @param {boolean} force Si true, ignora el cooldown corto entre GET del mismo lead.
-     * @returns {void}
-     */
-    load_conversation_if_needed(force) {
-      const self = this
-      const rec = this.effective_record
-      if (!rec || !rec.id) {
-        return
-      }
-      if (
-        !force
-        && rec.messages_scope === 'full'
-        && rec.messages
-        && rec.messages.length
-      ) {
-        return
-      }
-      if (this.loading_conversation) {
-        return
-      }
-      const now_ms = Date.now()
-      const same_lead = this.last_conversation_fetch_lead_id == rec.id
-      const cooldown_ms = 3000
-      if (!force && same_lead && now_ms - this.last_conversation_fetch_ms < cooldown_ms) {
-        return
-      }
-      this.loading_conversation = true
-      this.$store
-        .dispatch('lead/fetch_lead_for_conversation', rec.id)
-        .then(function (model) {
-          self.loading_conversation = false
-          self.last_conversation_fetch_ms = Date.now()
-          self.last_conversation_fetch_lead_id = rec.id
-          self.$emit('record-updated', model)
-          /** Tras GET con unread_count fresco: marcar leídos si el intento al cambiar de pestaña fue demasiado pronto. */
-          self.try_mark_whatsapp_messages_read()
-          self.schedule_scroll_to_bottom()
-        })
-        .catch(function () {
-          self.loading_conversation = false
-        })
-    },
-    /**
-     * Programa scroll al final tras actualizar el DOM (mensajes nuevos o estado post-Claude).
      * @returns {void}
      */
     schedule_scroll_to_bottom() {
@@ -819,8 +933,10 @@ export default {
         })
       })
     },
+
     /**
-     * Desplaza el panel de conversación hasta el último mensaje.
+     * Desplaza el panel de mensajes hasta el último mensaje.
+     *
      * @returns {void}
      */
     scroll_conversation_to_bottom() {
@@ -830,8 +946,10 @@ export default {
       }
       el.scrollTop = el.scrollHeight
     },
+
     /**
-     * Quita el badge de la tabla si el lead tiene seguimiento sin ver y la pestaña está activa.
+     * Quita el badge de seguimiento sin ver si el lead lo tiene pendiente.
+     *
      * @returns {void}
      */
     try_mark_followup_suggestion_seen() {
@@ -848,22 +966,18 @@ export default {
         .dispatch('lead/mark_followup_suggestion_seen', rec.id)
         .then(function (model) {
           self.marking_followup_seen = false
-          self.$emit('record-updated', model)
+          self.on_record_updated(model)
         })
         .catch(function () {
           self.marking_followup_seen = false
         })
     },
+
     /**
-     * Marca como leídos los mensajes entrantes del lead al abrir la pestaña de conversación.
+     * Mayor contador de no leídos entre el registro local y el del store.
      *
-     * @returns {void}
-     */
-    /**
-     * Mayor contador de no leídos entre borrador del modal y lead en store (per-usuario).
-     *
-     * @param {Object|null|undefined} record_row Fila o borrador del modal.
-     * @param {Object|null|undefined} conv_row Lead abierto en Vuex.
+     * @param {Object|null} record_row Fila del registro local.
+     * @param {Object|null} conv_row Lead en Vuex.
      * @returns {number}
      */
     resolve_effective_unread_count(record_row, conv_row) {
@@ -884,8 +998,9 @@ export default {
       }
       return max_unread
     },
+
     /**
-     * Marca como leídos los mensajes entrantes del lead al abrir la pestaña de conversación.
+     * Marca como leídos los mensajes entrantes del lead (la vista siempre está activa).
      *
      * @returns {void}
      */
@@ -895,12 +1010,11 @@ export default {
       if (!rec || !rec.id) {
         return
       }
-      if (this.parent_active_tab !== 'extra:conversation') {
-        return
-      }
-      /** Contador per-usuario: unread_count y unread_messages_count son alias del mismo withCount. */
       const conv = this.$store.state.lead.lead_en_conversacion
-      const unread = this.resolve_effective_unread_count(this.record, conv && conv.id == rec.id ? conv : null)
+      const unread = this.resolve_effective_unread_count(
+        this.lead_record,
+        conv && conv.id == rec.id ? conv : null
+      )
       if (unread < 1) {
         return
       }
@@ -912,12 +1026,13 @@ export default {
         .dispatch('lead/mark_whatsapp_messages_read', rec.id)
         .then(function (model) {
           self.marking_whatsapp_read = false
-          self.$emit('record-updated', model)
+          self.on_record_updated(model)
         })
         .catch(function () {
           self.marking_whatsapp_read = false
         })
     },
+
     /**
      * Envía un mensaje directo al lead por WhatsApp sin pasar por Claude.
      *
@@ -936,16 +1051,23 @@ export default {
         .then(function (model) {
           self.enviando_directo = false
           self.mensaje_directo = ''
-          self.$emit('record-updated', model)
+          /* Resetear altura del textarea al vaciarlo. */
+          self.$nextTick(function () {
+            const textarea = self.$el && self.$el.querySelector('.message-input')
+            if (textarea) {
+              textarea.style.height = 'auto'
+            }
+          })
+          self.on_record_updated(model)
           self.schedule_scroll_to_bottom()
         })
         .catch(function () {
           self.enviando_directo = false
         })
     },
+
     /**
      * Simula un mensaje entrante del lead (testing) sin pasar por WhatsApp.
-     * Dispara en el backend el mismo flujo que el webhook real (sugerencia IA con debounce).
      *
      * @returns {void}
      */
@@ -962,16 +1084,16 @@ export default {
         .then(function (model) {
           self.enviando_simulado = false
           self.mensaje_simulado = ''
-          self.$emit('record-updated', model)
+          self.on_record_updated(model)
           self.schedule_scroll_to_bottom()
         })
         .catch(function () {
           self.enviando_simulado = false
         })
     },
+
     /**
-     * Fuerza el seguimiento que corresponde al lead ahora mismo (testing), sin esperar
-     * el tiempo configurado ni estar bloqueado por una sugerencia pendiente.
+     * Fuerza el seguimiento que corresponde al lead ahora mismo (testing).
      *
      * @returns {void}
      */
@@ -987,9 +1109,8 @@ export default {
         .dispatch('lead/force_followup', rec.id)
         .then(function (data) {
           self.forzando_seguimiento = false
-          self.$emit('record-updated', data.model)
+          self.on_record_updated(data.model)
           self.schedule_scroll_to_bottom()
-
           const outcome = data.outcome || {}
           if (outcome.result === 'no_rule') {
             self.forzar_seguimiento_resultado = 'No hay regla de seguimiento activa para este estado.'
@@ -1005,12 +1126,12 @@ export default {
           self.forzar_seguimiento_resultado = 'Error al forzar el seguimiento.'
         })
     },
+
     /**
-     * Activa o desactiva las notificaciones push para el lead abierto.
+     * Activa o desactiva las notificaciones push para este lead.
      * El admin autenticado queda como destinatario al activar (backend toma Auth::id()).
-     * Se mantiene la convención del componente (.then/.catch, sin async/await).
      *
-     * @param {boolean} enabled
+     * @param {boolean} enabled Nuevo estado deseado del toggle.
      * @returns {void}
      */
     on_toggle_notify_messages(enabled) {
@@ -1024,16 +1145,17 @@ export default {
         .post('/lead/' + rec.id + '/toggle-notify-messages', { enabled: enabled })
         .then(function (res) {
           self.toggling_notify = false
-          /** Fusiona la respuesta parcial (notificar_mensajes, notify_admin_id) sobre el registro actual. */
-          self.$emit('record-updated', Object.assign({}, rec, res.data))
+          /* Fusiona la respuesta parcial (notificar_mensajes, notify_admin_id) sobre el registro. */
+          self.on_record_updated(Object.assign({}, rec, res.data))
         })
         .catch(function (error) {
           self.toggling_notify = false
           console.error('Error al actualizar notificaciones del lead', error)
         })
     },
+
     /**
-     * GET settings/lead-whatsapp-onboarding para conocer la demora de debounce IA.
+     * GET settings/lead-whatsapp-onboarding para cargar demora de debounce IA.
      *
      * @returns {void}
      */
@@ -1056,8 +1178,9 @@ export default {
           /* Mantener default local si falla la carga. */
         })
     },
+
     /**
-     * Actualiza el timestamp del último inbound del lead y reinicia bypass si llegó mensaje nuevo.
+     * Actualiza el timestamp del último inbound y reinicia bypass si llegó mensaje nuevo.
      *
      * @returns {void}
      */
@@ -1090,15 +1213,16 @@ export default {
       this.last_lead_inbound_message_id = last_id
       this.last_lead_inbound_at_ms = last_ms
     },
+
     /**
-     * Arranca o detiene el reloj local cuando hay countdowns visibles en la pestaña.
+     * Arranca o detiene el reloj local cuando hay countdowns visibles.
+     * La vista siempre está activa (sin guard de parent_active_tab).
      *
      * @returns {void}
      */
     sync_countdown_clock() {
-      const needs_clock =
-        this.parent_active_tab === 'extra:conversation' &&
-        (this.show_ai_consult_countdown || this.has_active_auto_send_countdown)
+      /* La vista siempre está activa: solo necesita el reloj cuando hay countdown. */
+      const needs_clock = this.show_ai_consult_countdown || this.has_active_auto_send_countdown
       if (!needs_clock) {
         this.stop_countdown_clock()
         return
@@ -1115,6 +1239,7 @@ export default {
         }
       }, 1000)
     },
+
     /**
      * Detiene el intervalo del reloj de countdown.
      *
@@ -1127,6 +1252,7 @@ export default {
       clearInterval(this.now_tick_interval_id)
       this.now_tick_interval_id = null
     },
+
     /**
      * Cancela el job diferido que pediría sugerencia IA automática a Claude.
      *
@@ -1144,16 +1270,16 @@ export default {
         .then(function (model) {
           self.cancelling_auto_consult = false
           self.ai_auto_consult_cancelled = true
-          self.$emit('record-updated', model)
+          self.on_record_updated(model)
           self.sync_countdown_clock()
         })
         .catch(function () {
           self.cancelling_auto_consult = false
         })
     },
+
     /**
      * Pide sugerencia a Claude de inmediato (sin esperar el debounce automático).
-     * Tras generarla, el backend programa el envío automático por WhatsApp como siempre.
      *
      * @returns {void}
      */
@@ -1167,7 +1293,7 @@ export default {
         .dispatch('lead/request_ai_suggestion', rec.id)
         .then(function (model) {
           self.ai_auto_consult_cancelled = false
-          self.$emit('record-updated', model)
+          self.on_record_updated(model)
           self.schedule_scroll_to_bottom()
           self.sync_countdown_clock()
         })
@@ -1175,8 +1301,9 @@ export default {
           /* ai_error queda en store para el alert rojo. */
         })
     },
+
     /**
-     * Activa o desactiva la respuesta automática de Claude para el lead de esta conversación.
+     * Activa o desactiva la respuesta automática de Claude para este lead.
      *
      * @returns {void}
      */
@@ -1194,17 +1321,18 @@ export default {
           if (!model.claude_auto_reply) {
             self.ai_auto_consult_cancelled = true
           }
-          self.$emit('record-updated', model)
+          self.on_record_updated(model)
           self.sync_countdown_clock()
         })
         .catch(function () {
           self.toggling_claude_auto_reply = false
         })
     },
+
     /**
      * Envía por WhatsApp la sugerencia de Claude sin modificar el texto.
      *
-     * @param {number} message_id
+     * @param {number} message_id Id del mensaje a aprobar.
      * @returns {void}
      */
     on_enviar_sugerencia(message_id) {
@@ -1214,18 +1342,19 @@ export default {
         .dispatch('lead/approve_message', message_id)
         .then(function (model) {
           self.busy_message_id = null
-          self.$emit('record-updated', model)
+          self.on_record_updated(model)
           self.schedule_scroll_to_bottom()
         })
         .catch(function () {
           self.busy_message_id = null
         })
     },
+
     /**
      * Guarda el texto editado y lo envía por WhatsApp.
      *
-     * @param {number} message_id
-     * @param {string} edited_content
+     * @param {number} message_id Id del mensaje a aprobar con edición.
+     * @param {string} edited_content Texto editado por el setter.
      * @returns {void}
      */
     on_guardar_y_enviar_sugerencia(message_id, edited_content) {
@@ -1242,17 +1371,18 @@ export default {
         })
         .then(function (model) {
           self.busy_message_id = null
-          self.$emit('record-updated', model)
+          self.on_record_updated(model)
           self.schedule_scroll_to_bottom()
         })
         .catch(function () {
           self.busy_message_id = null
         })
     },
+
     /**
      * Cancela el envío automático de una sugerencia y la marca como no enviada.
      *
-     * @param {number} message_id
+     * @param {number} message_id Id del mensaje a cancelar.
      * @returns {void}
      */
     on_cancelar_envio_automatico(message_id) {
@@ -1262,34 +1392,34 @@ export default {
         .dispatch('lead/cancel_auto_send_message', message_id)
         .then(function (model) {
           self.busy_message_id = null
-          self.$emit('record-updated', model)
+          self.on_record_updated(model)
           self.sync_countdown_clock()
         })
         .catch(function () {
           self.busy_message_id = null
         })
     },
+
     /**
      * Alterna si el mensaje se incluye o excluye del historial enviado a Claude.
-     * Marca el mensaje como ocupado durante la petición para deshabilitar los botones.
      *
-     * @param {number} message_id Id del mensaje de lead a alternar.
+     * @param {number} message_id Id del mensaje a alternar.
      * @returns {void}
      */
     on_toggle_deleted_from_context(message_id) {
       const self = this
-      /* Marca el mensaje como ocupado para evitar doble clic. */
       this.busy_message_id = message_id
       this.$store
         .dispatch('lead/toggle_message_deleted_from_context', message_id)
         .then(function (model) {
           self.busy_message_id = null
-          self.$emit('record-updated', model)
+          self.on_record_updated(model)
         })
         .catch(function () {
           self.busy_message_id = null
         })
     },
+
     /**
      * Formatea la conversación completa y la copia al portapapeles.
      *
@@ -1325,30 +1455,86 @@ export default {
 </script>
 
 <style scoped>
-/* Más alto en pantalla: aprovecha el alto del viewport dentro del modal. */
-.conversation-scroll {
+/* Layout de pantalla completa tipo WhatsApp */
+.conversation-view {
   display: flex;
   flex-direction: column;
-  min-height: 280px;
-  max-height: min(62vh, calc(100vh - 170px));
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* Header y footer no ceden espacio al área de mensajes */
+.conversation-header {
+  flex-shrink: 0;
+}
+.conversation-footer {
+  flex-shrink: 0;
+}
+
+/* El nombre del lead se trunca si es muy largo */
+.conversation-lead-name {
+  max-width: 60vw;
+}
+
+/* Área de mensajes ocupa el espacio restante y scrollea internamente */
+.conversation-messages {
+  flex: 1;
   overflow-y: auto;
 }
 
-/* Botón cuadrado con icono WhatsApp. */
-.lead-wa-open-btn {
-  width: 2rem;
-  height: 2rem;
-  padding: 0;
+/* Alertas pegadas al tope del área de scroll (no del viewport) */
+.sticky-top-alerts {
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
-/* Área de redacción manual: multilínea; Enter no envía. */
-.lead-direct-compose {
-  width: 100%;
+/* Botones circulares de solo ícono (header y footer) */
+.icon-btn {
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  padding: 0;
 }
-.lead-direct-textarea {
-  flex: 1 1 auto;
-  min-height: 4.5rem;
-  resize: vertical;
-  line-height: 1.35;
+.icon-btn:hover {
+  background: var(--bs-secondary-bg);
+}
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Textarea auto-expandible tipo WhatsApp */
+.message-input {
+  flex: 1;
+  resize: none;
+  overflow-y: auto;
+  max-height: 8rem;
+  border-radius: 1.2rem;
+  padding: 0.45rem 0.9rem;
+  line-height: 1.4;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  font-size: inherit;
+}
+.message-input:focus {
+  outline: none;
+  border-color: var(--bs-primary);
+  box-shadow: 0 0 0 0.15rem rgba(var(--bs-primary-rgb), 0.2);
+}
+
+/* Sección DEV con fondo suave para distinguirla del área de producción */
+.dev-tools {
+  background: rgba(var(--bs-warning-rgb), 0.05);
+  border-radius: 0.375rem;
+  padding: 0.5rem;
 }
 </style>
