@@ -29,7 +29,9 @@
           type="button"
           class="icon-btn"
           :class="notify_active ? 'text-primary' : 'text-muted'"
-          :title="notify_active ? 'Notificando los mensajes de este lead' : 'No notificado'"
+          :title="notify_active
+            ? 'Recibirás un WhatsApp cuando llegue un mensaje de este lead. Clic para desactivar.'
+            : 'Activar notificaciones WhatsApp para mensajes de este lead.'"
           :disabled="toggling_notify || !effective_record"
           @click="on_toggle_notify_messages(!notify_active)"
         >
@@ -453,12 +455,13 @@ export default {
     },
 
     /**
-     * true si las notificaciones push están activas para este lead en el admin logueado.
+     * true si el admin autenticado está suscrito a notificaciones WhatsApp de este lead.
+     * Lee is_notified_by_me que el backend incluye en la respuesta del lead.
      *
      * @returns {boolean}
      */
     notify_active() {
-      return Boolean(this.effective_record && this.effective_record.notificar_mensajes)
+      return Boolean(this.effective_record && this.effective_record.is_notified_by_me)
     },
 
     /**
@@ -1161,8 +1164,8 @@ export default {
     },
 
     /**
-     * Activa o desactiva las notificaciones push para este lead.
-     * El admin autenticado queda como destinatario al activar (backend toma Auth::id()).
+     * Activa o desactiva la suscripción WhatsApp para este lead.
+     * El backend inserta/elimina la fila en lead_admin_notifications según el estado solicitado.
      *
      * @param {boolean} enabled Nuevo estado deseado del toggle.
      * @returns {void}
@@ -1178,8 +1181,10 @@ export default {
         .post('/lead/' + rec.id + '/toggle-notify-messages', { enabled: enabled })
         .then(function (res) {
           self.toggling_notify = false
-          /* Fusiona la respuesta parcial (notificar_mensajes, notify_admin_id) sobre el registro. */
-          self.on_record_updated(Object.assign({}, rec, res.data))
+          /* Fusiona is_notified_by_me desde la respuesta del backend sobre el registro actual. */
+          self.on_record_updated(Object.assign({}, rec, {
+            is_notified_by_me: res.data.notificar_mensajes
+          }))
         })
         .catch(function (error) {
           self.toggling_notify = false

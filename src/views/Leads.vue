@@ -92,7 +92,7 @@
                 :key="'proxima-' + day_group.date_key"
                 class="mb-4"
               >
-                <div class="d-flex align-items-center mb-2">
+                <div class="d-flex align-items-center flex-wrap gap-1 mb-2 demos-agendadas-day-heading">
                   <span
                     class="badge me-2"
                     :class="day_group.is_today ? 'bg-primary' : 'bg-secondary'"
@@ -103,72 +103,8 @@
                   <span class="text-muted small ms-2">({{ day_group.leads.length }})</span>
                 </div>
 
-                <table class="table table-sm table-hover mb-0">
-                  <thead class="table-light">
-                    <tr>
-                      <th class="small">Hora inicio</th>
-                      <th class="small">Llamar a las</th>
-                      <th class="small">Cliente (demo)</th>
-                      <th class="small">Lead</th>
-                      <th class="small">Empresa</th>
-                      <th class="small">Estado setup</th>
-                      <th class="small">Resumen IA</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="lead in day_group.leads"
-                      :key="lead.id"
-                      class="demos-agendadas-row"
-                      role="button"
-                      tabindex="0"
-                      @click="on_demo_row_click(lead)"
-                      @keydown.enter="on_demo_row_click(lead)"
-                    >
-                      <td class="small">{{ lead.demo_start_time || '—' }}</td>
-                      <td class="small fw-semibold text-primary">{{ calc_llamar_a_las(lead) }}</td>
-                      <td class="small">{{ demo_client_label(lead) }}</td>
-                      <td class="small">{{ lead.contact_name || '(sin nombre)' }}</td>
-                      <td class="small">{{ lead.company_name || '—' }}</td>
-                      <td class="small">
-                        <span
-                          class="badge"
-                          :class="demo_setup_badge_class(lead.demo_setup_status)"
-                        >{{ lead.demo_setup_status || '—' }}</span>
-                      </td>
-                      <td class="small">
-                        <span v-if="lead.demo_summary" class="badge bg-success">
-                          <i class="bi bi-stars me-1" /> Disponible
-                        </span>
-                        <span v-else class="text-muted">Pendiente</span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <!-- Bloques agrupados por día: demos ya realizadas (más reciente primero) -->
-              <div
-                v-if="demos_pasadas_por_dia.length"
-                class="mt-4 pt-3 border-top"
-              >
-                <h6 class="small fw-semibold text-muted mb-3">
-                  <i class="bi bi-clock-history me-1" />
-                  Demos realizadas
-                </h6>
-
-                <div
-                  v-for="day_group in demos_pasadas_por_dia"
-                  :key="'pasada-' + day_group.date_key"
-                  class="mb-4"
-                >
-                  <div class="d-flex align-items-center mb-2">
-                    <span class="badge bg-light text-secondary border me-2">Realizada</span>
-                    <h6 class="mb-0 small fw-semibold">{{ day_group.heading }}</h6>
-                    <span class="text-muted small ms-2">({{ day_group.leads.length }})</span>
-                  </div>
-
-                  <table class="table table-sm table-hover mb-0">
+                <div class="table-responsive demos-agendadas-table-wrap">
+                  <table class="table table-sm table-hover mb-0 demos-agendadas-table">
                     <thead class="table-light">
                       <tr>
                         <th class="small">Hora inicio</th>
@@ -210,6 +146,74 @@
                       </tr>
                     </tbody>
                   </table>
+                </div>
+              </div>
+
+              <!-- Bloques agrupados por día: demos ya realizadas (más reciente primero) -->
+              <div
+                v-if="demos_pasadas_por_dia.length"
+                class="mt-4 pt-3 border-top"
+              >
+                <h6 class="small fw-semibold text-muted mb-3">
+                  <i class="bi bi-clock-history me-1" />
+                  Demos realizadas
+                </h6>
+
+                <div
+                  v-for="day_group in demos_pasadas_por_dia"
+                  :key="'pasada-' + day_group.date_key"
+                  class="mb-4"
+                >
+                  <div class="d-flex align-items-center flex-wrap gap-1 mb-2 demos-agendadas-day-heading">
+                    <span class="badge bg-light text-secondary border me-2">Realizada</span>
+                    <h6 class="mb-0 small fw-semibold">{{ day_group.heading }}</h6>
+                    <span class="text-muted small ms-2">({{ day_group.leads.length }})</span>
+                  </div>
+
+                  <div class="table-responsive demos-agendadas-table-wrap">
+                    <table class="table table-sm table-hover mb-0 demos-agendadas-table">
+                      <thead class="table-light">
+                        <tr>
+                          <th class="small">Hora inicio</th>
+                          <th class="small">Llamar a las</th>
+                          <th class="small">Cliente (demo)</th>
+                          <th class="small">Lead</th>
+                          <th class="small">Empresa</th>
+                          <th class="small">Estado setup</th>
+                          <th class="small">Resumen IA</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr
+                          v-for="lead in day_group.leads"
+                          :key="lead.id"
+                          class="demos-agendadas-row"
+                          role="button"
+                          tabindex="0"
+                          @click="on_demo_row_click(lead)"
+                          @keydown.enter="on_demo_row_click(lead)"
+                        >
+                          <td class="small">{{ lead.demo_start_time || '—' }}</td>
+                          <td class="small fw-semibold text-primary">{{ calc_llamar_a_las(lead) }}</td>
+                          <td class="small">{{ demo_client_label(lead) }}</td>
+                          <td class="small">{{ lead.contact_name || '(sin nombre)' }}</td>
+                          <td class="small">{{ lead.company_name || '—' }}</td>
+                          <td class="small">
+                            <span
+                              class="badge"
+                              :class="demo_setup_badge_class(lead.demo_setup_status)"
+                            >{{ lead.demo_setup_status || '—' }}</span>
+                          </td>
+                          <td class="small">
+                            <span v-if="lead.demo_summary" class="badge bg-success">
+                              <i class="bi bi-stars me-1" /> Disponible
+                            </span>
+                            <span v-else class="text-muted">Pendiente</span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
@@ -717,5 +721,16 @@ export default {
 /* Filas clickeables del panel de demos agendadas (misma UX que la tabla principal). */
 .demos-agendadas-row {
   cursor: pointer;
+}
+
+/* Contenedor con scroll horizontal cuando la tabla no entra en pantallas angostas. */
+.demos-agendadas-table-wrap {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Ancho mínimo para mantener columnas legibles y forzar scroll horizontal en móvil. */
+.demos-agendadas-table {
+  min-width: 44rem;
+  white-space: nowrap;
 }
 </style>

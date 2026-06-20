@@ -1007,9 +1007,8 @@ export default {
         })
     },
     /**
-     * Activa o desactiva las notificaciones push para el lead abierto.
-     * El admin autenticado queda como destinatario al activar (backend toma Auth::id()).
-     * Se mantiene la convención del componente (.then/.catch, sin async/await).
+     * Activa o desactiva la suscripción WhatsApp del admin autenticado para este lead.
+     * El backend inserta/elimina la fila en lead_admin_notifications según el estado solicitado.
      *
      * @param {boolean} enabled
      * @returns {void}
@@ -1025,8 +1024,10 @@ export default {
         .post('/lead/' + rec.id + '/toggle-notify-messages', { enabled: enabled })
         .then(function (res) {
           self.toggling_notify = false
-          /** Fusiona la respuesta parcial (notificar_mensajes, notify_admin_id) sobre el registro actual. */
-          self.$emit('record-updated', Object.assign({}, rec, res.data))
+          /* Fusiona is_notified_by_me desde la respuesta del backend sobre el registro actual. */
+          self.$emit('record-updated', Object.assign({}, rec, {
+            is_notified_by_me: res.data.notificar_mensajes
+          }))
         })
         .catch(function (error) {
           self.toggling_notify = false
