@@ -15,6 +15,10 @@
           @change="() => $emit('toggle', row)"
         />
       </td>
+      <!-- Columna opcional de acciones por fila: primera columna de datos (slot del consumidor). -->
+      <td v-if="$slots['row-actions']" class="text-center text-nowrap" @click.stop>
+        <slot name="row-actions" :row="row" />
+      </td>
       <td
         v-for="p in table_properties"
         :key="p.key + '-' + row.id"
@@ -22,10 +26,6 @@
         :style="cell_style(p)"
       >
         <cell-renderer :prop="p" :row="row" />
-      </td>
-      <!-- Columna opcional de acciones por fila: solo se renderiza si el consumidor define el slot. -->
-      <td v-if="$slots['row-actions']" class="text-center text-nowrap" @click.stop>
-        <slot name="row-actions" :row="row" />
       </td>
     </tr>
   </tbody>

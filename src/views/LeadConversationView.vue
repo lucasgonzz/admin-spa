@@ -104,7 +104,7 @@
     <!-- ====================================================
          ÁREA DE MENSAJES: scroll vertical, alertas sticky al tope
          ==================================================== -->
-    <div ref="conversation_scroll_box" class="conversation-messages px-3 py-2">
+    <div ref="conversation_scroll_box" class="conversation-messages whatsapp-conversation-wallpaper px-3 py-2">
 
       <!-- Alertas contextuales pegadas al tope del scroll -->
       <div class="conversation-alerts sticky-top-alerts">
@@ -193,7 +193,7 @@
          FOOTER FIJO: textarea auto-expandible + botón mic/enviar
          (+ herramientas DEV solo en import.meta.env.DEV)
          ==================================================== -->
-    <div class="conversation-footer border-top bg-white px-3 py-2">
+    <div class="conversation-footer border-top px-3 py-2">
 
       <!-- Área de redacción tipo WhatsApp -->
       <div class="d-flex align-items-end gap-2">
@@ -285,6 +285,7 @@
 import MessageBubble from '@/components/lead/conversation/MessageBubble.vue'
 import api from '@/utils/axios'
 import { copy_lead_conversation_to_clipboard } from '@/utils/lead_conversation_clipboard'
+import '@/styles/whatsapp-conversation-wallpaper.css'
 
 /**
  * Vista de pantalla completa para la conversación WhatsApp de un lead.
@@ -1474,6 +1475,7 @@ export default {
 }
 .conversation-footer {
   flex-shrink: 0;
+  background: #f0f2f5;
 }
 
 /* El nombre del lead se trunca si es muy largo */
@@ -1526,17 +1528,17 @@ export default {
   resize: none;
   overflow-y: auto;
   max-height: 8rem;
-  border-radius: 1.2rem;
-  padding: 0.45rem 0.9rem;
+  border-radius: 1.35rem;
+  padding: 0.55rem 1rem;
   line-height: 1.4;
-  border: 1px solid var(--bs-border-color);
-  background: var(--bs-body-bg);
+  border: none;
+  background: #ffffff;
   font-size: inherit;
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
 }
 .message-input:focus {
   outline: none;
-  border-color: var(--bs-primary);
-  box-shadow: 0 0 0 0.15rem rgba(var(--bs-primary-rgb), 0.2);
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
 }
 
 /* Sección DEV con fondo suave para distinguirla del área de producción */

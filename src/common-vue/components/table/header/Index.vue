@@ -2,6 +2,8 @@
   <thead>
     <tr>
       <th v-if="is_selectable" style="width: 2rem" />
+      <!-- Cabecera de la columna opcional de acciones por fila (primera columna de datos). -->
+      <th v-if="has_row_actions" class="text-center" style="width: 3rem">Acciones</th>
       <th
         v-for="p in table_properties"
         :key="p.key"
@@ -17,8 +19,6 @@
           />
         </span>
       </th>
-      <!-- Cabecera de la columna opcional de acciones por fila. -->
-      <th v-if="has_row_actions" class="text-center" style="width: 3rem">Acciones</th>
     </tr>
   </thead>
 </template>

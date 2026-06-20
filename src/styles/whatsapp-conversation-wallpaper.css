@@ -1,0 +1,10 @@
+/**
+ * Fondo del área de mensajes, similar al wallpaper claro por defecto de WhatsApp Web.
+ * Se importa en contenedores de conversación de leads (vista completa y pestaña modal).
+ */
+.whatsapp-conversation-wallpaper {
+	background-color: #efeae2;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='404' height='404' viewBox='0 0 404 404'%3E%3Cg fill='%23d4cdc4' fill-opacity='0.45'%3E%3Cpath d='M229.5 79.5c-8.2 0-14.9 6.7-14.9 14.9s6.7 14.9 14.9 14.9 14.9-6.7 14.9-14.9-6.7-14.9-14.9-14.9zm-55 0c-8.2 0-14.9 6.7-14.9 14.9s6.7 14.9 14.9 14.9 14.9-6.7 14.9-14.9-6.7-14.9-14.9-14.9zm110 55c-8.2 0-14.9 6.7-14.9 14.9s6.7 14.9 14.9 14.9 14.9-6.7 14.9-14.9-6.7-14.9-14.9-14.9zm-165 0c-8.2 0-14.9 6.7-14.9 14.9s6.7 14.9 14.9 14.9 14.9-6.7 14.9-14.9-6.7-14.9-14.9-14.9zm220 55c-8.2 0-14.9 6.7-14.9 14.9s6.7 14.9 14.9 14.9 14.9-6.7 14.9-14.9-6.7-14.9-14.9-14.9zm-275 0c-8.2 0-14.9 6.7-14.9 14.9s6.7 14.9 14.9 14.9 14.9-6.7 14.9-14.9-6.7-14.9-14.9-14.9zm330 55c-8.2 0-14.9 6.7-14.9 14.9s6.7 14.9 14.9 14.9 14.9-6.7 14.9-14.9-6.7-14.9-14.9-14.9zm-385 0c-8.2 0-14.9 6.7-14.9 14.9s6.7 14.9 14.9 14.9 14.9-6.7 14.9-14.9-6.7-14.9-14.9-14.9z'/%3E%3C/g%3E%3C/svg%3E");
+	background-repeat: repeat;
+	background-size: 404px 404px;
+}

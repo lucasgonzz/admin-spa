@@ -1,198 +1,193 @@
 <template>
   <div class="wa-bubble-row" :class="'wa-bubble-row--' + bubble_side">
-    <div class="wa-meta text-muted d-flex align-items-center gap-1">
-      <span>{{ sender_label }} · {{ formatted_time }}</span>
-      <!-- Botón para marcar/desmarcar el mensaje como excluido del contexto de IA -->
-      <button
-        type="button"
-        class="btn btn-link wa-ctx-toggle p-0 ms-1"
-        :class="message.deleted_from_context ? 'wa-ctx-toggle--excluded text-danger' : 'wa-ctx-toggle--included text-muted'"
-        :title="message.deleted_from_context
-          ? 'Este mensaje está excluido del contexto de Claude. Clic para volver a incluirlo.'
-          : 'Excluir este mensaje del contexto de Claude (no lo verá al generar sugerencias)'"
-        :disabled="busy"
-        @click="on_toggle_deleted_from_context"
-      >
-        <i
-          class="bi"
-          :class="message.deleted_from_context ? 'bi-trash-fill' : 'bi-trash'"
-          aria-hidden="true"
-        />
-      </button>
-    </div>
     <div class="wa-bubble-shell" :class="'wa-bubble-shell--' + bubble_side">
-    <div class="wa-bubble border" :class="bubble_style_class">
-      <div v-if="is_followup_suggestion" class="wa-extra mb-1">
-        <span class="badge bg-warning text-dark wa-badge-tight">
-          <i class="bi bi-clock-history me-1" aria-hidden="true" />
-          Seguimiento
-        </span>
-      </div>
-      <div
-        v-if="is_audio_message && !has_local_attachment"
-        class="wa-audio-missing text-muted small mb-1">
-        🎤 Audio recibido — transcripción abajo. El archivo aún no está en el servidor.
-      </div>
-      <!-- Reproductor de audio o enlace al adjunto (documento, imagen, video) -->
-      <template v-if="has_local_attachment">
-        <audio-player
-          v-if="is_audio_message"
-          :src="attachment_open_url(message.attachments[0])"
-        />
-        <a
-          v-else-if="is_image_message"
-          :href="attachment_open_url(message.attachments[0])"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="wa-attachment-image-link"
-          title="Abrir imagen en nueva pestaña">
-          <img
-            :src="attachment_open_url(message.attachments[0])"
-            class="wa-attachment-image"
-            :alt="attachment_display_name(message.attachments[0])" />
-        </a>
-        <a
-          v-else
-          :href="attachment_open_url(message.attachments[0])"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="wa-file-attachment"
-          :title="'Abrir ' + attachment_display_name(message.attachments[0])">
-          <i class="bi wa-file-attachment-icon" :class="attachment_icon_class(message.attachments[0])" aria-hidden="true" />
-          <span class="wa-file-attachment-name">{{ attachment_display_name(message.attachments[0]) }}</span>
-        </a>
-      </template>
-      <!-- Modo lectura: transcripción / texto (original o editado tras aprobar) -->
-      <!-- Si el contenido tiene separadores ---, se renderiza como múltiples bloques -->
-      <template v-if="!editing && show_message_text">
+      <div class="wa-bubble" :class="bubble_style_class">
+        <!-- Nombre del emisor dentro de la burbuja (solo mensajes de sistema / IA) -->
+        <div v-if="show_sender_name_in_bubble" class="wa-sender-name">
+          {{ sender_label }}
+        </div>
         <div
-          v-for="(part, idx) in message_parts"
-          :key="idx"
-          class="message-text"
-          :class="[
-            { 'message-text--not-sent': is_not_sent_suggestion },
-            { 'mt-2 pt-2 border-top border-opacity-25': idx > 0 }
-          ]"
-        >
-          {{ part }}
+          v-if="is_audio_message && !has_local_attachment"
+          class="wa-audio-missing text-muted small mb-1">
+          🎤 Audio recibido — transcripción abajo. El archivo aún no está en el servidor.
         </div>
-      </template>
-      <!-- Modo edición: textarea precargado con el content original de la sugerencia -->
-      <textarea
-        v-else
-        v-model="edited_text"
-        class="form-control form-control-sm wa-edit-textarea"
-        rows="4"
-        :disabled="busy"
-      />
-      <div v-if="pipeline_status_change_label" class="wa-extra mt-1">
-        <span class="badge bg-info text-dark wa-badge-tight" :title="pipeline_status_change_title">
-          {{ pipeline_status_change_label }}
-        </span>
-      </div>
-      <div v-if="message.requiere_verificacion" class="wa-extra mt-1">
-        <span class="badge bg-warning text-dark wa-badge-tight">Requiere verificación con Lucas</span>
-      </div>
-      <div v-if="message.ai_reasoning" class="wa-extra mt-1">
-        <button type="button" class="btn btn-link wa-link-tight p-0" @click="toggle_reasoning">
-          {{ show_reasoning ? 'Ocultar' : 'Ver' }} razonamiento
-        </button>
-        <div v-show="show_reasoning" class="wa-reasoning text-muted border-top mt-1 pt-1">
-          {{ message.ai_reasoning }}
-        </div>
-      </div>
-      <div v-if="show_pending_suggestion_actions" class="wa-actions d-flex flex-wrap gap-1 align-items-center">
-        <template v-if="!editing">
-          <button
-            type="button"
-            class="btn btn-success btn-sm wa-btn-tight"
-            :disabled="busy || !has_sendable_text"
-            @click="on_enviar"
-          >
-            Enviar
-          </button>
-          <button type="button" class="btn btn-outline-primary btn-sm wa-btn-tight" :disabled="busy" @click="on_start_edit">
-            Editar
-          </button>
+        <!-- Reproductor de audio o enlace al adjunto (documento, imagen, video) -->
+        <template v-if="has_local_attachment">
+          <audio-player
+            v-if="is_audio_message"
+            :src="attachment_open_url(message.attachments[0])"
+          />
+          <a
+            v-else-if="is_image_message"
+            :href="attachment_open_url(message.attachments[0])"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="wa-attachment-image-link"
+            title="Abrir imagen en nueva pestaña">
+            <img
+              :src="attachment_open_url(message.attachments[0])"
+              class="wa-attachment-image"
+              :alt="attachment_display_name(message.attachments[0])" />
+          </a>
+          <a
+            v-else
+            :href="attachment_open_url(message.attachments[0])"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="wa-file-attachment"
+            :title="'Abrir ' + attachment_display_name(message.attachments[0])">
+            <i class="bi wa-file-attachment-icon" :class="attachment_icon_class(message.attachments[0])" aria-hidden="true" />
+            <span class="wa-file-attachment-name">{{ attachment_display_name(message.attachments[0]) }}</span>
+          </a>
         </template>
-        <template v-else>
-          <button
-            type="button"
-            class="btn btn-success btn-sm wa-btn-tight"
-            :disabled="busy || !has_edited_text_for_send"
-            @click="on_guardar_y_enviar"
+        <!-- Modo lectura: transcripción / texto (original o editado tras aprobar) -->
+        <!-- Si el contenido tiene separadores ---, se renderiza como múltiples bloques -->
+        <template v-if="!editing && show_message_text">
+          <div
+            v-for="(part, idx) in message_parts"
+            :key="idx"
+            class="message-text"
+            :class="[
+              { 'message-text--not-sent': is_not_sent_suggestion },
+              { 'mt-2 pt-2 border-top border-opacity-25': idx > 0 }
+            ]"
           >
-            Guardar y enviar
-          </button>
-          <button type="button" class="btn btn-outline-secondary btn-sm wa-btn-tight" :disabled="busy" @click="on_cancel_edit">
-            Cancelar
-          </button>
+            {{ part }}
+          </div>
         </template>
-      </div>
-      <div v-if="show_auto_send_timer_block" class="wa-auto-send-timer mt-1">
-        <div class="wa-auto-send-timer-row d-flex flex-wrap align-items-center justify-content-between gap-2">
-          <span class="wa-auto-send-timer-label text-muted small">
-            <template v-if="show_auto_send_countdown">
-              Envío automático en <strong class="wa-auto-send-seconds">{{ auto_send_remaining_seconds }}</strong> s
-            </template>
-            <template v-else-if="show_auto_send_dispatching">Enviando automáticamente…</template>
+        <!-- Modo edición: textarea precargado con el content original de la sugerencia -->
+        <textarea
+          v-else-if="editing"
+          v-model="edited_text"
+          class="form-control form-control-sm wa-edit-textarea"
+          rows="4"
+          :disabled="busy"
+        />
+        <div v-if="pipeline_status_change_label" class="wa-extra mt-1">
+          <span class="badge bg-info text-dark wa-badge-tight" :title="pipeline_status_change_title">
+            {{ pipeline_status_change_label }}
           </span>
+        </div>
+        <div v-if="message.requiere_verificacion" class="wa-extra mt-1">
+          <span class="badge bg-warning text-dark wa-badge-tight">Requiere verificación con Lucas</span>
+        </div>
+        <div v-if="message.ai_reasoning" class="wa-extra mt-1">
+          <button type="button" class="btn btn-link wa-link-tight p-0" @click="toggle_reasoning">
+            {{ show_reasoning ? 'Ocultar' : 'Ver' }} razonamiento
+          </button>
+          <div v-show="show_reasoning" class="wa-reasoning text-muted border-top mt-1 pt-1">
+            {{ message.ai_reasoning }}
+          </div>
+        </div>
+        <div v-if="show_pending_suggestion_actions" class="wa-actions d-flex flex-wrap gap-1 align-items-center">
+          <template v-if="!editing">
+            <button
+              type="button"
+              class="btn btn-success btn-sm wa-btn-tight"
+              :disabled="busy || !has_sendable_text"
+              @click="on_enviar"
+            >
+              Enviar
+            </button>
+            <button type="button" class="btn btn-outline-primary btn-sm wa-btn-tight" :disabled="busy" @click="on_start_edit">
+              Editar
+            </button>
+          </template>
+          <template v-else>
+            <button
+              type="button"
+              class="btn btn-success btn-sm wa-btn-tight"
+              :disabled="busy || !has_edited_text_for_send"
+              @click="on_guardar_y_enviar"
+            >
+              Guardar y enviar
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm wa-btn-tight" :disabled="busy" @click="on_cancel_edit">
+              Cancelar
+            </button>
+          </template>
+        </div>
+        <div v-if="show_auto_send_timer_block" class="wa-auto-send-timer mt-1">
+          <div class="wa-auto-send-timer-row d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <span class="wa-auto-send-timer-label text-muted small">
+              <template v-if="show_auto_send_countdown">
+                Envío automático en <strong class="wa-auto-send-seconds">{{ auto_send_remaining_seconds }}</strong> s
+              </template>
+              <template v-else-if="show_auto_send_dispatching">Enviando automáticamente…</template>
+            </span>
+            <button
+              type="button"
+              class="btn btn-outline-secondary btn-sm wa-btn-tight"
+              :disabled="busy"
+              title="Cancelar el envío automático por WhatsApp"
+              @click="on_cancelar_envio_automatico"
+            >
+              Cancelar envío
+            </button>
+          </div>
+        </div>
+        <div
+          v-else-if="show_pending_confirmation_label"
+          class="wa-pending-confirmation text-muted">
+          Esperando confirmación
+        </div>
+        <div v-if="is_not_sent_suggestion" class="wa-not-sent-banner text-muted small mt-1">
+          <i class="bi bi-x-circle me-1" aria-hidden="true" />
+          Sugerencia no enviada al lead
+        </div>
+        <!-- Banner que indica que el mensaje está excluido del historial enviado a Claude -->
+        <div v-if="message.deleted_from_context" class="wa-excluded-banner text-danger small mt-1">
+          <i class="bi bi-trash-fill me-1" aria-hidden="true" />
+          Excluido del contexto de IA
+        </div>
+        <div v-if="show_whatsapp_delivery_error" class="wa-delivery-error text-danger small mt-1">
+          No enviado por WhatsApp
+        </div>
+        <div v-if="status_badge_text" class="wa-extra mt-1">
+          <span class="badge wa-badge-tight" :class="status_badge_class">{{ status_badge_text }}</span>
+        </div>
+        <!-- Hora y estado de entrega dentro de la burbuja (estilo WhatsApp) -->
+        <div class="wa-bubble-footer">
           <button
             type="button"
-            class="btn btn-outline-secondary btn-sm wa-btn-tight"
+            class="btn btn-link wa-ctx-toggle p-0"
+            :class="message.deleted_from_context ? 'wa-ctx-toggle--excluded text-danger' : 'wa-ctx-toggle--included text-muted'"
+            :title="message.deleted_from_context
+              ? 'Este mensaje está excluido del contexto de Claude. Clic para volver a incluirlo.'
+              : 'Excluir este mensaje del contexto de Claude (no lo verá al generar sugerencias)'"
             :disabled="busy"
-            title="Cancelar el envío automático por WhatsApp"
-            @click="on_cancelar_envio_automatico"
+            @click="on_toggle_deleted_from_context"
           >
-            Cancelar envío
+            <i
+              class="bi"
+              :class="message.deleted_from_context ? 'bi-trash-fill' : 'bi-trash'"
+              aria-hidden="true"
+            />
           </button>
+          <span
+            v-if="show_sending_indicator"
+            class="wa-meta-sending"
+            aria-label="Enviando"
+          >Enviando…</span>
+          <span v-if="formatted_time_short" class="wa-bubble-time">{{ formatted_time_short }}</span>
+          <span
+            v-if="show_whatsapp_sent_meta"
+            class="wa-meta-delivery"
+            :title="whatsapp_delivery_title"
+          >
+            <i class="bi bi-check2-all wa-tick-double" aria-hidden="true" />
+          </span>
         </div>
       </div>
+      <!-- Reacción del lead sobre este mensaje (estilo pill de WhatsApp) -->
       <div
-        v-else-if="show_pending_confirmation_label"
-        class="wa-pending-confirmation text-muted">
-        Esperando confirmación
-      </div>
-      <div v-if="is_not_sent_suggestion" class="wa-not-sent-banner text-muted small mt-1">
-        <i class="bi bi-x-circle me-1" aria-hidden="true" />
-        Sugerencia no enviada al lead
-      </div>
-      <!-- Banner que indica que el mensaje está excluido del historial enviado a Claude -->
-      <div v-if="message.deleted_from_context" class="wa-excluded-banner text-danger small mt-1">
-        <i class="bi bi-trash-fill me-1" aria-hidden="true" />
-        Excluido del contexto de IA
-      </div>
-      <div
-        v-if="show_sending_indicator"
-        class="wa-message-meta d-flex align-items-center justify-content-end mt-1"
+        v-if="has_lead_reaction"
+        class="wa-reaction-pill"
+        :title="lead_reaction_title"
+        aria-label="Reacción del lead"
       >
-        <span class="wa-meta-sending text-muted small" aria-label="Enviando">Enviando…</span>
+        {{ message.lead_reaction_emoji }}
       </div>
-      <div v-if="show_whatsapp_delivery_error" class="wa-delivery-error text-danger small mt-1">
-        No enviado por WhatsApp
-      </div>
-      <div
-        v-if="show_whatsapp_sent_meta"
-        class="wa-message-meta d-flex align-items-center justify-content-end mt-1"
-      >
-        <span class="wa-meta-delivery" :title="whatsapp_delivery_title">
-          <i class="bi bi-whatsapp wa-meta-whatsapp-icon" aria-hidden="true" />
-          <i class="bi bi-check2-all wa-tick-double" aria-hidden="true" />
-        </span>
-      </div>
-      <div v-if="status_badge_text" class="wa-extra mt-1">
-        <span class="badge wa-badge-tight" :class="status_badge_class">{{ status_badge_text }}</span>
-      </div>
-    </div>
-    <!-- Reacción del lead sobre este mensaje (estilo pill de WhatsApp) -->
-    <div
-      v-if="has_lead_reaction"
-      class="wa-reaction-pill"
-      :title="lead_reaction_title"
-      aria-label="Reacción del lead"
-    >
-      {{ message.lead_reaction_emoji }}
-    </div>
     </div>
   </div>
 </template>
@@ -240,26 +235,33 @@ export default {
       return 'out'
     },
     /**
-     * Estilo de fondo según emisor + esquinas tipo burbuja entrante (izq.) / saliente (der.).
-     * Si el mensaje está excluido del contexto de IA se aplica además la clase de excluido.
+     * Clases de estilo según emisor, lado y variantes (sugerencia, seguimiento, excluido).
+     *
      * @returns {string}
      */
     bubble_style_class() {
-      /* Sufijo de exclusión del contexto: reduce opacidad y cambia borde. */
-      var excluded_class = this.message.deleted_from_context ? ' wa-bubble--excluded' : ''
-      if (this.message.sender === 'lead') {
-        return 'bg-primary bg-opacity-10 border-primary wa-bubble--in' + excluded_class
+      var classes = ['wa-bubble--' + this.bubble_side]
+      if (this.message.deleted_from_context) {
+        classes.push('wa-bubble--excluded')
       }
-      if (this.message.sender === 'setter') {
-        return 'bg-light wa-bubble--out' + excluded_class
+      if (this.message.sender === 'sistema') {
+        if (this.is_followup_suggestion) {
+          classes.push('wa-bubble--followup')
+        } else if (this.is_not_sent_suggestion) {
+          classes.push('wa-bubble--not-sent')
+        } else if (this.message.status === 'sugerido') {
+          classes.push('wa-bubble--suggestion')
+        }
       }
-      if (this.is_followup_suggestion) {
-        return 'bg-warning bg-opacity-10 border-warning wa-bubble--out wa-bubble--followup' + excluded_class
-      }
-      if (this.is_not_sent_suggestion) {
-        return 'bg-light wa-bubble--out wa-bubble--not-sent' + excluded_class
-      }
-      return 'bg-white wa-bubble--out' + excluded_class
+      return classes.join(' ')
+    },
+    /**
+     * true si se muestra el nombre del emisor dentro de la burbuja (mensajes de sistema / IA).
+     *
+     * @returns {boolean}
+     */
+    show_sender_name_in_bubble() {
+      return this.message.sender === 'sistema'
     },
     /**
      * true si la sugerencia de Claude quedó marcada como no enviada al lead.
@@ -303,7 +305,31 @@ export default {
       return s || '—'
     },
     /**
-     * Fecha/hora corta para cabecera de burbuja.
+     * Hora corta para el pie de la burbuja (estilo WhatsApp).
+     *
+     * @returns {string}
+     */
+    formatted_time_short() {
+      const raw = this.message.created_at
+      if (!raw) {
+        return ''
+      }
+      try {
+        const d = new Date(raw)
+        if (isNaN(d.getTime())) {
+          return ''
+        }
+        return d.toLocaleTimeString('es-AR', {
+          hour: 'numeric',
+          minute: '2-digit',
+        })
+      } catch (e) {
+        return ''
+      }
+    },
+    /**
+     * Fecha/hora completa (reservado para tooltips u otros usos).
+     *
      * @returns {string}
      */
     formatted_time() {
@@ -528,7 +554,7 @@ export default {
       if (!this.show_pending_suggestion_actions) {
         return 0
       }
-      if (this.is_followup_suggestion || this.message.requiere_verificacion) {
+      if (this.message.requiere_verificacion) {
         return 0
       }
       const delay_seconds = parseInt(this.auto_send_delay_seconds, 10)
@@ -552,9 +578,6 @@ export default {
      */
     show_auto_send_timer_block() {
       if (!this.show_pending_suggestion_actions) {
-        return false
-      }
-      if (this.is_followup_suggestion) {
         return false
       }
       if (this.message.requiere_verificacion) {
@@ -845,12 +868,12 @@ export default {
 </script>
 
 <style scoped>
-/* Burbujas estilo WhatsApp: ancho flexible hasta ~78% del panel, sin tope px artificial. */
+/* Burbujas estilo WhatsApp Web (modo claro). */
 .wa-bubble-row {
   display: flex;
   flex-direction: column;
-  margin-bottom: 0.35rem;
-  max-width: 78%;
+  margin-bottom: 0.2rem;
+  max-width: 65%;
   width: fit-content;
 }
 .wa-bubble-row--in {
@@ -861,37 +884,84 @@ export default {
   align-self: flex-end;
   align-items: flex-end;
 }
-.wa-meta {
-  font-size: 0.65rem;
-  line-height: 1.15;
-  opacity: 0.82;
-  margin-bottom: 2px;
-  padding: 0 1px;
-}
 .wa-bubble {
+  position: relative;
   width: fit-content;
   max-width: 100%;
-  font-size: 1rem;
-  line-height: 1.38;
-  padding: 0.32rem 0.55rem;
-  border-radius: 8px;
-  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.06);
+  font-size: 0.9375rem;
+  line-height: 1.35;
+  padding: 0.35rem 0.45rem 0.2rem 0.55rem;
+  border: none;
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+  color: #111b21;
 }
-/* Entrante (lead): cola inferior izquierda. */
+/* Entrante (lead): blanco con cola superior izquierda. */
 .wa-bubble--in {
-  border-bottom-left-radius: 3px;
+  background: #ffffff;
+  border-radius: 0 7.5px 7.5px 7.5px;
 }
-/* Saliente (setter / sistema / cloud): cola inferior derecha. */
+.wa-bubble--in::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -8px;
+  width: 8px;
+  height: 13px;
+  background: linear-gradient(225deg, #ffffff 50%, transparent 50%);
+}
+/* Saliente (setter / sistema): verde claro con cola superior derecha. */
 .wa-bubble--out {
-  border-bottom-right-radius: 3px;
+  background: #d9fdd3;
+  border-radius: 7.5px 0 7.5px 7.5px;
+}
+.wa-bubble--out::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: -8px;
+  width: 8px;
+  height: 13px;
+  background: linear-gradient(135deg, #d9fdd3 50%, transparent 50%);
 }
 .wa-bubble--followup {
-  border-width: 2px;
+  background: #fff4ce;
+}
+.wa-bubble--followup::before {
+  background: linear-gradient(135deg, #fff4ce 50%, transparent 50%);
+}
+.wa-bubble--suggestion {
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13), inset 0 0 0 1px rgba(11, 20, 26, 0.06);
+}
+.wa-sender-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #e542a3;
+  margin-bottom: 0.15rem;
 }
 .message-text {
   white-space: pre-wrap;
   overflow-wrap: break-word;
   word-break: normal;
+  padding-right: 0.15rem;
+}
+.wa-bubble-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 3px;
+  margin-top: 1px;
+  margin-left: 1.5rem;
+  float: right;
+  clear: both;
+}
+.wa-bubble-time {
+  font-size: 0.6875rem;
+  line-height: 1.15;
+  color: rgba(17, 27, 33, 0.45);
+  white-space: nowrap;
+  user-select: none;
 }
 .wa-attachment-image-link {
   display: inline-block;
@@ -912,13 +982,13 @@ export default {
   margin-bottom: 0.25rem;
   padding: 0.35rem 0.55rem;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.55);
   color: inherit;
   text-decoration: none;
   max-width: 100%;
 }
 .wa-file-attachment:hover {
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.85);
   color: inherit;
   text-decoration: none;
 }
@@ -932,8 +1002,8 @@ export default {
   word-break: break-word;
 }
 .wa-edit-textarea {
-  font-size: 1rem;
-  line-height: 1.38;
+  font-size: 0.9375rem;
+  line-height: 1.35;
   resize: vertical;
   min-height: 4rem;
   min-width: 240px;
@@ -941,19 +1011,20 @@ export default {
   box-sizing: border-box;
 }
 .wa-extra {
-  font-size: 1rem;
+  font-size: 0.875rem;
 }
 .wa-link-tight {
   font-size: 0.7rem;
 }
 .wa-reasoning {
-  font-size: 1rem;
+  font-size: 0.875rem;
   line-height: 1.3;
   max-height: 120px;
   overflow-y: auto;
 }
 .wa-actions {
   margin-top: 0.35rem;
+  clear: both;
 }
 .wa-btn-tight.btn-sm {
   font-size: 0.9rem;
@@ -970,10 +1041,12 @@ export default {
   line-height: 1.2;
   margin-top: 0.25rem;
   font-style: italic;
+  clear: both;
 }
 .wa-auto-send-timer {
   padding-top: 0.2rem;
   border-top: 1px dashed rgba(0, 0, 0, 0.08);
+  clear: both;
 }
 .wa-auto-send-timer-label {
   font-style: italic;
@@ -986,9 +1059,11 @@ export default {
   font-variant-numeric: tabular-nums;
 }
 .wa-bubble--not-sent {
-  opacity: 0.72;
-  border-style: dashed !important;
-  border-color: #adb5bd !important;
+  opacity: 0.78;
+  background: #f0f2f5 !important;
+}
+.wa-bubble--not-sent::before {
+  background: linear-gradient(135deg, #f0f2f5 50%, transparent 50%) !important;
 }
 .message-text--not-sent {
   text-decoration: line-through;
@@ -997,13 +1072,12 @@ export default {
 .wa-not-sent-banner {
   font-style: italic;
   line-height: 1.25;
-}
-.wa-message-meta {
-  font-size: 0.8rem;
-  line-height: 1;
+  clear: both;
 }
 .wa-meta-sending {
+  font-size: 0.6875rem;
   font-style: italic;
+  color: rgba(17, 27, 33, 0.45);
   animation: wa-sending-pulse 1.2s ease-in-out infinite;
 }
 @keyframes wa-sending-pulse {
@@ -1018,45 +1092,46 @@ export default {
 .wa-meta-delivery {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  color: #9ca3af;
+  line-height: 1;
+  color: #53bdeb;
   white-space: nowrap;
 }
-.wa-meta-whatsapp-icon {
-  color: #25d366;
-  font-size: 0.95rem;
-}
 .wa-tick-double {
-  font-size: 1.05rem;
-  color: #5a5f66;
+  font-size: 0.95rem;
+  color: #53bdeb;
 }
 .wa-delivery-error {
   font-size: 0.75rem;
+  clear: both;
 }
-/* Burbuja cuyo mensaje fue excluido del contexto de Claude: opacidad reducida y borde punteado rojo. */
+/* Burbuja excluida del contexto de Claude. */
 .wa-bubble--excluded {
-  opacity: 0.55;
-  border-style: dashed !important;
-  border-color: #dc3545 !important;
+  opacity: 0.62;
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13), inset 0 0 0 1px rgba(220, 53, 69, 0.35);
 }
-/* Banner de exclusión del contexto de IA dentro de la burbuja. */
 .wa-excluded-banner {
   font-style: italic;
   line-height: 1.25;
+  clear: both;
 }
-/* Botón de papelera para toggle excluido del contexto — tamaño reducido, sin decoración. */
+/* Toggle de exclusión del contexto (admin), discreto en el pie de la burbuja. */
 .wa-ctx-toggle {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   line-height: 1;
-  opacity: 0.55;
+  opacity: 0;
   text-decoration: none !important;
   vertical-align: middle;
+  transition: opacity 0.15s;
+}
+.wa-bubble-row:hover .wa-ctx-toggle,
+.wa-ctx-toggle--excluded {
+  opacity: 0.75;
 }
 .wa-ctx-toggle:hover,
 .wa-ctx-toggle--excluded {
   opacity: 1;
 }
-/* Contenedor burbuja + pill de reacción (pill superpuesta al borde inferior). */
+/* Contenedor burbuja + pill de reacción. */
 .wa-bubble-shell {
   position: relative;
   display: flex;

@@ -116,7 +116,7 @@
     </div>
 
     <!-- Conversación -->
-    <div ref="conversation_scroll_box" class="conversation-scroll border rounded p-2 mb-3 bg-light">
+    <div ref="conversation_scroll_box" class="conversation-scroll whatsapp-conversation-wallpaper border rounded p-2 mb-3">
       <div
         v-if="loading_conversation"
         class="text-muted small p-2 d-flex align-items-center gap-2"
@@ -204,6 +204,7 @@
 import MessageBubble from './MessageBubble.vue'
 import api from '@/utils/axios'
 import { copy_lead_conversation_to_clipboard } from '@/utils/lead_conversation_clipboard'
+import '@/styles/whatsapp-conversation-wallpaper.css'
 
 /**
  * Pestaña "Conversación WhatsApp" dentro del modal de edición del lead.
@@ -1332,6 +1333,7 @@ export default {
   min-height: 280px;
   max-height: min(62vh, calc(100vh - 170px));
   overflow-y: auto;
+  border-color: rgba(11, 20, 26, 0.08) !important;
 }
 
 /* Botón cuadrado con icono WhatsApp. */
