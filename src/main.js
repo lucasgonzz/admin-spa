@@ -37,6 +37,22 @@ if (pusher_app_key && pusher_app_cluster) {
 
 store.dispatch('auth/bootstrap')
 
-registerSW({ immediate: true })
+/**
+ * Registra el Service Worker con detección de nueva versión.
+ * Cuando vite-plugin-pwa detecta un SW nuevo en estado `waiting`, dispara
+ * onNeedRefresh: exponemos la función update_sw globalmente y avisamos a la UI
+ * con un evento custom (mismo patrón desacoplado que la instalación PWA).
+ */
+const update_sw = registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    // Nuevo SW listo en waiting — avisar a la UI sin acoplamiento directo
+    window.__pwa_update_sw = update_sw
+    window.dispatchEvent(new Event('pwa-update-available'))
+  },
+  onOfflineReady() {
+    // no acción necesaria
+  },
+})
 
 app.mount('#app')

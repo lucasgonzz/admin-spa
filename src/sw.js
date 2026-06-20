@@ -11,6 +11,17 @@ import { precacheAndRoute } from 'workbox-precaching'
 precacheAndRoute(self.__WB_MANIFEST)
 
 /**
+ * Permite forzar la activación inmediata del nuevo SW desde la UI.
+ * Cuando el usuario toca "Actualizar sistema", la función update_sw envía
+ * este mensaje SKIP_WAITING; el SW saltea el estado waiting y toma control.
+ */
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting()
+  }
+})
+
+/**
  * Recibe un push del backend (AdminPushNotificationService) y muestra la notificación nativa.
  * El payload es el JSON que arma el servicio: { title, body, url? }.
  */

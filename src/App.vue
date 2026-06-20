@@ -16,6 +16,25 @@
     class="d-flex min-vh-100 app-root mx-auto w-100"
     :class="{ 'app-root--mobile': is_mobile_viewport }"
   >
+    <!-- Banner de actualización de PWA -->
+    <div
+      v-if="pwa_update_available"
+      class="pwa-update-banner d-flex align-items-center justify-content-between gap-2 px-3 py-2"
+      role="alert"
+    >
+      <span class="small fw-semibold">
+        <i class="bi bi-arrow-repeat me-1" aria-hidden="true" />
+        Nueva versión disponible
+      </span>
+      <button
+        type="button"
+        class="btn btn-sm btn-light"
+        @click="on_pwa_update_click"
+      >
+        Actualizar sistema
+      </button>
+    </div>
+
     <div
       v-if="show_nav && is_mobile_viewport && nav_mobile_open"
       class="app-nav-mobile-backdrop d-md-none"
@@ -107,6 +126,8 @@ export default {
       nav_mobile_open: false,
       /** MediaQueryList para detectar cambios de viewport sin polling. */
       mobile_media_query: null,
+      /** true cuando hay una nueva versión del SW lista para activar. */
+      pwa_update_available: false,
     }
   },
   computed: {
@@ -226,6 +247,8 @@ export default {
     window.addEventListener('beforeinstallprompt', this.on_pwa_before_install_prompt)
     // Confirmación de que la app quedó instalada: limpia el evento guardado.
     window.addEventListener('appinstalled', this.on_pwa_app_installed)
+    // Nueva versión del SW lista en waiting: muestra el banner de actualización.
+    window.addEventListener('pwa-update-available', this.on_pwa_update_available)
   },
   beforeUnmount() {
     /**
@@ -235,6 +258,7 @@ export default {
     this.teardown_nav_viewport_listener()
     window.removeEventListener('beforeinstallprompt', this.on_pwa_before_install_prompt)
     window.removeEventListener('appinstalled', this.on_pwa_app_installed)
+    window.removeEventListener('pwa-update-available', this.on_pwa_update_available)
   },
   methods: {
     /**
@@ -342,6 +366,29 @@ export default {
     on_pwa_app_installed() {
       window.__pwa_install_prompt = null
       window.dispatchEvent(new Event('pwa-installed'))
+    },
+
+    /**
+     * El SW detectó una nueva versión lista: muestra el banner de actualización.
+     *
+     * @returns {void}
+     */
+    on_pwa_update_available() {
+      this.pwa_update_available = true
+    },
+
+    /**
+     * El usuario confirmó la actualización: invoca update_sw (skipWaiting + reload).
+     *
+     * @returns {void}
+     */
+    on_pwa_update_click() {
+      if (typeof window.__pwa_update_sw === 'function') {
+        window.__pwa_update_sw(true)
+      } else {
+        // Fallback: recarga forzada si por alguna razón la función no está disponible
+        window.location.reload()
+      }
     },
 
     /**
@@ -523,5 +570,23 @@ export default {
   width: 80vw !important;
   max-width: 80vw !important;
   overflow: visible !important;
+}
+
+/* Banner de nueva versión disponible — fijo en la parte superior, sobre la UI */
+.pwa-update-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2000;
+  background: #0d6efd;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+
+  .btn-light {
+    color: #0d6efd;
+    font-weight: 600;
+    white-space: nowrap;
+  }
 }
 </style>
