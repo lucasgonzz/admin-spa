@@ -35,14 +35,10 @@
       </div>
       <!-- Reproductor de audio o enlace al adjunto (documento, imagen, video) -->
       <template v-if="has_local_attachment">
-        <audio
+        <audio-player
           v-if="is_audio_message"
-          controls
           :src="attachment_open_url(message.attachments[0])"
-          class="wa-message-audio"
-          preload="metadata">
-          Tu navegador no soporta reproducción de audio.
-        </audio>
+        />
         <a
           v-else-if="is_image_message"
           :href="attachment_open_url(message.attachments[0])"
@@ -202,11 +198,14 @@
 </template>
 
 <script>
+import AudioPlayer from '@/components/lead/conversation/AudioPlayer.vue'
+
 /**
  * Burbuja de mensaje de la conversación WhatsApp (lead, setter, sistema / IA).
  */
 export default {
   name: 'LeadMessageBubble',
+  components: { AudioPlayer },
   emits: ['enviar', 'guardar_y_enviar', 'cancelar_envio_automatico', 'toggle_deleted_from_context'],
   props: {
     /** Fila `lead_messages` desde la API. */
@@ -893,14 +892,6 @@ export default {
   white-space: pre-wrap;
   overflow-wrap: break-word;
   word-break: normal;
-}
-.wa-message-audio {
-  display: block;
-  width: 100%;
-  min-width: 220px;
-  max-width: min(100%, 360px);
-  height: 36px;
-  margin-bottom: 0.25rem;
 }
 .wa-attachment-image-link {
   display: inline-block;
