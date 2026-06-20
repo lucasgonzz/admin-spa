@@ -41,6 +41,18 @@
     <span v-else class="text-muted"></span>
   </span>
   <span v-else-if="link_text !== null" class="text-break">{{ link_text }}</span>
+  <!-- Botón ícono que navega a una ruta nombrada usando un parámetro tomado del row -->
+  <span v-else-if="prop.type === 'router_link_btn'">
+    <router-link
+      v-if="row.id"
+      :to="resolve_router_link(prop, row)"
+      class="btn btn-sm btn-outline-success icon-cell-btn"
+      :title="prop.btn_title || ''"
+      @click.stop
+    >
+      <i :class="'bi ' + (prop.btn_icon || 'bi-link')" />
+    </router-link>
+  </span>
   <span v-else class="text-break">{{ text }}</span>
 </template>
 
@@ -162,6 +174,25 @@ export default {
       }
     },
   },
+  methods: {
+    /**
+     * Construye el objeto de ruta para el botón `router_link_btn`.
+     * Toma el nombre de ruta y los metadatos del parámetro desde la prop,
+     * y el valor del parámetro desde la fila (row).
+     *
+     * @param {Object} prop Definición de la columna (route_name, route_param_key, route_param_value_key).
+     * @param {Object} row Fila de datos de la tabla.
+     * @returns {Object|string} Objeto de ruta nombrada para router-link, o '/' si falta route_name.
+     */
+    resolve_router_link(prop, row) {
+      if (!prop.route_name) return '/'
+      const params = {}
+      if (prop.route_param_key && prop.route_param_value_key) {
+        params[prop.route_param_key] = row[prop.route_param_value_key]
+      }
+      return { name: prop.route_name, params }
+    },
+  },
 }
 
 /**
@@ -191,5 +222,15 @@ function contrast_text_for_hex(hex) {
   font-weight: 500;
   padding: 0.2em 0.5em;
   white-space: nowrap;
+}
+/* Botón ícono circular dentro de una celda de tabla (tipo router_link_btn). */
+.icon-cell-btn {
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 </style>
