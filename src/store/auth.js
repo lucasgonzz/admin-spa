@@ -120,8 +120,15 @@ const actions = {
       })
       .catch((err) => {
         log_debug(err)
-        commit('set_token', null)
-        commit('set_admin', null)
+        // Solo limpiar la sesión si el servidor confirma explícitamente que el
+        // token no es válido (401). Errores de red, timeouts o fallas del servidor
+        // (5xx) no deben destruir el token — el usuario puede estar simplemente
+        // sin conexión o el servidor puede tener un pico de carga puntual.
+        const status = err && err.response ? err.response.status : null
+        if (status === 401) {
+          commit('set_token', null)
+          commit('set_admin', null)
+        }
         throw err
       })
   },
