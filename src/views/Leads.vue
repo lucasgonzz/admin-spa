@@ -7,8 +7,20 @@
       :model_properties_nav_order="model_properties_nav_order"
       @extra-record-updated="on_record_updated"
     >
-      <!-- Acción rápida por fila: abrir la conversación WhatsApp del lead en pantalla completa. -->
+      <!-- Acciones rápidas por fila: pin y conversación WhatsApp del lead. -->
       <template #row-actions="{ row }">
+        <!-- Botón fijar/desfijar lead (pin global, igual a WhatsApp) -->
+        <button
+          type="button"
+          class="btn btn-sm me-1"
+          :class="row.pinned_at ? 'btn-warning' : 'btn-outline-secondary'"
+          :title="row.pinned_at ? 'Desfijar lead' : 'Fijar lead'"
+          :aria-label="row.pinned_at ? 'Desfijar lead' : 'Fijar lead'"
+          @click.stop="on_toggle_pinned(row)"
+        >
+          <i class="bi bi-pin-fill" :class="row.pinned_at ? '' : 'opacity-50'" aria-hidden="true" />
+        </button>
+        <!-- Botón abrir conversación WhatsApp del lead en pantalla completa -->
         <button
           type="button"
           class="btn btn-outline-success btn-sm"
@@ -387,6 +399,29 @@ export default {
       setTimeout(function () {
         self.wait_for_resource_view_and_open(lead, remaining - 1)
       }, 100)
+    },
+    /**
+     * Fija o desfija un lead en la tabla (pin global: todos los admins ven el mismo estado).
+     *
+     * Si el lead no está fijado, se setea pinned_at en el backend y aparece con ícono amarillo.
+     * Si ya está fijado, se limpia pinned_at y vuelve a estado normal.
+     * El último en ser fijado aparece primero entre los fijados (igual que WhatsApp).
+     *
+     * @param {Object} lead Lead de la fila clickeada.
+     * @returns {void}
+     */
+    on_toggle_pinned(lead) {
+      if (!lead || !lead.id) {
+        return
+      }
+      var self = this
+      api.post('/lead/' + lead.id + '/toggle-pinned').then(function (res) {
+        if (res.data && res.data.model) {
+          self.$store.dispatch('lead/upsert_model_in_lists', res.data.model)
+        }
+      }).catch(function () {
+        self.$root.$emit('open_toast', 'No se pudo cambiar el estado del pin.')
+      })
     },
     /**
      * Navega a la vista de pantalla completa de la conversación WhatsApp del lead.
