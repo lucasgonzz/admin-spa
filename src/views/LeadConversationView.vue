@@ -1455,11 +1455,16 @@ export default {
 </script>
 
 <style scoped>
-/* Layout de pantalla completa tipo WhatsApp */
+/* Layout de pantalla completa tipo WhatsApp.
+   Se fija sobre todo el viewport con position:fixed para neutralizar cualquier padding,
+   scroll o margen que el layout de App.vue aplique al <main> contenedor. */
 .conversation-view {
+  position: fixed;
+  inset: 0;
+  z-index: 1040;
+  background: var(--bs-body-bg);
   display: flex;
   flex-direction: column;
-  height: 100dvh;
   overflow: hidden;
 }
 
