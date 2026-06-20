@@ -206,15 +206,23 @@
           @input="on_input_resize"
         />
 
-        <!-- Botón mic cuando no hay texto (audio próximamente) -->
+        <!-- Botón mic cuando no hay texto: grabación de audio -->
         <button
           v-if="!has_mensaje_directo"
           type="button"
-          class="icon-btn flex-shrink-0 text-muted"
-          disabled
-          title="Grabación de audio próximamente"
+          class="icon-btn flex-shrink-0"
+          :class="recording_audio ? 'text-danger audio-recording-pulse' : 'text-muted'"
+          :disabled="enviando_audio"
+          :title="recording_audio ? 'Grabando. Tocá para detener y enviar' : 'Mantené pulsado o tocá para grabar audio'"
+          @click="on_mic_click"
+          @mousedown="on_mic_mousedown"
+          @mouseup="on_mic_mouseup_or_leave"
+          @mouseleave="on_mic_mouseup_or_leave"
+          @touchstart.prevent="on_mic_touchstart"
+          @touchend.prevent="on_mic_touchend"
         >
-          <i class="bi bi-mic" aria-hidden="true" />
+          <span v-if="enviando_audio" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+          <i v-else class="bi" :class="recording_audio ? 'bi-stop-circle-fill' : 'bi-mic'" aria-hidden="true" />
         </button>
 
         <!-- Botón enviar cuando hay texto -->
@@ -389,6 +397,21 @@ export default {
        * Controla la visibilidad de las herramientas de testing en el footer.
        */
       is_dev: import.meta.env.DEV,
+
+      /** true mientras el micrófono está grabando. */
+      recording_audio: false,
+
+      /** Instancia MediaRecorder activa (null cuando no graba). */
+      audio_recorder: null,
+
+      /** Stream de micrófono activo (null cuando no graba). */
+      audio_stream: null,
+
+      /** true mientras se envía el audio al backend. */
+      enviando_audio: false,
+
+      /** true cuando el usuario mantiene pulsado el botón (hold mode). */
+      audio_hold_mode: false,
     }
   },
 
@@ -851,6 +874,15 @@ export default {
       clearTimeout(this.export_conversation_feedback_timer)
       this.export_conversation_feedback_timer = null
     }
+    /* Liberar micrófono si la vista se destruye mientras graba. */
+    if (this.recording_audio) {
+      try {
+        if (this.audio_recorder) {
+          this.audio_recorder.stop()
+        }
+      } catch (_) {}
+    }
+    this.release_audio_stream()
   },
 
   methods: {
@@ -1451,6 +1483,202 @@ export default {
           self.export_conversation_loading = false
         })
     },
+
+    /**
+     * Click simple en el micrófono:
+     * - Si no está grabando → inicia
+     * - Si está grabando → detiene y envía
+     * Si el usuario hizo hold (mousedown + mouseup), el click se ignora
+     * porque on_mic_mouseup_or_leave ya manejó el stop.
+     *
+     * @returns {void}
+     */
+    on_mic_click() {
+      if (this.audio_hold_mode) {
+        this.audio_hold_mode = false
+        return
+      }
+      if (this.recording_audio) {
+        this.stop_and_send_audio()
+      } else {
+        this.start_audio_recording()
+      }
+    },
+
+    /**
+     * MouseDown: marca que el usuario puede estar en modo hold y empieza a grabar.
+     * Se distingue del click simple con un timer corto.
+     *
+     * @returns {void}
+     */
+    on_mic_mousedown() {
+      const self = this
+      this._mic_hold_timer = setTimeout(function () {
+        self.audio_hold_mode = true
+        self.start_audio_recording()
+      }, 200)
+    },
+
+    /**
+     * MouseUp o MouseLeave: si estaba en hold y grabando, detiene y envía.
+     *
+     * @returns {void}
+     */
+    on_mic_mouseup_or_leave() {
+      if (this._mic_hold_timer) {
+        clearTimeout(this._mic_hold_timer)
+        this._mic_hold_timer = null
+      }
+      if (this.audio_hold_mode && this.recording_audio) {
+        this.audio_hold_mode = false
+        this.stop_and_send_audio()
+      }
+    },
+
+    /**
+     * TouchStart: inicia el hold en dispositivos táctiles.
+     *
+     * @param {TouchEvent} event
+     * @returns {void}
+     */
+    on_mic_touchstart(event) {
+      event.preventDefault()
+      this.audio_hold_mode = true
+      this.start_audio_recording()
+    },
+
+    /**
+     * TouchEnd: detiene la grabación en hold táctil.
+     *
+     * @param {TouchEvent} event
+     * @returns {void}
+     */
+    on_mic_touchend(event) {
+      event.preventDefault()
+      if (this.audio_hold_mode && this.recording_audio) {
+        this.audio_hold_mode = false
+        this.stop_and_send_audio()
+      }
+    },
+
+    /**
+     * Solicita acceso al micrófono y empieza a grabar con MediaRecorder.
+     *
+     * @returns {void}
+     */
+    start_audio_recording() {
+      const self = this
+      if (this.recording_audio || this.enviando_audio) {
+        return
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('Tu navegador no soporta grabación de audio.')
+        return
+      }
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(function (stream) {
+          self.audio_stream = stream
+          const recorder = new MediaRecorder(stream)
+          self.audio_recorder = recorder
+          const chunks = []
+          recorder.ondataavailable = function (e) {
+            if (e.data && e.data.size > 0) {
+              chunks.push(e.data)
+            }
+          }
+          recorder.onstop = function () {
+            const mime = recorder.mimeType || 'audio/webm'
+            const blob = new Blob(chunks, { type: mime })
+            self._pending_audio_blob = blob
+            self._pending_audio_mime = mime
+            self.recording_audio = false
+            self.release_audio_stream()
+            self.send_pending_audio()
+          }
+          recorder.start()
+          self.recording_audio = true
+        })
+        .catch(function (err) {
+          console.error('Error al acceder al micrófono', err)
+          alert('No se pudo acceder al micrófono. Verificá los permisos del navegador.')
+          self.recording_audio = false
+        })
+    },
+
+    /**
+     * Detiene la grabación activa; el envío se dispara desde recorder.onstop.
+     *
+     * @returns {void}
+     */
+    stop_and_send_audio() {
+      if (!this.recording_audio || !this.audio_recorder) {
+        return
+      }
+      try {
+        this.audio_recorder.stop()
+      } catch (err) {
+        console.error('Error al detener el MediaRecorder', err)
+        this.recording_audio = false
+        this.release_audio_stream()
+      }
+    },
+
+    /**
+     * Libera el stream del micrófono (apaga el LED de grabación en el sistema operativo).
+     *
+     * @returns {void}
+     */
+    release_audio_stream() {
+      if (this.audio_stream) {
+        this.audio_stream.getTracks().forEach(function (t) {
+          t.stop()
+        })
+        this.audio_stream = null
+      }
+      this.audio_recorder = null
+    },
+
+    /**
+     * Envía el blob de audio al backend vía POST multipart.
+     *
+     * @returns {void}
+     */
+    send_pending_audio() {
+      const self = this
+      const rec = this.effective_record
+      const blob = this._pending_audio_blob
+      const mime = this._pending_audio_mime || 'audio/webm'
+      if (!blob || !rec || !rec.id || this.enviando_audio) {
+        return
+      }
+      this._pending_audio_blob = null
+      this._pending_audio_mime = null
+
+      let ext = 'webm'
+      if (mime.indexOf('ogg') !== -1) {
+        ext = 'ogg'
+      } else if (mime.indexOf('mp4') !== -1) {
+        ext = 'mp4'
+      }
+      const form = new FormData()
+      form.append('audio', blob, 'audio.' + ext)
+
+      this.enviando_audio = true
+      api
+        .post('/lead/' + rec.id + '/send-direct-audio', form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+        .then(function (res) {
+          self.enviando_audio = false
+          self.on_record_updated(res.data.model)
+          self.schedule_scroll_to_bottom()
+        })
+        .catch(function (err) {
+          self.enviando_audio = false
+          console.error('Error al enviar audio', err)
+          alert('No se pudo enviar el audio.')
+        })
+    },
   },
 }
 </script>
@@ -1546,5 +1774,14 @@ export default {
   background: rgba(var(--bs-warning-rgb), 0.05);
   border-radius: 0.375rem;
   padding: 0.5rem;
+}
+
+/* Pulso rojo mientras graba */
+@keyframes audio-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+.audio-recording-pulse {
+  animation: audio-pulse 1s ease-in-out infinite;
 }
 </style>
