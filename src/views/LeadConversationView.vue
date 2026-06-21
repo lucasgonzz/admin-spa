@@ -2,7 +2,7 @@
   <div class="conversation-view">
 
     <!-- ====================================================
-         HEADER FIJO: atrás | nombre del lead | 4 botones icono
+         HEADER FIJO: atrás | nombre del lead | 5 botones icono
          ==================================================== -->
     <div class="conversation-header d-flex align-items-center justify-content-between px-3 py-2 border-bottom bg-white">
 
@@ -21,10 +21,21 @@
         </span>
       </div>
 
-      <!-- Derecha: 4 botones de acción (solo ícono) -->
+      <!-- Derecha: 5 botones de acción (solo ícono) -->
       <div class="d-flex align-items-center gap-1 flex-shrink-0">
 
-        <!-- Notificar mensajes: campana llena si activo, vacía si no -->
+        <!-- Resumen del lead -->
+        <button
+          type="button"
+          class="icon-btn text-muted"
+          title="Ver resumen del lead"
+          :disabled="!effective_record"
+          @click="show_resumen_modal = true"
+        >
+          <i class="bi bi-person-lines-fill" aria-hidden="true" />
+        </button>
+
+        <!-- Notificar mensajes: campana l͏͏͏͏ si activo, vacía si no -->
         <button
           type="button"
           class="icon-btn"
@@ -299,11 +310,49 @@
       </div>
     </div>
 
+    <!-- ====================================================
+         MODAL: Resumen del lead
+         ==================================================== -->
+    <div
+      v-if="show_resumen_modal"
+      class="resumen-modal-overlay"
+      @click.self="show_resumen_modal = false"
+    >
+      <div class="resumen-modal-panel">
+
+        <!-- Header del modal -->
+        <div class="d-flex align-items-center justify-content-between px-4 py-3 border-bottom">
+          <span class="fw-semibold">
+            <i class="bi bi-person-lines-fill me-2 text-primary" aria-hidden="true" />
+            Resumen del lead
+          </span>
+          <button
+            type="button"
+            class="icon-btn text-muted"
+            title="Cerrar"
+            @click="show_resumen_modal = false"
+          >
+            <i class="bi bi-x-lg" aria-hidden="true" />
+          </button>
+        </div>
+
+        <!-- Cuerpo: reutiliza LeadResumenTab -->
+        <div class="resumen-modal-body">
+          <lead-resumen-tab
+            :record="effective_record"
+            @record-updated="on_record_updated"
+          />
+        </div>
+
+      </div>
+    </div>
+
   </div>
 </template>
 
 <script>
 import MessageBubble from '@/components/lead/conversation/MessageBubble.vue'
+import LeadResumenTab from '@/components/lead/resumen/Index.vue'
 import api from '@/utils/axios'
 import { copy_lead_conversation_to_clipboard } from '@/utils/lead_conversation_clipboard'
 import lead_conversation_date_dividers from '@/mixins/lead_conversation_date_dividers'
@@ -322,7 +371,7 @@ import '@/styles/whatsapp-date-divider.css'
  */
 export default {
   name: 'LeadConversationView',
-  components: { MessageBubble },
+  components: { MessageBubble, LeadResumenTab },
   mixins: [lead_conversation_date_dividers],
 
   data() {
@@ -428,6 +477,9 @@ export default {
 
       /** true cuando el usuario mantiene pulsado el botón (hold mode). */
       audio_hold_mode: false,
+
+      /** Controla la visibilidad del modal de resumen del lead. */
+      show_resumen_modal: false,
     }
   },
 
@@ -1828,5 +1880,35 @@ export default {
 }
 .audio-recording-pulse {
   animation: audio-pulse 1s ease-in-out infinite;
+}
+
+/* Overlay del modal de resumen */
+.resumen-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1060;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+/* Panel del modal: sube desde abajo, ocupa hasta 80% del alto de pantalla */
+.resumen-modal-panel {
+  background: var(--bs-body-bg);
+  border-radius: 1rem 1rem 0 0;
+  width: 100%;
+  max-width: 640px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Cuerpo scrolleable */
+.resumen-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.25rem 1.5rem;
 }
 </style>
