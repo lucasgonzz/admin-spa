@@ -1741,6 +1741,13 @@ export default {
   background: #f0f2f5;
 }
 
+/* En móvil, separar el footer del borde inferior (barra del sistema / home indicator). */
+@media (max-width: 767.98px) {
+  .conversation-footer {
+    padding-bottom: 15px;
+  }
+}
+
 /* El nombre del lead se trunca si es muy largo */
 .conversation-lead-name {
   max-width: 60vw;
