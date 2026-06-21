@@ -55,4 +55,15 @@ const update_sw = registerSW({
   },
 })
 
+/**
+ * Chequeo periódico de actualizaciones del SW (cada 60 segundos).
+ * Necesario especialmente en iOS, donde el SW no chequea en background:
+ * sin esto, una PWA abierta hace horas nunca detecta un nuevo deploy.
+ */
+setInterval(() => {
+  navigator.serviceWorker.getRegistration().then((r) => {
+    if (r) r.update()
+  })
+}, 60 * 1000)
+
 app.mount('#app')
