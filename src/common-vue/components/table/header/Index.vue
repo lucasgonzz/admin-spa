@@ -9,9 +9,13 @@
         :key="p.key"
         class="position-relative th-filtro"
         :class="{ 'th-filtro--open': is_filter_for(p.key) }"
+        @click="on_th_click(p.key)"
       >
         <span v-html="p.text" />
-        <span class="cont-filter-buttons" :class="{ 'force-show': is_filter_for(p.key) }">
+        <span
+          class="cont-filter-buttons"
+          :class="{ 'force-show': is_filter_for(p.key) || th_open_key === p.key }"
+        >
           <btn-filter
             :active="is_filter_for(p.key)"
             @open="$emit('open-filter', p)"
@@ -40,6 +44,19 @@ export default {
     has_row_actions: { type: Boolean, default: false },
   },
   emits: ['open-filter', 'clear-filter'],
+  data() {
+    return {
+      // key de la columna cuyo botón de filtro está visible por tap (mobile/touch)
+      th_open_key: null,
+    }
+  },
+  mounted() {
+    // cierra la lupita abierta por tap al hacer click fuera de la tabla
+    document.addEventListener('click', this._on_doc_click)
+  },
+  beforeUnmount() {
+    document.removeEventListener('click', this._on_doc_click)
+  },
   methods: {
     /**
      * Indica si la columna tiene un filtro activo según su key.
@@ -48,6 +65,22 @@ export default {
      */
     is_filter_for(key) {
       return this.filters.some((f) => f.key == key)
+    },
+    /**
+     * Alterna la visibilidad del botón de filtro al tocar la cabecera (mobile).
+     * @param {string} key clave de columna.
+     */
+    on_th_click(key) {
+      this.th_open_key = (this.th_open_key === key) ? null : key
+    },
+    /**
+     * Oculta la lupita abierta por tap si el click fue fuera del thead.
+     * @param {Event} e evento click del documento.
+     */
+    _on_doc_click(e) {
+      if (!this.$el.contains(e.target)) {
+        this.th_open_key = null
+      }
     },
   },
 }

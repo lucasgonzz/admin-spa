@@ -1,7 +1,14 @@
 <template>
   <div class="mb-2">
     <label class="form-label">Id del registro relacionado</label>
-    <input v-model="draft.igual_que" type="number" min="0" step="1" class="form-control" />
+    <input
+      v-model="draft.igual_que"
+      type="number"
+      min="0"
+      step="1"
+      class="form-control"
+      @keyup.enter="$emit('filter')"
+    />
   </div>
 </template>
 
@@ -16,5 +23,6 @@ export default {
     model_name: { type: String, default: '' },
     draft: { type: Object, required: true },
   },
+  emits: ['filter'],
 }
 </script>

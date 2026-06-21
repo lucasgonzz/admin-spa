@@ -4,14 +4,17 @@
       <filter-text
         v-if="field.type === 'text' || field.type === 'textarea'"
         :draft="draft"
+        @filter="on_filter"
       />
       <filter-number
         v-else-if="field.type === 'number'"
         :draft="draft"
+        @filter="on_filter"
       />
       <filter-date
         v-else-if="field.type === 'date'"
         :draft="draft"
+        @filter="on_filter"
       />
       <filter-select
         v-else-if="field.type === 'select' || field.type === 'pipeline_status'"
@@ -23,6 +26,7 @@
         :field="field"
         :model_name="model_name"
         :draft="draft"
+        @filter="on_filter"
       />
       <filter-checkbox
         v-else-if="field.type === 'checkbox'"
@@ -86,6 +90,13 @@ export default {
       this.open_local = v
       if (v) {
         this.init_draft()
+        // espera la animación del modal antes de enfocar el primer campo
+        setTimeout(() => {
+          const input = this.$el && this.$el.querySelector('input, select')
+          if (input) {
+            input.focus()
+          }
+        }, 150)
       }
     },
   },
