@@ -50,11 +50,19 @@ export function useLeadSocket(options) {
     if (!is_viewing_lead_conversation(lead_id)) {
       return
     }
+    // Si ya hay un POST en vuelo, no acumular otro
+    if (store.state.lead._mark_read_in_flight != null) {
+      return
+    }
     if (mark_read_if_viewing_debounce_timer) {
       clearTimeout(mark_read_if_viewing_debounce_timer)
     }
     mark_read_if_viewing_debounce_timer = setTimeout(function () {
       mark_read_if_viewing_debounce_timer = null
+      // Re-verificar flag al momento de ejecutar (puede haber cambiado durante el debounce)
+      if (store.state.lead._mark_read_in_flight != null) {
+        return
+      }
       store.dispatch('lead/mark_whatsapp_messages_read', lead_id).catch(function () {
         return null
       })

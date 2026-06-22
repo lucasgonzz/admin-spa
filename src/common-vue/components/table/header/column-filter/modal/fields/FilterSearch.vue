@@ -2,6 +2,7 @@
   <div class="mb-2">
     <label class="form-label">Id del registro relacionado</label>
     <input
+      ref="first_input"
       v-model="draft.igual_que"
       type="number"
       min="0"
@@ -24,5 +25,17 @@ export default {
     draft: { type: Object, required: true },
   },
   emits: ['filter'],
+  methods: {
+    /**
+     * Enfoca el input numérico al abrir el modal de filtro search.
+     * @returns {void}
+     */
+    focus_input() {
+      const input = this.$refs.first_input
+      if (input) {
+        input.focus()
+      }
+    },
+  },
 }
 </script>

@@ -44,7 +44,8 @@ function resolve_navigation(to, from, next, store) {
   }
 
   if (to.meta && to.meta.requiresAuth) {
-    if (!store.state.auth.token || !store.state.auth.admin) {
+    // Basta el token: el perfil puede restaurarse desde localStorage o /me en bootstrap.
+    if (!store.state.auth.token) {
       next({ name: 'login', query: { redirect: to.fullPath } })
       return
     }

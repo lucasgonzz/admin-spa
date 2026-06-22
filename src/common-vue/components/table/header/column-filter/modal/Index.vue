@@ -3,26 +3,31 @@
     <div v-if="field">
       <filter-text
         v-if="field.type === 'text' || field.type === 'textarea'"
+        ref="active_field"
         :draft="draft"
         @filter="on_filter"
       />
       <filter-number
         v-else-if="field.type === 'number'"
+        ref="active_field"
         :draft="draft"
         @filter="on_filter"
       />
       <filter-date
         v-else-if="field.type === 'date'"
+        ref="active_field"
         :draft="draft"
         @filter="on_filter"
       />
       <filter-select
         v-else-if="field.type === 'select' || field.type === 'pipeline_status'"
+        ref="active_field"
         :field="field"
         :draft="draft"
       />
       <filter-search
         v-else-if="field.type === 'search'"
+        ref="active_field"
         :field="field"
         :model_name="model_name"
         :draft="draft"
@@ -30,6 +35,7 @@
       />
       <filter-checkbox
         v-else-if="field.type === 'checkbox'"
+        ref="active_field"
         :field="field"
         :draft="draft"
       />
@@ -90,13 +96,7 @@ export default {
       this.open_local = v
       if (v) {
         this.init_draft()
-        // espera la animación del modal antes de enfocar el primer campo
-        setTimeout(() => {
-          const input = this.$el && this.$el.querySelector('input, select')
-          if (input) {
-            input.focus()
-          }
-        }, 150)
+        this.focus_active_field_input()
       }
     },
   },
@@ -140,6 +140,23 @@ export default {
     },
     build_payload() {
       return Object.assign({}, this.draft)
+    },
+    /**
+     * Enfoca el control del campo activo tras abrir el modal.
+     * BaseModal usa teleport: no se puede buscar el input en this.$el.
+     * @returns {void}
+     */
+    focus_active_field_input() {
+      const self = this
+      this.$nextTick(function () {
+        // breve espera para que termine el render teletransportado del modal
+        setTimeout(function () {
+          const field = self.$refs.active_field
+          if (field && typeof field.focus_input === 'function') {
+            field.focus_input()
+          }
+        }, 150)
+      })
     },
   },
 }

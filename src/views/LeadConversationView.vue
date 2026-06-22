@@ -412,9 +412,6 @@ export default {
       /** Evita POST duplicados al marcar seguimiento como visto. */
       marking_followup_seen: false,
 
-      /** Evita POST duplicados al marcar mensajes WhatsApp como leídos. */
-      marking_whatsapp_read: false,
-
       /** Evita GET duplicados por Pusher (rate limit 429). */
       last_conversation_fetch_ms: 0,
 
@@ -1136,18 +1133,16 @@ export default {
       if (unread < 1) {
         return
       }
-      if (this.marking_whatsapp_read) {
-        return
-      }
-      this.marking_whatsapp_read = true
+      // El store controla que no haya llamadas paralelas
       this.$store
         .dispatch('lead/mark_whatsapp_messages_read', rec.id)
         .then(function (model) {
-          self.marking_whatsapp_read = false
-          self.on_record_updated(model)
+          if (model) {
+            self.on_record_updated(model)
+          }
         })
         .catch(function () {
-          self.marking_whatsapp_read = false
+          // silencioso: el store ya manejó el flag
         })
     },
 
@@ -1796,7 +1791,7 @@ export default {
 /* En móvil, separar el footer del borde inferior (barra del sistema / home indicator). */
 @media (max-width: 767.98px) {
   .conversation-footer {
-    padding-bottom: 15px;
+    padding-bottom: 25px;
   }
 }
 

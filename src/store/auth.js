@@ -1,8 +1,14 @@
 /**
- * Sesión admin: token Sanctum + perfil mínimo.
+ * Sesión admin: token Sanctum + perfil mínimo persistido en localStorage.
  */
 import api from '@/utils/axios'
 import { log_debug } from '@/utils/logger'
+
+/** Clave localStorage del Bearer token Sanctum. */
+const ADMIN_TOKEN_STORAGE_KEY = 'admin_token'
+
+/** Clave localStorage del perfil mínimo del admin (cache offline / F5). */
+const ADMIN_PROFILE_STORAGE_KEY = 'admin_profile'
 
 const state = {
   admin: null,
@@ -15,17 +21,59 @@ const state = {
 /** Promesa compartida para no ejecutar bootstrap en paralelo (main + guard). */
 let bootstrap_promise = null
 
+/**
+ * Parsea el perfil admin guardado en localStorage.
+ *
+ * @returns {Object|null}
+ */
+function read_admin_profile_from_storage() {
+  const raw_admin_profile = window.localStorage.getItem(ADMIN_PROFILE_STORAGE_KEY)
+  if (!raw_admin_profile) {
+    return null
+  }
+  try {
+    const parsed_admin_profile = JSON.parse(raw_admin_profile)
+    if (!parsed_admin_profile || typeof parsed_admin_profile !== 'object') {
+      return null
+    }
+    return parsed_admin_profile
+  } catch (parse_error) {
+    log_debug(parse_error)
+    window.localStorage.removeItem(ADMIN_PROFILE_STORAGE_KEY)
+    return null
+  }
+}
+
 const mutations = {
+  /**
+   * Persiste el perfil mínimo del admin en memoria y localStorage.
+   *
+   * @param {Object} s  State del módulo auth.
+   * @param {Object|null} v  Perfil admin o null al cerrar sesión.
+   */
   set_admin(s, v) {
     s.admin = v
+    if (v) {
+      window.localStorage.setItem(ADMIN_PROFILE_STORAGE_KEY, JSON.stringify(v))
+      return
+    }
+    window.localStorage.removeItem(ADMIN_PROFILE_STORAGE_KEY)
   },
+  /**
+   * Persiste el token Bearer; al limpiarlo también borra el perfil cacheado.
+   *
+   * @param {Object} s  State del módulo auth.
+   * @param {string|null} v  Token Sanctum o null.
+   */
   set_token(s, v) {
     s.token = v
     if (v) {
-      window.localStorage.setItem('admin_token', v)
-    } else {
-      window.localStorage.removeItem('admin_token')
+      window.localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, v)
+      return
     }
+    window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY)
+    s.admin = null
+    window.localStorage.removeItem(ADMIN_PROFILE_STORAGE_KEY)
   },
   set_loading(s, v) {
     s.loading = v
@@ -36,10 +84,17 @@ const mutations = {
 }
 
 const actions = {
+  /**
+   * Restaura token y perfil admin desde localStorage (sin validar aún con /me).
+   */
   init_from_storage({ commit }) {
-    const t = window.localStorage.getItem('admin_token')
-    if (t) {
-      commit('set_token', t)
+    const stored_token = window.localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY)
+    if (stored_token) {
+      commit('set_token', stored_token)
+    }
+    const cached_admin_profile = read_admin_profile_from_storage()
+    if (cached_admin_profile) {
+      commit('set_admin', cached_admin_profile)
     }
   },
   /**
@@ -60,16 +115,23 @@ const actions = {
         if (!state.token) {
           return null
         }
-        return dispatch('me')
-          .catch(function () {
+        return dispatch('me').catch(function (err) {
+          // me() ya limpia token y perfil en 401; aquí solo toleramos fallas transitorias.
+          const status = err && err.response ? err.response.status : null
+          if (status === 401) {
             return null
-          })
-          .then(function (admin) {
-            if (!admin) {
-              return null
-            }
-            return dispatch('version/load_select_catalog', null, { root: true })
-          })
+          }
+          if (state.token) {
+            return state.admin || { id: null }
+          }
+          return null
+        })
+      })
+      .then(function () {
+        if (!state.token) {
+          return null
+        }
+        return dispatch('version/load_select_catalog', null, { root: true })
       })
       .finally(function () {
         commit('set_session_ready', true)
@@ -151,7 +213,19 @@ const actions = {
 }
 
 const getters = {
-  authenticated: (s) => !!s.token && !!s.admin,
+  /**
+   * true si hay token activo. Tras bootstrap, basta el token (perfil puede venir de cache).
+   * Durante bootstrap previo a session_ready, exige también perfil para evitar flashes.
+   */
+  authenticated: (s) => {
+    if (!s.token) {
+      return false
+    }
+    if (s.admin) {
+      return true
+    }
+    return s.session_ready
+  },
 }
 
 export default {

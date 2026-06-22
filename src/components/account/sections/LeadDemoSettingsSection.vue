@@ -73,6 +73,22 @@
         </div>
       </div>
 
+      <!-- Campo: recordatorio de mañana de la demo -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-5">
+          <label class="form-label small" for="demo_recordatorio_manana_hora">Hora del recordatorio de mañana de la demo</label>
+          <!-- Hora del día en que se envía el recordatorio de mañana por WhatsApp -->
+          <input
+            id="demo_recordatorio_manana_hora"
+            v-model="local.recordatorio_manana_hora"
+            type="time"
+            class="form-control form-control-sm"
+            :disabled="saving"
+          />
+          <p class="text-muted small mb-0 mt-1">Se envía automáticamente por WhatsApp el día de la demo a esta hora.</p>
+        </div>
+      </div>
+
       <!-- Campo: check de ingreso post-inicio -->
       <div class="row g-2 align-items-end mb-3">
         <div class="col-sm-5">
@@ -149,7 +165,7 @@ import api from '@/utils/axios'
 /**
  * Sección en Cuenta: configuración de demos.
  *
- * Gestiona los 7 parámetros que controlan duración, márgenes de setup/gracia,
+ * Gestiona los 8 parámetros que controlan duración, márgenes de setup/gracia,
  * tiempos de automatizaciones (recordatorio, check de ingreso, resumen del lead)
  * y la duración de la llamada del closer para el bloqueo global de disponibilidad.
  */
@@ -163,6 +179,7 @@ export default {
         setup_minutos_antes: 15,
         gracia_minutos_post: 10,
         recordatorio_minutos_antes: 15,
+        recordatorio_manana_hora: '09:00',
         check_ingreso_minutos_post: 5,
         resumen_minutos_antes_fin: 10,
         /** Minutos que el closer necesita para atender al lead post-demo; bloquea la ventana en otras demos. */
@@ -174,6 +191,7 @@ export default {
         setup_minutos_antes: 15,
         gracia_minutos_post: 10,
         recordatorio_minutos_antes: 15,
+        recordatorio_manana_hora: '09:00',
         check_ingreso_minutos_post: 5,
         resumen_minutos_antes_fin: 10,
         /** Espejo del servidor para detectar si el campo fue modificado localmente. */
@@ -227,8 +245,14 @@ export default {
           var fields = Object.keys(self.local)
           fields.forEach(function (key) {
             if (data[key] !== undefined) {
-              self.local[key]  = parseInt(data[key], 10)
-              self.stored[key] = parseInt(data[key], 10)
+              /* Hora de mañana: string HH:MM, no parsear como entero. */
+              if (key === 'recordatorio_manana_hora') {
+                self.local[key]  = String(data[key])
+                self.stored[key] = String(data[key])
+              } else {
+                self.local[key]  = parseInt(data[key], 10)
+                self.stored[key] = parseInt(data[key], 10)
+              }
             }
           })
         })
@@ -258,6 +282,7 @@ export default {
           setup_minutos_antes:             self.local.setup_minutos_antes,
           gracia_minutos_post:             self.local.gracia_minutos_post,
           recordatorio_minutos_antes:      self.local.recordatorio_minutos_antes,
+          recordatorio_manana_hora:        self.local.recordatorio_manana_hora,
           check_ingreso_minutos_post:      self.local.check_ingreso_minutos_post,
           resumen_minutos_antes_fin:       self.local.resumen_minutos_antes_fin,
           duracion_llamada_closer_minutos: self.local.duracion_llamada_closer_minutos,
@@ -268,8 +293,14 @@ export default {
           var fields = Object.keys(self.local)
           fields.forEach(function (key) {
             if (data[key] !== undefined) {
-              self.local[key]  = parseInt(data[key], 10)
-              self.stored[key] = parseInt(data[key], 10)
+              /* Hora de mañana: string HH:MM, no parsear como entero. */
+              if (key === 'recordatorio_manana_hora') {
+                self.local[key]  = String(data[key])
+                self.stored[key] = String(data[key])
+              } else {
+                self.local[key]  = parseInt(data[key], 10)
+                self.stored[key] = parseInt(data[key], 10)
+              }
             }
           })
           self.saved_message = 'Configuración de demos guardada.'

@@ -113,7 +113,7 @@ export default __base_store({
   state: {
     model_name: 'lead',
     use_per_page: true,
-    per_page: 50,
+    per_page: 500,
     /** Lead abierto en la pestaña de conversación (para refrescar listas coherentes). */
     lead_en_conversacion: null,
     /**
@@ -131,6 +131,8 @@ export default __base_store({
     unread_total: 0,
     /** Id de lead con GET conversación en curso (evita duplicados). */
     _conversation_fetch_in_flight: null,
+    /** Id del lead cuyo mark-whatsapp-messages-read está en vuelo (null si ninguno). */
+    _mark_read_in_flight: null,
     /** Criterio de ordenamiento activo: 'last_message' | 'created_at'. Por defecto último mensaje. */
     sort_by: 'last_message',
   },
@@ -141,6 +143,15 @@ export default __base_store({
      */
     set_conversation_fetch_in_flight(state, lead_id) {
       state._conversation_fetch_in_flight = lead_id
+    },
+    /**
+     * Registra qué lead tiene un POST mark-whatsapp-messages-read en curso (evita llamadas paralelas).
+     *
+     * @param {Object} state
+     * @param {number|string|null} lead_id
+     */
+    set_mark_read_in_flight(state, lead_id) {
+      state._mark_read_in_flight = lead_id != null ? String(lead_id) : null
     },
     /**
      * @param {Object} state
@@ -735,15 +746,31 @@ export default __base_store({
     mark_whatsapp_messages_read(context, lead_id) {
       const commit = context.commit
       const dispatch = context.dispatch
-      return api.post('/lead/' + lead_id + '/mark-whatsapp-messages-read').then((res) => {
-        const model = res.data.model
-        commit('update_lead_en_conversacion', model)
-        // Refresca la fila en la tabla con el unread_count y followup_count actualizados.
-        dispatch('upsert_model_in_lists', model)
-        return dispatch('fetch_unread_badges').then(function () {
-          return model
+      const state = context.state
+
+      // Evitar llamadas paralelas para el mismo lead (o cualquier lead si ya hay una en vuelo)
+      if (state._mark_read_in_flight != null) {
+        return Promise.resolve(state.lead_en_conversacion)
+      }
+
+      commit('set_mark_read_in_flight', lead_id)
+
+      return api
+        .post('/lead/' + lead_id + '/mark-whatsapp-messages-read')
+        .then(function (res) {
+          const model = res.data.model
+          commit('set_mark_read_in_flight', null)
+          commit('update_lead_en_conversacion', model)
+          // Refresca la fila en la tabla con el unread_count y followup_count actualizados.
+          dispatch('upsert_model_in_lists', model)
+          return dispatch('fetch_unread_badges').then(function () {
+            return model
+          })
         })
-      })
+        .catch(function (err) {
+          commit('set_mark_read_in_flight', null)
+          return Promise.reject(err)
+        })
     },
     /**
      * Lead completo con todos los mensajes (modal / conversación).

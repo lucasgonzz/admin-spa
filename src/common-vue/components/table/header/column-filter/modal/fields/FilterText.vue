@@ -2,6 +2,7 @@
   <div class="mb-3">
     <label class="form-label">Contiene (cualquier orden)</label>
     <input
+      ref="first_input"
       v-model="draft.que_contenga"
       type="text"
       class="form-control"
@@ -20,5 +21,17 @@ export default {
     draft: { type: Object, required: true },
   },
   emits: ['filter'],
+  methods: {
+    /**
+     * Enfoca el input de texto para permitir escribir al abrir el modal.
+     * @returns {void}
+     */
+    focus_input() {
+      const input = this.$refs.first_input
+      if (input) {
+        input.focus()
+      }
+    },
+  },
 }
 </script>

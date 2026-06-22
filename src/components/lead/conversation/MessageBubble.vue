@@ -872,9 +872,19 @@ export default {
 .wa-bubble-row {
   display: flex;
   flex-direction: column;
-  margin-bottom: 0.2rem;
   max-width: 65%;
   width: fit-content;
+}
+/*
+ * Espaciado vertical como WhatsApp Web: ~12px al cambiar de lado (entrante/saliente),
+ * ~2px entre burbujas consecutivas del mismo lado (mensajes agrupados).
+ */
+.wa-bubble-row + .wa-bubble-row {
+  margin-top: 0.75rem;
+}
+.wa-bubble-row--in + .wa-bubble-row--in,
+.wa-bubble-row--out + .wa-bubble-row--out {
+  margin-top: 0.125rem;
 }
 .wa-bubble-row--in {
   align-self: flex-start;

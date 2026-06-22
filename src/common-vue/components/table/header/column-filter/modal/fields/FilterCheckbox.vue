@@ -1,7 +1,7 @@
 <template>
   <div class="mb-2">
     <label class="form-label">{{ field.text }}</label>
-    <select v-model="draft.checkbox" class="form-select">
+    <select ref="first_input" v-model="draft.checkbox" class="form-select">
       <option v-for="o in cb_options" :key="o.value" :value="o.value">{{ o.text }}</option>
     </select>
   </div>
@@ -25,6 +25,18 @@ export default {
         { value: 0, text: 'No' },
       ],
     }
+  },
+  methods: {
+    /**
+     * Enfoca el select booleano al abrir el modal de filtro.
+     * @returns {void}
+     */
+    focus_input() {
+      const select = this.$refs.first_input
+      if (select) {
+        select.focus()
+      }
+    },
   },
 }
 </script>
