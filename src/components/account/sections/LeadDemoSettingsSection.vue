@@ -140,6 +140,95 @@
         </div>
       </div>
 
+      <!-- Campo: horario laboral del closer lunes a viernes -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-5">
+          <label class="form-label small" for="demo_closer_horario_lunes_viernes">Horario de trabajo del closer (lunes a viernes)</label>
+          <!-- Rango horario H:i-H:i; define en qué ventana el closer puede atender demos -->
+          <input
+            id="demo_closer_horario_lunes_viernes"
+            v-model="local.closer_horario_lunes_viernes"
+            type="text"
+            class="form-control form-control-sm"
+            placeholder="09:00-18:00"
+            :disabled="saving"
+          />
+          <p class="text-muted small mb-0 mt-1">Formato HH:MM-HH:MM. Ej: 09:00-18:00</p>
+        </div>
+      </div>
+
+      <!-- Campo: horario laboral del closer sábados -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-5">
+          <label class="form-label small" for="demo_closer_horario_sabado">Horario de trabajo del closer (sábados)</label>
+          <!-- Dejar vacío si el closer no trabaja los sábados -->
+          <input
+            id="demo_closer_horario_sabado"
+            v-model="local.closer_horario_sabado"
+            type="text"
+            class="form-control form-control-sm"
+            placeholder="10:00-13:00"
+            :disabled="saving"
+          />
+          <p class="text-muted small mb-0 mt-1">Dejar vacío si el closer no trabaja los sábados.</p>
+        </div>
+      </div>
+
+      <!-- Campo: horario laboral del closer domingos -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-5">
+          <label class="form-label small" for="demo_closer_horario_domingo">Horario de trabajo del closer (domingos)</label>
+          <!-- Dejar vacío si el closer no trabaja los domingos -->
+          <input
+            id="demo_closer_horario_domingo"
+            v-model="local.closer_horario_domingo"
+            type="text"
+            class="form-control form-control-sm"
+            placeholder=""
+            :disabled="saving"
+          />
+          <p class="text-muted small mb-0 mt-1">Dejar vacío si el closer no trabaja los domingos.</p>
+        </div>
+      </div>
+
+      <!-- Campo: frecuencia de slots en minutos -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-5">
+          <label class="form-label small" for="demo_frecuencia_slots_minutos">Frecuencia de slots (minutos)</label>
+          <!-- Cada cuántos minutos se generan los horarios disponibles para agendar demos -->
+          <input
+            id="demo_frecuencia_slots_minutos"
+            v-model.number="local.frecuencia_slots_minutos"
+            type="number"
+            class="form-control form-control-sm"
+            min="5"
+            max="60"
+            :disabled="saving"
+          />
+          <p class="text-muted small mb-0 mt-1">Cada cuántos minutos se generan los horarios disponibles. Valores válidos: 5, 10, 15, 30, 60.</p>
+        </div>
+      </div>
+
+      <!-- Campo: checkbox llamada del closer debe terminar dentro del horario -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-7">
+          <div class="form-check">
+            <!-- Controla si el slot solo se ofrece cuando la llamada completa cabe en el horario laboral -->
+            <input
+              id="demo_llamada_debe_terminar_en_horario"
+              v-model="local.llamada_debe_terminar_en_horario"
+              type="checkbox"
+              class="form-check-input"
+              :disabled="saving"
+            />
+            <label class="form-check-label small" for="demo_llamada_debe_terminar_en_horario">
+              La llamada del closer debe terminar dentro de su horario laboral
+            </label>
+          </div>
+          <p class="text-muted small mb-0 mt-1">Si está activado, solo se ofrecen demos donde la llamada completa quede dentro del horario. Si está desactivado, basta con que la llamada comience dentro del horario.</p>
+        </div>
+      </div>
+
       <!-- Botón guardar: único para todos los campos -->
       <div class="d-flex align-items-center gap-2">
         <button
@@ -184,6 +273,16 @@ export default {
         resumen_minutos_antes_fin: 10,
         /** Minutos que el closer necesita para atender al lead post-demo; bloquea la ventana en otras demos. */
         duracion_llamada_closer_minutos: 30,
+        /** Horario laboral del closer lunes a viernes (H:i-H:i). */
+        closer_horario_lunes_viernes: '09:00-18:00',
+        /** Horario laboral del closer sábados (H:i-H:i o vacío). */
+        closer_horario_sabado: '10:00-13:00',
+        /** Horario laboral del closer domingos (H:i-H:i o vacío). */
+        closer_horario_domingo: '',
+        /** Frecuencia en minutos con que se generan los slots disponibles. */
+        frecuencia_slots_minutos: 30,
+        /** Si la llamada del closer debe terminar dentro del horario laboral. */
+        llamada_debe_terminar_en_horario: false,
       },
       /** Valores persistidos en servidor (para detectar cambios). */
       stored: {
@@ -196,6 +295,16 @@ export default {
         resumen_minutos_antes_fin: 10,
         /** Espejo del servidor para detectar si el campo fue modificado localmente. */
         duracion_llamada_closer_minutos: 30,
+        /** Espejo del servidor: horario laboral del closer lunes a viernes. */
+        closer_horario_lunes_viernes: '09:00-18:00',
+        /** Espejo del servidor: horario laboral del closer sábados. */
+        closer_horario_sabado: '10:00-13:00',
+        /** Espejo del servidor: horario laboral del closer domingos. */
+        closer_horario_domingo: '',
+        /** Espejo del servidor: frecuencia de slots en minutos. */
+        frecuencia_slots_minutos: 30,
+        /** Espejo del servidor: si la llamada del closer debe terminar dentro del horario. */
+        llamada_debe_terminar_en_horario: false,
       },
       /** Carga inicial GET settings. */
       loading: true,
@@ -243,10 +352,17 @@ export default {
           /* Poblar campos locales y almacenar los valores de referencia del servidor. */
           var data = res.data || {}
           var fields = Object.keys(self.local)
+          /* Campos que se tratan como string (no entero). */
+          var string_fields = ['recordatorio_manana_hora', 'closer_horario_lunes_viernes', 'closer_horario_sabado', 'closer_horario_domingo']
+          /* Campos que se tratan como booleano. */
+          var bool_fields = ['llamada_debe_terminar_en_horario']
           fields.forEach(function (key) {
             if (data[key] !== undefined) {
-              /* Hora de mañana: string HH:MM, no parsear como entero. */
-              if (key === 'recordatorio_manana_hora') {
+              if (bool_fields.indexOf(key) !== -1) {
+                /* El backend devuelve true/false; normalizar a boolean. */
+                self.local[key]  = data[key] === true || data[key] === 1 || data[key] === '1'
+                self.stored[key] = self.local[key]
+              } else if (string_fields.indexOf(key) !== -1) {
                 self.local[key]  = String(data[key])
                 self.stored[key] = String(data[key])
               } else {
@@ -278,23 +394,34 @@ export default {
       self.error_message = ''
       api
         .put('/settings/lead-demo', {
-          duracion_minutos:                self.local.duracion_minutos,
-          setup_minutos_antes:             self.local.setup_minutos_antes,
-          gracia_minutos_post:             self.local.gracia_minutos_post,
-          recordatorio_minutos_antes:      self.local.recordatorio_minutos_antes,
-          recordatorio_manana_hora:        self.local.recordatorio_manana_hora,
-          check_ingreso_minutos_post:      self.local.check_ingreso_minutos_post,
-          resumen_minutos_antes_fin:       self.local.resumen_minutos_antes_fin,
-          duracion_llamada_closer_minutos: self.local.duracion_llamada_closer_minutos,
+          duracion_minutos:                    self.local.duracion_minutos,
+          setup_minutos_antes:                 self.local.setup_minutos_antes,
+          gracia_minutos_post:                 self.local.gracia_minutos_post,
+          recordatorio_minutos_antes:          self.local.recordatorio_minutos_antes,
+          recordatorio_manana_hora:            self.local.recordatorio_manana_hora,
+          check_ingreso_minutos_post:          self.local.check_ingreso_minutos_post,
+          resumen_minutos_antes_fin:           self.local.resumen_minutos_antes_fin,
+          duracion_llamada_closer_minutos:     self.local.duracion_llamada_closer_minutos,
+          closer_horario_lunes_viernes:        self.local.closer_horario_lunes_viernes,
+          closer_horario_sabado:               self.local.closer_horario_sabado,
+          closer_horario_domingo:              self.local.closer_horario_domingo,
+          frecuencia_slots_minutos:            self.local.frecuencia_slots_minutos,
+          llamada_debe_terminar_en_horario:    self.local.llamada_debe_terminar_en_horario,
         })
         .then(function (res) {
           /* Actualizar los valores de referencia para que can_save vuelva a false. */
           var data = res.data || {}
           var fields = Object.keys(self.local)
+          /* Campos que se tratan como string (no entero). */
+          var string_fields = ['recordatorio_manana_hora', 'closer_horario_lunes_viernes', 'closer_horario_sabado', 'closer_horario_domingo']
+          /* Campos que se tratan como booleano. */
+          var bool_fields = ['llamada_debe_terminar_en_horario']
           fields.forEach(function (key) {
             if (data[key] !== undefined) {
-              /* Hora de mañana: string HH:MM, no parsear como entero. */
-              if (key === 'recordatorio_manana_hora') {
+              if (bool_fields.indexOf(key) !== -1) {
+                self.local[key]  = data[key] === true || data[key] === 1 || data[key] === '1'
+                self.stored[key] = self.local[key]
+              } else if (string_fields.indexOf(key) !== -1) {
                 self.local[key]  = String(data[key])
                 self.stored[key] = String(data[key])
               } else {
