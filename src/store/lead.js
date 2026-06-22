@@ -1,5 +1,6 @@
 import __base_store from '@/common-vue/store/__base_store'
 import api from '@/utils/axios'
+import { route_string } from '@/utils/route_string'
 
 /**
  * Fusiona mensajes del hilo conservando adjuntos si el payload nuevo no los trae.
@@ -323,7 +324,46 @@ export default __base_store({
      */
     change_sort_by(context, sort_by) {
       context.commit('set_sort_by', sort_by)
+      /** Si hay filtros activos, recargar búsqueda con el nuevo orden. */
+      if (context.state.is_filtered) {
+        return context.dispatch('run_filter', { page: 1 })
+      }
       return context.dispatch('get_models')
+    },
+    /**
+     * Búsqueda filtrada de leads: incluye sort_by para respetar el orden de la bandeja.
+     *
+     * @param {Object} context
+     * @param {Object} [payload]
+     * @returns {Promise<void>}
+     */
+    run_filter(context, payload) {
+      const commit = context.commit
+      const state = context.state
+      const page = payload && payload.page != null ? payload.page : state.filter_page
+      const per = state.filter_per_page || 50
+      const url =
+        '/search/' + route_string(state.model_name) + '/null/1?page=' + page
+      commit('set_loading_filtered', true)
+      return api
+        .post(url, {
+          filters: state.filters,
+          papelera: false,
+          per_page: per,
+          sort_by: state.sort_by,
+        })
+        .then(function (res) {
+          const body = res.data
+          const rows = body.data || []
+          commit('set_is_filtered', true)
+          commit('set_filtered', rows)
+          commit('set_total_filter_pages', body.last_page || 1)
+          commit('set_total_filter_results', body.total != null ? body.total : rows.length)
+          commit('set_loading_filtered', false)
+        })
+        .catch(function () {
+          commit('set_loading_filtered', false)
+        })
     },
     /**
      * Fusiona fila en listados preservando `messages` si el payload de Pusher no los trae.

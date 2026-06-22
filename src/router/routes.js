@@ -10,6 +10,14 @@ const routes_def = [
   //   meta: { requiresAuth: true, nav: true, icon: 'house' },
   // },
   {
+    path: '/leads',
+    name: 'leads',
+    text: 'Leads',
+    model_name: 'lead',
+    component: () => import('@/views/Leads.vue'),
+    meta: { requiresAuth: true, nav: true, icon: 'person-lines-fill' },
+  },
+  {
     path: '/soporte',
     name: 'support',
     text: 'Soporte',
@@ -27,14 +35,6 @@ const routes_def = [
     path: '/task-templates',
     redirect: { path: '/cuenta', hash: '#task-templates' },
     meta: { requiresAuth: true, nav: false },
-  },
-  {
-    path: '/leads',
-    name: 'leads',
-    text: 'Leads',
-    model_name: 'lead',
-    component: () => import('@/views/Leads.vue'),
-    meta: { requiresAuth: true, nav: true, icon: 'person-lines-fill' },
   },
   {
     path: '/versiones',

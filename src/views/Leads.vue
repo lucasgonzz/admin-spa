@@ -33,23 +33,51 @@
       </template>
 
       <template #right>
+        <!-- Filtro rápido por fecha de inicio de conversación WhatsApp -->
+        <div class="d-flex align-items-center me-2 leads-conversation-date-filter">
+          <label class="small text-muted mb-0 me-1 text-nowrap" for="lead_conversation_started_date">
+            Inicio conv.
+          </label>
+          <input
+            id="lead_conversation_started_date"
+            v-model="conversation_started_date"
+            type="date"
+            class="form-control form-control-sm leads-conversation-date-input"
+            title="Filtrar leads que iniciaron conversación en esta fecha"
+            @change="on_conversation_started_date_change"
+          />
+          <button
+            v-if="conversation_started_date"
+            type="button"
+            class="btn btn-outline-secondary btn-sm ms-1"
+            title="Quitar filtro de inicio de conversación"
+            aria-label="Quitar filtro de inicio de conversación"
+            @click="on_clear_conversation_started_date"
+          >
+            <i class="bi bi-x-lg" aria-hidden="true" />
+          </button>
+        </div>
         <!-- Selector de orden: último mensaje (WhatsApp) vs leads más nuevos por created_at -->
         <div class="btn-group btn-sm me-2">
           <button
             type="button"
             class="btn btn-sm"
             :class="lead_sort_by === 'last_message' ? 'btn-secondary' : 'btn-outline-secondary'"
+            title="Ordenar por último mensaje de WhatsApp"
+            aria-label="Ordenar por último mensaje de WhatsApp"
             @click="on_sort_change('last_message')"
           >
-            <i class="bi bi-chat-dots me-1" /> Último mensaje
+            <i class="bi bi-chat-dots" aria-hidden="true" />
           </button>
           <button
             type="button"
             class="btn btn-sm"
             :class="lead_sort_by === 'created_at' ? 'btn-secondary' : 'btn-outline-secondary'"
+            title="Ordenar por leads más nuevos"
+            aria-label="Ordenar por leads más nuevos"
             @click="on_sort_change('created_at')"
           >
-            <i class="bi bi-sort-down me-1" /> Más nuevos
+            <i class="bi bi-sort-down" aria-hidden="true" />
           </button>
         </div>
         <!-- Botón toggle para el panel de demos agendadas (próximas y realizadas) -->
@@ -57,12 +85,20 @@
           type="button"
           class="btn btn-sm me-2"
           :class="show_demos_agendadas ? 'btn-primary' : 'btn-outline-primary'"
+          title="Mostrar u ocultar demos agendadas"
+          aria-label="Mostrar u ocultar demos agendadas"
           @click="on_toggle_demos_agendadas"
         >
-          <i class="bi bi-calendar-check me-1" /> Demos agendadas
+          <i class="bi bi-calendar-check" aria-hidden="true" />
         </button>
-        <button type="button" class="btn btn-outline-primary btn-sm" @click="on_open_demo_modal">
-          <i class="bi bi-window-sidebar me-1" /> Gestionar demos
+        <button
+          type="button"
+          class="btn btn-outline-primary btn-sm"
+          title="Gestionar catálogo de demos"
+          aria-label="Gestionar catálogo de demos"
+          @click="on_open_demo_modal"
+        >
+          <i class="bi bi-window-sidebar" aria-hidden="true" />
         </button>
       </template>
 
@@ -79,10 +115,12 @@
               <button
                 type="button"
                 class="btn btn-outline-secondary btn-sm"
+                title="Actualizar lista de demos agendadas"
+                aria-label="Actualizar lista de demos agendadas"
                 :disabled="loading_demos_agendadas"
                 @click="load_demos_agendadas"
               >
-                <i class="bi bi-arrow-clockwise" />
+                <i class="bi bi-arrow-clockwise" aria-hidden="true" />
               </button>
             </div>
 
@@ -245,7 +283,15 @@
     >
       <resource-view model_name="demo" />
       <template #footer>
-        <button type="button" class="btn btn-secondary" @click="on_close_demo_modal">Cerrar</button>
+        <button
+          type="button"
+          class="btn btn-secondary btn-sm"
+          title="Cerrar gestión de demos"
+          aria-label="Cerrar gestión de demos"
+          @click="on_close_demo_modal"
+        >
+          <i class="bi bi-x-lg" aria-hidden="true" />
+        </button>
       </template>
     </base-modal>
   </div>
@@ -330,6 +376,8 @@ export default {
       loading_demos_agendadas: false,
       /** Duración de la demo en minutos (leída desde settings al abrir el panel). */
       duracion_minutos: 60,
+      /** Fecha YYYY-MM-DD para filtrar leads por inicio de conversación WhatsApp. */
+      conversation_started_date: '',
     }
   },
   computed: {
@@ -341,9 +389,23 @@ export default {
       return this.$store.state.lead.sort_by
     },
   },
+  watch: {
+    /**
+     * Mantiene el input de fecha alineado si se resetean filtros desde la tabla o el header.
+     * @returns {void}
+     */
+    '$store.state.lead.filters': {
+      handler() {
+        this.sync_conversation_started_date_from_store()
+      },
+      deep: true,
+    },
+  },
   mounted() {
     /* Al montar la vista, verificar si la URL trae ?lead_id para abrir el modal directo. */
     this.open_lead_from_query_param()
+    /* Sincronizar el input de fecha con un filtro activo previo en el store. */
+    this.sync_conversation_started_date_from_store()
   },
   methods: {
     /**
@@ -442,6 +504,80 @@ export default {
      */
     on_sort_change(sort_by) {
       this.$store.dispatch('lead/change_sort_by', sort_by)
+    },
+    /**
+     * Lee del store el filtro activo sobre first_message_at para reflejarlo en el input de fecha.
+     * @returns {void}
+     */
+    sync_conversation_started_date_from_store() {
+      var filters = this.$store.state.lead.filters || []
+      var i = 0
+      for (i = 0; i < filters.length; i = i + 1) {
+        var filter_row = filters[i]
+        if (
+          filter_row
+          && filter_row.key === 'first_message_at'
+          && filter_row.type === 'date'
+          && filter_row.igual_que
+        ) {
+          this.conversation_started_date = filter_row.igual_que
+          return
+        }
+      }
+      this.conversation_started_date = ''
+    },
+    /**
+     * Aplica o quita el filtro por fecha de inicio de conversación (igual_que en first_message_at).
+     * @returns {void}
+     */
+    on_conversation_started_date_change() {
+      var self = this
+      var date_value = (this.conversation_started_date || '').trim()
+      if (!date_value) {
+        this.on_clear_conversation_started_date()
+        return
+      }
+
+      var payload = {
+        type: 'date',
+        key: 'first_message_at',
+        igual_que: date_value,
+        menor_que: '',
+        mayor_que: '',
+      }
+
+      this.$store.commit('lead/add_filter', payload)
+      this.$store.commit('lead/set_filter_page', 1)
+      this.$store.dispatch('lead/run_filter', { page: 1 }).then(function () {
+        self.sync_conversation_started_date_from_store()
+      })
+    },
+    /**
+     * Limpia el filtro de inicio de conversación y vuelve al listado base si no quedan filtros.
+     * @returns {void}
+     */
+    on_clear_conversation_started_date() {
+      var self = this
+      this.conversation_started_date = ''
+      this.$store.commit('lead/remove_filter_by_key', 'first_message_at')
+
+      if (!this.$store.state.lead.is_filtered) {
+        return
+      }
+
+      var remaining_filters = this.$store.state.lead.filters || []
+      if (remaining_filters.length > 0) {
+        this.$store.commit('lead/set_filter_page', 1)
+        this.$store.dispatch('lead/run_filter', { page: 1 })
+        return
+      }
+
+      this.$store.commit('lead/set_filter_page', 1)
+      this.$store.commit('lead/set_filtered', [])
+      this.$store.commit('lead/set_is_filtered', false)
+      this.$store.dispatch('lead/get_models').then(function () {
+        self.sync_conversation_started_date_from_store()
+      })
     },
     /**
      * Abre modal fullscreen con el CRUD de demos.
@@ -754,6 +890,12 @@ export default {
 </script>
 
 <style scoped>
+/* Input compacto del filtro por inicio de conversación en la barra superior. */
+.leads-conversation-date-input {
+  width: 10.5rem;
+  min-width: 10.5rem;
+}
+
 /* Filas clickeables del panel de demos agendadas (misma UX que la tabla principal). */
 .demos-agendadas-row {
   cursor: pointer;

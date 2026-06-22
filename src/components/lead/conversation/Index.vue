@@ -7,12 +7,13 @@
       <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
         <button
           type="button"
-          class="btn btn-sm d-inline-flex align-items-center gap-1"
+          class="btn btn-sm d-inline-flex align-items-center justify-content-center"
           :class="export_conversation_feedback ? 'btn-success' : 'btn-outline-secondary'"
           :disabled="export_conversation_loading || !sorted_messages.length"
           :title="sorted_messages.length
             ? 'Copiar toda la conversación al portapapeles con fecha, emisor y contenido'
             : 'No hay mensajes para exportar'"
+          :aria-label="export_conversation_feedback ? 'Conversación copiada' : 'Exportar conversación al portapapeles'"
           @click="on_export_conversation"
         >
           <span
@@ -27,14 +28,14 @@
             :class="export_conversation_feedback ? 'bi-check-lg' : 'bi-clipboard'"
             aria-hidden="true"
           />
-          <span>{{ export_conversation_feedback ? 'Copiado' : 'Exportar conversación' }}</span>
         </button>
         <button
           type="button"
-          class="btn btn-sm d-inline-flex align-items-center gap-1"
+          class="btn btn-sm d-inline-flex align-items-center justify-content-center"
           :class="can_request_ai_suggestion ? 'btn-outline-primary' : 'btn-outline-secondary'"
           :disabled="!can_request_ai_suggestion"
           :title="request_ai_suggestion_button_title"
+          aria-label="Pedir sugerencia de respuesta a Claude"
           @click="on_request_ai_suggestion"
         >
           <span
@@ -44,16 +45,18 @@
             aria-hidden="true"
           />
           <i v-else class="bi bi-lightning-charge" aria-hidden="true" />
-          <span>Pedir respuesta</span>
         </button>
         <button
           type="button"
-          class="btn btn-sm d-inline-flex align-items-center gap-1"
+          class="btn btn-sm d-inline-flex align-items-center justify-content-center"
           :class="claude_auto_reply_enabled ? 'btn-success' : 'btn-outline-secondary'"
           :disabled="toggling_claude_auto_reply"
           :title="claude_auto_reply_enabled
             ? 'Claude responde automáticamente a este lead. Clic para desactivar y responder vos.'
             : 'Claude no intercepta mensajes de este lead. Clic para reactivar.'"
+          :aria-label="claude_auto_reply_enabled
+            ? 'Desactivar respuesta automática de Claude'
+            : 'Activar respuesta automática de Claude'"
           @click="on_toggle_claude_auto_reply"
         >
           <span
@@ -63,7 +66,6 @@
             aria-hidden="true"
           />
           <i v-else class="bi bi-stars" aria-hidden="true" />
-          <span>Claude: {{ claude_auto_reply_enabled ? 'ON' : 'OFF' }}</span>
         </button>
       </div>
     </div>
@@ -100,9 +102,10 @@
       </span>
       <button
         type="button"
-        class="btn btn-outline-secondary btn-sm"
+        class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center justify-content-center"
         :disabled="cancelling_auto_consult"
         title="Cancelar la petición automática a Claude"
+        aria-label="Cancelar la petición automática a Claude"
         @click="on_cancel_auto_ai_consult"
       >
         <span
@@ -111,7 +114,7 @@
           role="status"
           aria-hidden="true"
         />
-        <template v-else>Cancelar</template>
+        <i v-else class="bi bi-x-lg" aria-hidden="true" />
       </button>
     </div>
 
@@ -161,12 +164,14 @@
       />
       <button
         type="button"
-        class="btn btn-primary btn-sm d-inline-flex align-items-center gap-2"
+        class="btn btn-primary btn-sm d-inline-flex align-items-center justify-content-center"
         :disabled="enviando_directo || !has_mensaje_directo"
+        title="Enviar mensaje por WhatsApp"
+        aria-label="Enviar mensaje por WhatsApp"
         @click="on_enviar_directo"
       >
         <span v-if="enviando_directo" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-        <template v-else>Enviar</template>
+        <i v-else class="bi bi-send" aria-hidden="true" />
       </button>
     </div>
 
@@ -182,12 +187,14 @@
       />
       <button
         type="button"
-        class="btn btn-outline-warning btn-sm d-inline-flex align-items-center gap-2"
+        class="btn btn-outline-warning btn-sm d-inline-flex align-items-center justify-content-center"
         :disabled="enviando_simulado || !has_mensaje_simulado"
+        title="Simular mensaje entrante del lead (testing)"
+        aria-label="Simular mensaje entrante del lead"
         @click="on_simular_inbound"
       >
         <span v-if="enviando_simulado" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-        <template v-else>Simular</template>
+        <i v-else class="bi bi-chat-left-dots" aria-hidden="true" />
       </button>
     </div>
 
@@ -195,13 +202,14 @@
     <div class="d-flex align-items-center gap-2 mt-2">
       <button
         type="button"
-        class="btn btn-outline-info btn-sm d-inline-flex align-items-center gap-2"
+        class="btn btn-outline-info btn-sm d-inline-flex align-items-center justify-content-center"
         :disabled="forzando_seguimiento"
         title="Dispara ahora el seguimiento que corresponda según el estado y los seguimientos ya enviados, sin esperar el tiempo configurado"
+        aria-label="Forzar seguimiento automático ahora"
         @click="on_forzar_seguimiento"
       >
         <span v-if="forzando_seguimiento" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-        <template v-else>Forzar seguimiento</template>
+        <i v-else class="bi bi-clock-history" aria-hidden="true" />
       </button>
       <span v-if="forzar_seguimiento_resultado" class="small text-muted">{{ forzar_seguimiento_resultado }}</span>
     </div>

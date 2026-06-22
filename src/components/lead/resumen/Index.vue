@@ -10,12 +10,14 @@
       <!-- Botón para regenerar el resumen via Claude -->
       <button
         type="button"
-        class="btn btn-outline-secondary btn-sm"
+        class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center justify-content-center"
         :disabled="loading_regenerate"
+        title="Regenerar resumen del lead con Claude"
+        aria-label="Regenerar resumen del lead con Claude"
         @click="regenerate_summary"
       >
-        <span v-if="loading_regenerate" class="spinner-border spinner-border-sm me-1"></span>
-        Regenerar
+        <span v-if="loading_regenerate" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+        <i v-else class="bi bi-arrow-clockwise" aria-hidden="true" />
       </button>
     </div>
 

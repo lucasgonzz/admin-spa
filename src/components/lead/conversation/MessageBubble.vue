@@ -72,8 +72,18 @@
           <span class="badge bg-warning text-dark wa-badge-tight">Requiere verificación con Lucas</span>
         </div>
         <div v-if="message.ai_reasoning" class="wa-extra mt-1">
-          <button type="button" class="btn btn-link wa-link-tight p-0" @click="toggle_reasoning">
-            {{ show_reasoning ? 'Ocultar' : 'Ver' }} razonamiento
+          <button
+            type="button"
+            class="btn btn-link wa-link-tight p-0"
+            :title="show_reasoning ? 'Ocultar razonamiento de Claude' : 'Ver razonamiento de Claude'"
+            :aria-label="show_reasoning ? 'Ocultar razonamiento de Claude' : 'Ver razonamiento de Claude'"
+            @click="toggle_reasoning"
+          >
+            <i
+              class="bi"
+              :class="show_reasoning ? 'bi-chevron-up' : 'bi-lightbulb'"
+              aria-hidden="true"
+            />
           </button>
           <div v-show="show_reasoning" class="wa-reasoning text-muted border-top mt-1 pt-1">
             {{ message.ai_reasoning }}
@@ -83,27 +93,45 @@
           <template v-if="!editing">
             <button
               type="button"
-              class="btn btn-success btn-sm wa-btn-tight"
+              class="btn btn-success btn-sm wa-btn-tight d-inline-flex align-items-center justify-content-center"
               :disabled="busy || !has_sendable_text"
+              title="Enviar sugerencia por WhatsApp"
+              aria-label="Enviar sugerencia por WhatsApp"
               @click="on_enviar"
             >
-              Enviar
+              <i class="bi bi-send" aria-hidden="true" />
             </button>
-            <button type="button" class="btn btn-outline-primary btn-sm wa-btn-tight" :disabled="busy" @click="on_start_edit">
-              Editar
+            <button
+              type="button"
+              class="btn btn-outline-primary btn-sm wa-btn-tight d-inline-flex align-items-center justify-content-center"
+              :disabled="busy"
+              title="Editar sugerencia antes de enviar"
+              aria-label="Editar sugerencia antes de enviar"
+              @click="on_start_edit"
+            >
+              <i class="bi bi-pencil" aria-hidden="true" />
             </button>
           </template>
           <template v-else>
             <button
               type="button"
-              class="btn btn-success btn-sm wa-btn-tight"
+              class="btn btn-success btn-sm wa-btn-tight d-inline-flex align-items-center justify-content-center"
               :disabled="busy || !has_edited_text_for_send"
+              title="Guardar texto editado y enviar por WhatsApp"
+              aria-label="Guardar texto editado y enviar por WhatsApp"
               @click="on_guardar_y_enviar"
             >
-              Guardar y enviar
+              <i class="bi bi-send-check" aria-hidden="true" />
             </button>
-            <button type="button" class="btn btn-outline-secondary btn-sm wa-btn-tight" :disabled="busy" @click="on_cancel_edit">
-              Cancelar
+            <button
+              type="button"
+              class="btn btn-outline-secondary btn-sm wa-btn-tight d-inline-flex align-items-center justify-content-center"
+              :disabled="busy"
+              title="Cancelar edición"
+              aria-label="Cancelar edición"
+              @click="on_cancel_edit"
+            >
+              <i class="bi bi-x-lg" aria-hidden="true" />
             </button>
           </template>
         </div>
@@ -117,12 +145,13 @@
             </span>
             <button
               type="button"
-              class="btn btn-outline-secondary btn-sm wa-btn-tight"
+              class="btn btn-outline-secondary btn-sm wa-btn-tight d-inline-flex align-items-center justify-content-center"
               :disabled="busy"
               title="Cancelar el envío automático por WhatsApp"
+              aria-label="Cancelar el envío automático por WhatsApp"
               @click="on_cancelar_envio_automatico"
             >
-              Cancelar envío
+              <i class="bi bi-stop-circle" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -1040,6 +1069,8 @@ export default {
   font-size: 0.9rem;
   padding: 0.1rem 0.42rem;
   line-height: 1.2;
+  min-width: 1.85rem;
+  min-height: 1.85rem;
 }
 .wa-badge-tight {
   font-size: 0.9rem;

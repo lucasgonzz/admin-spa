@@ -12,6 +12,7 @@
           type="button"
           class="icon-btn"
           title="Volver a Leads"
+          aria-label="Volver a Leads"
           @click="$router.push({ name: 'leads' })"
         >
           <i class="bi bi-arrow-left" aria-hidden="true" />
@@ -29,6 +30,7 @@
           type="button"
           class="icon-btn text-muted"
           title="Ver resumen del lead"
+          aria-label="Ver resumen del lead"
           :disabled="!effective_record"
           @click="show_resumen_modal = true"
         >
@@ -43,6 +45,9 @@
           :title="notify_active
             ? 'Recibirás un WhatsApp cuando llegue un mensaje de este lead. Clic para desactivar.'
             : 'Activar notificaciones WhatsApp para mensajes de este lead.'"
+          :aria-label="notify_active
+            ? 'Desactivar notificaciones WhatsApp para este lead'
+            : 'Activar notificaciones WhatsApp para este lead'"
           :disabled="toggling_notify || !effective_record"
           @click="on_toggle_notify_messages(!notify_active)"
         >
@@ -61,6 +66,9 @@
           class="icon-btn"
           :class="export_conversation_feedback ? 'text-success' : 'text-muted'"
           :title="sorted_messages.length ? 'Copiar conversación al portapapeles' : 'No hay mensajes para exportar'"
+          :aria-label="export_conversation_feedback
+            ? 'Conversación copiada al portapapeles'
+            : 'Copiar conversación al portapapeles'"
           :disabled="export_conversation_loading || !sorted_messages.length"
           @click="on_export_conversation"
         >
@@ -79,6 +87,7 @@
           class="icon-btn"
           :class="can_request_ai_suggestion ? 'text-primary' : 'text-muted'"
           :title="request_ai_suggestion_button_title"
+          aria-label="Pedir sugerencia de respuesta a Claude"
           :disabled="!can_request_ai_suggestion"
           @click="on_request_ai_suggestion"
         >
@@ -99,6 +108,9 @@
           :title="claude_auto_reply_enabled
             ? 'Claude responde automáticamente. Clic para desactivar.'
             : 'Claude desactivado. Clic para reactivar.'"
+          :aria-label="claude_auto_reply_enabled
+            ? 'Desactivar respuesta automática de Claude'
+            : 'Activar respuesta automática de Claude'"
           :disabled="toggling_claude_auto_reply"
           @click="on_toggle_claude_auto_reply"
         >
@@ -157,9 +169,10 @@
           </span>
           <button
             type="button"
-            class="btn btn-outline-secondary btn-sm"
+            class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center justify-content-center"
             :disabled="cancelling_auto_consult"
             title="Cancelar la petición automática a Claude"
+            aria-label="Cancelar la petición automática a Claude"
             @click="on_cancel_auto_ai_consult"
           >
             <span
@@ -168,7 +181,7 @@
               role="status"
               aria-hidden="true"
             />
-            <template v-else>Cancelar</template>
+            <i v-else class="bi bi-x-lg" aria-hidden="true" />
           </button>
         </div>
 
@@ -256,6 +269,7 @@
           class="icon-btn flex-shrink-0 text-primary"
           :disabled="enviando_directo"
           title="Enviar mensaje"
+          aria-label="Enviar mensaje"
           @click="on_enviar_directo"
         >
           <span
@@ -283,12 +297,14 @@
           />
           <button
             type="button"
-            class="btn btn-outline-warning btn-sm d-inline-flex align-items-center gap-2"
+            class="btn btn-outline-warning btn-sm d-inline-flex align-items-center justify-content-center"
             :disabled="enviando_simulado || !has_mensaje_simulado"
+            title="Simular mensaje entrante del lead (testing)"
+            aria-label="Simular mensaje entrante del lead"
             @click="on_simular_inbound"
           >
             <span v-if="enviando_simulado" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-            <template v-else>Simular</template>
+            <i v-else class="bi bi-chat-left-dots" aria-hidden="true" />
           </button>
         </div>
 
@@ -296,13 +312,14 @@
         <div class="d-flex gap-2 align-items-center">
           <button
             type="button"
-            class="btn btn-outline-info btn-sm d-inline-flex align-items-center gap-2"
+            class="btn btn-outline-info btn-sm d-inline-flex align-items-center justify-content-center"
             :disabled="forzando_seguimiento"
             title="Dispara el seguimiento correspondiente ahora mismo, sin esperar el tiempo configurado"
+            aria-label="Forzar seguimiento automático ahora"
             @click="on_forzar_seguimiento"
           >
             <span v-if="forzando_seguimiento" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-            <template v-else>Forzar seguimiento</template>
+            <i v-else class="bi bi-clock-history" aria-hidden="true" />
           </button>
           <span v-if="forzar_seguimiento_resultado" class="small text-muted">{{ forzar_seguimiento_resultado }}</span>
         </div>
@@ -330,6 +347,7 @@
             type="button"
             class="icon-btn text-muted"
             title="Cerrar"
+            aria-label="Cerrar resumen del lead"
             @click="show_resumen_modal = false"
           >
             <i class="bi bi-x-lg" aria-hidden="true" />
