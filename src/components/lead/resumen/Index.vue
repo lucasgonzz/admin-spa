@@ -121,22 +121,54 @@
       </div>
       <!-- Fin grid de tarjetas estructuradas -->
 
+      <!-- Divisor entre resumen de demo y resumen de llamada (solo si ambos existen) -->
+      <hr v-if="record.call_summary" class="my-4">
+
+      <!-- Subtítulo de la sección de llamada del closer -->
+      <div v-if="record.call_summary" class="d-flex align-items-center justify-content-between mb-3">
+        <span class="small fw-semibold text-secondary">
+          <i class="bi bi-telephone-fill me-2"></i> Llamada del closer
+        </span>
+      </div>
+
+      <!-- Panel de resumen de la llamada del closer (generado por Recall.ai + Claude) -->
+      <call-summary-panel v-if="record.call_summary" :call_summary="record.call_summary" />
+
+      <!-- Estado vacío de llamada: lead hizo la demo pero el closer todavía no llamó -->
+      <div
+        v-else
+        class="text-center py-3 text-muted border rounded-3 mt-3"
+      >
+        <i class="bi bi-telephone d-block mb-2" style="font-size: 1.5rem"></i>
+        <p class="small mb-0">El resumen de la llamada del closer aún no está disponible.</p>
+      </div>
+
     </template>
 
   </div>
 </template>
 
 <script>
+/* Componente que muestra el resumen de la llamada del closer (call_summary JSON) */
+import CallSummaryPanel from './CallSummaryPanel.vue'
+
 /**
  * Tab "Resumen" del modal de lead.
  *
  * Muestra el resumen narrativo generado por Claude y las 4 tarjetas del resumen
  * estructurado (empresa, situación actual, funcionalidades, puntos de dolor).
- * Incluye botón para regenerar ambos resúmenes invocando la acción del store.
+ * Incluye el panel de resumen de llamada del closer (CallSummaryPanel) con escenario
+ * de cierre, precio acordado, modificaciones y transcripción colapsable.
+ * Incluye botón para regenerar el resumen de demo invocando la acción del store.
  * Incluye acceso rápido al módulo de conversación WhatsApp del lead.
  */
 export default {
   name: 'LeadResumenTab',
+
+  components: {
+    /* Panel de resumen de llamada del closer generado por Recall.ai + Claude */
+    CallSummaryPanel,
+  },
 
   props: {
     /** Lead completo recibido desde el ModelModal (draft actualizado en tiempo real). */
