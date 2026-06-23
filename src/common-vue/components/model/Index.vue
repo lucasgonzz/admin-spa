@@ -49,6 +49,7 @@
           <component
             v-if="t.component"
             :is="t.component"
+            :key="'extra-component-' + t.key + '-' + (draft && draft.id ? draft.id : 'new')"
             v-bind="extra_tab_scope"
             @record-updated="on_extra_record_updated"
           />
@@ -1106,3 +1107,4 @@ export default {
   white-space: nowrap;
 }
 </style>
+
