@@ -89,6 +89,49 @@
             {{ message.ai_reasoning }}
           </div>
         </div>
+        <!-- Snapshot del calendario Google del closer (debug de disponibilidad) -->
+        <div v-if="calendar_snapshot_parsed" class="wa-extra mt-1">
+          <button
+            type="button"
+            class="btn btn-link wa-link-tight p-0"
+            :title="show_calendar_snapshot ? 'Ocultar eventos del calendario' : 'Ver eventos del calendario del closer'"
+            :aria-label="show_calendar_snapshot ? 'Ocultar eventos del calendario' : 'Ver eventos del calendario del closer'"
+            @click="toggle_calendar_snapshot"
+          >
+            <i
+              class="bi"
+              :class="show_calendar_snapshot ? 'bi-chevron-up' : 'bi-calendar3'"
+              aria-hidden="true"
+            />
+          </button>
+          <div v-show="show_calendar_snapshot" class="wa-reasoning text-muted border-top mt-1 pt-1">
+            <div class="small">
+              <div class="mb-1 text-muted" style="font-size: 0.75rem;">
+                Consultado {{ calendar_snapshot_fecha }}
+              </div>
+              <div v-for="closer in calendar_snapshot_parsed.closers" :key="closer.admin_id" class="mb-2">
+                <div class="fw-semibold" style="font-size: 0.8rem;">
+                  {{ closer.nombre }}
+                  <span class="badge ms-1" :class="calendar_estado_badge_class(closer.estado)">
+                    {{ calendar_estado_label(closer.estado) }}
+                  </span>
+                </div>
+                <div v-if="closer.eventos && closer.eventos.length > 0">
+                  <div
+                    v-for="(ev, idx) in closer.eventos"
+                    :key="idx"
+                    style="font-size: 0.78rem;"
+                  >
+                    {{ ev.fecha }}: {{ ev.inicio }} – {{ ev.fin }}
+                  </div>
+                </div>
+                <div v-else-if="closer.estado === 'consultado'" class="text-muted" style="font-size: 0.78rem;">
+                  Sin eventos en las fechas consultadas
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
         <div v-if="show_pending_suggestion_actions" class="wa-actions d-flex flex-wrap gap-1 align-items-center">
           <template v-if="!editing">
             <button
@@ -245,6 +288,8 @@ export default {
     return {
       /** Controla panel colapsable del razonamiento de Claude. */
       show_reasoning: false,
+      /** Controla panel colapsable del snapshot del calendario del closer. */
+      show_calendar_snapshot: false,
       /** true cuando el setter está editando una sugerencia antes de enviar. */
       editing: false,
       /** Texto en edición (precargado con content original). */
@@ -735,6 +780,43 @@ export default {
       }
       return true
     },
+    /**
+     * Snapshot del calendario Google parseado desde JSON (null si no aplica).
+     * @returns {Object|null}
+     */
+    calendar_snapshot_parsed() {
+      if (!this.message.calendar_snapshot) {
+        return null
+      }
+      try {
+        if (typeof this.message.calendar_snapshot === 'string') {
+          return JSON.parse(this.message.calendar_snapshot)
+        }
+        return this.message.calendar_snapshot
+      } catch (e) {
+        return null
+      }
+    },
+    /**
+     * Fecha/hora legible de cuándo se consultó el calendario Google.
+     * @returns {string}
+     */
+    calendar_snapshot_fecha() {
+      if (!this.calendar_snapshot_parsed || !this.calendar_snapshot_parsed.consultado_en) {
+        return ''
+      }
+      try {
+        return new Date(this.calendar_snapshot_parsed.consultado_en).toLocaleString('es-AR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      } catch (e) {
+        return this.calendar_snapshot_parsed.consultado_en
+      }
+    },
   },
   watch: {
     /**
@@ -756,6 +838,43 @@ export default {
      */
     toggle_reasoning() {
       this.show_reasoning = !this.show_reasoning
+    },
+    /**
+     * Alterna visibilidad del bloque de snapshot del calendario del closer.
+     * @returns {void}
+     */
+    toggle_calendar_snapshot() {
+      this.show_calendar_snapshot = !this.show_calendar_snapshot
+    },
+    /**
+     * Etiqueta legible del estado de consulta Google por closer.
+     * @param {string} estado
+     * @returns {string}
+     */
+    calendar_estado_label(estado) {
+      const labels = {
+        consultado: 'OK',
+        sin_calendario: 'sin calendario',
+        token_revocado: 'token revocado',
+        error_api: 'error API',
+        cacheado: 'cacheado',
+      }
+      return labels[estado] || estado
+    },
+    /**
+     * Clase Bootstrap del badge según estado de consulta Google.
+     * @param {string} estado
+     * @returns {string}
+     */
+    calendar_estado_badge_class(estado) {
+      const classes = {
+        consultado: 'bg-success',
+        cacheado: 'bg-secondary',
+        sin_calendario: 'bg-warning text-dark',
+        token_revocado: 'bg-danger',
+        error_api: 'bg-danger',
+      }
+      return classes[estado] || 'bg-secondary'
     },
     /**
      * Activa modo edición con el content original de la sugerencia.
