@@ -1,7 +1,13 @@
 <template>
   <div>
-    <button class="btn btn-outline-primary btn-sm" @click="show = true">
-      <i class="bi bi-eye" /> Columnas
+    <button
+      class="btn btn-outline-primary btn-sm"
+      type="button"
+      title="Columnas a mostrar"
+      aria-label="Columnas a mostrar"
+      @click="show = true"
+    >
+      <i class="bi bi-eye" aria-hidden="true" />
     </button>
     <base-modal :show="show" title="Columnas a mostrar" size="lg" @update:show="show = $event" @close="show = false">
       <div class="table-responsive">

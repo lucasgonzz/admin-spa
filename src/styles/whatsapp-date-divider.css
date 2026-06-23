@@ -5,6 +5,15 @@
 .wa-date-section {
   display: flex;
   flex-direction: column;
+  /* Separación uniforme entre divisor de fecha y burbujas del día. */
+  gap: 0.625rem;
+}
+
+/* Separación entre bloques de distintos días en el hilo. */
+.conversation-messages-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
 }
 
 /*

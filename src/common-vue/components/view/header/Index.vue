@@ -1,45 +1,68 @@
 <template>
-  <div class="view-header d-flex flex-wrap align-items-center gap-2 py-2 mb-2 border-bottom">
+  <div class="view-header py-2 mb-2 border-bottom">
+    <!-- Fila principal: acciones estándar a la izquierda y extras del recurso a la derecha. -->
+    <div class="view-header-main d-flex flex-wrap align-items-center gap-2 w-100">
+      <props-to-show
+        :model_name="model_name"
+        :default_properties="default_properties"
+        @saved="on_props_saved"
+      />
 
-    <props-to-show
-      :model_name="model_name"
-      :default_properties="default_properties"
-      @saved="on_props_saved"
-    />
-    
-    <button v-if="show_create" class="btn btn-primary btn-sm" @click="$emit('create')">
-      <i class="bi bi-plus-lg me-1" /> Nuevo
-    </button>
-    <button
-      class="btn btn-sm"
-      :class="is_selectable ? 'btn-secondary' : 'btn-outline-secondary'"
-      @click="$emit('toggle-select')"
-    >
-      <i class="bi bi-check2-square me-1" /> Selección
-    </button>
-    <button
-      v-if="is_filtered"
-      class="btn btn-warning btn-sm"
-      @click="$emit('act-filtered')"
-    >
-      Actuar (filtrados)
-    </button>
-    <button
-      v-if="selected_count > 0"
-      class="btn btn-info btn-sm"
-      @click="$emit('act-selected')"
-    >
-      Actuar ({{ selected_count }})
-    </button>
-    <button
-      v-if="has_filters"
-      class="btn btn-outline-warning btn-sm"
-      @click="$emit('reset-filters')"
-    >
-      <i class="bi bi-arrow-counterclockwise me-1" /> Resetear filtros
-    </button>
+      <button
+        v-if="show_create"
+        type="button"
+        class="btn btn-primary btn-sm"
+        title="Nuevo"
+        aria-label="Nuevo"
+        @click="$emit('create')"
+      >
+        <i class="bi bi-plus-lg" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        class="btn btn-sm"
+        :class="is_selectable ? 'btn-secondary' : 'btn-outline-secondary'"
+        title="Selección"
+        aria-label="Selección"
+        @click="$emit('toggle-select')"
+      >
+        <i class="bi bi-check2-square" aria-hidden="true" />
+      </button>
+      <button
+        v-if="is_filtered"
+        class="btn btn-warning btn-sm"
+        @click="$emit('act-filtered')"
+      >
+        Actuar (filtrados)
+      </button>
+      <button
+        v-if="selected_count > 0"
+        class="btn btn-info btn-sm"
+        @click="$emit('act-selected')"
+      >
+        Actuar ({{ selected_count }})
+      </button>
+      <button
+        v-if="has_filters"
+        class="btn btn-outline-warning btn-sm"
+        @click="$emit('reset-filters')"
+      >
+        <i class="bi bi-arrow-counterclockwise me-1" /> Resetear filtros
+      </button>
 
-    <div class="ms-auto d-flex gap-2">
+      <div
+        v-if="$slots['toolbar-right']"
+        class="view-header-toolbar-right ms-auto d-flex flex-wrap align-items-center gap-2"
+      >
+        <slot name="toolbar-right" />
+      </div>
+    </div>
+
+    <!-- Fila secundaria a ancho completo (ej. filtro de fecha en leads). -->
+    <div
+      v-if="$slots.right"
+      class="view-header-secondary d-flex flex-wrap align-items-center gap-2 w-100 mt-2 justify-content-md-end"
+    >
       <slot name="right" />
     </div>
   </div>

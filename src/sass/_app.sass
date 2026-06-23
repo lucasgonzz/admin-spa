@@ -1,37 +1,75 @@
 // Estilos globales mínimos del admin SPA
+
+// Comportamiento tipo app nativa en móvil: sin zoom por pinza, sin desplazamiento
+// horizontal del documento ni rebote (overscroll) que estire toda la pantalla.
+html
+	width: 100%
+	max-width: 100%
+	height: 100%
+	overflow-x: hidden
+	overscroll-behavior: none
+	-webkit-text-size-adjust: 100%
+
 body
-  background-color: #f8f9fa
+	width: 100%
+	max-width: 100%
+	min-height: 100%
+	margin: 0
+	overflow-x: hidden
+	overscroll-behavior: none
+	touch-action: manipulation
+	-webkit-overflow-scrolling: touch
+	background-color: #f8f9fa
+
+#app
+	width: 100%
+	max-width: 100%
+	min-height: 100%
+	overflow-x: hidden
+
+// iOS Safari hace zoom automático al enfocar inputs con font-size < 16px.
+@media (max-width: 767.98px)
+	input,
+	textarea,
+	select,
+	.form-control
+		font-size: 16px !important
+
+	// Áreas con scroll interno: el rebote queda contenido sin arrastrar el body.
+	.overflow-auto,
+	.overflow-y-auto
+		overscroll-behavior: contain
 
 // Sombra sutil en el contenedor (evita que el overflow de .table recorte el box-shadow).
 // No usar `> .table`: en ResourceTable la tabla va dentro de .position-relative (overlay loading).
 .table
-  box-shadow: rgba(99, 99, 99, 0.2) 0px 2px 8px 0px
-  border-radius: 7px
+	box-shadow: rgba(99, 99, 99, 0.2) 0px 2px 8px 0px
+	border-radius: 7px
 
 // Estilo global de tablas del sistema:
 // - Cabeceras con color #444
 // - Esquinas redondeadas con radio de 7px
 .table
-  border-collapse: separate
-  border-spacing: 0
-  border-radius: 7px
-  overflow: hidden
+	border-collapse: separate
+	border-spacing: 0
+	border-radius: 7px
+	overflow: hidden
 
 .table > thead > tr > th
-  background-color: #444 !important
-  color: #fff
-  border-color: #444
+	background-color: #444 !important
+	color: #fff
+	border-color: #444
 
 .table > thead > tr:first-child > th:first-child
-  border-top-left-radius: 7px
+	border-top-left-radius: 7px
 
 .table > thead > tr:first-child > th:last-child
-  border-top-right-radius: 7px
+	border-top-right-radius: 7px
 
 .table > tbody > tr:last-child > td:first-child,
 .table > tbody > tr:last-child > th:first-child
-  border-bottom-left-radius: 7px
+	border-bottom-left-radius: 7px
 
 .table > tbody > tr:last-child > td:last-child,
 .table > tbody > tr:last-child > th:last-child
-  border-bottom-right-radius: 7px
+	border-bottom-right-radius: 7px

@@ -32,33 +32,9 @@
         </button>
       </template>
 
-      <template #right>
-        <!-- Filtro rápido por fecha de inicio de conversación WhatsApp -->
-        <div class="d-flex align-items-center me-2 leads-conversation-date-filter">
-          <label class="small text-muted mb-0 me-1 text-nowrap" for="lead_conversation_started_date">
-            Inicio conv.
-          </label>
-          <input
-            id="lead_conversation_started_date"
-            v-model="conversation_started_date"
-            type="date"
-            class="form-control form-control-sm leads-conversation-date-input"
-            title="Filtrar leads que iniciaron conversación en esta fecha"
-            @change="on_conversation_started_date_change"
-          />
-          <button
-            v-if="conversation_started_date"
-            type="button"
-            class="btn btn-outline-secondary btn-sm ms-1"
-            title="Quitar filtro de inicio de conversación"
-            aria-label="Quitar filtro de inicio de conversación"
-            @click="on_clear_conversation_started_date"
-          >
-            <i class="bi bi-x-lg" aria-hidden="true" />
-          </button>
-        </div>
+      <template #toolbar-right>
         <!-- Selector de orden: último mensaje (WhatsApp) vs leads más nuevos por created_at -->
-        <div class="btn-group btn-sm me-2">
+        <div class="btn-group btn-sm">
           <button
             type="button"
             class="btn btn-sm"
@@ -83,7 +59,7 @@
         <!-- Botón toggle para el panel de demos agendadas (próximas y realizadas) -->
         <button
           type="button"
-          class="btn btn-sm me-2"
+          class="btn btn-sm"
           :class="show_demos_agendadas ? 'btn-primary' : 'btn-outline-primary'"
           title="Mostrar u ocultar demos agendadas"
           aria-label="Mostrar u ocultar demos agendadas"
@@ -100,6 +76,33 @@
         >
           <i class="bi bi-window-sidebar" aria-hidden="true" />
         </button>
+      </template>
+
+      <template #right>
+        <!-- Filtro rápido por fecha de inicio de conversación WhatsApp -->
+        <div class="d-flex align-items-center w-100 w-md-auto leads-conversation-date-filter">
+          <label class="small text-muted mb-0 me-1 text-nowrap" for="lead_conversation_started_date">
+            Inicio conv.
+          </label>
+          <input
+            id="lead_conversation_started_date"
+            v-model="conversation_started_date"
+            type="date"
+            class="form-control form-control-sm leads-conversation-date-input"
+            title="Filtrar leads que iniciaron conversación en esta fecha"
+            @change="on_conversation_started_date_change"
+          />
+          <button
+            v-if="conversation_started_date"
+            type="button"
+            class="btn btn-outline-secondary btn-sm ms-1"
+            title="Quitar filtro de inicio de conversación"
+            aria-label="Quitar filtro de inicio de conversación"
+            @click="on_clear_conversation_started_date"
+          >
+            <i class="bi bi-x-lg" aria-hidden="true" />
+          </button>
+        </div>
       </template>
 
       <template #header>
@@ -894,6 +897,15 @@ export default {
 .leads-conversation-date-input {
   width: 10.5rem;
   min-width: 10.5rem;
+}
+
+/* En móvil el filtro de fecha usa todo el ancho de la fila secundaria. */
+@media (max-width: 767.98px) {
+  .leads-conversation-date-input {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
 }
 
 /* Filas clickeables del panel de demos agendadas (misma UX que la tabla principal). */

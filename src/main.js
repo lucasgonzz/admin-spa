@@ -10,6 +10,12 @@ import 'bootstrap-icons/font/bootstrap-icons.css'
 
 import './sass/_app.sass'
 import { registerSW } from 'virtual:pwa-register'
+import { init_mobile_viewport_lock } from '@/utils/mobile_viewport'
+
+/**
+ * Fija el viewport en móvil (sin pinch-zoom ni estiramiento del documento).
+ */
+init_mobile_viewport_lock()
 
 const app = createApp(App)
 app.use(store)

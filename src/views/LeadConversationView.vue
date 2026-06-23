@@ -234,6 +234,18 @@
 
       <!-- Área de redacción tipo WhatsApp -->
       <div class="d-flex align-items-end gap-2">
+
+        <!-- Botón selector de plantillas Meta (útil cuando la ventana de 24hs está cerrada) -->
+        <button
+          type="button"
+          class="icon-btn flex-shrink-0 text-muted"
+          title="Enviar plantilla de WhatsApp"
+          :disabled="!effective_record"
+          @click="on_open_template_picker"
+        >
+          <i class="bi bi-chevron-up" aria-hidden="true" />
+        </button>
+
         <textarea
           v-model="mensaje_directo"
           class="message-input"
@@ -366,11 +378,20 @@
     </div>
 
   </div>
+
+  <!-- Modal para enviar plantillas Meta manualmente cuando la ventana de 24hs está cerrada -->
+  <TemplatePickerModal
+    v-if="effective_record"
+    ref="template_picker_modal"
+    :lead="effective_record"
+  />
+
 </template>
 
 <script>
 import MessageBubble from '@/components/lead/conversation/MessageBubble.vue'
 import LeadResumenTab from '@/components/lead/resumen/Index.vue'
+import TemplatePickerModal from '@/components/lead/conversation/TemplatePickerModal.vue'
 import api from '@/utils/axios'
 import { copy_lead_conversation_to_clipboard } from '@/utils/lead_conversation_clipboard'
 import lead_conversation_date_dividers from '@/mixins/lead_conversation_date_dividers'
@@ -389,7 +410,11 @@ import '@/styles/whatsapp-date-divider.css'
  */
 export default {
   name: 'LeadConversationView',
-  components: { MessageBubble, LeadResumenTab },
+  components: {
+    MessageBubble,
+    LeadResumenTab,
+    TemplatePickerModal,
+  },
   mixins: [lead_conversation_date_dividers],
 
   data() {
@@ -1165,6 +1190,25 @@ export default {
     },
 
     /**
+     * Abre el modal de selección de plantillas Meta para el lead activo.
+     * Usa $nextTick para asegurar que el ref del modal ya esté montado.
+     *
+     * @returns {void}
+     */
+    on_open_template_picker() {
+      const self = this
+      if (!this.effective_record) {
+        return
+      }
+      this.$nextTick(function () {
+        const modal_ref = self.$refs.template_picker_modal
+        if (modal_ref && typeof modal_ref.open === 'function') {
+          modal_ref.open()
+        }
+      })
+    },
+
+    /**
      * Envía un mensaje directo al lead por WhatsApp sin pasar por Claude.
      *
      * @returns {void}
@@ -1822,6 +1866,9 @@ export default {
 .conversation-messages {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 
 /* Columna flex para alinear burbujas; el scroll vive en .conversation-messages. */

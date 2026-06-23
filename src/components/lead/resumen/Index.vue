@@ -21,6 +21,20 @@
       </button>
     </div>
 
+    <!-- Acceso rápido a la conversación WhatsApp del lead (módulo de pantalla completa) -->
+    <div v-if="show_whatsapp_button" class="mb-3">
+      <button
+        type="button"
+        class="btn btn-outline-success btn-sm d-inline-flex align-items-center gap-2"
+        title="Abrir conversación de WhatsApp"
+        aria-label="Abrir conversación de WhatsApp"
+        @click="open_whatsapp_conversation"
+      >
+        <i class="bi bi-whatsapp" aria-hidden="true" />
+        Abrir conversación de WhatsApp
+      </button>
+    </div>
+
     <!-- Estado vacío: cuando no existe resumen generado aún -->
     <div v-if="!record || !record.demo_summary" class="text-center py-5 text-muted">
       <i class="bi bi-file-earmark-text d-block mb-3" style="font-size: 3rem"></i>
@@ -119,6 +133,7 @@
  * Muestra el resumen narrativo generado por Claude y las 4 tarjetas del resumen
  * estructurado (empresa, situación actual, funcionalidades, puntos de dolor).
  * Incluye botón para regenerar ambos resúmenes invocando la acción del store.
+ * Incluye acceso rápido al módulo de conversación WhatsApp del lead.
  */
 export default {
   name: 'LeadResumenTab',
@@ -138,6 +153,24 @@ export default {
   },
 
   computed: {
+    /**
+     * Indica si debe mostrarse el botón para ir al módulo de conversación WhatsApp.
+     * Se oculta cuando ya se está viendo la conversación de este mismo lead.
+     * @returns {boolean}
+     */
+    show_whatsapp_button() {
+      if (!this.record || !this.record.id) {
+        return false
+      }
+      if (
+        this.$route.name === 'lead_conversation'
+        && String(this.$route.params.lead_id) === String(this.record.id)
+      ) {
+        return false
+      }
+      return true
+    },
+
     /**
      * Parsea y devuelve el objeto demo_summary_structured del lead.
      * Maneja tanto el caso en que el backend lo devuelve ya como objeto JS
@@ -162,6 +195,18 @@ export default {
   },
 
   methods: {
+    /**
+     * Navega a la vista de pantalla completa de la conversación WhatsApp del lead.
+     * Reutiliza la misma ruta que el botón de la tabla de leads.
+     * @returns {void}
+     */
+    open_whatsapp_conversation() {
+      if (!this.record || !this.record.id) {
+        return
+      }
+      this.$router.push({ name: 'lead_conversation', params: { lead_id: this.record.id } })
+    },
+
     /**
      * Llama a la acción del store para regenerar el resumen del lead via Claude.
      * Al completarse emite record-updated con el modelo actualizado y muestra toast.

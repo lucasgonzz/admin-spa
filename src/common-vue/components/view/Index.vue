@@ -14,6 +14,9 @@
       @reset-filters="on_reset_filters"
       @saved="on_props_saved"
     >
+      <template #toolbar-right>
+        <slot name="toolbar-right" />
+      </template>
       <template #right>
         <slot name="right" />
       </template>

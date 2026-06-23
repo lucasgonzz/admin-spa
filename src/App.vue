@@ -463,6 +463,16 @@ export default {
   background-color: #f8f9fa;
 }
 
+/* Móvil: el shell raíz no puede desbordar ni estirarse fuera del viewport. */
+@media (max-width: 767.98px) {
+  .app-root {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+    overscroll-behavior: none;
+  }
+}
+
 .app-route-loading {
   position: absolute;
   inset: 0;
