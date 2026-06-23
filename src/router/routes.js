@@ -152,6 +152,13 @@ const routes_def = [
     meta: { requiresAuth: true, nav: false },
   },
   {
+    /** Vista fullscreen de la conversación WhatsApp de una implementación. */
+    path: '/implementaciones/:implementation_id/conversacion',
+    name: 'implementation_conversation',
+    component: () => import('@/views/ImplementationConversationView.vue'),
+    meta: { requiresAuth: true, nav: false },
+  },
+  {
     path: '/login',
     name: 'login',
     text: 'Ingresar',

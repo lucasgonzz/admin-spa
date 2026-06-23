@@ -58,9 +58,17 @@
             </span>
           </div>
 
-          <!-- Días desde inicio -->
-          <div class="small text-muted mt-1">
-            {{ days_since_label(impl.started_at) }}
+          <!-- Días desde inicio + botón directo a la conversación -->
+          <div class="d-flex align-items-center justify-content-between mt-1">
+            <span class="small text-muted">{{ days_since_label(impl.started_at) }}</span>
+            <button
+              type="button"
+              class="btn btn-link btn-sm p-0 text-success"
+              title="Ver conversación WhatsApp"
+              @click.stop="go_to_conversation(impl.id)"
+            >
+              <i class="bi bi-whatsapp" aria-hidden="true" />
+            </button>
           </div>
         </div>
 
@@ -101,67 +109,47 @@
               </span>
             </div>
 
-            <!--
-              Botón avanzar etapa: solo visible si la implementación está activa
-              y la etapa actual es menor a 8 (la última etapa cierra automáticamente).
-            -->
-            <button
-              v-if="selected_implementation.status === 'in_progress' && selected_implementation.current_stage < 8"
-              class="btn btn-primary btn-sm flex-shrink-0"
-              :disabled="advancing_stage"
-              @click="on_advance_stage"
-            >
-              {{ advancing_stage ? 'Avanzando...' : 'Avanzar etapa' }}
-            </button>
+            <!-- Acciones del header: botón conversación + botón avanzar etapa -->
+            <div class="d-flex align-items-center gap-2 flex-shrink-0">
+
+              <!--
+                Botón de acceso directo a la conversación WhatsApp fullscreen.
+                Navega a la vista ImplementationConversationView.
+              -->
+              <button
+                v-if="selected_implementation"
+                class="btn btn-sm btn-outline-success d-inline-flex align-items-center gap-1 flex-shrink-0"
+                title="Ver conversación WhatsApp"
+                @click="go_to_conversation(selected_implementation.id)"
+              >
+                <i class="bi bi-whatsapp" aria-hidden="true" />
+                Conversación
+              </button>
+
+              <!--
+                Botón avanzar etapa: solo visible si la implementación está activa
+                y la etapa actual es menor a 8 (la última etapa cierra automáticamente).
+              -->
+              <button
+                v-if="selected_implementation.status === 'in_progress' && selected_implementation.current_stage < 8"
+                class="btn btn-primary btn-sm flex-shrink-0"
+                :disabled="advancing_stage"
+                @click="on_advance_stage"
+              >
+                {{ advancing_stage ? 'Avanzando...' : 'Avanzar etapa' }}
+              </button>
+
+            </div>
           </div>
         </div>
 
-        <!--
-          Navegación del detalle: alterna entre resumen (etapas + datos)
-          y conversación sin mezclar ambos en un único scroll largo.
-        -->
-        <div class="impl-right-nav flex-shrink-0">
-          <div class="impl-detail-tab-bar" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              class="impl-detail-tab-btn"
-              :class="{ 'impl-detail-tab-btn--active': detail_panel_tab === 'summary' }"
-              :aria-selected="detail_panel_tab === 'summary'"
-              @click="set_detail_panel_tab('summary')"
-            >
-              Resumen
-            </button>
-            <button
-              type="button"
-              role="tab"
-              class="impl-detail-tab-btn"
-              :class="{ 'impl-detail-tab-btn--active': detail_panel_tab === 'conversation' }"
-              :aria-selected="detail_panel_tab === 'conversation'"
-              @click="set_detail_panel_tab('conversation')"
-            >
-              Conversación
-            </button>
-          </div>
-        </div>
-
-        <!--
-          Cuerpo con scroll propio: contenido según pestaña activa.
-          En la pestaña Conversación se quita padding y overflow para que
-          ImplementationConversation gestione su propio scroll interno.
-        -->
+        <!-- Cuerpo con scroll propio: resumen de etapas y datos recolectados. -->
         <div
           ref="impl_right_body"
-          class="impl-right-body flex-grow-1"
-          :class="{
-            'overflow-auto': detail_panel_tab !== 'conversation',
-            'overflow-hidden': detail_panel_tab === 'conversation',
-            'impl-right-body--no-padding': detail_panel_tab === 'conversation',
-          }"
+          class="impl-right-body flex-grow-1 overflow-auto"
         >
 
-          <!-- Resumen: etapas y datos recolectados (sin conversación) -->
-          <template v-if="detail_panel_tab === 'summary'">
+          <!-- Resumen: etapas y datos recolectados -->
 
           <!-- Sección: progreso visual de las 7 etapas -->
           <h6 class="impl-section-title">Etapas</h6>
@@ -457,20 +445,6 @@
             </p>
           </div>
 
-          </template>
-
-          <!--
-            Conversación: mensajes WhatsApp con input de envío y simulación.
-            El componente ImplementationConversation gestiona su propio scroll,
-            burbujas, audio, imágenes, adjuntos y los dos inputs del footer.
-          -->
-          <template v-if="detail_panel_tab === 'conversation'">
-            <ImplementationConversation
-              v-if="selected_implementation"
-              :implementation="selected_implementation"
-            />
-          </template>
-
         </div>
       </template>
 
@@ -480,7 +454,6 @@
 
 <script>
 import api from '@/utils/axios'
-import ImplementationConversation from '@/components/implementation/ImplementationConversation.vue'
 
 /**
  * Etiquetas en español de propiedades de sistema (mismo mapa que ImplementationImportService).
@@ -500,11 +473,6 @@ const STAGE_4_PROPERTY_LABELS = {
 
 export default {
   name: 'ViewImplementations',
-
-  components: {
-    /* Componente de conversación WhatsApp para el panel de detalle. */
-    ImplementationConversation,
-  },
 
   data() {
     return {
@@ -542,12 +510,6 @@ export default {
        * Indicador de operación en curso al eliminar la implementación activa.
        */
       deleting_implementation: false,
-
-      /**
-       * Sección visible en el panel derecho del detalle: summary (etapas + datos)
-       * o conversation (mensajes WhatsApp).
-       */
-      detail_panel_tab: 'summary',
 
       /**
        * Referencia al canal Pusher suscrito (admin-implementations).
@@ -635,31 +597,6 @@ export default {
       return this.stage_4_stage !== null
     },
 
-    /**
-     * Mapa message_id → metadata de adjunto para renderizar tarjetas en la conversación
-     * sin re-parsear el body en cada binding del template.
-     *
-     * @returns {Object.<string, { filename: string, message_id: number|string }>}
-     */
-    message_file_attachments_by_id() {
-      /** Índice de adjuntos detectados por id de mensaje. */
-      const map = {}
-      const self = this
-
-      if (!this.selected_implementation || !this.selected_implementation.messages) {
-        return map
-      }
-
-      this.selected_implementation.messages.forEach(function (message) {
-        const attachment = self.parse_message_file_attachment(message)
-
-        if (attachment) {
-          map[message.id] = attachment
-        }
-      })
-
-      return map
-    },
   },
 
   created() {
@@ -726,8 +663,6 @@ export default {
 
       this.selected_id = id
       this.selected_implementation = null
-      /* Al cambiar de implementación, mostrar primero el resumen de etapas. */
-      this.detail_panel_tab = 'summary'
       this.load_detail(id)
     },
 
@@ -751,74 +686,7 @@ export default {
         })
         .then(function () {
           self.detail_loading = false
-
-          /*
-           * Si el detalle se recargó estando en Conversación, bajar el scroll
-           * al último mensaje una vez visible el panel.
-           */
-          if (self.detail_panel_tab === 'conversation') {
-            self.schedule_scroll_conversation_to_bottom()
-          }
         })
-    },
-
-    /**
-     * Cambia la pestaña del detalle (resumen o conversación).
-     * En conversación, desplaza el scroll al último mensaje tras pintar el DOM.
-     *
-     * @param {string} tab Clave de pestaña: 'summary' | 'conversation'.
-     * @returns {void}
-     */
-    set_detail_panel_tab(tab) {
-      this.detail_panel_tab = tab
-
-      if (tab === 'conversation') {
-        this.schedule_scroll_conversation_to_bottom()
-      }
-    },
-
-    /**
-     * Programa el scroll al pie del hilo: nextTick + doble rAF por layout tardío.
-     *
-     * @returns {void}
-     */
-    schedule_scroll_conversation_to_bottom() {
-      const self = this
-
-      this.$nextTick(function () {
-        self.scroll_conversation_to_bottom()
-
-        requestAnimationFrame(function () {
-          requestAnimationFrame(function () {
-            self.scroll_conversation_to_bottom()
-          })
-        })
-      })
-    },
-
-    /**
-     * Desplaza el contenedor del detalle y el ancla al último mensaje visible.
-     *
-     * @returns {void}
-     */
-    scroll_conversation_to_bottom() {
-      if (this.detail_panel_tab !== 'conversation') {
-        return
-      }
-
-      /** Contenedor con overflow del panel derecho. */
-      const container = this.$refs.impl_right_body
-
-      if (container) {
-        container.scrollTop = container.scrollHeight
-      }
-
-      /** Marcador al final de la lista de burbujas. */
-      const anchor = this.$refs.conversation_scroll_end
-
-      if (anchor && typeof anchor.scrollIntoView === 'function') {
-        anchor.scrollIntoView({ block: 'end', inline: 'nearest' })
-      }
     },
 
     /**
@@ -988,88 +856,6 @@ export default {
       }
       const ext = String(filename).split('.').pop()
       return ext ? ext.toUpperCase() : ''
-    },
-
-    /**
-     * Detecta si un mensaje de conversación contiene un adjunto de archivo (formato Kapso).
-     *
-     * El body guardado por el webhook tiene el patrón:
-     *   [Document attached (archivo.xlsx)]
-     *   [Size: … | Type: …]
-     *   URL: https://…
-     *
-     * @param {Object} message Mensaje de implementation_messages.
-     * @returns {{ filename: string, message_id: number|string }|null}
-     */
-    parse_message_file_attachment(message) {
-      if (!message || !message.body) {
-        return null
-      }
-
-      /** Texto completo del mensaje persistido en la base. */
-      const body = String(message.body)
-
-      // Solo mensajes con patrón de adjunto multimedia.
-      if (!/\b(document|image|video|audio)\s+attached\b/i.test(body)) {
-        return null
-      }
-
-      /** Nombre extraído del patrón "Document attached (nombre.ext)". */
-      let filename = 'archivo'
-      const name_match = body.match(/(?:document|image|video|audio)\s+attached\s*\(([^)]+)\)/i)
-
-      if (name_match && name_match[1]) {
-        filename = name_match[1].trim()
-      }
-
-      // Requiere URL de Kapso para poder descargar vía proxy del backend.
-      const url_match = body.match(/URL:\s*(https?:\/\/\S+)/i)
-
-      if (!url_match || !url_match[1]) {
-        return null
-      }
-
-      return {
-        filename: filename,
-        message_id: message.id,
-      }
-    },
-
-    /**
-     * Descarga el adjunto de un mensaje de conversación vía proxy del backend.
-     *
-     * @param {Object} message Mensaje con adjunto detectado por parse_message_file_attachment.
-     * @returns {void}
-     */
-    download_message_file(message) {
-      const attachment = this.parse_message_file_attachment(message)
-
-      if (!attachment || !this.selected_implementation) {
-        return
-      }
-
-      /** ID de la implementación activa y del mensaje con el adjunto. */
-      const impl_id = this.selected_implementation.id
-      const message_id = attachment.message_id
-      const filename = attachment.filename
-
-      api
-        .get('/implementation/' + impl_id + '/message-file-download/' + message_id, {
-          responseType: 'blob',
-        })
-        .then(function (res) {
-          const blob_url = window.URL.createObjectURL(new Blob([res.data]))
-          const link = document.createElement('a')
-          link.href = blob_url
-          link.setAttribute('download', filename || 'archivo')
-          document.body.appendChild(link)
-          link.click()
-          link.parentNode.removeChild(link)
-          window.URL.revokeObjectURL(blob_url)
-        })
-        .catch(function () {
-          /* El interceptor global de axios ya muestra el toast de error. */
-        })
     },
 
     /**
@@ -1332,10 +1118,6 @@ export default {
       self._pusher_channel.listen('.implementation.import.status_updated', function (event_data) {
         self.on_import_status_updated(event_data)
       })
-
-      self._pusher_channel.listen('.implementation.message.received', function (event_data) {
-        self.on_message_received(event_data)
-      })
     },
 
     /**
@@ -1378,55 +1160,6 @@ export default {
 
       if (this.selected_id == event_data.implementation_id) {
         this.load_detail(this.selected_id)
-      }
-    },
-
-    /**
-     * Agrega un mensaje al hilo si la implementación afectada está cargada en el detalle.
-     *
-     * Evita duplicados por id (re-emisión o recarga concurrente) y hace scroll al pie
-     * cuando la pestaña Conversación está activa.
-     *
-     * @param {Object} event_data Payload: { implementation_id, message }.
-     * @returns {void}
-     */
-    on_message_received(event_data) {
-      if (!event_data || !event_data.message || !event_data.implementation_id) {
-        return
-      }
-
-      if (!this.selected_id || this.selected_id != event_data.implementation_id) {
-        return
-      }
-
-      if (!this.selected_implementation) {
-        return
-      }
-
-      /** Mensaje recién persistido en el backend. */
-      const message = event_data.message
-
-      if (!this.selected_implementation.messages) {
-        this.selected_implementation.messages = []
-      }
-
-      /** Indica si el mensaje ya está en el hilo local. */
-      let already_exists = false
-
-      this.selected_implementation.messages.forEach(function (existing_message) {
-        if (existing_message.id == message.id) {
-          already_exists = true
-        }
-      })
-
-      if (already_exists) {
-        return
-      }
-
-      this.selected_implementation.messages.push(message)
-
-      if (this.detail_panel_tab === 'conversation') {
-        this.schedule_scroll_conversation_to_bottom()
       }
     },
 
@@ -1853,6 +1586,20 @@ export default {
         return normalized === 'true' || normalized === 'yes' || normalized === '1' || normalized === 'sí' || normalized === 'si'
       }
       return false
+    },
+
+    /**
+     * Navega a la vista fullscreen de conversación WhatsApp de una implementación.
+     * Equivalente al ícono de WhatsApp en el listado de leads.
+     *
+     * @param {number|string} impl_id ID de la implementación.
+     * @returns {void}
+     */
+    go_to_conversation(impl_id) {
+      this.$router.push({
+        name: 'implementation_conversation',
+        params: { implementation_id: impl_id },
+      })
     },
   },
 }
