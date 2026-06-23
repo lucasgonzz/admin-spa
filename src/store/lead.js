@@ -535,6 +535,18 @@ export default __base_store({
       })
     },
     /**
+     * Genera el check de fin de demo manualmente sin esperar el scheduler automático.
+     * Crea un mensaje sugerido preguntando si el lead pudo terminar la demo.
+     * @param {Object} context contexto del módulo Vuex.
+     * @param {number} lead_id identificador del lead.
+     * @returns {Promise<Object>} modelo actualizado devuelto por el backend.
+     */
+    check_demo_fin(context, lead_id) {
+      return api.post('/lead/' + lead_id + '/check-demo-fin').then(function (res) {
+        return res.data.model
+      })
+    },
+    /**
      * Fuerza el seguimiento que corresponde al lead ahora mismo (testing manual),
      * sin esperar horas_espera ni estar bloqueado por sugerencia pendiente.
      *
@@ -583,6 +595,30 @@ export default __base_store({
       return api
         .post('/lead/' + payload.lead_id + '/send-direct-message', { content: payload.content })
         .then((res) => {
+          const model = res.data.model
+          commit('update_lead_en_conversacion', model)
+          return model
+        })
+    },
+    /**
+     * Envía manualmente una plantilla Meta al lead (útil cuando la ventana de 24hs está cerrada).
+     *
+     * @param {Object} context
+     * @param {{ lead_id: number, template_name: string, language_code: string, variables: string[], content: string }} payload
+     * @returns {Promise<Object>} modelo lead actualizado
+     */
+    send_template(context, payload) {
+      /* Extraer commit del contexto para actualizar el estado local tras el envío. */
+      const commit = context.commit
+      return api
+        .post('/lead/' + payload.lead_id + '/send-template', {
+          template_name:  payload.template_name,
+          language_code:  payload.language_code,
+          variables:      payload.variables,
+          content:        payload.content,
+        })
+        .then((res) => {
+          /* Actualizar el lead en conversación con el modelo devuelto por el backend. */
           const model = res.data.model
           commit('update_lead_en_conversacion', model)
           return model

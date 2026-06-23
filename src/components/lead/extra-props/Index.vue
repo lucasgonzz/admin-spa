@@ -45,9 +45,9 @@
               </div>
               <!-- Detalle opcional: fecha de demo, error de setup, etc. -->
               <div v-if="stage.detail" class="small text-muted mt-1">{{ stage.detail }}</div>
-              <!-- Resumen colapsable para la etapa 7 (demo summary generado por Claude) -->
-              <div v-if="stage.id === 7 && record.demo_summary && summary_expanded" class="mt-2 p-2 bg-light rounded small" style="white-space: pre-line;">{{ record.demo_summary }}</div>
-              <div v-if="stage.id === 7 && record.demo_summary" class="mt-1">
+              <!-- Resumen colapsable para la etapa 10 (demo summary generado por Claude) -->
+              <div v-if="stage.id === 10 && record.demo_summary && summary_expanded" class="mt-2 p-2 bg-light rounded small" style="white-space: pre-line;">{{ record.demo_summary }}</div>
+              <div v-if="stage.id === 10 && record.demo_summary" class="mt-1">
                 <button
                   type="button"
                   class="btn btn-link btn-sm p-0 text-decoration-none small text-muted"
@@ -288,8 +288,23 @@ export default {
         return []
       }
 
-      /* Statuses que indican que el lead ya está calificado en el funnel. */
-      var calificado_statuses = ['calificado', 'demo_agendada', 'demo_realizada', 'cerrado_ganado', 'mail2_enviado', 'cerrado_perdido']
+      /*
+       * Statuses que indican que el lead ya está calificado en el funnel.
+       * Incluye los 4 estados nuevos del ciclo de demo (prompt 094) para que
+       * la etapa "Lead calificado" se muestre como completada en todos esos estados.
+       */
+      var calificado_statuses = [
+        'calificado',
+        'demo_agendada',
+        'ingresando_demo',
+        'demo_en_curso',
+        'demo_pendiente_de_ingreso',
+        'demo_pendiente_de_terminar',
+        'demo_realizada',
+        'cerrado_ganado',
+        'mail2_enviado',
+        'cerrado_perdido',
+      ]
 
       return [
         {
@@ -374,6 +389,55 @@ export default {
         },
         {
           id: 7,
+          label: 'Ingreso confirmado',
+          /*
+           * Solo lectura: Claude infiere la confirmación de ingreso del lead.
+           * No se puede marcar/desmarcar manualmente; no tiene botón de acción.
+           */
+          status: r.demo_ingreso_confirmado ? 'completed' : 'pending',
+          /* Muestra la hora de confirmación en formato HH:MM si ya fue confirmado. */
+          detail: r.demo_ingreso_confirmado && r.demo_ingreso_confirmado_at
+            ? 'Confirmado a las ' + this.format_time(r.demo_ingreso_confirmado_at)
+            : null,
+          action: null,
+          action_label: null,
+          allow_repeat: false,
+          execution_at: null,
+          execution_source: null,
+        },
+        {
+          id: 8,
+          label: 'Check de fin enviado',
+          /* Completado cuando se envió el mensaje preguntando si el lead terminó la demo. */
+          status: r.demo_fin_check_enviado ? 'completed' : 'pending',
+          detail: null,
+          action: 'check_demo_fin',
+          action_label: 'Enviar check ahora',
+          action_label_repeat: 'Volver a enviar check',
+          allow_repeat: true,
+          execution_at: null,
+          execution_source: null,
+        },
+        {
+          id: 9,
+          label: 'Demo terminada',
+          /*
+           * Solo lectura: Claude infiere que el lead confirmó el fin de la demo.
+           * No se puede marcar/desmarcar manualmente; no tiene botón de acción.
+           */
+          status: r.demo_terminada_confirmada ? 'completed' : 'pending',
+          /* Muestra la hora de confirmación en formato HH:MM si ya fue confirmada. */
+          detail: r.demo_terminada_confirmada && r.demo_terminada_confirmada_at
+            ? 'Confirmada a las ' + this.format_time(r.demo_terminada_confirmada_at)
+            : null,
+          action: null,
+          action_label: null,
+          allow_repeat: false,
+          execution_at: null,
+          execution_source: null,
+        },
+        {
+          id: 10,
           label: 'Resumen para el closer generado',
           /* Completado cuando Claude generó el resumen del lead para el closer. */
           status: (r.demo_summary || '').trim() ? 'completed' : 'pending',
@@ -388,7 +452,7 @@ export default {
           execution_source: this.format_execution_source(r.demo_summary_manual),
         },
         {
-          id: 8,
+          id: 11,
           label: 'Llamada del closer realizada',
           /* Completado cuando el closer marcó que realizó la llamada post-demo. */
           status: r.closer_called_at ? 'completed' : 'pending',
@@ -626,6 +690,28 @@ export default {
         return 'Automático'
       }
       return null
+    },
+    /**
+     * Formatea un datetime ISO a solo hora (HH:MM) en timezone Argentina.
+     * Usado para mostrar la hora de confirmación de ingreso y fin de demo.
+     * @param {string|null} date_value datetime ISO recibido del backend.
+     * @returns {string} hora en formato HH:MM, o cadena vacía si no hay valor.
+     */
+    format_time(date_value) {
+      if (!date_value) {
+        return ''
+      }
+      /* Instanciar Date para respetar el offset UTC del campo. */
+      var local_date = new Date(date_value)
+      if (isNaN(local_date.getTime())) {
+        return date_value
+      }
+      /* Formatear solo la hora en timezone Argentina (es-AR, sin segundos). */
+      return local_date.toLocaleTimeString('es-AR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'America/Argentina/Buenos_Aires',
+      })
     },
     /**
      * Formatea una fecha ISO a texto legible en español (solo fecha).
