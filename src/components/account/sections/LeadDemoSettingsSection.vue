@@ -229,6 +229,60 @@
         </div>
       </div>
 
+      <!-- Campo: timeout de ingreso -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-5">
+          <label class="form-label small" for="demo_ingreso_timeout_minutos">Timeout de ingreso (min)</label>
+          <!-- Minutos sin respuesta al check de ingreso antes de marcar pendiente y avisar admins -->
+          <input
+            id="demo_ingreso_timeout_minutos"
+            v-model.number="local.ingreso_timeout_minutos"
+            type="number"
+            class="form-control form-control-sm"
+            min="0"
+            max="240"
+            :disabled="saving"
+          />
+          <p class="text-muted small mb-0 mt-1">Si el lead no responde al check de ingreso pasados estos minutos, se marca como pendiente de ingreso y se avisa a los admins.</p>
+        </div>
+      </div>
+
+      <!-- Campo: seguimiento de fin -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-5">
+          <label class="form-label small" for="demo_fin_seguimiento_minutos">Seguimiento de fin (min)</label>
+          <!-- Minutos desde la pregunta de fin antes de insistir una vez más -->
+          <input
+            id="demo_fin_seguimiento_minutos"
+            v-model.number="local.fin_seguimiento_minutos"
+            type="number"
+            class="form-control form-control-sm"
+            min="0"
+            max="240"
+            :disabled="saving"
+          />
+          <p class="text-muted small mb-0 mt-1">Minutos tras preguntar si terminó la demo, antes de insistir una vez más.</p>
+        </div>
+      </div>
+
+      <!-- Campo: timeout de fin -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-5">
+          <label class="form-label small" for="demo_fin_timeout_minutos">Timeout de fin (min)</label>
+          <!-- Minutos desde la pregunta de fin antes de marcar pendiente de terminar y avisar admins -->
+          <input
+            id="demo_fin_timeout_minutos"
+            v-model.number="local.fin_timeout_minutos"
+            type="number"
+            class="form-control form-control-sm"
+            min="0"
+            max="240"
+            :disabled="saving"
+          />
+          <p class="text-muted small mb-0 mt-1">Si el lead no confirma que terminó pasados estos minutos, se marca pendiente de terminar y se avisa a los admins.</p>
+        </div>
+      </div>
+
       <!-- Botón guardar: único para todos los campos -->
       <div class="d-flex align-items-center gap-2">
         <button
@@ -283,6 +337,12 @@ export default {
         frecuencia_slots_minutos: 30,
         /** Si la llamada del closer debe terminar dentro del horario laboral. */
         llamada_debe_terminar_en_horario: false,
+        /** Minutos sin respuesta al check de ingreso antes de marcar demo_pendiente_de_ingreso. */
+        ingreso_timeout_minutos: 15,
+        /** Minutos desde el check de fin antes de insistir una vez más ("¿pudiste terminar?"). */
+        fin_seguimiento_minutos: 10,
+        /** Minutos desde el check de fin antes de marcar demo_pendiente_de_terminar. */
+        fin_timeout_minutos: 25,
       },
       /** Valores persistidos en servidor (para detectar cambios). */
       stored: {
@@ -305,6 +365,12 @@ export default {
         frecuencia_slots_minutos: 30,
         /** Espejo del servidor: si la llamada del closer debe terminar dentro del horario. */
         llamada_debe_terminar_en_horario: false,
+        /** Espejo del servidor: timeout de ingreso en minutos. */
+        ingreso_timeout_minutos: 15,
+        /** Espejo del servidor: minutos antes de insistir en el fin de la demo. */
+        fin_seguimiento_minutos: 10,
+        /** Espejo del servidor: timeout de fin en minutos. */
+        fin_timeout_minutos: 25,
       },
       /** Carga inicial GET settings. */
       loading: true,
@@ -407,6 +473,9 @@ export default {
           closer_horario_domingo:              self.local.closer_horario_domingo,
           frecuencia_slots_minutos:            self.local.frecuencia_slots_minutos,
           llamada_debe_terminar_en_horario:    self.local.llamada_debe_terminar_en_horario,
+          ingreso_timeout_minutos:             self.local.ingreso_timeout_minutos,
+          fin_seguimiento_minutos:             self.local.fin_seguimiento_minutos,
+          fin_timeout_minutos:                 self.local.fin_timeout_minutos,
         })
         .then(function (res) {
           /* Actualizar los valores de referencia para que can_save vuelva a false. */
