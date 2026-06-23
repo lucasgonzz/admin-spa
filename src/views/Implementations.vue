@@ -145,8 +145,20 @@
           </div>
         </div>
 
-        <!-- Cuerpo con scroll propio: contenido según pestaña activa -->
-        <div ref="impl_right_body" class="impl-right-body flex-grow-1 overflow-auto">
+        <!--
+          Cuerpo con scroll propio: contenido según pestaña activa.
+          En la pestaña Conversación se quita padding y overflow para que
+          ImplementationConversation gestione su propio scroll interno.
+        -->
+        <div
+          ref="impl_right_body"
+          class="impl-right-body flex-grow-1"
+          :class="{
+            'overflow-auto': detail_panel_tab !== 'conversation',
+            'overflow-hidden': detail_panel_tab === 'conversation',
+            'impl-right-body--no-padding': detail_panel_tab === 'conversation',
+          }"
+        >
 
           <!-- Resumen: etapas y datos recolectados (sin conversación) -->
           <template v-if="detail_panel_tab === 'summary'">
@@ -186,21 +198,23 @@
                 </div>
 
                 <!--
-                  Subetapas de la Etapa 1: se muestran cuando la etapa 1
-                  está en progreso o completada y tiene datos recolectados.
+                  Subetapas de la etapa activa: se muestran para todas las etapas (1 a 8)
+                  cuando están en progreso o completadas.
                   Cada subetapa indica con ✅/⬜ si su campo fue completado.
+                  La nota opcional se muestra entre paréntesis si está presente.
                 -->
                 <div
-                  v-if="stage.stage_number === 1 && (stage.status === 'completed' || stage.status === 'in_progress') && stage.data"
-                  class="impl-stage-1-substeps mt-1"
+                  v-if="stage.status === 'completed' || stage.status === 'in_progress'"
+                  class="impl-stage-substeps mt-1"
                 >
                   <div
-                    v-for="substep in stage_1_substeps_from(stage.data)"
+                    v-for="substep in substeps_from_stage(stage)"
                     :key="substep.key"
                     class="impl-stage-substep small"
                     :class="{ 'text-muted': !substep.done }"
                   >
                     {{ substep.done ? '✅' : '⬜' }} {{ substep.label }}
+                    <span v-if="substep.note" class="text-muted ms-1">({{ substep.note }})</span>
                   </div>
                 </div>
               </div>
@@ -445,98 +459,16 @@
 
           </template>
 
-          <!-- Conversación: mensajes WhatsApp (sin etapas ni datos recolectados) -->
+          <!--
+            Conversación: mensajes WhatsApp con input de envío y simulación.
+            El componente ImplementationConversation gestiona su propio scroll,
+            burbujas, audio, imágenes, adjuntos y los dos inputs del footer.
+          -->
           <template v-if="detail_panel_tab === 'conversation'">
-
-          <h6 class="impl-section-title">Conversación</h6>
-
-          <!-- Sin mensajes -->
-          <div
-            v-if="!selected_implementation.messages || !selected_implementation.messages.length"
-            class="text-muted small mb-3"
-          >
-            Sin mensajes registrados.
-          </div>
-
-          <!-- Lista de burbujas con separadores por etapa -->
-          <div v-else class="impl-messages">
-            <template
-              v-for="(message, index) in selected_implementation.messages"
-              :key="message.id"
-            >
-              <!--
-                Separador de etapa: se muestra la primera vez que aparece una etapa
-                o cuando cambia respecto al mensaje anterior.
-              -->
-              <div
-                v-if="index === 0 || selected_implementation.messages[index - 1].stage_number !== message.stage_number"
-                class="impl-stage-separator text-center text-muted small"
-              >
-                — Etapa {{ message.stage_number }} —
-              </div>
-
-              <!-- Burbuja de mensaje: derecha = outbound, izquierda = inbound -->
-              <div
-                class="d-flex mb-2"
-                :class="message.direction === 'outbound' ? 'justify-content-end' : 'justify-content-start'"
-              >
-                <div
-                  class="impl-bubble"
-                  :class="message.direction === 'outbound' ? 'impl-bubble--outbound' : 'impl-bubble--inbound'"
-                >
-                  <!-- Adjunto de archivo: misma tarjeta visual que en Archivos recibidos (Etapa 4) -->
-                  <div v-if="message_file_attachments_by_id[message.id]" class="impl-bubble__attachment">
-                    <div
-                      class="impl-stage4-file-card impl-bubble-file-card d-flex align-items-center gap-2 p-2 border rounded"
-                    >
-                      <i
-                        class="impl-stage4-file-icon bi flex-shrink-0"
-                        :class="file_type_icon_class(message_file_attachments_by_id[message.id].filename)"
-                        :style="{
-                          color: file_type_color(message_file_attachments_by_id[message.id].filename),
-                          fontSize: '1.6rem',
-                        }"
-                        aria-hidden="true"
-                      />
-
-                      <div class="flex-grow-1 min-w-0">
-                        <div
-                          class="text-truncate small fw-semibold"
-                          :title="message_file_attachments_by_id[message.id].filename"
-                        >
-                          {{ message_file_attachments_by_id[message.id].filename }}
-                        </div>
-                        <div
-                          class="text-muted"
-                          style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em;"
-                        >
-                          {{ file_ext(message_file_attachments_by_id[message.id].filename) }}
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        class="btn btn-sm btn-outline-secondary flex-shrink-0 impl-stage4-download-btn"
-                        :title="'Descargar ' + message_file_attachments_by_id[message.id].filename"
-                        @click.stop="download_message_file(message)"
-                      >
-                        <i class="bi bi-download" aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Texto plano para mensajes sin adjunto -->
-                  <div v-else class="impl-bubble__body">{{ message.body }}</div>
-
-                  <!-- Timestamp del mensaje -->
-                  <div class="impl-bubble__time">{{ format_date(message.sent_at) }}</div>
-                </div>
-              </div>
-            </template>
-            <!-- Ancla al pie del hilo para scrollIntoView tras renderizar mensajes -->
-            <div ref="conversation_scroll_end" class="impl-conversation-scroll-end" aria-hidden="true"></div>
-          </div>
-
+            <ImplementationConversation
+              v-if="selected_implementation"
+              :implementation="selected_implementation"
+            />
           </template>
 
         </div>
@@ -548,6 +480,7 @@
 
 <script>
 import api from '@/utils/axios'
+import ImplementationConversation from '@/components/implementation/ImplementationConversation.vue'
 
 /**
  * Etiquetas en español de propiedades de sistema (mismo mapa que ImplementationImportService).
@@ -567,6 +500,11 @@ const STAGE_4_PROPERTY_LABELS = {
 
 export default {
   name: 'ViewImplementations',
+
+  components: {
+    /* Componente de conversación WhatsApp para el panel de detalle. */
+    ImplementationConversation,
+  },
 
   data() {
     return {
@@ -1696,36 +1634,164 @@ export default {
     // -------------------------------------------------------------------------
 
     /**
-     * Construye el listado de subetapas de la Etapa 1 a partir de los datos recolectados.
+     * Construye el listado de subetapas de cualquier etapa (1 a 8)
+     * a partir del objeto `stage` completo.
      *
-     * Cada subetapa indica si fue completada según la presencia o valor de su clave en `data`.
+     * Recibe el stage completo (no solo `data`) para poder acceder también
+     * a `stage.status` y `stage.stage_number`, necesarios en etapas 3 y 8.
      *
-     * @param {Object} data Objeto `stage.data` del stage con stage_number === 1.
-     * @returns {Array<{ key: string, label: string, done: boolean }>}
+     * Las subetapas condicionales de la Etapa 1 (`price_lists`, `deposit_names`)
+     * solo se incluyen cuando el flag correspondiente está activo.
+     *
+     * @param {Object} stage Objeto de etapa con campos: stage_number, status, data.
+     * @returns {Array<{ key: string, label: string, done: boolean, note?: string }>}
      */
-    stage_1_substeps_from(data) {
-      if (!data) {
-        return []
+    substeps_from_stage(stage) {
+      /* stage.data puede ser null si la etapa todavía no tiene datos recolectados */
+      const data = stage.data || {}
+
+      /* Número de etapa para elegir el mapa correspondiente */
+      const num = stage.stage_number
+
+      /* ------------------------------------------------------------------ */
+      /* Etapa 1 — Info de la empresa                                        */
+      /* ------------------------------------------------------------------ */
+      if (num === 1) {
+        /* Array inicial con subetapas siempre presentes */
+        const substeps = [
+          /* Tipo de negocio: completada si la clave existe en data */
+          { key: 'business_type',    label: 'Tipo de negocio',    done: 'business_type' in data },
+          /* Listas de precios: completada si la clave existe en data */
+          { key: 'use_price_lists',  label: 'Listas de precios',  done: 'use_price_lists' in data },
+        ]
+
+        /* Subetapa condicional: nombres de listas, solo si use_price_lists === true */
+        if (data.use_price_lists === true) {
+          substeps.push({ key: 'price_lists', label: 'Nombres de listas', done: 'price_lists' in data })
+        }
+
+        /* Depósitos/sucursales: siempre presente */
+        substeps.push({ key: 'use_deposits', label: 'Depósitos/sucursales', done: 'use_deposits' in data })
+
+        /* Subetapa condicional: nombres de depósitos, solo si use_deposits === true */
+        if (data.use_deposits === true) {
+          substeps.push({ key: 'deposit_names', label: 'Nombres de depósitos', done: 'deposit_names' in data })
+        }
+
+        /* Resto de subetapas fijas de la Etapa 1 */
+        substeps.push(
+          { key: 'payment_discounts',        label: 'Descuentos por pago',           done: 'payment_discounts' in data },
+          { key: 'company_name',             label: 'Nombre de empresa',             done: 'company_name' in data },
+          { key: 'address_company',          label: 'Dirección',                     done: 'address_company' in data },
+          /* Empleados: completada si la clave existe y el valor no es vacío */
+          { key: 'employees',                label: 'Empleados',                     done: 'employees' in data && data.employees !== null && data.employees !== '' },
+          /* Logo: completada solo si logo_received === true */
+          { key: 'logo_received',            label: 'Logo',                          done: data.logo_received === true },
+          { key: 'social_networks',          label: 'Redes sociales',                done: 'social_networks' in data },
+          { key: 'dollar_prices',            label: 'Precios en dólares',            done: 'dollar_prices' in data },
+          { key: 'ask_amount_in_vender',     label: 'Cantidad en venta',             done: 'ask_amount_in_vender' in data },
+          { key: 'default_cuenta_corriente', label: 'Cuenta corriente por defecto',  done: 'default_cuenta_corriente' in data },
+        )
+
+        return substeps
       }
 
-      return [
-        /* Listas de precios: completada si la clave existe en data */
-        { key: 'use_price_lists',        label: 'Listas de precios',       done: 'use_price_lists' in data },
-        /* Depósitos/sucursales: completada si la clave existe en data */
-        { key: 'use_deposits',           label: 'Depósitos/sucursales',    done: 'use_deposits' in data },
-        /* Método de pago: completada si la clave existe en data */
-        { key: 'payment_discounts',      label: 'Método de pago',          done: 'payment_discounts' in data },
-        /* Nombre de empresa: completada si la clave existe en data */
-        { key: 'company_name',           label: 'Nombre de empresa',       done: 'company_name' in data },
-        /* Empleados: completada si la clave existe y el valor no es vacío */
-        { key: 'employees',              label: 'Empleados',               done: 'employees' in data && data.employees !== null && data.employees !== '' },
-        /* Logo: completada solo si logo_received === true */
-        { key: 'logo_received',          label: 'Logo',                    done: data.logo_received === true },
-        /* Cantidad en venta: completada si la clave existe en data */
-        { key: 'ask_amount_in_vender',   label: 'Cantidad en venta',       done: 'ask_amount_in_vender' in data },
-        /* Cuenta corriente: completada si la clave existe en data */
-        { key: 'default_cuenta_corriente', label: 'Cuenta corriente',      done: 'default_cuenta_corriente' in data },
-      ]
+      /* ------------------------------------------------------------------ */
+      /* Etapa 2 — Responsable de migración                                  */
+      /* ------------------------------------------------------------------ */
+      if (num === 2) {
+        return [
+          /* Completadas cuando completed === true (el dueño puede elegir "Yo mismo") */
+          { key: 'migration_responsible_name',  label: 'Responsable de migración',  done: 'migration_responsible_name' in data },
+          { key: 'migration_responsible_phone', label: 'Teléfono del responsable',  done: 'migration_responsible_phone' in data },
+        ]
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* Etapa 3 — Instalación del sistema (etapa manual, sin data relevante) */
+      /* ------------------------------------------------------------------ */
+      if (num === 3) {
+        return [
+          /* "done" se deriva del estado de la etapa, no de un campo en data */
+          { key: 'installation', label: 'Sistema instalado', done: stage.status === 'completed' },
+        ]
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* Etapa 4 — Archivos de migración                                     */
+      /* ------------------------------------------------------------------ */
+      if (num === 4) {
+        /**
+         * Criterio de "done" para archivos de migración:
+         * el campo debe existir, no ser 'pending', y ser 'skipped' o un array con elementos.
+         *
+         * @param {*} val Valor del campo de archivos.
+         * @returns {boolean}
+         */
+        var files_done = function (val) {
+          return Boolean(val) && val !== 'pending' && (val === 'skipped' || (Array.isArray(val) && val.length > 0))
+        }
+
+        return [
+          { key: 'articles_files',    label: 'Excel de artículos',           done: files_done(data.articles_files) },
+          { key: 'clients_files',     label: 'Excel de clientes',            done: files_done(data.clients_files) },
+          { key: 'suppliers_files',   label: 'Excel de proveedores',         done: files_done(data.suppliers_files) },
+          { key: 'confirm_analysis',  label: 'Mapeo confirmado por cliente', done: data.files_confirmed_complete === true },
+        ]
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* Etapa 5 — Migración con IA                                          */
+      /* ------------------------------------------------------------------ */
+      if (num === 5) {
+        /* Acceso seguro al objeto import_status (puede no existir todavía) */
+        const import_status = data.import_status || {}
+
+        return [
+          { key: 'analyzing',         label: 'Análisis IA',            done: data.analysis_result != null },
+          { key: 'confirm_analysis',  label: 'Mapeo confirmado',        done: data.completed === true },
+          /* Las importaciones se muestran siempre; done solo si su status fue 'success' */
+          { key: 'import_articles',   label: 'Artículos importados',   done: import_status.articles && import_status.articles.status === 'success' },
+          { key: 'import_clients',    label: 'Clientes importados',    done: import_status.clients && import_status.clients.status === 'success' },
+          { key: 'import_suppliers',  label: 'Proveedores importados', done: import_status.suppliers && import_status.suppliers.status === 'success' },
+        ]
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* Etapa 6 — Acceso de empleados                                       */
+      /* ------------------------------------------------------------------ */
+      if (num === 6) {
+        return [
+          /* Completada si employees_notified es un array con al menos un elemento */
+          { key: 'employees_notified', label: 'Credenciales enviadas a empleados', done: Array.isArray(data.employees_notified) && data.employees_notified.length > 0 },
+        ]
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* Etapa 7 — Vinculación AFIP/ARCA                                     */
+      /* ------------------------------------------------------------------ */
+      if (num === 7) {
+        return [
+          { key: 'afip_contact_name',  label: 'Responsable AFIP identificado', done: 'afip_contact_name' in data },
+          { key: 'afip_contact_phone', label: 'Teléfono del responsable AFIP',  done: 'afip_contact_phone' in data },
+          { key: 'afip_steps_sent',    label: 'Pasos AFIP enviados',            done: data.afip_steps_sent === true },
+        ]
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* Etapa 8 — Videollamada                                              */
+      /* ------------------------------------------------------------------ */
+      if (num === 8) {
+        return [
+          /* Disponibilidad: confirmada si hay availability en data o se saltó la videollamada */
+          { key: 'availability',        label: 'Disponibilidad confirmada', done: 'availability' in data || data.skip_videocall === true },
+          /* Videollamada realizada: done se deriva del estado de la etapa */
+          { key: 'videocall_scheduled', label: 'Videollamada realizada',    done: stage.status === 'completed' },
+        ]
+      }
+
+      /* Etapa fuera del rango conocido: sin subetapas */
+      return []
     },
 
     /**
@@ -1937,6 +2003,11 @@ export default {
   padding: 16px;
 }
 
+/* Modo conversación: sin padding para que el componente ocupe todo el espacio */
+.impl-right-body--no-padding {
+  padding: 0;
+}
+
 /* Título de sección dentro del panel derecho */
 .impl-section-title {
   text-transform: uppercase;
@@ -1959,8 +2030,8 @@ export default {
   text-align: center;
 }
 
-/* Contenedor de subetapas de la Etapa 1, indentado bajo el nombre de la etapa */
-.impl-stage-1-substeps {
+/* Contenedor de subetapas de cualquier etapa, indentado bajo el nombre de la etapa */
+.impl-stage-substeps {
   padding-left: 1.2rem;
 }
 
