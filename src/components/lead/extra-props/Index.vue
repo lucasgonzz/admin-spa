@@ -123,6 +123,21 @@
           </button>
         </div>
 
+        <!-- Iniciar implementación: visible cuando el lead ya fue promovido y aún no tiene implementación activa -->
+        <div v-if="can_start_implementation" class="mt-2">
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-primary"
+            :disabled="loading_action !== ''"
+            @click="start_implementation"
+          >
+            {{ loading_action === 'start_implementation' ? 'Iniciando...' : 'Iniciar implementación' }}
+          </button>
+          <p class="text-muted small mb-0 mt-1">
+            Al presionar, se creará la implementación y se enviará automáticamente el primer mensaje de presentación al cliente por WhatsApp.
+          </p>
+        </div>
+
         <!-- Advertencia de campos faltantes para el mail de demo -->
         <div v-if="demo_mail_validation_message" class="alert alert-warning py-2 mt-2 mb-0 small">
           <strong>Mail 1 - DEMO:</strong> {{ demo_mail_validation_message }}
@@ -538,6 +553,19 @@ export default {
         return false
       }
       return this.client_production_api_url.length > 0
+    },
+    /**
+     * Habilita "Iniciar implementación" cuando el lead tiene Client promovido sin implementación activa.
+     * @returns {boolean}
+     */
+    can_start_implementation() {
+      if (!this.record || !this.record.promoted_client_id) {
+        return false
+      }
+      if (!this.record.promoted_client) {
+        return false
+      }
+      return !this.record.promoted_client.implementation
     },
     /**
      * Tarjetas de estado de los envíos de mail comercial (Mail 1 demo + Mail 2 seguimiento).
@@ -984,6 +1012,33 @@ export default {
         },
         'User setup ejecutado.'
       )
+    },
+    /**
+     * Inicia la implementación del cliente promovido y dispara la plantilla de bienvenida por WhatsApp.
+     * @returns {void}
+     */
+    start_implementation() {
+      var self = this
+      if (!self.can_start_implementation) {
+        return
+      }
+      self.loading_action = 'start_implementation'
+      var client_id = self.record.promoted_client_id
+      api.post('/client/' + client_id + '/implementation/start')
+        .then(function (res) {
+          var payload = res && res.data ? res.data : {}
+          if (payload.model && self.record.promoted_client) {
+            self.record.promoted_client.implementation = payload.model
+          }
+          self.$emit('record-updated', self.record)
+          self.open_feedback('Implementación iniciada correctamente.')
+        })
+        .catch(function (err) {
+          alert(resolve_error_message(err))
+        })
+        .then(function () {
+          self.loading_action = ''
+        })
     },
   },
 }
