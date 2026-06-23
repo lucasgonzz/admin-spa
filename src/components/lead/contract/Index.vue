@@ -187,13 +187,21 @@ export default {
   },
   methods: {
     /**
-     * Toast global o alert de respaldo.
+     * Toast global (Vue 3: CustomEvent admin-spa-toast) o alert de respaldo.
      * @param {string} message
+     * @param {string} [variant] variante Bootstrap del toast (success, danger, etc.).
      * @returns {void}
      */
-    open_feedback(message) {
-      if (this.$root && this.$root.$emit) {
-        this.$root.$emit('open_toast', message)
+    open_feedback(message, variant) {
+      /** Variante visual; por defecto éxito en guardados manuales. */
+      const toast_variant = variant || 'success'
+      if (typeof window !== 'undefined' && window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('admin-spa-toast', {
+          detail: {
+            message: String(message),
+            variant: toast_variant,
+          },
+        }))
         return
       }
       alert(message)
@@ -319,7 +327,7 @@ export default {
           self.open_feedback('Datos del contrato guardados.')
         })
         .catch(function (error) {
-          self.open_feedback(self.get_error_message(error))
+          self.open_feedback(self.get_error_message(error), 'danger')
         })
         .then(function () {
           self.loading_save = false

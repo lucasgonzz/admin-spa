@@ -278,7 +278,9 @@ export default {
      */
     form_properties() {
       const self = this
-      return this.all_properties.filter((p) => self.is_form_field(p))
+      return this.all_properties.filter((p) => {
+        return self.is_form_field(p) && p.show !== false
+      })
     },
     /**
      * Campos a renderizar según el grupo seleccionado (incluye informativos `only_show` / `exclude_on_update`).

@@ -468,6 +468,7 @@ export default {
           !has_visible_props
           && prop
           && !prop.group_title
+          && prop.show !== false
           && self.get_group_title_for_prop(prop) === group_title
           && self.is_form_field(prop)
         ) {
