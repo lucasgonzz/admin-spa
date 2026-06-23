@@ -201,6 +201,22 @@
               </div>
             </div>
 
+            <!-- Campo: Notificar errores de envío automático por WhatsApp -->
+            <div class="mb-3 form-check">
+              <input
+                v-model="form.notify_send_errors_whatsapp"
+                type="checkbox"
+                class="form-check-input"
+                id="notify_send_errors_check"
+              />
+              <label class="form-check-label" for="notify_send_errors_check">
+                Notificar errores de envío por WhatsApp
+              </label>
+              <div class="form-text text-muted">
+                Recibís un WhatsApp cuando falla el envío automático de un mensaje del sistema (seguimientos, recordatorios de demo).
+              </div>
+            </div>
+
             <!-- Panel de Google Calendar: solo al editar un admin con is_closer = true -->
             <div v-if="editing_admin && form.is_closer" class="mt-4">
               <hr />
@@ -267,6 +283,8 @@ export default {
         notify_lead_escalation_whatsapp: false,
         /* Flag para recibir WhatsApp cuando se agenda una demo. */
         notify_demo_scheduled_whatsapp: false,
+        /* Flag para recibir WhatsApp cuando falla el envío automático de un mensaje del sistema. */
+        notify_send_errors_whatsapp: false,
       },
       /** Errores de validación por campo. */
       form_errors: {},
@@ -319,6 +337,7 @@ export default {
         phone_number: '',
         notify_lead_escalation_whatsapp: false,
         notify_demo_scheduled_whatsapp: false,
+        notify_send_errors_whatsapp: false,
       }
       this.form_errors = {}
       this.save_error = ''
@@ -342,6 +361,7 @@ export default {
         /* Cargar flags de notificación WhatsApp existentes. */
         notify_lead_escalation_whatsapp: !!admin.notify_lead_escalation_whatsapp,
         notify_demo_scheduled_whatsapp:  !!admin.notify_demo_scheduled_whatsapp,
+        notify_send_errors_whatsapp:     !!admin.notify_send_errors_whatsapp,
       }
       this.form_errors = {}
       this.save_error = ''
@@ -377,6 +397,7 @@ export default {
         /* Flags de notificación WhatsApp; se envían siempre para permitir desactivarlos. */
         notify_lead_escalation_whatsapp: self.form.notify_lead_escalation_whatsapp,
         notify_demo_scheduled_whatsapp:  self.form.notify_demo_scheduled_whatsapp,
+        notify_send_errors_whatsapp:     self.form.notify_send_errors_whatsapp,
       }
       if (self.form.password) {
         payload.password = self.form.password
