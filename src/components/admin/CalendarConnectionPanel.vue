@@ -106,6 +106,54 @@
         <p v-if="status.last_synced_at" class="text-muted small mb-2">
           Última sincronización: {{ format_date(status.last_synced_at) }}
         </p>
+
+        <!-- Botón sincronizar -->
+        <button
+          type="button"
+          class="btn btn-outline-secondary btn-sm mb-3"
+          :disabled="syncing || loading_events"
+          @click="on_sync"
+        >
+          <span v-if="syncing" class="spinner-border spinner-border-sm me-1" />
+          <i v-else class="bi bi-arrow-clockwise me-1" />
+          {{ syncing ? 'Sincronizando…' : 'Sincronizar calendario' }}
+        </button>
+
+        <!-- Tabla de eventos -->
+        <div v-if="loading_events" class="text-muted small">
+          <span class="spinner-border spinner-border-sm me-1" />
+          Cargando eventos…
+        </div>
+
+        <div v-else-if="events_error" class="text-danger small mb-2">{{ events_error }}</div>
+
+        <template v-else>
+          <p v-if="!events.length" class="text-muted small mb-2">No hay eventos próximos en este calendario.</p>
+
+          <template v-else>
+            <!-- Agrupar eventos por fecha y mostrar una sección por día -->
+            <div v-for="(day_events, day_key) in events_by_day" :key="day_key" class="mb-2">
+              <p class="small fw-semibold mb-1 text-secondary">{{ format_day(day_key) }}</p>
+              <table class="table table-sm table-bordered small mb-0">
+                <thead>
+                  <tr>
+                    <th style="width: 80px">Inicio</th>
+                    <th style="width: 80px">Fin</th>
+                    <th>Evento</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(ev, idx) in day_events" :key="idx">
+                    <td>{{ ev.inicio }}</td>
+                    <td>{{ ev.fin }}</td>
+                    <td>{{ ev.nombre }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
+        </template>
+
         <button
           type="button"
           class="btn btn-outline-danger btn-sm"
@@ -176,7 +224,34 @@ export default {
       disconnecting: false,
       /** Mensaje de error para mostrar al usuario. */
       error_message: '',
+      /** Lista de eventos próximos del calendario conectado. */
+      events: [],
+      /** Indica si se están cargando los eventos del calendario. */
+      loading_events: false,
+      /** Indica si se está ejecutando una sincronización manual. */
+      syncing: false,
+      /** Mensaje de error específico de la carga de eventos. */
+      events_error: '',
     }
+  },
+
+  computed: {
+    /**
+     * Agrupa los eventos por fecha (Y-m-d) para renderizar una tabla por día.
+     *
+     * @returns {Object.<string, Array>}
+     */
+    events_by_day() {
+      var grouped = {}
+      var self = this
+      self.events.forEach(function (ev) {
+        if (!grouped[ev.fecha]) {
+          grouped[ev.fecha] = []
+        }
+        grouped[ev.fecha].push(ev)
+      })
+      return grouped
+    },
   },
 
   watch: {
@@ -211,6 +286,10 @@ export default {
           // Si está conectado pero sin calendario, cargar la lista para que elija.
           if (self.status.connected && !self.status.google_calendar_id) {
             self.load_calendars()
+          }
+          // Si ya tiene calendario elegido, cargar eventos próximos.
+          if (self.status.connected && self.status.google_calendar_id) {
+            self.load_events()
           }
         })
         .catch(function () {
@@ -278,12 +357,60 @@ export default {
         .then(function (res) {
           // Actualizar el estado local con el calendario guardado.
           self.status.google_calendar_id = res.data.google_calendar_id
+          // Cargar eventos al confirmar el calendario dedicado.
+          self.load_events()
         })
         .catch(function () {
           self.error_message = 'No se pudo guardar la selección del calendario.'
         })
         .then(function () {
           self.saving_calendar = false
+        })
+    },
+
+    /**
+     * Carga los eventos próximos del calendario Google del admin objetivo.
+     */
+    load_events() {
+      var self = this
+      self.loading_events = true
+      self.events_error = ''
+
+      api.get('/calendar/google/' + self.admin.id + '/events')
+        .then(function (res) {
+          self.events = res.data.events || []
+          if (res.data.last_synced_at) {
+            self.status.last_synced_at = res.data.last_synced_at
+          }
+        })
+        .catch(function () {
+          self.events_error = 'No se pudieron cargar los eventos del calendario.'
+        })
+        .then(function () {
+          self.loading_events = false
+        })
+    },
+
+    /**
+     * Fuerza sincronización con Google Calendar e invalida caché de disponibilidad.
+     */
+    on_sync() {
+      var self = this
+      self.syncing = true
+      self.events_error = ''
+
+      api.post('/calendar/google/' + self.admin.id + '/sync')
+        .then(function (res) {
+          self.events = res.data.events || []
+          if (res.data.last_synced_at) {
+            self.status.last_synced_at = res.data.last_synced_at
+          }
+        })
+        .catch(function () {
+          self.events_error = 'No se pudo sincronizar el calendario.'
+        })
+        .then(function () {
+          self.syncing = false
         })
     },
 
@@ -309,6 +436,7 @@ export default {
           }
           self.calendars = []
           self.selected_calendar_id = ''
+          self.events = []
         })
         .catch(function () {
           self.error_message = 'No se pudo desconectar el calendario.'
@@ -316,6 +444,26 @@ export default {
         .then(function () {
           self.disconnecting = false
         })
+    },
+
+    /**
+     * Formatea una fecha Y-m-d como encabezado de día legible en español.
+     *
+     * @param {string} date_string  Fecha en formato Y-m-d.
+     * @returns {string} Fecha formateada con día de semana.
+     */
+    format_day(date_string) {
+      try {
+        var d = new Date(date_string + 'T12:00:00')
+        return d.toLocaleDateString('es-AR', {
+          weekday: 'long',
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        })
+      } catch (e) {
+        return date_string
+      }
     },
 
     /**
