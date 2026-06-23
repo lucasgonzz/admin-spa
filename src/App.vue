@@ -13,7 +13,7 @@
 
   <div
     v-else
-    class="d-flex min-vh-100 app-root mx-auto w-100"
+    class="d-flex h-100 min-h-0 app-root mx-auto w-100"
     :class="{ 'app-root--mobile': is_mobile_viewport }"
   >
     <!-- Banner de actualización de PWA -->
@@ -65,7 +65,7 @@
     </header>
 
     <div
-      class="app-main-column flex-grow-1 d-flex flex-column min-vh-100 overflow-hidden"
+      class="app-main-column flex-grow-1 d-flex flex-column h-100 min-h-0 overflow-hidden"
       :class="{ 'app-main-column--mobile-topbar': show_nav && is_mobile_viewport }"
     >
       <div
@@ -146,13 +146,15 @@ export default {
      * @returns {string}
      */
     main_content_class() {
+      /** min-h-0: permite que overflow-auto en flex reciba scroll con rueda/trackpad. */
+      const scroll_shell = 'flex-grow-1 min-h-0 overflow-auto app-main-scroll'
       if (this.$route.name === 'login') {
-        return 'flex-grow-1 overflow-auto app-main--login'
+        return scroll_shell + ' app-main--login'
       }
       if (this.show_nav) {
-        return 'flex-grow-1 overflow-auto app-main-with-nav'
+        return scroll_shell + ' app-main-with-nav'
       }
-      return 'flex-grow-1 p-2 p-md-3 overflow-auto'
+      return scroll_shell + ' p-2 p-md-3'
     },
     /**
      * Texto de la ruta activa para la barra superior móvil (coincide con el menú lateral).
@@ -487,6 +489,12 @@ export default {
 
 .app-main-column {
   position: relative;
+}
+
+/* Contenedor de scroll de vistas (Leads, Clientes, etc.): rueda y trackpad. */
+.app-main-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 /* Desktop: margen mínimo tras la franja colapsada del nav (56px visible + 4px de respiro). */

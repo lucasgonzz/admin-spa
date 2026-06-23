@@ -6,26 +6,27 @@ html
 	width: 100%
 	max-width: 100%
 	height: 100%
-	overflow-x: hidden
+	/* El scroll vive en <main.app-main-scroll>, no en el documento. */
+	overflow: hidden
 	overscroll-behavior: none
 	-webkit-text-size-adjust: 100%
 
 body
 	width: 100%
 	max-width: 100%
-	min-height: 100%
+	height: 100%
 	margin: 0
-	overflow-x: hidden
+	overflow: hidden
 	overscroll-behavior: none
-	touch-action: manipulation
-	-webkit-overflow-scrolling: touch
+	/* pan-x pan-y: desplazamiento táctil sin zoom por pinza (viewport + gesture* lo cubren). */
+	touch-action: pan-x pan-y
 	background-color: #f8f9fa
 
 #app
 	width: 100%
 	max-width: 100%
-	min-height: 100%
-	overflow-x: hidden
+	height: 100%
+	overflow: hidden
 
 // iOS Safari hace zoom automático al enfocar inputs con font-size < 16px.
 @media (max-width: 767.98px)

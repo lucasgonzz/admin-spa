@@ -112,5 +112,7 @@ export default {
 
 .resource-table-loading-overlay {
   z-index: 2;
+  /* No bloquear scroll de la página mientras se recarga la tabla. */
+  pointer-events: none;
 }
 </style>
