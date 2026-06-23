@@ -130,88 +130,170 @@
             <!-- Estado de carga -->
             <p v-if="loading_demos_agendadas" class="text-muted small mb-0">Cargando demos...</p>
 
-            <!-- Sin demos próximas ni realizadas -->
+            <!-- Sin demos en ninguno de los tres grupos -->
             <p
-              v-else-if="!demos_por_dia.length && !demos_pasadas_por_dia.length"
+              v-else-if="!demos_por_dia.length && !demos_en_curso_por_dia.length && !demos_pasadas_por_dia.length"
               class="text-muted small mb-0"
             >
               No hay demos agendadas.
             </p>
 
-            <div v-else>
-              <!-- Bloques agrupados por día: demos que aún no ocurrieron -->
-              <div
-                v-for="day_group in demos_por_dia"
-                :key="'proxima-' + day_group.date_key"
-                class="mb-4"
-              >
-                <div class="d-flex align-items-center flex-wrap gap-1 mb-2 demos-agendadas-day-heading">
-                  <span
-                    class="badge me-2"
-                    :class="day_group.is_today ? 'bg-primary' : 'bg-secondary'"
-                  >
-                    {{ day_group.is_today ? 'Hoy' : 'Próximo' }}
-                  </span>
-                  <h6 class="mb-0 small fw-semibold">{{ day_group.heading }}</h6>
-                  <span class="text-muted small ms-2">({{ day_group.leads.length }})</span>
-                </div>
+            <!-- Tres columnas en desktop; apilado en móvil -->
+            <div v-else class="demos-grupos-grid">
+              <!-- Grupo: demos pendientes (fecha futura o hoy antes del inicio) -->
+              <div class="demos-grupo-column">
+                <h6 class="small fw-semibold text-primary mb-3">
+                  <i class="bi bi-clock me-1" />
+                  Próximas
+                </h6>
+                <p
+                  v-if="!demos_por_dia.length"
+                  class="text-muted small mb-0"
+                >
+                  Sin demos próximas.
+                </p>
+                <div
+                  v-for="day_group in demos_por_dia"
+                  :key="'proxima-' + day_group.date_key"
+                  class="mb-4"
+                >
+                  <div class="d-flex align-items-center flex-wrap gap-1 mb-2 demos-agendadas-day-heading">
+                    <span class="badge bg-primary me-2">
+                      {{ day_group.is_today ? 'Hoy' : 'Próximo' }}
+                    </span>
+                    <h6 class="mb-0 small fw-semibold">{{ day_group.heading }}</h6>
+                    <span class="text-muted small ms-2">({{ day_group.leads.length }})</span>
+                  </div>
 
-                <div class="table-responsive demos-agendadas-table-wrap">
-                  <table class="table table-sm table-hover mb-0 demos-agendadas-table">
-                    <thead class="table-light">
-                      <tr>
-                        <th class="small">Hora inicio</th>
-                        <th class="small">Llamar a las</th>
-                        <th class="small">Cliente (demo)</th>
-                        <th class="small">Lead</th>
-                        <th class="small">Empresa</th>
-                        <th class="small">Estado setup</th>
-                        <th class="small">Resumen IA</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr
-                        v-for="lead in day_group.leads"
-                        :key="lead.id"
-                        class="demos-agendadas-row"
-                        role="button"
-                        tabindex="0"
-                        @click="on_demo_row_click(lead)"
-                        @keydown.enter="on_demo_row_click(lead)"
-                      >
-                        <td class="small">{{ lead.demo_start_time || '—' }}</td>
-                        <td class="small fw-semibold text-primary">{{ calc_llamar_a_las(lead) }}</td>
-                        <td class="small">{{ demo_client_label(lead) }}</td>
-                        <td class="small">{{ lead.contact_name || '(sin nombre)' }}</td>
-                        <td class="small">{{ lead.company_name || '—' }}</td>
-                        <td class="small">
-                          <span
-                            class="badge"
-                            :class="demo_setup_badge_class(lead.demo_setup_status)"
-                          >{{ lead.demo_setup_status || '—' }}</span>
-                        </td>
-                        <td class="small">
-                          <span v-if="lead.demo_summary" class="badge bg-success">
-                            <i class="bi bi-stars me-1" /> Disponible
-                          </span>
-                          <span v-else class="text-muted">Pendiente</span>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+                  <div class="table-responsive demos-agendadas-table-wrap">
+                    <table class="table table-sm table-hover mb-0 demos-agendadas-table">
+                      <thead class="table-light">
+                        <tr>
+                          <th class="small">Hora inicio</th>
+                          <th class="small">Llamar a las</th>
+                          <th class="small">Cliente (demo)</th>
+                          <th class="small">Lead</th>
+                          <th class="small">Empresa</th>
+                          <th class="small">Estado setup</th>
+                          <th class="small">Resumen IA</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr
+                          v-for="lead in day_group.leads"
+                          :key="lead.id"
+                          class="demos-agendadas-row"
+                          role="button"
+                          tabindex="0"
+                          @click="on_demo_row_click(lead)"
+                          @keydown.enter="on_demo_row_click(lead)"
+                        >
+                          <td class="small">{{ lead.demo_start_time || '—' }}</td>
+                          <td class="small fw-semibold text-primary">{{ calc_llamar_a_las(lead) }}</td>
+                          <td class="small">{{ demo_client_label(lead) }}</td>
+                          <td class="small">{{ lead.contact_name || '(sin nombre)' }}</td>
+                          <td class="small">{{ lead.company_name || '—' }}</td>
+                          <td class="small">
+                            <span
+                              class="badge"
+                              :class="demo_setup_badge_class(lead.demo_setup_status)"
+                            >{{ lead.demo_setup_status || '—' }}</span>
+                          </td>
+                          <td class="small">
+                            <span v-if="lead.demo_summary" class="badge bg-success">
+                              <i class="bi bi-stars me-1" /> Disponible
+                            </span>
+                            <span v-else class="text-muted">Pendiente</span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
 
-              <!-- Bloques agrupados por día: demos ya realizadas (más reciente primero) -->
-              <div
-                v-if="demos_pasadas_por_dia.length"
-                class="mt-4 pt-3 border-top"
-              >
+              <!-- Grupo: demos en curso (hoy, entre inicio y fin estimado) -->
+              <div class="demos-grupo-column">
+                <h6 class="small fw-semibold text-success mb-3">
+                  <i class="bi bi-play-circle me-1" />
+                  En curso
+                </h6>
+                <p
+                  v-if="!demos_en_curso_por_dia.length"
+                  class="text-muted small mb-0"
+                >
+                  Sin demos en curso.
+                </p>
+                <div
+                  v-for="day_group in demos_en_curso_por_dia"
+                  :key="'curso-' + day_group.date_key"
+                  class="mb-4"
+                >
+                  <div class="d-flex align-items-center flex-wrap gap-1 mb-2 demos-agendadas-day-heading">
+                    <span class="badge bg-success me-2">En curso</span>
+                    <h6 class="mb-0 small fw-semibold">{{ day_group.heading }}</h6>
+                    <span class="text-muted small ms-2">({{ day_group.leads.length }})</span>
+                  </div>
+
+                  <div class="table-responsive demos-agendadas-table-wrap">
+                    <table class="table table-sm table-hover mb-0 demos-agendadas-table">
+                      <thead class="table-light">
+                        <tr>
+                          <th class="small">Hora inicio</th>
+                          <th class="small">Llamar a las</th>
+                          <th class="small">Cliente (demo)</th>
+                          <th class="small">Lead</th>
+                          <th class="small">Empresa</th>
+                          <th class="small">Estado setup</th>
+                          <th class="small">Resumen IA</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr
+                          v-for="lead in day_group.leads"
+                          :key="lead.id"
+                          class="demos-agendadas-row"
+                          role="button"
+                          tabindex="0"
+                          @click="on_demo_row_click(lead)"
+                          @keydown.enter="on_demo_row_click(lead)"
+                        >
+                          <td class="small">{{ lead.demo_start_time || '—' }}</td>
+                          <td class="small fw-semibold text-primary">{{ calc_llamar_a_las(lead) }}</td>
+                          <td class="small">{{ demo_client_label(lead) }}</td>
+                          <td class="small">{{ lead.contact_name || '(sin nombre)' }}</td>
+                          <td class="small">{{ lead.company_name || '—' }}</td>
+                          <td class="small">
+                            <span
+                              class="badge"
+                              :class="demo_setup_badge_class(lead.demo_setup_status)"
+                            >{{ lead.demo_setup_status || '—' }}</span>
+                          </td>
+                          <td class="small">
+                            <span v-if="lead.demo_summary" class="badge bg-success">
+                              <i class="bi bi-stars me-1" /> Disponible
+                            </span>
+                            <span v-else class="text-muted">Pendiente</span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Grupo: demos ya realizadas (fecha pasada o hoy con fin superado) -->
+              <div class="demos-grupo-column">
                 <h6 class="small fw-semibold text-muted mb-3">
                   <i class="bi bi-clock-history me-1" />
-                  Demos realizadas
+                  Realizadas
                 </h6>
-
+                <p
+                  v-if="!demos_pasadas_por_dia.length"
+                  class="text-muted small mb-0"
+                >
+                  Sin demos realizadas.
+                </p>
                 <div
                   v-for="day_group in demos_pasadas_por_dia"
                   :key="'pasada-' + day_group.date_key"
@@ -373,6 +455,8 @@ export default {
       show_demos_agendadas: false,
       /** Demos próximas agrupadas por fecha (ascendente), cada ítem con date_key, heading y leads. */
       demos_por_dia: [],
+      /** Demos en curso hoy (inicio pasado, fin no alcanzado), misma estructura que demos_por_dia. */
+      demos_en_curso_por_dia: [],
       /** Demos ya realizadas agrupadas por fecha (descendente), misma estructura que demos_por_dia. */
       demos_pasadas_por_dia: [],
       /** Indica si la carga del panel de demos está en curso. */
@@ -637,7 +721,12 @@ export default {
      */
     on_toggle_demos_agendadas() {
       this.show_demos_agendadas = !this.show_demos_agendadas
-      if (this.show_demos_agendadas && !this.demos_por_dia.length && !this.demos_pasadas_por_dia.length) {
+      if (
+        this.show_demos_agendadas
+        && !this.demos_por_dia.length
+        && !this.demos_en_curso_por_dia.length
+        && !this.demos_pasadas_por_dia.length
+      ) {
         this.load_demos_settings_and_leads()
       }
     },
@@ -680,7 +769,49 @@ export default {
       return (lead.demo_date + '').substring(0, 10)
     },
     /**
-     * Indica si la demo del lead ya finalizó (fecha pasada o hoy con hora de fin superada).
+     * Parsea demo_date y demo_start_time del lead a minutos desde medianoche (inicio y fin estimado).
+     * @param {Object} lead Lead con demo_date y demo_start_time.
+     * @returns {{ date_key: string, start_minutes: number, end_minutes: number }|null}
+     */
+    get_demo_time_bounds(lead) {
+      var date_key = this.parse_demo_date_key(lead)
+      if (!date_key || !lead.demo_start_time) {
+        return null
+      }
+      var match = (lead.demo_start_time + '').match(/(\d{1,2}):(\d{2})/)
+      if (!match) {
+        return null
+      }
+      /* Minutos desde medianoche del inicio y del fin (inicio + duración configurada). */
+      var start_minutes = parseInt(match[1], 10) * 60 + parseInt(match[2], 10)
+      var end_minutes = start_minutes + (this.duracion_minutos || 60)
+      return {
+        date_key: date_key,
+        start_minutes: start_minutes,
+        end_minutes: end_minutes,
+      }
+    },
+    /**
+     * Indica si la demo del lead está en curso (hoy, entre hora de inicio y fin estimado).
+     * @param {Object} lead Lead con demo_date y demo_start_time.
+     * @returns {boolean}
+     */
+    demo_is_in_progress(lead) {
+      var bounds = this.get_demo_time_bounds(lead)
+      if (!bounds) {
+        return false
+      }
+      var today_str = this.get_today_str()
+      if (bounds.date_key !== today_str) {
+        return false
+      }
+      var now = new Date()
+      var now_minutes = now.getHours() * 60 + now.getMinutes()
+      return now_minutes >= bounds.start_minutes && now_minutes < bounds.end_minutes
+    },
+    /**
+     * Indica si la demo del lead ya finalizó por completo (fecha pasada o hoy con hora de fin superada).
+     * No retorna true mientras la demo sigue en curso.
      * @param {Object} lead Lead con demo_date y demo_start_time.
      * @returns {boolean}
      */
@@ -699,22 +830,15 @@ export default {
         return false
       }
 
-      /* Mismo día: comparar hora actual contra fin estimado de la demo. */
-      if (!lead.demo_start_time) {
+      /* Mismo día: solo realizada cuando la hora de fin estimada ya pasó. */
+      var bounds = this.get_demo_time_bounds(lead)
+      if (!bounds) {
         return false
       }
-      var match = (lead.demo_start_time + '').match(/(\d{1,2}):(\d{2})/)
-      if (!match) {
-        return false
-      }
-
-      /* Minutos desde medianoche del inicio y del fin (inicio + duración configurada). */
-      var start_minutes = parseInt(match[1], 10) * 60 + parseInt(match[2], 10)
-      var end_minutes = start_minutes + (this.duracion_minutos || 60)
       var now = new Date()
       var now_minutes = now.getHours() * 60 + now.getMinutes()
 
-      return now_minutes >= end_minutes
+      return now_minutes >= bounds.end_minutes
     },
     /**
      * Agrupa leads por demo_date y ordena días y horas según el criterio indicado.
@@ -771,7 +895,7 @@ export default {
       return grouped
     },
     /**
-     * Carga los leads con demo agendada desde la API, separa próximas vs realizadas
+     * Carga los leads con demo agendada desde la API, separa próximas, en curso y realizadas
      * y agrupa por fecha para el panel del header.
      * @returns {void}
      */
@@ -790,22 +914,27 @@ export default {
             return !!self.parse_demo_date_key(l)
           })
 
-          /* Separar demos que aún no ocurrieron de las ya realizadas. */
+          /* Separar demos en tres grupos: pendientes, en curso y realizadas. */
           var upcoming_leads = []
+          var in_progress_leads = []
           var past_leads = []
           leads.forEach(function (lead) {
             if (self.demo_has_occurred(lead)) {
               past_leads.push(lead)
+            } else if (self.demo_is_in_progress(lead)) {
+              in_progress_leads.push(lead)
             } else {
               upcoming_leads.push(lead)
             }
           })
 
           self.demos_por_dia = self.build_demos_day_groups(upcoming_leads, true)
+          self.demos_en_curso_por_dia = self.build_demos_day_groups(in_progress_leads, true)
           self.demos_pasadas_por_dia = self.build_demos_day_groups(past_leads, false)
         })
         .catch(function () {
           self.demos_por_dia = []
+          self.demos_en_curso_por_dia = []
           self.demos_pasadas_por_dia = []
         })
         .then(function () {
@@ -922,5 +1051,18 @@ export default {
 .demos-agendadas-table {
   min-width: 44rem;
   white-space: nowrap;
+}
+
+/* Grid responsive: tres columnas en desktop, apilado en móvil. */
+.demos-grupos-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .demos-grupos-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
 }
 </style>
