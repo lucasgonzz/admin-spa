@@ -145,12 +145,16 @@ export default {
     draft(val) {
       if (val && val.id) {
         this.local_update = Object.assign({}, val)
+        this.deployment_logs = []
+        this.stop_deployment_poll()
         this.load_full_update()
       }
     },
     record(val) {
       if (val && val.id && (!this.draft || !this.draft.id)) {
         this.local_update = Object.assign({}, val)
+        this.deployment_logs = []
+        this.stop_deployment_poll()
         this.load_full_update()
       }
     },
@@ -186,6 +190,7 @@ export default {
       const self = this
       const id = self.local_update.id
       self.loading = true
+      self.deployment_logs = []
       Promise.all([
         api.get('/update/' + id),
         api.get('/update/' + id + '/extra-data'),
@@ -576,3 +581,4 @@ export default {
   },
 }
 </script>
+
