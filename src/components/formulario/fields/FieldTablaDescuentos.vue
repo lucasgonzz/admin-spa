@@ -223,7 +223,7 @@ export default {
 .field-tabla__table thead th {
   font-size: 0.8rem;
   font-weight: 600;
-  color: #6c757d;
+  color: #ffffff;
   border-bottom: 1px solid #dee2e6;
   padding: 6px 8px;
 }
