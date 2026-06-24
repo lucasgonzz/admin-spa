@@ -223,8 +223,10 @@ export default {
             self.submitted   = true
             self.client_name = res.data.client_name || ''
           } else {
-            /* Cargar los datos guardados para continuar donde el cliente dejó */
-            const saved_data = res.data.form_data || {}
+            /* Cargar los datos guardados para continuar donde el cliente dejó.
+               Forzar objeto aunque el backend devuelva [] (array PHP vacío → JSON []) */
+            const raw = res.data.form_data
+            const saved_data = (raw && !Array.isArray(raw) && typeof raw === 'object') ? raw : {}
             self.client_name = res.data.client_name || ''
             self.form_data   = saved_data
 
