@@ -115,6 +115,72 @@
       <!-- Mensajes de estado para el selector de admin -->
       <p v-if="saved_message" class="text-success small mt-2 mb-0">{{ saved_message }}</p>
       <p v-else-if="error_message" class="text-danger small mt-2 mb-0">{{ error_message }}</p>
+
+      <!-- Campo: URL base del formulario de configuración del cliente -->
+      <div class="row g-2 align-items-end mt-3 mb-3">
+        <div class="col-sm-8">
+          <label class="form-label small" for="impl_form_url">
+            URL base del formulario (se agrega /{token} al final)
+          </label>
+          <!-- Input de texto con la URL base del formulario público del cliente -->
+          <input
+            id="impl_form_url"
+            v-model="local_form_url"
+            type="text"
+            class="form-control form-control-sm"
+            placeholder="https://app.comerciocity.com/configuracion"
+            :disabled="loading_form_url || saving_form_url"
+          />
+        </div>
+
+        <div class="col-auto">
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            :disabled="loading_form_url || saving_form_url || !can_save_form_url"
+            @click="on_save_form_url"
+          >
+            {{ saving_form_url ? 'Guardando…' : 'Guardar' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Mensajes de estado para la URL del formulario -->
+      <p v-if="saved_form_url_message" class="text-success small mt-2 mb-3">{{ saved_form_url_message }}</p>
+      <p v-else-if="error_form_url_message" class="text-danger small mt-2 mb-3">{{ error_form_url_message }}</p>
+
+      <!-- Campo: minutos de delay entre envío del formulario y primer contacto de WhatsApp -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-6">
+          <label class="form-label small" for="impl_form_contact_delay">
+            Minutos entre el envío del formulario y el primer mensaje de WhatsApp de Martín
+          </label>
+          <!-- Input numérico en minutos; se convierte a segundos al enviar -->
+          <input
+            id="impl_form_contact_delay"
+            v-model.number="local_form_contact_delay_minutes"
+            type="number"
+            class="form-control form-control-sm"
+            min="0"
+            :disabled="loading_form_contact_delay || saving_form_contact_delay"
+          />
+        </div>
+
+        <div class="col-auto">
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            :disabled="loading_form_contact_delay || saving_form_contact_delay || !can_save_form_contact_delay"
+            @click="on_save_form_contact_delay"
+          >
+            {{ saving_form_contact_delay ? 'Guardando…' : 'Guardar' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Mensajes de estado para el delay de contacto -->
+      <p v-if="saved_form_contact_delay_message" class="text-success small mt-2 mb-0">{{ saved_form_contact_delay_message }}</p>
+      <p v-else-if="error_form_contact_delay_message" class="text-danger small mt-2 mb-0">{{ error_form_contact_delay_message }}</p>
     </template>
   </div>
 </template>
@@ -237,6 +303,68 @@ export default {
        * Mensaje de error para el campo de segundos de espera de empleados.
        */
       error_employees_wait_message: '',
+
+      /**
+       * URL base del formulario de configuración del cliente (valor local editable).
+       * Se agrega /{token} al final para construir el link de cada cliente.
+       */
+      local_form_url: '',
+
+      /**
+       * URL guardada en el servidor para detectar cambios sin guardar.
+       */
+      stored_form_url: '',
+
+      /**
+       * Indicador de carga del setting de URL del formulario.
+       */
+      loading_form_url: true,
+
+      /**
+       * Indica que hay un PUT del setting de URL en curso.
+       */
+      saving_form_url: false,
+
+      /**
+       * Mensaje de éxito tras guardar la URL del formulario.
+       */
+      saved_form_url_message: '',
+
+      /**
+       * Mensaje de error para el campo de URL del formulario.
+       */
+      error_form_url_message: '',
+
+      /**
+       * Minutos de delay entre el envío del formulario y el primer contacto de WhatsApp (valor local editable).
+       * Se convierte a segundos al persistir en la API.
+       */
+      local_form_contact_delay_minutes: 0,
+
+      /**
+       * Valor guardado en el servidor (en minutos) para detectar cambios sin guardar.
+       */
+      stored_form_contact_delay_minutes: 0,
+
+      /**
+       * Indicador de carga del setting de delay de contacto.
+       */
+      loading_form_contact_delay: true,
+
+      /**
+       * Indica que hay un PUT del setting de delay en curso.
+       */
+      saving_form_contact_delay: false,
+
+      /**
+       * Mensaje de éxito tras guardar el delay de contacto.
+       */
+      saved_form_contact_delay_message: '',
+
+      /**
+       * Mensaje de error para el campo de delay de contacto.
+       */
+      error_form_contact_delay_message: '',
     }
   },
 
@@ -267,14 +395,34 @@ export default {
     can_save_employees_wait() {
       return this.local_employees_wait_seconds !== this.stored_employees_wait_seconds
     },
+
+    /**
+     * Habilita el botón Guardar de la URL del formulario solo si el valor cambió.
+     *
+     * @returns {boolean}
+     */
+    can_save_form_url() {
+      return this.local_form_url !== this.stored_form_url
+    },
+
+    /**
+     * Habilita el botón Guardar del delay de contacto solo si el valor cambió.
+     *
+     * @returns {boolean}
+     */
+    can_save_form_contact_delay() {
+      return this.local_form_contact_delay_minutes !== this.stored_form_contact_delay_minutes
+    },
   },
 
   mounted() {
-    /* Cargar lista de admins, setting de admin y setting de espera en paralelo al montar. */
+    /* Cargar todos los settings en paralelo al montar el componente. */
     this.load_admins()
     this.load_setting()
     this.load_file_wait_setting()
     this.load_employees_wait_setting()
+    this.load_form_url_setting()
+    this.load_form_contact_delay_setting()
   },
 
   methods: {
@@ -497,6 +645,137 @@ export default {
         })
         .then(function () {
           self.saving_employees_wait = false
+        })
+    },
+
+    /**
+     * Carga la URL base del formulario desde GET /settings/implementation/form-url.
+     *
+     * @returns {void}
+     */
+    load_form_url_setting() {
+      const self = this
+      self.loading_form_url      = true
+      self.error_form_url_message = ''
+
+      api
+        .get('/settings/implementation/form-url')
+        .then(function (res) {
+          /** URL retornada por el servidor; fallback a cadena vacía. */
+          const url = res.data && res.data.url != null ? res.data.url : ''
+          self.local_form_url  = url
+          self.stored_form_url = url
+        })
+        .catch(function () {
+          self.error_form_url_message = 'No se pudo cargar la URL del formulario.'
+        })
+        .then(function () {
+          self.loading_form_url = false
+        })
+    },
+
+    /**
+     * Guarda la URL del formulario via PUT /settings/implementation/form-url.
+     *
+     * @returns {void}
+     */
+    on_save_form_url() {
+      const self = this
+
+      self.saving_form_url        = true
+      self.saved_form_url_message = ''
+      self.error_form_url_message = ''
+
+      api
+        .put('/settings/implementation/form-url', { url: self.local_form_url })
+        .then(function (res) {
+          /** URL confirmada por el servidor. */
+          const saved_url = res.data && res.data.url != null ? res.data.url : self.local_form_url
+          self.local_form_url  = saved_url
+          self.stored_form_url = saved_url
+          self.saved_form_url_message = 'Configuración guardada.'
+        })
+        .catch(function (err) {
+          const msg =
+            (err.response && err.response.data && err.response.data.message) ||
+            'No se pudo guardar.'
+          self.error_form_url_message = msg
+        })
+        .then(function () {
+          self.saving_form_url = false
+        })
+    },
+
+    /**
+     * Carga el delay de contacto post-formulario desde GET /settings/implementation/form-contact-delay.
+     * El servidor almacena el valor en segundos; se convierte a minutos para la UI.
+     *
+     * @returns {void}
+     */
+    load_form_contact_delay_setting() {
+      const self = this
+      self.loading_form_contact_delay      = true
+      self.error_form_contact_delay_message = ''
+
+      api
+        .get('/settings/implementation/form-contact-delay')
+        .then(function (res) {
+          /** Segundos retornados por el servidor; convertir a minutos para el input. */
+          const seconds = res.data && res.data.seconds != null ? res.data.seconds : 0
+          const minutes = Math.round(seconds / 60)
+          self.local_form_contact_delay_minutes  = minutes
+          self.stored_form_contact_delay_minutes = minutes
+        })
+        .catch(function () {
+          self.error_form_contact_delay_message = 'No se pudo cargar el delay de contacto.'
+        })
+        .then(function () {
+          self.loading_form_contact_delay = false
+        })
+    },
+
+    /**
+     * Guarda el delay de contacto via PUT /settings/implementation/form-contact-delay.
+     * Convierte minutos a segundos antes de enviar al servidor.
+     *
+     * @returns {void}
+     */
+    on_save_form_contact_delay() {
+      const self = this
+
+      /** Validación: el valor debe ser un número no negativo. */
+      const minutes = parseInt(self.local_form_contact_delay_minutes, 10)
+
+      if (isNaN(minutes) || minutes < 0) {
+        self.error_form_contact_delay_message = 'El valor debe ser 0 o más minutos.'
+        return
+      }
+
+      self.saving_form_contact_delay        = true
+      self.saved_form_contact_delay_message = ''
+      self.error_form_contact_delay_message = ''
+
+      /* Convertir minutos a segundos para la API */
+      const seconds = minutes * 60
+
+      api
+        .put('/settings/implementation/form-contact-delay', { seconds: seconds })
+        .then(function (res) {
+          /** Segundos confirmados por el servidor; reconvertir a minutos. */
+          const saved_seconds = res.data && res.data.seconds != null ? res.data.seconds : seconds
+          const saved_minutes = Math.round(saved_seconds / 60)
+          self.local_form_contact_delay_minutes  = saved_minutes
+          self.stored_form_contact_delay_minutes = saved_minutes
+          self.saved_form_contact_delay_message  = 'Configuración guardada.'
+        })
+        .catch(function (err) {
+          const msg =
+            (err.response && err.response.data && err.response.data.message) ||
+            'No se pudo guardar.'
+          self.error_form_contact_delay_message = msg
+        })
+        .then(function () {
+          self.saving_form_contact_delay = false
         })
     },
   },

@@ -165,6 +165,17 @@ const routes_def = [
     component: () => import('@/views/Login.vue'),
     meta: { guest: true, nav: false },
   },
+  {
+    /**
+     * Formulario de configuración inicial del cliente.
+     * Ruta pública: no requiere autenticación ni es ruta de guest.
+     * El token identifica al cliente y permite cargar/guardar sus respuestas.
+     */
+    path: '/configuracion/:token',
+    name: 'implementation_form',
+    component: () => import('@/views/ImplementationFormView.vue'),
+    meta: { public: true },
+  },
 ]
 
 export default routes_def
