@@ -74,12 +74,13 @@ export default {
 
   mounted() {
     /**
-     * Si no hay valor cargado en form_data, emitir 'yo_mismo' como valor por defecto
-     * para que can_continue() lo reconozca como respondido desde el inicio.
+     * Siempre emitir el valor inicial al montar para que form_data quede sincronizado
+     * con el valor visible en el select (que por defecto es 'yo_mismo').
+     * Sin esto, can_continue() ve form_data.migration_responsible como undefined
+     * y bloquea el botón Enviar aunque el select muestre una opción válida.
      */
-    if (!this.value) {
-      this.$emit('update:value', 'yo_mismo')
-    }
+    const initial = this.value || 'yo_mismo'
+    this.$emit('update:value', initial)
   },
 
   methods: {
