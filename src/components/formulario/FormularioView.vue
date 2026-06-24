@@ -342,7 +342,9 @@ export default {
       }
       self.current_section -= 1
       window.scrollTo({ top: 0, behavior: 'smooth' })
-      self.flush_autosave()
+      self.$nextTick(function () {
+        self.flush_autosave()
+      })
     },
 
     /**
@@ -358,7 +360,10 @@ export default {
       }
       self.current_section += 1
       window.scrollTo({ top: 0, behavior: 'smooth' })
-      self.flush_autosave()
+      // Esperar a que Vue procese todos los eventos pendientes antes de guardar
+      self.$nextTick(function () {
+        self.flush_autosave()
+      })
     },
 
     /**
