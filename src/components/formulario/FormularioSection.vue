@@ -95,7 +95,7 @@ import FieldSelectEmpleado  from './fields/FieldSelectEmpleado.vue'
  *
  * @prop {object} section - Definición de la sección (de questions.js).
  * @prop {object} form_data - Mapa global de respuestas del formulario.
- * @emits update:form_data - Emite { key, value } para actualizar una respuesta puntual.
+ * @emits field_updated - Emite { key, value } para actualizar una respuesta puntual.
  */
 export default {
   name: 'FormularioSection',
@@ -157,7 +157,7 @@ export default {
      * @returns {void}
      */
     on_update(key, value) {
-      this.$emit('update:form_data', { key, value })
+      this.$emit('field_updated', { key, value })
     },
   },
 }
