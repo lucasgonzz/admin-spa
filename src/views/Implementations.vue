@@ -1431,18 +1431,16 @@ export default {
       }
 
       /* ------------------------------------------------------------------ */
-      /* Etapa 2 — Responsable de migración                                  */
+      /* Etapa 2 — Instalación del sistema (manual, sin data relevante)      */
       /* ------------------------------------------------------------------ */
       if (num === 2) {
         return [
-          /* Completadas cuando completed === true (el dueño puede elegir "Yo mismo") */
-          { key: 'migration_responsible_name',  label: 'Responsable de migración',  done: 'migration_responsible_name' in data },
-          { key: 'migration_responsible_phone', label: 'Teléfono del responsable',  done: 'migration_responsible_phone' in data },
+          { key: 'installation', label: 'Sistema instalado', done: stage.status === 'completed' },
         ]
       }
 
       /* ------------------------------------------------------------------ */
-      /* Etapa 3 — Instalación del sistema (etapa manual, sin data relevante) */
+      /* Etapa 3 — Recolección de archivos                                   */
       /* ------------------------------------------------------------------ */
       if (num === 3) {
         return [
