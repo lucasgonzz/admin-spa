@@ -72,6 +72,16 @@ export default {
     },
   },
 
+  mounted() {
+    /**
+     * Si no hay valor cargado en form_data, emitir 'yo_mismo' como valor por defecto
+     * para que can_continue() lo reconozca como respondido desde el inicio.
+     */
+    if (!this.value) {
+      this.$emit('update:value', 'yo_mismo')
+    }
+  },
+
   methods: {
     /**
      * Emite el valor seleccionado al padre.
