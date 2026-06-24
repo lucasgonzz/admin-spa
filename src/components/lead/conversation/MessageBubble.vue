@@ -109,6 +109,14 @@
               <div class="mb-1 text-muted" style="font-size: 0.75rem;">
                 Consultado {{ calendar_snapshot_fecha }}
               </div>
+              <div
+                v-if="!calendar_snapshot_parsed.closers || calendar_snapshot_parsed.closers.length === 0"
+                class="text-muted mb-2"
+                style="font-size: 0.78rem;"
+              >
+                Sin closers con calendario consultable
+                <span v-if="calendar_snapshot_parsed.nota"> ({{ calendar_snapshot_parsed.nota }})</span>
+              </div>
               <div v-for="closer in calendar_snapshot_parsed.closers" :key="closer.admin_id" class="mb-2">
                 <div class="fw-semibold" style="font-size: 0.8rem;">
                   {{ closer.nombre }}
@@ -123,10 +131,57 @@
                     style="font-size: 0.78rem;"
                   >
                     {{ ev.fecha }}: {{ ev.inicio }} – {{ ev.fin }}
+                    <span v-if="ev.nombre" class="text-muted"> · {{ ev.nombre }}</span>
                   </div>
+                </div>
+                <div v-else-if="closer.estado === 'sin_calendario'" class="text-warning" style="font-size: 0.78rem;">
+                  Sin calendario conectado - esta capa no aplica
+                </div>
+                <div v-else-if="closer.estado === 'cacheado'" class="text-muted" style="font-size: 0.78rem;">
+                  (cacheado - sin detalle de eventos)
                 </div>
                 <div v-else-if="closer.estado === 'consultado'" class="text-muted" style="font-size: 0.78rem;">
                   Sin eventos en las fechas consultadas
+                </div>
+              </div>
+              <!-- Config del closer al momento de la consulta (debug disponibilidad) -->
+              <div v-if="calendar_snapshot_parsed.closer_config" class="mt-2 border-top pt-1">
+                <div class="fw-semibold mb-1" style="font-size: 0.78rem;">Config del closer</div>
+                <div style="font-size: 0.75rem; font-family: monospace; white-space: pre-wrap;">{{ closer_config_text }}</div>
+              </div>
+              <!-- Demos ya agendadas al consultar disponibilidad -->
+              <div v-if="calendar_snapshot_parsed.demos_agendadas" class="mt-2 border-top pt-1">
+                <div class="fw-semibold mb-1" style="font-size: 0.78rem;">
+                  Demos agendadas al consultar
+                  <span class="badge bg-secondary ms-1">{{ calendar_snapshot_parsed.demos_agendadas.length }}</span>
+                </div>
+                <div v-if="calendar_snapshot_parsed.demos_agendadas.length === 0" class="text-muted" style="font-size: 0.75rem;">
+                  Ninguna
+                </div>
+                <div
+                  v-for="(d, idx) in calendar_snapshot_parsed.demos_agendadas"
+                  :key="idx"
+                  style="font-size: 0.75rem;"
+                >
+                  Lead #{{ d.lead_id }} {{ d.contact_name }} — Demo #{{ d.demo_id }} — {{ d.demo_date }} {{ d.demo_start_time }}–{{ d.demo_end_time }}
+                </div>
+              </div>
+              <!-- Slots exactos enviados a Claude en la segunda llamada -->
+              <div v-if="calendar_snapshot_parsed.slots_disponibles" class="mt-2 border-top pt-1">
+                <div class="fw-semibold mb-1" style="font-size: 0.78rem;">Slots enviados a Claude</div>
+                <div
+                  v-for="(fechas, demo_id) in calendar_snapshot_parsed.slots_disponibles"
+                  :key="demo_id"
+                  class="mb-1"
+                >
+                  <div class="text-muted" style="font-size: 0.72rem;">Demo #{{ demo_id }}</div>
+                  <div
+                    v-for="(slots, fecha) in fechas"
+                    :key="fecha"
+                    style="font-size: 0.75rem;"
+                  >
+                    {{ fecha }}: {{ slots.length > 0 ? slots.join(', ') : '(sin slots)' }}
+                  </div>
                 </div>
               </div>
             </div>
@@ -782,6 +837,7 @@ export default {
     },
     /**
      * Snapshot del calendario Google parseado desde JSON (null si no aplica).
+     * Truthy también con closers vacíos o estados de diagnóstico (sin_calendario, etc.).
      * @returns {Object|null}
      */
     calendar_snapshot_parsed() {
@@ -789,10 +845,20 @@ export default {
         return null
       }
       try {
+        var parsed = null
         if (typeof this.message.calendar_snapshot === 'string') {
-          return JSON.parse(this.message.calendar_snapshot)
+          parsed = JSON.parse(this.message.calendar_snapshot)
+        } else {
+          parsed = this.message.calendar_snapshot
         }
-        return this.message.calendar_snapshot
+        if (!parsed || typeof parsed !== 'object') {
+          return null
+        }
+        /* Mostrar desplegable aunque closers esté vacío o solo tenga nota de diagnóstico. */
+        if (!parsed.closers) {
+          parsed.closers = []
+        }
+        return parsed
       } catch (e) {
         return null
       }
@@ -816,6 +882,21 @@ export default {
       } catch (e) {
         return this.calendar_snapshot_parsed.consultado_en
       }
+    },
+    /**
+     * Texto legible de la config del closer guardada en el snapshot.
+     * @returns {string}
+     */
+    closer_config_text() {
+      var cfg = this.calendar_snapshot_parsed ? this.calendar_snapshot_parsed.closer_config : null
+      if (!cfg) {
+        return ''
+      }
+      var lines = []
+      Object.entries(cfg).forEach(function (entry) {
+        lines.push(entry[0] + ': ' + entry[1])
+      })
+      return lines.join('\n')
     },
   },
   watch: {
