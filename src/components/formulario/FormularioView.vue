@@ -227,6 +227,10 @@ export default {
                Forzar objeto aunque el backend devuelva [] (array PHP vacío → JSON []) */
             const raw = res.data.form_data
             const saved_data = (raw && !Array.isArray(raw) && typeof raw === 'object') ? raw : {}
+            /* Pre-inicializar migration_responsible para que can_continue no lo bloquee */
+            if (!saved_data.migration_responsible) {
+              saved_data.migration_responsible = 'yo_mismo'
+            }
             self.client_name = res.data.client_name || ''
             self.form_data   = saved_data
 
