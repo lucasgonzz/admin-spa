@@ -42,7 +42,7 @@
             :key="current_section"
             :section="active_section"
             :form_data="form_data"
-            @update:form_data="on_field_update"
+            @field_updated="on_field_update"
           />
         </div>
       </div>
