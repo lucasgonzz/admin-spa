@@ -572,9 +572,12 @@ export default {
             }
           })
 
-          /* Actualizar el modelo con el mensaje recién enviado si la API lo devuelve. */
-          if (res.data && res.data.model) {
-            self.implementation = res.data.model
+          /* Agregar solo el mensaje nuevo — no reemplazar toda la implementación. */
+          if (res.data && res.data.model && self.implementation && Array.isArray(self.implementation.messages)) {
+            const existing_ids = self.implementation.messages.map(function (m) { return m.id })
+            if (!existing_ids.includes(res.data.model.id)) {
+              self.implementation.messages.push(res.data.model)
+            }
           }
 
           self.schedule_scroll_to_bottom()
@@ -1151,8 +1154,11 @@ export default {
         })
         .then(function (res) {
           self.enviando_audio = false
-          if (res.data && res.data.model) {
-            self.implementation = res.data.model
+          if (res.data && res.data.model && self.implementation && Array.isArray(self.implementation.messages)) {
+            const existing_ids = self.implementation.messages.map(function (m) { return m.id })
+            if (!existing_ids.includes(res.data.model.id)) {
+              self.implementation.messages.push(res.data.model)
+            }
           }
           self.schedule_scroll_to_bottom()
         })
@@ -1273,26 +1279,46 @@ export default {
   animation: audio-pulse 1s ease-in-out infinite;
 }
 
-/* Burbuja de mensaje genérica. */
+/* Burbuja de mensaje genérica — misma base que MessageBubble de leads. */
 .impl-bubble {
+  position: relative;
   max-width: 70%;
-  padding: 8px 12px;
-  border-radius: 12px;
+  padding: 6px 7px 8px 9px;
+  border-radius: 7.5px;
   font-size: 0.875rem;
+  line-height: 1.35;
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+  color: #111b21;
 }
 
-/* Burbuja outbound (enviado por el sistema): azul primario, alineada a la derecha. */
+/* Burbuja outbound (enviado por Martín/sistema): verde claro WhatsApp con cola derecha. */
 .impl-bubble--outbound {
-  background-color: #0d6efd;
-  color: white;
-  border-bottom-right-radius: 2px;
+  background: #d9fdd3;
+  border-radius: 7.5px 0 7.5px 7.5px;
+}
+.impl-bubble--outbound::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: -8px;
+  width: 8px;
+  height: 13px;
+  background: linear-gradient(135deg, #d9fdd3 50%, transparent 50%);
 }
 
-/* Burbuja inbound (recibida del cliente): gris claro, alineada a la izquierda. */
+/* Burbuja inbound (recibida del cliente): blanco con cola izquierda. */
 .impl-bubble--inbound {
-  background-color: #e9ecef;
-  color: #212529;
-  border-bottom-left-radius: 2px;
+  background: #ffffff;
+  border-radius: 0 7.5px 7.5px 7.5px;
+}
+.impl-bubble--inbound::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -8px;
+  width: 8px;
+  height: 13px;
+  background: linear-gradient(225deg, #ffffff 50%, transparent 50%);
 }
 
 /* Texto del mensaje con saltos de línea preservados. */
