@@ -111,6 +111,8 @@ export default {
     FieldSelectEmpleado,
   },
 
+  emits: ['field_updated'],
+
   props: {
     /**
      * Definición de la sección actual (id, title, questions).
@@ -126,6 +128,15 @@ export default {
     form_data: {
       type: Object,
       required: true,
+    },
+
+    /**
+     * Callback para notificar al padre de un cambio de campo.
+     * Se llama con (key, value) cuando el usuario modifica una respuesta.
+     */
+    on_field_change: {
+      type: Function,
+      default: null,
     },
   },
 
@@ -150,14 +161,20 @@ export default {
 
   methods: {
     /**
-     * Emite la actualización de una respuesta individual al componente padre.
+     * Actualiza form_data directamente (mutación del objeto reactivo compartido)
+     * y notifica al padre via callback prop para el autoguardado.
      *
      * @param {string} key - Clave de la pregunta actualizada.
      * @param {*} value - Nuevo valor de la respuesta.
      * @returns {void}
      */
     on_update(key, value) {
-      this.$emit('field_updated', { key, value })
+      /* Mutar directamente la propiedad del objeto reactivo — Vue 3 lo detecta */
+      this.form_data[key] = value
+      /* Notificar al padre para que dispare el autoguardado */
+      if (typeof this.on_field_change === 'function') {
+        this.on_field_change(key, value)
+      }
     },
   },
 }
