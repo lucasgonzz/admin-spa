@@ -140,54 +140,96 @@
         </div>
       </div>
 
-      <!-- Campo: horario laboral del closer lunes a viernes -->
+      <!-- Horario laboral del closer: lunes a viernes -->
       <div class="row g-2 align-items-end mb-3">
-        <div class="col-sm-5">
-          <label class="form-label small" for="demo_closer_horario_lunes_viernes">Horario de trabajo del closer (lunes a viernes)</label>
-          <!-- Rango horario H:i-H:i; define en qué ventana el closer puede atender demos -->
-          <input
-            id="demo_closer_horario_lunes_viernes"
-            v-model="local.closer_horario_lunes_viernes"
-            type="text"
-            class="form-control form-control-sm"
-            placeholder="09:00-18:00"
-            :disabled="saving"
-          />
-          <p class="text-muted small mb-0 mt-1">Formato HH:MM-HH:MM. Ej: 09:00-18:00</p>
+        <div class="col-12">
+          <label class="form-label small">Horario de trabajo del closer (lunes a viernes)</label>
+          <!-- Inicio y fin del horario laboral entre semana; define en qué ventana el closer puede atender demos -->
+          <div class="d-flex flex-wrap align-items-end gap-3">
+            <div class="col-auto">
+              <label class="form-label small mb-0" for="demo_closer_lv_inicio">Inicio</label>
+              <input
+                id="demo_closer_lv_inicio"
+                v-model="local.closer_lv_inicio"
+                type="time"
+                class="form-control form-control-sm"
+                :disabled="saving"
+              />
+            </div>
+            <div class="col-auto">
+              <label class="form-label small mb-0" for="demo_closer_lv_fin">Fin</label>
+              <input
+                id="demo_closer_lv_fin"
+                v-model="local.closer_lv_fin"
+                type="time"
+                class="form-control form-control-sm"
+                :disabled="saving"
+              />
+            </div>
+          </div>
+          <p class="text-muted small mb-0 mt-1">Si dejás Inicio o Fin vacíos, el sistema no ofrecerá slots entre semana.</p>
         </div>
       </div>
 
-      <!-- Campo: horario laboral del closer sábados -->
+      <!-- Horario laboral del closer: sábados -->
       <div class="row g-2 align-items-end mb-3">
-        <div class="col-sm-5">
-          <label class="form-label small" for="demo_closer_horario_sabado">Horario de trabajo del closer (sábados)</label>
-          <!-- Dejar vacío si el closer no trabaja los sábados -->
-          <input
-            id="demo_closer_horario_sabado"
-            v-model="local.closer_horario_sabado"
-            type="text"
-            class="form-control form-control-sm"
-            placeholder="10:00-13:00"
-            :disabled="saving"
-          />
-          <p class="text-muted small mb-0 mt-1">Dejar vacío si el closer no trabaja los sábados.</p>
+        <div class="col-12">
+          <label class="form-label small">Horario de trabajo del closer (sábados)</label>
+          <!-- Dejar ambos vacíos si el closer no trabaja los sábados -->
+          <div class="d-flex flex-wrap align-items-end gap-3">
+            <div class="col-auto">
+              <label class="form-label small mb-0" for="demo_closer_sabado_inicio">Inicio</label>
+              <input
+                id="demo_closer_sabado_inicio"
+                v-model="local.closer_sabado_inicio"
+                type="time"
+                class="form-control form-control-sm"
+                :disabled="saving"
+              />
+            </div>
+            <div class="col-auto">
+              <label class="form-label small mb-0" for="demo_closer_sabado_fin">Fin</label>
+              <input
+                id="demo_closer_sabado_fin"
+                v-model="local.closer_sabado_fin"
+                type="time"
+                class="form-control form-control-sm"
+                :disabled="saving"
+              />
+            </div>
+          </div>
+          <p class="text-muted small mb-0 mt-1">Dejar vacío para indicar que el closer no trabaja ese día.</p>
         </div>
       </div>
 
-      <!-- Campo: horario laboral del closer domingos -->
+      <!-- Horario laboral del closer: domingos -->
       <div class="row g-2 align-items-end mb-3">
-        <div class="col-sm-5">
-          <label class="form-label small" for="demo_closer_horario_domingo">Horario de trabajo del closer (domingos)</label>
-          <!-- Dejar vacío si el closer no trabaja los domingos -->
-          <input
-            id="demo_closer_horario_domingo"
-            v-model="local.closer_horario_domingo"
-            type="text"
-            class="form-control form-control-sm"
-            placeholder=""
-            :disabled="saving"
-          />
-          <p class="text-muted small mb-0 mt-1">Dejar vacío si el closer no trabaja los domingos.</p>
+        <div class="col-12">
+          <label class="form-label small">Horario de trabajo del closer (domingos)</label>
+          <!-- Dejar ambos vacíos si el closer no trabaja los domingos -->
+          <div class="d-flex flex-wrap align-items-end gap-3">
+            <div class="col-auto">
+              <label class="form-label small mb-0" for="demo_closer_domingo_inicio">Inicio</label>
+              <input
+                id="demo_closer_domingo_inicio"
+                v-model="local.closer_domingo_inicio"
+                type="time"
+                class="form-control form-control-sm"
+                :disabled="saving"
+              />
+            </div>
+            <div class="col-auto">
+              <label class="form-label small mb-0" for="demo_closer_domingo_fin">Fin</label>
+              <input
+                id="demo_closer_domingo_fin"
+                v-model="local.closer_domingo_fin"
+                type="time"
+                class="form-control form-control-sm"
+                :disabled="saving"
+              />
+            </div>
+          </div>
+          <p class="text-muted small mb-0 mt-1">Dejar vacío para indicar que el closer no trabaja ese día.</p>
         </div>
       </div>
 
@@ -327,12 +369,18 @@ export default {
         resumen_minutos_antes_fin: 10,
         /** Minutos que el closer necesita para atender al lead post-demo; bloquea la ventana en otras demos. */
         duracion_llamada_closer_minutos: 30,
-        /** Horario laboral del closer lunes a viernes (H:i-H:i). */
-        closer_horario_lunes_viernes: '09:00-18:00',
-        /** Horario laboral del closer sábados (H:i-H:i o vacío). */
-        closer_horario_sabado: '10:00-13:00',
-        /** Horario laboral del closer domingos (H:i-H:i o vacío). */
-        closer_horario_domingo: '',
+        /** Hora de inicio del horario laboral del closer lunes a viernes. */
+        closer_lv_inicio: '09:00',
+        /** Hora de fin del horario laboral del closer lunes a viernes. */
+        closer_lv_fin: '18:00',
+        /** Hora de inicio del horario laboral del closer los sábados (vacío = no trabaja). */
+        closer_sabado_inicio: '',
+        /** Hora de fin del horario laboral del closer los sábados (vacío = no trabaja). */
+        closer_sabado_fin: '',
+        /** Hora de inicio del horario laboral del closer los domingos (vacío = no trabaja). */
+        closer_domingo_inicio: '',
+        /** Hora de fin del horario laboral del closer los domingos (vacío = no trabaja). */
+        closer_domingo_fin: '',
         /** Frecuencia en minutos con que se generan los slots disponibles. */
         frecuencia_slots_minutos: 30,
         /** Si la llamada del closer debe terminar dentro del horario laboral. */
@@ -355,12 +403,18 @@ export default {
         resumen_minutos_antes_fin: 10,
         /** Espejo del servidor para detectar si el campo fue modificado localmente. */
         duracion_llamada_closer_minutos: 30,
-        /** Espejo del servidor: horario laboral del closer lunes a viernes. */
-        closer_horario_lunes_viernes: '09:00-18:00',
-        /** Espejo del servidor: horario laboral del closer sábados. */
-        closer_horario_sabado: '10:00-13:00',
-        /** Espejo del servidor: horario laboral del closer domingos. */
-        closer_horario_domingo: '',
+        /** Espejo del servidor: hora de inicio lunes a viernes. */
+        closer_lv_inicio: '09:00',
+        /** Espejo del servidor: hora de fin lunes a viernes. */
+        closer_lv_fin: '18:00',
+        /** Espejo del servidor: hora de inicio sábados. */
+        closer_sabado_inicio: '',
+        /** Espejo del servidor: hora de fin sábados. */
+        closer_sabado_fin: '',
+        /** Espejo del servidor: hora de inicio domingos. */
+        closer_domingo_inicio: '',
+        /** Espejo del servidor: hora de fin domingos. */
+        closer_domingo_fin: '',
         /** Espejo del servidor: frecuencia de slots en minutos. */
         frecuencia_slots_minutos: 30,
         /** Espejo del servidor: si la llamada del closer debe terminar dentro del horario. */
@@ -404,6 +458,67 @@ export default {
   },
   methods: {
     /**
+     * Parsea un string H:i-H:i del backend en hora de inicio y fin separadas.
+     *
+     * @param {string} range_string - Rango horario del servidor o cadena vacía.
+     * @returns {{ inicio: string, fin: string }}
+     */
+    parse_horario_range(range_string) {
+      if (!range_string || range_string.trim() === '') {
+        return { inicio: '', fin: '' }
+      }
+      var parts = range_string.split('-')
+      if (parts.length === 2) {
+        return { inicio: parts[0].trim(), fin: parts[1].trim() }
+      }
+      return { inicio: '', fin: '' }
+    },
+    /**
+     * Construye el string H:i-H:i que espera el backend a partir de inicio y fin.
+     *
+     * @param {string} inicio - Hora de inicio (input type="time").
+     * @param {string} fin - Hora de fin (input type="time").
+     * @returns {string} Rango concatenado o vacío si falta algún extremo.
+     */
+    build_horario_range(inicio, fin) {
+      if (!inicio || !fin || inicio.trim() === '' || fin.trim() === '') {
+        return ''
+      }
+      return inicio.trim() + '-' + fin.trim()
+    },
+    /**
+     * Pobla los seis campos de horario del closer desde la respuesta del servidor.
+     *
+     * @param {Object} data - Payload de GET/PUT con closer_horario_*.
+     * @param {boolean} sync_stored - Si true, actualiza también stored para can_save.
+     * @returns {void}
+     */
+    apply_closer_horario_from_api(data, sync_stored) {
+      var lv = this.parse_horario_range(
+        data.closer_horario_lunes_viernes !== undefined ? String(data.closer_horario_lunes_viernes) : ''
+      )
+      var sab = this.parse_horario_range(
+        data.closer_horario_sabado !== undefined ? String(data.closer_horario_sabado) : ''
+      )
+      var dom = this.parse_horario_range(
+        data.closer_horario_domingo !== undefined ? String(data.closer_horario_domingo) : ''
+      )
+      this.local.closer_lv_inicio = lv.inicio
+      this.local.closer_lv_fin = lv.fin
+      this.local.closer_sabado_inicio = sab.inicio
+      this.local.closer_sabado_fin = sab.fin
+      this.local.closer_domingo_inicio = dom.inicio
+      this.local.closer_domingo_fin = dom.fin
+      if (sync_stored) {
+        this.stored.closer_lv_inicio = lv.inicio
+        this.stored.closer_lv_fin = lv.fin
+        this.stored.closer_sabado_inicio = sab.inicio
+        this.stored.closer_sabado_fin = sab.fin
+        this.stored.closer_domingo_inicio = dom.inicio
+        this.stored.closer_domingo_fin = dom.fin
+      }
+    },
+    /**
      * GET /settings/lead-demo — carga la configuración actual de demos.
      *
      * @returns {void}
@@ -419,7 +534,7 @@ export default {
           var data = res.data || {}
           var fields = Object.keys(self.local)
           /* Campos que se tratan como string (no entero). */
-          var string_fields = ['recordatorio_manana_hora', 'closer_horario_lunes_viernes', 'closer_horario_sabado', 'closer_horario_domingo']
+          var string_fields = ['recordatorio_manana_hora']
           /* Campos que se tratan como booleano. */
           var bool_fields = ['llamada_debe_terminar_en_horario']
           fields.forEach(function (key) {
@@ -437,6 +552,8 @@ export default {
               }
             }
           })
+          /* Horarios del closer: el API devuelve strings H:i-H:i; mapear a inicio/fin separados. */
+          self.apply_closer_horario_from_api(data, true)
         })
         .catch(function () {
           self.error_message = 'No se pudo cargar la configuración de demos.'
@@ -468,9 +585,9 @@ export default {
           check_ingreso_minutos_post:          self.local.check_ingreso_minutos_post,
           resumen_minutos_antes_fin:           self.local.resumen_minutos_antes_fin,
           duracion_llamada_closer_minutos:     self.local.duracion_llamada_closer_minutos,
-          closer_horario_lunes_viernes:        self.local.closer_horario_lunes_viernes,
-          closer_horario_sabado:               self.local.closer_horario_sabado,
-          closer_horario_domingo:              self.local.closer_horario_domingo,
+          closer_horario_lunes_viernes:        self.build_horario_range(self.local.closer_lv_inicio, self.local.closer_lv_fin),
+          closer_horario_sabado:               self.build_horario_range(self.local.closer_sabado_inicio, self.local.closer_sabado_fin),
+          closer_horario_domingo:              self.build_horario_range(self.local.closer_domingo_inicio, self.local.closer_domingo_fin),
           frecuencia_slots_minutos:            self.local.frecuencia_slots_minutos,
           llamada_debe_terminar_en_horario:    self.local.llamada_debe_terminar_en_horario,
           ingreso_timeout_minutos:             self.local.ingreso_timeout_minutos,
@@ -482,7 +599,7 @@ export default {
           var data = res.data || {}
           var fields = Object.keys(self.local)
           /* Campos que se tratan como string (no entero). */
-          var string_fields = ['recordatorio_manana_hora', 'closer_horario_lunes_viernes', 'closer_horario_sabado', 'closer_horario_domingo']
+          var string_fields = ['recordatorio_manana_hora']
           /* Campos que se tratan como booleano. */
           var bool_fields = ['llamada_debe_terminar_en_horario']
           fields.forEach(function (key) {
@@ -499,6 +616,8 @@ export default {
               }
             }
           })
+          /* Sincronizar horarios parseados desde la respuesta del PUT. */
+          self.apply_closer_horario_from_api(data, true)
           self.saved_message = 'Configuración de demos guardada.'
         })
         .catch(function (err) {
