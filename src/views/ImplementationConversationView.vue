@@ -609,8 +609,12 @@ export default {
           self.enviando_simulado = false
           self.mensaje_simulado = ''
 
-          if (res.data && res.data.model) {
-            self.implementation = res.data.model
+          // Agregar solo el mensaje nuevo al array existente — NO reemplazar toda la implementación
+          if (res.data && res.data.model && self.implementation && Array.isArray(self.implementation.messages)) {
+            const existing_ids = self.implementation.messages.map(function (m) { return m.id })
+            if (!existing_ids.includes(res.data.model.id)) {
+              self.implementation.messages.push(res.data.model)
+            }
           }
 
           self.schedule_scroll_to_bottom()
