@@ -14,7 +14,10 @@
   <div
     v-else
     class="d-flex h-100 min-h-0 app-root mx-auto w-100"
-    :class="{ 'app-root--mobile': is_mobile_viewport }"
+    :class="{
+      'app-root--mobile': is_mobile_viewport,
+      'app-root--no-nav': !show_nav,
+    }"
   >
     <!-- Banner de actualización de PWA -->
     <div
@@ -138,7 +141,25 @@ export default {
       return this.$store.state.auth.session_ready
     },
     show_nav() {
+      /* Rutas públicas (formulario del cliente) y login: sin sidebar ni topbar móvil */
+      if (this.$route.meta && this.$route.meta.public) {
+        return false
+      }
       return this.$route.name !== 'login'
+    },
+    /**
+     * Rutas que ocupan toda el área útil sin padding del layout admin.
+     *
+     * @returns {boolean}
+     */
+    is_fullscreen_route() {
+      if (this.$route.name === 'login') {
+        return true
+      }
+      if (this.$route.meta && this.$route.meta.public) {
+        return true
+      }
+      return false
     },
     /**
      * Clases del contenedor principal: sin padding en login para ocupar toda la pantalla.
@@ -148,7 +169,7 @@ export default {
     main_content_class() {
       /** min-h-0: permite que overflow-auto en flex reciba scroll con rueda/trackpad. */
       const scroll_shell = 'flex-grow-1 min-h-0 overflow-auto app-main-scroll'
-      if (this.$route.name === 'login') {
+      if (this.is_fullscreen_route) {
         return scroll_shell + ' app-main--login'
       }
       if (this.show_nav) {
@@ -499,7 +520,7 @@ export default {
 
 /* Desktop: margen mínimo tras la franja colapsada del nav (56px visible + 4px de respiro). */
 @media (min-width: 768px) {
-  .app-root:not(.app-root--mobile) .app-main-column {
+  .app-root:not(.app-root--mobile):not(.app-root--no-nav) .app-main-column {
     padding-left: 60px;
   }
 }

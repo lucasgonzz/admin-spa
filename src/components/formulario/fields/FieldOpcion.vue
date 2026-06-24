@@ -76,21 +76,25 @@ export default {
   align-items: center;
   gap: 12px;
   padding: 16px;
-  border: 1px solid #dee2e6;
+  background: #fff;
+  border: 1px solid #dde4ee;
   border-radius: 12px;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
   user-select: none;
 }
 
 .field-opcion__card:hover {
   border-color: var(--bs-primary);
+  box-shadow: 0 4px 14px rgba(13, 110, 253, 0.1);
+  transform: translateY(-1px);
 }
 
 /* Estado seleccionado: borde y fondo de acento primario */
 .field-opcion__card--selected {
   border-color: var(--bs-primary);
-  background: rgba(var(--bs-primary-rgb), 0.06);
+  background: linear-gradient(135deg, rgba(13, 110, 253, 0.08) 0%, rgba(13, 110, 253, 0.03) 100%);
+  box-shadow: 0 4px 16px rgba(13, 110, 253, 0.12);
 }
 
 /* Indicador visual circular */

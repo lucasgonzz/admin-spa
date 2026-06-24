@@ -649,7 +649,7 @@ export default {
     },
 
     /**
-     * Carga la URL base del formulario desde GET /settings/implementation/form-url.
+     * Carga la URL base del formulario desde GET /settings/implementation-form-url.
      *
      * @returns {void}
      */
@@ -659,7 +659,7 @@ export default {
       self.error_form_url_message = ''
 
       api
-        .get('/settings/implementation/form-url')
+        .get('/settings/implementation-form-url')
         .then(function (res) {
           /** URL retornada por el servidor; fallback a cadena vacía. */
           const url = res.data && res.data.url != null ? res.data.url : ''
@@ -675,7 +675,7 @@ export default {
     },
 
     /**
-     * Guarda la URL del formulario via PUT /settings/implementation/form-url.
+     * Guarda la URL del formulario via PUT /settings/implementation-form-url.
      *
      * @returns {void}
      */
@@ -687,7 +687,7 @@ export default {
       self.error_form_url_message = ''
 
       api
-        .put('/settings/implementation/form-url', { url: self.local_form_url })
+        .put('/settings/implementation-form-url', { url: self.local_form_url })
         .then(function (res) {
           /** URL confirmada por el servidor. */
           const saved_url = res.data && res.data.url != null ? res.data.url : self.local_form_url
@@ -707,7 +707,7 @@ export default {
     },
 
     /**
-     * Carga el delay de contacto post-formulario desde GET /settings/implementation/form-contact-delay.
+     * Carga el delay de contacto post-formulario desde GET /settings/implementation-form-contact-delay.
      * El servidor almacena el valor en segundos; se convierte a minutos para la UI.
      *
      * @returns {void}
@@ -718,7 +718,7 @@ export default {
       self.error_form_contact_delay_message = ''
 
       api
-        .get('/settings/implementation/form-contact-delay')
+        .get('/settings/implementation-form-contact-delay')
         .then(function (res) {
           /** Segundos retornados por el servidor; convertir a minutos para el input. */
           const seconds = res.data && res.data.seconds != null ? res.data.seconds : 0
@@ -735,7 +735,7 @@ export default {
     },
 
     /**
-     * Guarda el delay de contacto via PUT /settings/implementation/form-contact-delay.
+     * Guarda el delay de contacto via PUT /settings/implementation-form-contact-delay.
      * Convierte minutos a segundos antes de enviar al servidor.
      *
      * @returns {void}
@@ -759,7 +759,7 @@ export default {
       const seconds = minutes * 60
 
       api
-        .put('/settings/implementation/form-contact-delay', { seconds: seconds })
+        .put('/settings/implementation-form-contact-delay', { seconds: seconds })
         .then(function (res) {
           /** Segundos confirmados por el servidor; reconvertir a minutos. */
           const saved_seconds = res.data && res.data.seconds != null ? res.data.seconds : seconds

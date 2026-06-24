@@ -174,7 +174,7 @@ const routes_def = [
     path: '/configuracion/:token',
     name: 'implementation_form',
     component: () => import('@/views/ImplementationFormView.vue'),
-    meta: { public: true },
+    meta: { public: true, nav: false },
   },
 ]
 

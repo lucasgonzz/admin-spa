@@ -1,6 +1,6 @@
 <template>
   <!-- Wrapper de la ruta pública /configuracion/:token -->
-  <!-- No incluye navbar ni sidebar del admin; pantalla completa para el cliente -->
+  <!-- Pantalla completa sin layout del admin (sin navbar ni sidebar) -->
   <div class="implementation-form-view">
     <formulario-view />
   </div>
@@ -11,8 +11,8 @@ import FormularioView from '@/components/formulario/FormularioView.vue'
 
 /**
  * Vista wrapper para la ruta pública del formulario de configuración inicial.
- * Es intencional que no tenga el layout del admin (sin navbar, sin sidebar).
- * Renderiza directamente FormularioView que gestiona todo el estado del formulario.
+ * El layout admin se oculta vía meta.public en App.vue; aquí solo se asegura
+ * que el formulario ocupe toda la pantalla con fondo coherente.
  */
 export default {
   name: 'ImplementationFormView',
@@ -24,9 +24,10 @@ export default {
 </script>
 
 <style scoped>
-/* Pantalla completa sin contenedor extra */
+/* Pantalla completa con fondo alineado al formulario */
 .implementation-form-view {
   min-height: 100vh;
-  background: #f8f9fa;
+  width: 100%;
+  background: linear-gradient(180deg, #eef2ff 0%, #f8f9fc 45%, #f0f4f8 100%);
 }
 </style>

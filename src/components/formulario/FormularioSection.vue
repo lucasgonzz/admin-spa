@@ -1,16 +1,12 @@
 <template>
   <!-- Contenedor de una sección del formulario: muestra título, preguntas y sus campos -->
-  <transition name="formulario-fade">
-    <div class="formulario-section">
-      <!-- Título de la sección -->
-      <h2 class="formulario-section__title">{{ section.title }}</h2>
-
-      <!-- Iteración sobre preguntas de la sección; respeta lógica condicional show_if -->
-      <div
-        v-for="question in visible_questions"
-        :key="question.key"
-        class="formulario-section__question"
-      >
+  <div class="formulario-section">
+    <!-- Iteración sobre preguntas de la sección; respeta lógica condicional show_if -->
+    <div
+      v-for="question in visible_questions"
+      :key="question.key"
+      class="formulario-section__question"
+    >
         <!-- Label con indicador de obligatorio -->
         <label class="formulario-section__label">
           {{ question.label }}
@@ -78,8 +74,7 @@
           @update:value="on_update(question.key, $event)"
         />
       </div>
-    </div>
-  </transition>
+  </div>
 </template>
 
 <script>
@@ -173,17 +168,13 @@ export default {
   width: 100%;
 }
 
-/* Título de la sección */
-.formulario-section__title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #212529;
+/* Bloque de una pregunta: solo espaciado, sin envoltorio propio */
+.formulario-section__question {
   margin-bottom: 28px;
 }
 
-/* Bloque de una pregunta con espaciado generoso */
-.formulario-section__question {
-  margin-bottom: 28px;
+.formulario-section__question:last-child {
+  margin-bottom: 0;
 }
 
 /* Label de la pregunta */
@@ -191,7 +182,7 @@ export default {
   display: block;
   font-size: 1rem;
   font-weight: 600;
-  color: #343a40;
+  color: #1f2937;
   margin-bottom: 6px;
 }
 
@@ -207,16 +198,5 @@ export default {
   color: #6c757d;
   margin-bottom: 10px;
   line-height: 1.5;
-}
-
-/* Animación fade al cambiar de sección */
-.formulario-fade-enter-active,
-.formulario-fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.formulario-fade-enter,
-.formulario-fade-leave-to {
-  opacity: 0;
 }
 </style>

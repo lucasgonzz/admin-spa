@@ -1,7 +1,7 @@
 <template>
   <!-- Barra de progreso fija en la parte superior de la pantalla con label de sección -->
   <div class="formulario-progress">
-    <!-- Barra horizontal de 4px con ancho proporcional al progreso -->
+    <!-- Barra horizontal con ancho proporcional al progreso -->
     <div class="formulario-progress__bar">
       <div
         class="formulario-progress__fill"
@@ -9,14 +9,23 @@
       ></div>
     </div>
 
-    <!-- Label con número de sección y título -->
-    <div class="formulario-progress__label">
-      Sección {{ current_index + 1 }} de {{ total }} — {{ current_title }}
+    <!-- Encabezado con marca y datos de la sección activa -->
+    <div class="formulario-progress__body">
+      <!-- Indicador de autoguardado anclado a la esquina del header -->
+      <formulario-save-status :save_status="save_status" />
+
+      <span class="formulario-progress__brand">ComercioCity</span>
+      <div class="formulario-progress__meta">
+        <span class="formulario-progress__step">Sección {{ current_index + 1 }} de {{ total }}</span>
+        <h1 class="formulario-progress__title">{{ current_title }}</h1>
+      </div>
     </div>
   </div>
 </template>
 
 <script>
+import FormularioSaveStatus from './FormularioSaveStatus.vue'
+
 /**
  * Barra de progreso del formulario de configuración.
  * Muestra el porcentaje completado y el nombre de la sección actual.
@@ -28,6 +37,10 @@
  */
 export default {
   name: 'FormularioProgress',
+
+  components: {
+    FormularioSaveStatus,
+  },
 
   props: {
     /**
@@ -52,6 +65,15 @@ export default {
     current_title: {
       type: String,
       required: true,
+    },
+
+    /**
+     * Estado del autoguardado para mostrar en el header.
+     * null | 'saving' | { saved_at: Date }
+     */
+    save_status: {
+      type: [String, Object],
+      default: null,
     },
   },
 
@@ -79,29 +101,64 @@ export default {
   right: 0;
   z-index: 100;
   background: #fff;
-  border-bottom: 1px solid #f1f3f5;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
 }
 
-/* Franja de progreso de 4px de altura */
+/* Franja de progreso más visible */
 .formulario-progress__bar {
-  height: 4px;
-  background: #e9ecef;
+  height: 8px;
+  background: #e8edf5;
   width: 100%;
 }
 
-/* Relleno animado de la barra */
+/* Relleno animado con degradado primario */
 .formulario-progress__fill {
   height: 100%;
-  background: var(--bs-primary);
-  transition: width 0.4s ease;
+  background: linear-gradient(90deg, #0d6efd 0%, #4c8dff 100%);
+  transition: width 0.45s ease;
+  border-radius: 0 4px 4px 0;
 }
 
-/* Label de sección debajo de la barra */
-.formulario-progress__label {
+/* Cuerpo del encabezado */
+.formulario-progress__body {
+  position: relative;
+  padding: 14px 20px 16px;
   text-align: center;
-  font-size: 0.8rem;
+}
+
+/* Marca del producto */
+.formulario-progress__brand {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #0d6efd;
+  margin-bottom: 6px;
+}
+
+/* Contenedor del contador y título de sección */
+.formulario-progress__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Contador de sección */
+.formulario-progress__step {
+  font-size: 0.82rem;
   color: #6c757d;
-  padding: 6px 16px;
   font-weight: 500;
+}
+
+/* Título de la sección activa, más destacado */
+.formulario-progress__title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #1a1d21;
+  margin: 0;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
 }
 </style>

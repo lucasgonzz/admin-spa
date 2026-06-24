@@ -25,27 +25,26 @@
 
     <!-- Estado: formulario activo -->
     <template v-else>
-      <!-- Barra de progreso fija en el tope -->
+      <!-- Barra de progreso fija en el tope (incluye indicador de guardado) -->
       <formulario-progress
         :current_index="current_section"
         :total="sections.length"
         :current_title="active_section.title"
+        :save_status="save_status"
       />
-
-      <!-- Indicador de guardado automático -->
-      <formulario-save-status :save_status="save_status" />
 
       <!-- Área de contenido central con padding para barra de progreso y footer -->
       <div class="formulario-view__content">
-        <!-- Sección activa con transición fade -->
-        <transition name="formulario-fade" mode="out-in">
+        <div class="formulario-view__card">
+          <!-- key por índice: remonta la sección al avanzar sin transición (evita pantalla en blanco en Vue 3) -->
           <formulario-section
-            :key="active_section.id"
+            v-if="active_section"
+            :key="current_section"
             :section="active_section"
             :form_data="form_data"
             @update:form_data="on_field_update"
           />
-        </transition>
+        </div>
       </div>
 
       <!-- Footer de navegación fijo al pie -->
@@ -66,7 +65,6 @@
 import api_public          from '@/utils/axios_public'
 import { SECTIONS }        from './questions'
 import FormularioProgress  from './FormularioProgress.vue'
-import FormularioSaveStatus from './FormularioSaveStatus.vue'
 import FormularioSection   from './FormularioSection.vue'
 import FormularioNavigation from './FormularioNavigation.vue'
 import FormularioSuccess   from './FormularioSuccess.vue'
@@ -87,7 +85,6 @@ export default {
 
   components: {
     FormularioProgress,
-    FormularioSaveStatus,
     FormularioSection,
     FormularioNavigation,
     FormularioSuccess,
@@ -197,7 +194,7 @@ export default {
     this.load_form_data()
   },
 
-  beforeDestroy() {
+  beforeUnmount() {
     /* Limpiar el timer de debounce al destruir el componente */
     if (this.save_timer) {
       clearTimeout(this.save_timer)
@@ -227,8 +224,18 @@ export default {
             self.client_name = res.data.client_name || ''
           } else {
             /* Cargar los datos guardados para continuar donde el cliente dejó */
+            const saved_data = res.data.form_data || {}
             self.client_name = res.data.client_name || ''
-            self.form_data   = res.data.form_data || {}
+            self.form_data   = saved_data
+
+            /* Restaurar la sección donde el usuario se quedó (si fue guardada) */
+            if (
+              saved_data._current_section != null
+              && saved_data._current_section >= 0
+              && saved_data._current_section < self.sections.length
+            ) {
+              self.current_section = saved_data._current_section
+            }
           }
         })
         .catch(function () {
@@ -240,6 +247,18 @@ export default {
     },
 
     /**
+     * Arma un objeto plano serializable para enviar al backend.
+     * Incluye la sección actual para retomar el progreso al volver al link.
+     *
+     * @returns {object}
+     */
+    build_fields_payload() {
+      const payload = JSON.parse(JSON.stringify(this.form_data))
+      payload._current_section = this.current_section
+      return payload
+    },
+
+    /**
      * Maneja la actualización de un campo individual.
      * Aplica el cambio en form_data y programa el autoguardado con debounce.
      *
@@ -247,8 +266,8 @@ export default {
      * @returns {void}
      */
     on_field_update(payload) {
-      /* Usar Vue.set para garantizar reactividad en objetos anidados */
-      this.$set(this.form_data, payload.key, payload.value)
+      /* En Vue 3 la reactividad con Proxy detecta claves nuevas sin $set */
+      this.form_data[payload.key] = payload.value
       this.schedule_autosave()
     },
 
@@ -285,8 +304,8 @@ export default {
       /* Indicar que el guardado está en progreso */
       self.save_status = 'saving'
 
-      api_public
-        .patch('/form/implementation/' + token, { form_data: self.form_data })
+      return api_public
+        .patch('/form/implementation/' + token, { fields: self.build_fields_payload() })
         .then(function () {
           /* Guardado exitoso: registrar hora */
           self.save_status = { saved_at: new Date() }
@@ -298,16 +317,32 @@ export default {
     },
 
     /**
+     * Cancela el debounce pendiente y ejecuta el autoguardado de inmediato.
+     * Se usa al cambiar de sección o enviar el formulario.
+     *
+     * @returns {Promise<void>}
+     */
+    flush_autosave() {
+      if (this.save_timer) {
+        clearTimeout(this.save_timer)
+        this.save_timer = null
+      }
+      return this.do_autosave()
+    },
+
+    /**
      * Navega a la sección anterior (decrementa current_section).
      *
      * @returns {void}
      */
     go_prev() {
-      if (this.current_section > 0) {
-        this.current_section -= 1
-        /* Scroll al inicio del contenido al cambiar de sección */
-        window.scrollTo({ top: 0, behavior: 'smooth' })
+      const self = this
+      if (self.current_section <= 0) {
+        return
       }
+      self.current_section -= 1
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      self.flush_autosave()
     },
 
     /**
@@ -317,10 +352,13 @@ export default {
      * @returns {void}
      */
     go_next() {
-      if (this.can_continue && this.current_section < this.sections.length - 1) {
-        this.current_section += 1
-        window.scrollTo({ top: 0, behavior: 'smooth' })
+      const self = this
+      if (!self.can_continue || self.current_section >= self.sections.length - 1) {
+        return
       }
+      self.current_section += 1
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      self.flush_autosave()
     },
 
     /**
@@ -341,17 +379,19 @@ export default {
 
       self.submitting = true
 
-      api_public
-        .post('/form/implementation/' + token + '/submit', { form_data: self.form_data })
-        .then(function () {
-          /* Mostrar pantalla de éxito */
-          self.submitted = true
-          window.scrollTo({ top: 0, behavior: 'smooth' })
-        })
-        .catch(function () {
-          /* Error al enviar: permitir reintento */
-          self.submitting = false
-        })
+      self.flush_autosave().finally(function () {
+        api_public
+          .post('/form/implementation/' + token + '/submit', { fields: self.build_fields_payload() })
+          .then(function () {
+            /* Mostrar pantalla de éxito */
+            self.submitted = true
+            window.scrollTo({ top: 0, behavior: 'smooth' })
+          })
+          .catch(function () {
+            /* Error al enviar: permitir reintento */
+            self.submitting = false
+          })
+      })
     },
   },
 }
@@ -365,7 +405,7 @@ export default {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: #f8f9fa;
+  background: linear-gradient(180deg, #eef2ff 0%, #f8f9fc 50%, #f0f4f8 100%);
   gap: 16px;
 }
 
@@ -382,7 +422,7 @@ export default {
   align-items: center;
   justify-content: center;
   padding: 24px 16px;
-  background: #f8f9fa;
+  background: linear-gradient(180deg, #eef2ff 0%, #f8f9fc 50%, #f0f4f8 100%);
 }
 
 .formulario-view__error-card {
@@ -407,23 +447,22 @@ export default {
   margin: 0;
 }
 
-/* Área de contenido: padding para compensar barra de progreso (top) y footer (bottom) */
+/* Área de contenido: padding para compensar header más alto y footer fijo */
 .formulario-view__content {
-  max-width: 640px;
+  max-width: 680px;
   margin: 0 auto;
-  padding: 100px 20px 100px;
+  padding: 118px 20px 108px;
   min-height: 100vh;
-  background: #f8f9fa;
+  background: linear-gradient(180deg, #eef2ff 0%, #f8f9fc 45%, #f0f4f8 100%);
 }
 
-/* Transición fade entre secciones */
-.formulario-fade-enter-active,
-.formulario-fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.formulario-fade-enter,
-.formulario-fade-leave-to {
-  opacity: 0;
+/* Tarjeta blanca que envuelve las preguntas */
+.formulario-view__card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 28px 24px;
+  min-height: 160px;
+  border: 1px solid rgba(13, 110, 253, 0.08);
+  box-shadow: 0 8px 32px rgba(13, 110, 253, 0.08);
 }
 </style>

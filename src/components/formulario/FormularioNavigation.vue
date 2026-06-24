@@ -104,10 +104,12 @@ export default {
   bottom: 0;
   left: 0;
   right: 0;
-  background: #fff;
-  border-top: 1px solid #e9ecef;
-  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid #e8edf5;
+  padding: 14px 16px;
   z-index: 100;
+  box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.06);
 }
 
 /* Distribución de botones: espacio entre ellos */
@@ -121,7 +123,9 @@ export default {
 
 .formulario-navigation__btn {
   min-width: 120px;
-  border-radius: 10px;
+  border-radius: 12px;
   font-size: 0.95rem;
+  font-weight: 600;
+  padding: 10px 18px;
 }
 </style>

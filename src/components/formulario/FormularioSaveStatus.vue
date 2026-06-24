@@ -63,20 +63,22 @@ export default {
 </script>
 
 <style scoped>
-/* Posición en la esquina superior derecha, sobre el contenido */
+/* Posición dentro del header del formulario (no fixed: evita quedar tapado) */
 .formulario-save-status {
-  position: fixed;
-  top: 52px;
-  right: 16px;
-  z-index: 99;
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 0.78rem;
-  color: #6c757d;
-  background: rgba(255, 255, 255, 0.9);
-  padding: 4px 10px;
+  color: #495057;
+  background: #fff;
+  padding: 5px 12px;
   border-radius: 20px;
+  border: 1px solid #e8edf5;
+  box-shadow: 0 2px 10px rgba(13, 110, 253, 0.1);
   pointer-events: none;
 }
 

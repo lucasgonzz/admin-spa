@@ -59,7 +59,7 @@ export default {
   align-items: center;
   justify-content: center;
   padding: 24px 16px;
-  background: #f8f9fa;
+  background: linear-gradient(180deg, #eef2ff 0%, #f8f9fc 50%, #f0f4f8 100%);
 }
 
 /* Tarjeta central del mensaje */
@@ -69,8 +69,9 @@ export default {
   text-align: center;
   padding: 40px 32px;
   background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+  border-radius: 20px;
+  border: 1px solid rgba(13, 110, 253, 0.08);
+  box-shadow: 0 8px 32px rgba(13, 110, 253, 0.1);
 }
 
 /* Ícono grande en color de éxito */
