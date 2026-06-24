@@ -510,7 +510,6 @@ export default {
       if (!(this.record.contact_name || '').trim())    { missing.push('nombre') }
       if (!(this.record.email || '').trim())            { missing.push('email') }
       if (!(this.record.doc_number || '').trim())       { missing.push('documento') }
-      if (!(this.record.company_name || '').trim())     { missing.push('nombre empresa') }
       if (!this.record.demo_id)                         { missing.push('demo asignada') }
       if (!this.record.demo_date)                       { missing.push('fecha demo') }
       if (!(this.record.demo_start_time || '').trim())  { missing.push('hora inicio') }
