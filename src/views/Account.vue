@@ -501,6 +501,11 @@ export default {
 </script>
 
 <style scoped>
+/* Respiro horizontal respecto al borde del área principal (el main global no aplica padding-left). */
+.account-page {
+  padding-left: 1rem;
+}
+
 .account-section--narrow {
   max-width: 36rem;
 }
@@ -510,6 +515,10 @@ export default {
 }
 
 @media (min-width: 768px) {
+  .account-page {
+    padding-left: 1.25rem;
+  }
+
   .account-page__nav {
     width: 14rem;
   }
