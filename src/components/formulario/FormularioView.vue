@@ -42,7 +42,7 @@
             :key="current_section"
             :section="active_section"
             :form_data="form_data"
-            @field_updated="on_field_update"
+            :on_field_change="on_field_change"
           />
         </div>
       </div>
@@ -265,9 +265,9 @@ export default {
      * @param {{ key: string, value: * }} payload
      * @returns {void}
      */
-    on_field_update(payload) {
-      /* En Vue 3 la reactividad con Proxy detecta claves nuevas sin $set */
-      this.form_data[payload.key] = payload.value
+    on_field_change(key, value) {
+      /* form_data ya fue mutado directamente por FormularioSection.
+         Solo necesitamos disparar el autoguardado. */
       this.schedule_autosave()
     },
 
