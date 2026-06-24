@@ -118,6 +118,54 @@
           </div>
         </div>
 
+        <!-- Tarjeta: Precio sugerido (uso interno del equipo, inferido por Claude) -->
+        <div v-if="structured_data.precio_sugerido" class="col-md-6">
+          <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+              <div class="d-flex align-items-center gap-2 mb-2">
+                <span class="badge bg-info-subtle text-info">
+                  <i class="bi bi-cash-coin"></i>
+                </span>
+                <span class="fw-semibold small">Precio sugerido</span>
+              </div>
+              <p class="mb-1 fw-bold fs-5">USD {{ structured_data.precio_sugerido.total }}</p>
+              <p v-if="structured_data.precio_sugerido.incluye_ecommerce" class="mb-1 small text-muted">
+                (incluye ecommerce)
+              </p>
+              <p
+                v-if="structured_data.precio_sugerido.bono !== null && structured_data.precio_sugerido.bono !== undefined"
+                class="mb-1 small text-success"
+              >
+                Bono acción rápida: USD {{ structured_data.precio_sugerido.bono }}
+              </p>
+              <p class="mb-0 small text-secondary lh-base">
+                {{ structured_data.precio_sugerido.razonamiento }}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tarjeta: Temperatura del lead (uso interno, inferida por Claude) -->
+        <div v-if="structured_data.temperatura" class="col-md-6">
+          <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+              <div class="d-flex align-items-center gap-2 mb-2">
+                <span
+                  class="badge"
+                  :class="temperatura_badge_class"
+                >
+                  <i :class="temperatura_icon_class"></i>
+                </span>
+                <span class="fw-semibold small">Temperatura del lead</span>
+              </div>
+              <p class="mb-1 small fw-semibold text-uppercase">{{ structured_data.temperatura.nivel }}</p>
+              <p class="mb-0 small text-secondary lh-base">
+                {{ structured_data.temperatura.razonamiento }}
+              </p>
+            </div>
+          </div>
+        </div>
+
       </div>
       <!-- Fin grid de tarjetas estructuradas -->
 
@@ -156,7 +204,8 @@ import CallSummaryPanel from './CallSummaryPanel.vue'
  * Tab "Resumen" del modal de lead.
  *
  * Muestra el resumen narrativo generado por Claude y las 4 tarjetas del resumen
- * estructurado (empresa, situación actual, funcionalidades, puntos de dolor).
+ * estructurado (empresa, situación actual, funcionalidades, puntos de dolor,
+ * precio sugerido y temperatura del lead).
  * Incluye el panel de resumen de llamada del closer (CallSummaryPanel) con escenario
  * de cierre, precio acordado, modificaciones y transcripción colapsable.
  * Incluye botón para regenerar el resumen de demo invocando la acción del store.
@@ -207,7 +256,8 @@ export default {
      * Parsea y devuelve el objeto demo_summary_structured del lead.
      * Maneja tanto el caso en que el backend lo devuelve ya como objeto JS
      * (cast 'array' de Laravel) como el caso en que viene como string JSON.
-     * @returns {Object|null} Objeto con claves empresa, situacion_actual, funcionalidades, puntos_dolor o null.
+     * @returns {Object|null} Objeto con claves empresa, situacion_actual, funcionalidades,
+     *   puntos_dolor, precio_sugerido y temperatura, o null.
      */
     structured_data() {
       if (!this.record || !this.record.demo_summary_structured) {
@@ -223,6 +273,40 @@ export default {
         }
       }
       return (typeof s === 'object' && s !== null) ? s : null
+    },
+
+    /**
+     * Clase CSS del badge según el nivel de temperatura del lead.
+     * @returns {string}
+     */
+    temperatura_badge_class() {
+      var nivel = this.structured_data && this.structured_data.temperatura
+        ? this.structured_data.temperatura.nivel
+        : ''
+      if (nivel === 'alta') {
+        return 'bg-danger-subtle text-danger'
+      }
+      if (nivel === 'media') {
+        return 'bg-warning-subtle text-warning-emphasis'
+      }
+      return 'bg-secondary-subtle text-secondary'
+    },
+
+    /**
+     * Clase del ícono Bootstrap según el nivel de temperatura del lead.
+     * @returns {string}
+     */
+    temperatura_icon_class() {
+      var nivel = this.structured_data && this.structured_data.temperatura
+        ? this.structured_data.temperatura.nivel
+        : ''
+      if (nivel === 'alta') {
+        return 'bi bi-thermometer-high'
+      }
+      if (nivel === 'media') {
+        return 'bi bi-thermometer-half'
+      }
+      return 'bi bi-thermometer-low'
     },
   },
 
