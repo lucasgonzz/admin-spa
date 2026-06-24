@@ -657,10 +657,6 @@ export default {
      * @returns {void}
      */
     select_implementation(id) {
-      if (this.selected_id == id) {
-        return
-      }
-
       this.selected_id = id
       this.selected_implementation = null
       this.load_detail(id)
