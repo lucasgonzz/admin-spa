@@ -1381,49 +1381,54 @@ export default {
      */
     substeps_from_stage(stage) {
       /* stage.data puede ser null si la etapa todavía no tiene datos recolectados */
-      const data = stage.data || {}
+      const raw_data = stage.data || {}
+
+      /* Los datos del formulario web se guardan en form_responses (subclave).
+         Si existe esa subclave usarla; sino leer directo del raíz (legacy WhatsApp). */
+      const data = (raw_data.form_responses && typeof raw_data.form_responses === 'object')
+        ? raw_data.form_responses
+        : raw_data
 
       /* Número de etapa para elegir el mapa correspondiente */
       const num = stage.stage_number
 
       /* ------------------------------------------------------------------ */
-      /* Etapa 1 — Info de la empresa                                        */
+      /* Etapa 1 — Info de la empresa (formulario web o legacy WhatsApp)     */
+      /* Formulario web: price_mode ('single'|'lists'), stock_mode           */
+      /* Legacy WhatsApp: use_price_lists (bool), use_deposits (bool)        */
       /* ------------------------------------------------------------------ */
       if (num === 1) {
-        /* Array inicial con subetapas siempre presentes */
+        const is_form = 'price_mode' in data
+        const uses_lists    = is_form ? data.price_mode === 'lists'    : data.use_price_lists === true
+        const uses_deposits = is_form ? data.stock_mode === 'deposits' : data.use_deposits    === true
+
         const substeps = [
-          /* Tipo de negocio: completada si la clave existe en data */
-          { key: 'business_type',    label: 'Tipo de negocio',    done: 'business_type' in data },
-          /* Listas de precios: completada si la clave existe en data */
-          { key: 'use_price_lists',  label: 'Listas de precios',  done: 'use_price_lists' in data },
+          { key: 'price_mode',    label: 'Tipo de precios',   done: is_form ? 'price_mode' in data : 'use_price_lists' in data },
         ]
 
-        /* Subetapa condicional: nombres de listas, solo si use_price_lists === true */
-        if (data.use_price_lists === true) {
-          substeps.push({ key: 'price_lists', label: 'Nombres de listas', done: 'price_lists' in data })
+        if (uses_lists) {
+          substeps.push({ key: 'price_lists', label: 'Listas de precios', done: Array.isArray(data.price_lists) && data.price_lists.length > 0 })
         }
 
-        /* Depósitos/sucursales: siempre presente */
-        substeps.push({ key: 'use_deposits', label: 'Depósitos/sucursales', done: 'use_deposits' in data })
-
-        /* Subetapa condicional: nombres de depósitos, solo si use_deposits === true */
-        if (data.use_deposits === true) {
-          substeps.push({ key: 'deposit_names', label: 'Nombres de depósitos', done: 'deposit_names' in data })
-        }
-
-        /* Resto de subetapas fijas de la Etapa 1 */
         substeps.push(
-          { key: 'payment_discounts',        label: 'Descuentos por pago',           done: 'payment_discounts' in data },
-          { key: 'company_name',             label: 'Nombre de empresa',             done: 'company_name' in data },
-          { key: 'address_company',          label: 'Dirección',                     done: 'address_company' in data },
-          /* Empleados: completada si la clave existe y el valor no es vacío */
-          { key: 'employees',                label: 'Empleados',                     done: 'employees' in data && data.employees !== null && data.employees !== '' },
-          /* Logo: completada solo si logo_received === true */
-          { key: 'logo_received',            label: 'Logo',                          done: data.logo_received === true },
-          { key: 'social_networks',          label: 'Redes sociales',                done: 'social_networks' in data },
-          { key: 'dollar_prices',            label: 'Precios en dólares',            done: 'dollar_prices' in data },
-          { key: 'ask_amount_in_vender',     label: 'Cantidad en venta',             done: 'ask_amount_in_vender' in data },
-          { key: 'default_cuenta_corriente', label: 'Cuenta corriente por defecto',  done: 'default_cuenta_corriente' in data },
+          { key: 'dollar_prices',  label: 'Precios en dólares', done: 'dollar_prices' in data },
+          { key: 'stock_mode',     label: 'Tipo de stock',      done: is_form ? 'stock_mode' in data : 'use_deposits' in data },
+        )
+
+        if (uses_deposits) {
+          substeps.push({ key: 'deposit_names', label: 'Depósitos/sucursales', done: Array.isArray(data.deposit_names) && data.deposit_names.length > 0 })
+        }
+
+        substeps.push(
+          { key: 'payment_discounts',        label: 'Descuentos por pago',          done: 'payment_discounts' in data },
+          { key: 'apply_iva',                label: 'IVA en precios',               done: 'apply_iva' in data },
+          { key: 'ask_quantity',             label: 'Cantidad en venta',            done: is_form ? 'ask_quantity' in data : 'ask_amount_in_vender' in data },
+          { key: 'default_cuenta_corriente', label: 'Cuenta corriente por defecto', done: 'default_cuenta_corriente' in data },
+          { key: 'company_name',             label: 'Nombre de empresa',            done: 'company_name' in data },
+          { key: 'address_company',          label: 'Dirección',                    done: 'address_company' in data },
+          { key: 'social_networks',          label: 'Redes sociales',               done: 'social_networks' in data },
+          { key: 'employees',                label: 'Empleados',                    done: Array.isArray(data.employees) ? data.employees.length > 0 : ('employees' in data && data.employees !== null && data.employees !== '') },
+          { key: 'migration_responsible',    label: 'Responsable de migración',     done: 'migration_responsible' in data },
         )
 
         return substeps
