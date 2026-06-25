@@ -214,6 +214,22 @@
       <span v-if="forzar_seguimiento_resultado" class="small text-muted">{{ forzar_seguimiento_resultado }}</span>
     </div>
 
+    <!-- Botón "Sugerir seguimiento": genera un mensaje de seguimiento post-llamada para el closer -->
+    <div v-if="can_generate_closer_followup" class="d-flex align-items-center gap-2 mt-2">
+      <button
+        type="button"
+        class="btn btn-outline-warning btn-sm d-inline-flex align-items-center justify-content-center gap-1"
+        :disabled="generando_closer_followup"
+        title="Pedir a Claude que sugiera un mensaje de seguimiento post-llamada para el closer"
+        aria-label="Sugerir seguimiento para el closer"
+        @click="on_generate_closer_followup"
+      >
+        <span v-if="generando_closer_followup" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+        <i v-else class="bi bi-chat-right-text" aria-hidden="true" />
+        <span class="small">Sugerir seguimiento</span>
+      </button>
+    </div>
+
 
   </div>
   <div v-else class="text-muted small">Guardá el lead primero para habilitar la conversación.</div>
@@ -259,6 +275,8 @@ export default {
       forzando_seguimiento: false,
       /** Texto descriptivo del último resultado de forzar seguimiento (testing). */
       forzar_seguimiento_resultado: '',
+      /** true mientras se genera el mensaje de seguimiento sugerido para el closer. */
+      generando_closer_followup: false,
       /** Evita doble click mientras se persiste el toggle de notificaciones. */
       toggling_notify: false,
       /** Id del mensaje en acción de aprobar/rechazar (deshabilita botones duplicados). */
@@ -521,6 +539,32 @@ export default {
         }
       }
       return false
+    },
+    /**
+     * true si el botón "Sugerir seguimiento" debe mostrarse.
+     * Solo visible cuando el lead está en estado closer_activo y tiene call_summary.
+     *
+     * @returns {boolean}
+     */
+    can_generate_closer_followup() {
+      const rec = this.effective_record
+      if (!rec || !rec.id) {
+        return false
+      }
+      /* Solo para leads en la etapa closer_activo (post-llamada). */
+      if (rec.status !== 'closer_activo') {
+        return false
+      }
+      /* Requiere call_summary con al menos escenario_cierre para que tenga sentido. */
+      const summary = rec.call_summary
+      if (!summary || typeof summary !== 'object') {
+        return false
+      }
+      /* Escenario D: lead descartado, no tiene sentido generar seguimiento. */
+      if (summary.escenario_cierre === 'D') {
+        return false
+      }
+      return true
     },
     /**
      * true si existe una sugerencia de Claude pendiente (no seguimiento automático).
@@ -1071,6 +1115,37 @@ export default {
         .catch(function () {
           self.forzando_seguimiento = false
           self.forzar_seguimiento_resultado = 'Error al forzar el seguimiento.'
+        })
+    },
+    /**
+     * Llama al endpoint para generar (o regenerar) el mensaje de seguimiento sugerido para el closer.
+     * Una vez que el backend responde, actualiza el lead en el padre y hace scroll al final de la
+     * conversación para que el nuevo mensaje sea visible.
+     *
+     * @returns {void}
+     */
+    on_generate_closer_followup() {
+      const self = this
+      const rec = this.effective_record
+      if (!rec || !rec.id || this.generando_closer_followup) {
+        return
+      }
+      self.generando_closer_followup = true
+      self.$store.commit('auth/setMessage', 'Generando sugerencia de seguimiento…')
+      self.$store.commit('auth/setLoading', true)
+      api
+        .post('/lead/' + rec.id + '/generate-closer-followup')
+        .then(function (res) {
+          self.$emit('record-updated', res.data)
+          self.schedule_scroll_to_bottom()
+        })
+        .catch(function () {
+          /* Error silencioso: el usuario puede intentar de nuevo. */
+        })
+        .finally(function () {
+          self.generando_closer_followup = false
+          self.$store.commit('auth/setLoading', false)
+          self.$store.commit('auth/setMessage', '')
         })
     },
     /**

@@ -60,7 +60,8 @@
           v-else-if="editing"
           v-model="edited_text"
           class="form-control form-control-sm wa-edit-textarea"
-          rows="4"
+          :rows="textarea_rows"
+          :style="{ width: textarea_width }"
           :disabled="busy"
         />
         <div v-if="pipeline_status_change_label" class="wa-extra mt-1">
@@ -747,6 +748,43 @@ export default {
       return Math.ceil(remaining_ms / 1000)
     },
     /**
+     * Ancho del textarea de edición calculado a partir del texto más largo del mensaje.
+     * Se clampea entre MIN_WIDTH y el 65% del viewport para no romper la burbuja.
+     * @returns {string} Valor CSS en píxeles, p. ej. "320px".
+     */
+    textarea_width() {
+      /* Ancho mínimo útil para editar cómodamente. */
+      var MIN_WIDTH = 280
+      /* Ancho máximo: 65% del viewport (igual que max-width de .wa-bubble-row). */
+      var MAX_WIDTH = Math.floor(window.innerWidth * 0.65)
+      /* Texto base: si ya se editó usar ese; sino el contenido original. */
+      var text = (this.message.content || '') + ''
+      /* Línea más larga para estimar el ancho requerido. */
+      var lines = text.split('\n')
+      var longest_line = ''
+      var i = 0
+      for (i = 0; i < lines.length; i = i + 1) {
+        if (lines[i].length > longest_line.length) {
+          longest_line = lines[i]
+        }
+      }
+      /* Factor de fuente: ~8.5px por carácter a 15px + padding horizontal. */
+      var estimated = Math.ceil(longest_line.length * 8.5) + 32
+      var computed_width = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, estimated))
+      return computed_width + 'px'
+    },
+    /**
+     * Cantidad de filas del textarea según el número de líneas del mensaje.
+     * Clampea entre 3 y 12 para evitar textareas demasiado pequeños o enormes.
+     * @returns {number}
+     */
+    textarea_rows() {
+      var text = (this.message.content || '') + ''
+      var line_count = text.split('\n').length
+      /* Mínimo 3 filas; máximo 12; +1 para que no quede justo al límite. */
+      return Math.max(3, Math.min(line_count + 1, 12))
+    },
+    /**
      * Texto no vacío para enviar sin editar.
      * @returns {boolean}
      */
@@ -1234,10 +1272,12 @@ export default {
   font-size: 0.9375rem;
   line-height: 1.35;
   resize: vertical;
-  min-height: 4rem;
-  min-width: 240px;
+  min-height: 4.5rem;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   box-sizing: border-box;
+  display: block;
 }
 .wa-extra {
   font-size: 0.875rem;

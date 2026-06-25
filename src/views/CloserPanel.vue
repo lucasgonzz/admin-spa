@@ -109,9 +109,32 @@
           'closer-panel__section--hidden-mobile': is_mobile && active_tab !== tab.key,
         }"
       >
-        <div class="closer-panel__section-header d-flex align-items-center gap-2 mb-3">
+        <div class="closer-panel__section-header d-flex align-items-center gap-2 mb-3 flex-wrap">
           <h2 class="h6 mb-0 fw-semibold">{{ tab.title }}</h2>
           <span class="badge bg-secondary rounded-pill">{{ tab.count }}</span>
+          <!-- Botones de orden: solo visibles en la sección "seguimiento" -->
+          <div v-if="tab.key === 'seguimiento'" class="d-flex gap-1 ms-auto">
+            <button
+              type="button"
+              class="btn btn-xs closer-sort-btn"
+              :class="followup_sort === 'suggestion' ? 'btn-warning' : 'btn-outline-secondary'"
+              title="Mostrar primero los leads con sugerencia de seguimiento pendiente"
+              @click="$store.commit('closer/set_followup_sort', 'suggestion')"
+            >
+              <i class="bi bi-chat-right-text me-1" aria-hidden="true" />
+              Sugerencia
+            </button>
+            <button
+              type="button"
+              class="btn btn-xs closer-sort-btn"
+              :class="followup_sort === 'date' ? 'btn-primary' : 'btn-outline-secondary'"
+              title="Ordenar por fecha de llamada (más reciente primero)"
+              @click="$store.commit('closer/set_followup_sort', 'date')"
+            >
+              <i class="bi bi-calendar-event me-1" aria-hidden="true" />
+              Por fecha
+            </button>
+          </div>
         </div>
 
         <div v-if="loading && !tab.leads.length" class="text-center text-muted py-4">
@@ -210,6 +233,44 @@ export default {
       return 'a las ' + hours + ':' + minutes
     },
     /**
+     * Criterio de orden activo para la sección "En seguimiento".
+     *
+     * @returns {'suggestion'|'date'}
+     */
+    followup_sort() {
+      return this.$store.state.closer.followup_sort
+    },
+    /**
+     * Lista de leads en seguimiento ordenada según el criterio activo.
+     * - 'suggestion': primero los que tienen tiene_sugerencia_pendiente = true.
+     * - 'date': por closer_called_at descendente (más reciente primero).
+     *
+     * @returns {Array<Object>}
+     */
+    sorted_seguimiento() {
+      const leads = (this.$store.state.closer.seguimiento || []).slice()
+      if (this.followup_sort === 'suggestion') {
+        return leads.sort(function (a, b) {
+          /* Leads con sugerencia pendiente van al inicio (0 < 1). */
+          var a_pending = a.tiene_sugerencia_pendiente ? 0 : 1
+          var b_pending = b.tiene_sugerencia_pendiente ? 0 : 1
+          if (a_pending !== b_pending) {
+            return a_pending - b_pending
+          }
+          /* Dentro del mismo grupo: más reciente primero por closer_called_at. */
+          var a_date = new Date(a.closer_called_at || 0).getTime()
+          var b_date = new Date(b.closer_called_at || 0).getTime()
+          return b_date - a_date
+        })
+      }
+      /* Orden por fecha: más reciente primero. */
+      return leads.sort(function (a, b) {
+        var a_date = new Date(a.closer_called_at || 0).getTime()
+        var b_date = new Date(b.closer_called_at || 0).getTime()
+        return b_date - a_date
+      })
+    },
+    /**
      * Definición de tabs/secciones con leads y mensajes vacíos.
      *
      * @returns {Array<Object>}
@@ -234,8 +295,8 @@ export default {
         {
           key: 'seguimiento',
           title: 'En seguimiento',
-          leads: state.seguimiento || [],
-          count: (state.seguimiento || []).length,
+          leads: this.sorted_seguimiento,
+          count: this.sorted_seguimiento.length,
           empty_message: 'No hay leads en seguimiento',
         },
       ]
@@ -508,4 +569,11 @@ export default {
 	to
 		opacity: 1
 		transform: scale(1)
+
+/* Botones compactos de ordenamiento en el encabezado de sección */
+.closer-sort-btn
+	font-size: 0.7rem
+	padding: 0.15rem 0.45rem
+	line-height: 1.4
+	border-radius: 0.35rem
 </style>

@@ -62,6 +62,12 @@ export default {
     loading: false,
     /** Timestamp ISO del último fetch exitoso. */
     last_fetched_at: null,
+    /**
+     * Criterio de ordenamiento de la sección "En seguimiento".
+     * 'suggestion' → leads con sugerencia pendiente primero.
+     * 'date'       → más reciente (por closer_called_at) primero.
+     */
+    followup_sort: 'suggestion',
   },
   mutations: {
     /**
@@ -111,6 +117,18 @@ export default {
         }
         return updated
       })
+    },
+    /**
+     * Actualiza el criterio de ordenamiento de la sección "En seguimiento".
+     *
+     * @param {Object} state
+     * @param {'suggestion'|'date'} value Nuevo criterio de orden.
+     * @returns {void}
+     */
+    set_followup_sort(state, value) {
+      if (value === 'suggestion' || value === 'date') {
+        state.followup_sort = value
+      }
     },
     /**
      * Elimina un socio del lead en el estado local tras DELETE.
