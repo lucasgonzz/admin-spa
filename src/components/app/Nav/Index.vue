@@ -466,6 +466,8 @@ export default {
     },
     /**
      * Al pulsar un ítem del menú: en móvil cierra el drawer; si ya estamos en esa ruta, fuerza recarga de la vista.
+     * Para Leads (keep-alive activo) no puede remontarse por key: se usa bump_leads_reload_version
+     * en lugar de bump_route_reload, y el hook activated() de Leads.vue detecta el cambio y recarga.
      *
      * @param {object} r Definición de ruta del menú (routes.js)
      * @returns {void}
@@ -478,8 +480,16 @@ export default {
         this.$store.commit('general/set_pending_nav_path', r.path)
       }
       if (r && r.name && this.$route.name === r.name) {
-        this.$store.commit('general/set_route_navigating', true)
-        this.$store.commit('general/bump_route_reload', r.name)
+        if (r.name === 'leads') {
+          /* Leads usa keep-alive: no puede remontarse por key.
+             Incrementar versión propia para que activated() detecte el click. */
+          this.$store.commit('lead/bump_leads_reload_version')
+          /* Limpiar pending_nav_path de inmediato (el spinner global no aplica aquí). */
+          this.$store.commit('general/set_pending_nav_path', null)
+        } else {
+          this.$store.commit('general/set_route_navigating', true)
+          this.$store.commit('general/bump_route_reload', r.name)
+        }
       }
     },
     /**

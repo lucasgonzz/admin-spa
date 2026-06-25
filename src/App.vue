@@ -86,7 +86,10 @@
       <logo-loading />
 
       <main :class="main_content_class">
-        <router-view :key="router_view_key" />
+        <!-- keep-alive preserva ViewLeads en memoria al navegar a/desde conversación -->
+        <keep-alive :include="['ViewLeads']">
+          <router-view :key="router_view_key_for_non_cached" />
+        </keep-alive>
       </main>
     </div>
 
@@ -197,10 +200,19 @@ export default {
      * Texto de la ruta activa para la barra superior móvil (coincide con el menú lateral).
      */
     /**
-     * Key de router-view: cambia al recargar la misma ruta desde el menú (remount = created/mounted de nuevo).
+     * Key de router-view para vistas que NO están en keep-alive cache.
+     * Para ViewLeads el keep-alive evita el remount, así que la ruta 'leads' recibe
+     * siempre la misma key para no romper el cache; el hook activated() de Leads.vue
+     * detecta el click en el menú a través de leads_reload_version.
+     *
+     * @returns {string}
      */
-    router_view_key() {
+    router_view_key_for_non_cached() {
       const route_name = this.$route.name || 'unknown'
+      /* Leads usa keep-alive: cambiar la key destruiría el cache. Devolver solo el nombre. */
+      if (route_name === 'leads') {
+        return route_name
+      }
       const versions = this.$store.state.general.route_reload_versions
       const reload_version = versions && versions[route_name] ? versions[route_name] : 0
       return route_name + '-' + String(reload_version)
@@ -254,8 +266,10 @@ export default {
     /**
      * Recarga del mismo ítem del menú (bump_route_reload): vue-router no dispara afterEach;
      * limpiamos el spinner cuando router-view remonta la vista.
+     * Para Leads esta key no cambia (el cache no se destruye); el spinner se limpia
+     * desde el hook activated() de Leads.vue.
      */
-    router_view_key() {
+    router_view_key_for_non_cached() {
       if (!this.$store.state.general.route_navigating) {
         return
       }

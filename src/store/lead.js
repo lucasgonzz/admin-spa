@@ -138,6 +138,12 @@ export default __base_store({
     sort_by: 'last_message',
     /** Posición vertical de scroll guardada al salir hacia la conversación WhatsApp (restaurar al volver). */
     scroll_y: 0,
+    /**
+     * Versión de recarga manual desde el menú lateral cuando Leads usa keep-alive.
+     * Se incrementa al hacer clic en "Leads" estando ya en esa vista, para que
+     * el hook activated() detecte que debe recargar la lista y resetear filtros.
+     */
+    leads_reload_version: 0,
   },
   mutations: {
     /**
@@ -248,6 +254,17 @@ export default __base_store({
      */
     set_scroll_y(state, value) {
       state.scroll_y = value || 0
+    },
+    /**
+     * Incrementa la versión de recarga de leads para que el hook activated() de Leads.vue
+     * detecte que el usuario clickeó Leads en el menú mientras ya estaba en esa vista.
+     * Con keep-alive, el componente no se destruye ni remonta, por lo que este contador
+     * reemplaza el mecanismo de key que usa el resto de las vistas.
+     *
+     * @param {Object} state
+     */
+    bump_leads_reload_version(state) {
+      state.leads_reload_version = (state.leads_reload_version || 0) + 1
     },
     /**
      * Agrega un mensaje al hilo abierto si no existe (evento Pusher).

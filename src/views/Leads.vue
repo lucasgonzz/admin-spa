@@ -7,8 +7,18 @@
       :model_properties_nav_order="model_properties_nav_order"
       @extra-record-updated="on_record_updated"
     >
-      <!-- Acciones rápidas por fila: pin y conversación WhatsApp del lead. -->
+      <!-- Acciones rápidas por fila: WhatsApp, fijar/desfijar y respuesta automática Claude. -->
       <template #row-actions="{ row }">
+        <!-- Botón abrir conversación WhatsApp del lead -->
+        <button
+          type="button"
+          class="btn btn-outline-success btn-sm me-1"
+          title="Abrir conversación de WhatsApp"
+          aria-label="Abrir conversación de WhatsApp"
+          @click="on_open_conversation(row)"
+        >
+          <i class="bi bi-whatsapp" aria-hidden="true" />
+        </button>
         <!-- Botón fijar/desfijar lead (pin global, igual a WhatsApp) -->
         <button
           type="button"
@@ -20,15 +30,27 @@
         >
           <i class="bi bi-pin-fill" :class="row.pinned_at ? '' : 'opacity-50'" aria-hidden="true" />
         </button>
-        <!-- Botón abrir conversación WhatsApp del lead en pantalla completa -->
+        <!-- Botón activar/desactivar respuesta automática de Claude (cloud) para el lead -->
         <button
           type="button"
-          class="btn btn-outline-success btn-sm"
-          title="Abrir conversación de WhatsApp"
-          aria-label="Abrir conversación de WhatsApp"
-          @click="on_open_conversation(row)"
+          class="btn btn-sm d-inline-flex align-items-center justify-content-center"
+          :class="is_claude_auto_reply_enabled(row) ? 'btn-primary' : 'btn-outline-primary'"
+          :title="is_claude_auto_reply_enabled(row)
+            ? 'Claude responde automáticamente. Clic para desactivar.'
+            : 'Claude desactivado. Clic para reactivar.'"
+          :aria-label="is_claude_auto_reply_enabled(row)
+            ? 'Desactivar respuesta automática de Claude'
+            : 'Activar respuesta automática de Claude'"
+          :disabled="is_claude_auto_reply_toggling(row)"
+          @click.stop="on_toggle_claude_auto_reply(row)"
         >
-          <i class="bi bi-whatsapp" aria-hidden="true" />
+          <span
+            v-if="is_claude_auto_reply_toggling(row)"
+            class="spinner-border spinner-border-sm"
+            role="status"
+            aria-hidden="true"
+          />
+          <i v-else class="bi bi-stars" :class="is_claude_auto_reply_enabled(row) ? '' : 'opacity-50'" aria-hidden="true" />
         </button>
       </template>
 
@@ -493,6 +515,8 @@ export default {
       batch_recovering: false,
       /** Lead actualmente abierto en el sidebar lateral de conversación (null = cerrado). */
       sidebar_lead: null,
+      /** Ids de leads con toggle de respuesta automática Claude en curso (evita doble clic). */
+      claude_auto_reply_toggling_ids: [],
     }
   },
   computed: {
@@ -529,12 +553,47 @@ export default {
     },
   },
   mounted() {
+    /* Guardar la versión de recarga inicial para comparar en activated() */
+    this._last_leads_reload_version = this.$store.state.lead.leads_reload_version
     /* Al montar la vista, verificar si la URL trae ?lead_id para abrir el modal directo. */
     this.open_lead_from_query_param()
     /* Sincronizar el input de fecha con un filtro activo previo en el store. */
     this.sync_conversation_started_date_from_store()
-    /* Restaurar scroll si el usuario volvió desde la conversación WhatsApp de un lead. */
+    /* Restaurar scroll si el usuario volvió desde la conversación WhatsApp de un lead (primera carga). */
     this.restore_scroll_position()
+  },
+
+  /**
+   * keep-alive: se llama cada vez que Leads vuelve a ser la vista activa.
+   * Detecta si el usuario clickeó Leads en el menú (reload solicitado) comparando
+   * leads_reload_version. En ese caso recarga la lista y resetea filtros, igual que un remount.
+   * Si viene de la conversación de un lead, solo restaura el scroll (el store ya está al día).
+   * @returns {void}
+   */
+  activated() {
+    var current_version = this.$store.state.lead.leads_reload_version
+    if (current_version !== this._last_leads_reload_version) {
+      /* El usuario clickeó Leads en el menú: refrescar igual que un remount. */
+      this._last_leads_reload_version = current_version
+      this.$store.commit('lead/set_filters', [])
+      this.$store.commit('lead/set_filter_page', 1)
+      this.$store.commit('lead/set_filtered', [])
+      this.$store.commit('lead/set_is_filtered', false)
+      this.conversation_started_date = ''
+      this.$store.dispatch('lead/get_models')
+      return
+    }
+    /* Viene de la conversación: restaurar scroll guardado si existe. */
+    this.restore_scroll_position()
+  },
+
+  /**
+   * keep-alive: se llama cuando Leads deja de ser la vista activa (antes de navegar).
+   * No hace nada; el scroll se guarda en on_open_conversation() antes de navegar en mobile.
+   * @returns {void}
+   */
+  deactivated() {
+    /* Sin acción al salir: el scroll ya fue guardado en on_open_conversation si aplica. */
   },
   methods: {
     /**
@@ -613,6 +672,76 @@ export default {
         }
       }).catch(function () {
         self.$root.$emit('open_toast', 'No se pudo cambiar el estado del pin.')
+      })
+    },
+    /**
+     * Indica si Claude tiene respuesta automática activa para el lead de la fila.
+     * Por defecto true cuando el backend no envió el campo (leads legacy en caché).
+     *
+     * @param {Object} lead Lead de la fila.
+     * @returns {boolean}
+     */
+    is_claude_auto_reply_enabled(lead) {
+      if (!lead) {
+        return true
+      }
+      if (lead.claude_auto_reply === undefined || lead.claude_auto_reply === null) {
+        return true
+      }
+      return Boolean(lead.claude_auto_reply)
+    },
+    /**
+     * true si el toggle de respuesta automática Claude está en curso para ese lead.
+     *
+     * @param {Object} lead Lead de la fila.
+     * @returns {boolean}
+     */
+    is_claude_auto_reply_toggling(lead) {
+      if (!lead || !lead.id) {
+        return false
+      }
+      return this.claude_auto_reply_toggling_ids.indexOf(lead.id) >= 0
+    },
+    /**
+     * Registra o libera el id del lead mientras corre el POST toggle-claude-auto-reply.
+     *
+     * @param {number} lead_id Id del lead.
+     * @param {boolean} toggling true para marcar en curso, false para liberar.
+     * @returns {void}
+     */
+    set_claude_auto_reply_toggling(lead_id, toggling) {
+      if (!lead_id) {
+        return
+      }
+      var ids = this.claude_auto_reply_toggling_ids.slice()
+      var idx = ids.indexOf(lead_id)
+      if (toggling) {
+        if (idx < 0) {
+          ids.push(lead_id)
+        }
+      } else if (idx >= 0) {
+        ids.splice(idx, 1)
+      }
+      this.claude_auto_reply_toggling_ids = ids
+    },
+    /**
+     * Activa o desactiva la respuesta automática de Claude (cloud) para el lead de la fila.
+     * Reutiliza la acción del store que ya sincroniza listas y conversación abierta.
+     *
+     * @param {Object} lead Lead de la fila clickeada.
+     * @returns {void}
+     */
+    on_toggle_claude_auto_reply(lead) {
+      if (!lead || !lead.id || this.is_claude_auto_reply_toggling(lead)) {
+        return
+      }
+      var self = this
+      this.set_claude_auto_reply_toggling(lead.id, true)
+      this.$store.dispatch('lead/toggle_claude_auto_reply', lead.id).then(function () {
+        self.set_claude_auto_reply_toggling(lead.id, false)
+      }).catch(function () {
+        self.set_claude_auto_reply_toggling(lead.id, false)
+        self.$root.$emit('open_toast', 'No se pudo cambiar la respuesta automática de Claude.')
       })
     },
     /**

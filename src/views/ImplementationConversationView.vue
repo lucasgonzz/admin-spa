@@ -187,7 +187,7 @@
          FOOTER FIJO: textarea auto-expandible + botón mic/enviar
          (+ herramientas DEV solo en import.meta.env.DEV)
          ==================================================== -->
-    <div class="conversation-footer border-top px-3 py-2">
+    <div class="conversation-footer border-top px-3">
 
       <!-- Área de redacción tipo WhatsApp -->
       <div class="d-flex align-items-end gap-2">
@@ -1213,12 +1213,15 @@ export default {
 .conversation-footer {
   flex-shrink: 0;
   background: #f0f2f5;
+  /* Padding vertical propio: py-2 de Bootstrap no se usa porque sus utilidades llevan !important y pisan el padding inferior en móvil. */
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
 }
 
-/* En móvil, separar el footer del borde inferior (barra del sistema / home indicator). */
+/* En móvil, separar la fila del input del borde inferior (barra del sistema / home indicator). */
 @media (max-width: 767.98px) {
   .conversation-footer {
-    padding-bottom: 25px;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
   }
 }
 

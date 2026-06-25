@@ -178,15 +178,15 @@ const STATUS_LABELS = {
   closer_activo: 'En seguimiento',
 }
 
-/** Clases Bootstrap para badges de estado. */
+/** Clases Bootstrap para badges de estado (alineadas al catálogo de colores del módulo leads). */
 const STATUS_BADGE_CLASSES = {
   demo_agendada: 'bg-primary',
-  solicita_disponibilidad: 'bg-info text-dark',
-  ingresando_demo: 'bg-primary',
-  demo_en_curso: 'bg-primary',
-  demo_pendiente_de_ingreso: 'bg-warning text-dark',
-  demo_pendiente_de_terminar: 'bg-warning text-dark',
-  demo_realizada: 'bg-secondary',
+  solicita_disponibilidad: 'bg-primary',
+  ingresando_demo: 'bg-danger',
+  demo_en_curso: 'bg-warning text-dark',
+  demo_pendiente_de_ingreso: 'bg-danger',
+  demo_pendiente_de_terminar: 'bg-danger',
+  demo_realizada: 'bg-primary',
   closer_activo: 'bg-success',
 }
 
