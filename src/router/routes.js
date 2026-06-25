@@ -10,6 +10,14 @@ const routes_def = [
   //   meta: { requiresAuth: true, nav: true, icon: 'house' },
   // },
   {
+    /** Panel operativo del closer: visible solo para admins con is_closer = true. */
+    path: '/closer',
+    name: 'closer-panel',
+    text: 'Panel',
+    component: () => import('@/views/CloserPanel.vue'),
+    meta: { requiresAuth: true, nav: true, icon: 'speedometer2', closer_only: true },
+  },
+  {
     path: '/leads',
     name: 'leads',
     text: 'Leads',

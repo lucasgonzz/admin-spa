@@ -21,6 +21,8 @@ import implementation from './implementation'
 import ecommerce_implementation from './ecommerce_implementation'
 // Actualizaciones de demo: pipeline SPA + API sobre demos en hosting.
 import demo_update from './demo_update'
+// Panel operativo del closer (tres secciones de leads).
+import closer from './closer'
 
 export default createStore({
   modules: {
@@ -48,5 +50,7 @@ export default createStore({
     ecommerce_implementation,
     // Actualizaciones de demo (pipeline SPA + API).
     demo_update,
+    // Panel del closer: en curso, agendadas y seguimiento.
+    closer,
   },
 })

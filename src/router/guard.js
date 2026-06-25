@@ -1,12 +1,24 @@
 import { get_first_nav_route } from './nav'
 
 /**
- * Destino por defecto autenticado: primer ítem del menú lateral.
+ * Indica si el admin autenticado es closer operativo.
  *
+ * @param {import('vuex').Store} store
+ * @returns {boolean}
+ */
+function store_admin_is_closer(store) {
+  const admin = store.state.auth.admin
+  return !!(admin && admin.is_closer)
+}
+
+/**
+ * Destino por defecto autenticado: primer ítem del menú lateral según perfil.
+ *
+ * @param {import('vuex').Store} store
  * @returns {{ name: string }|null}
  */
-function default_authenticated_target() {
-  const first_nav_route = get_first_nav_route()
+function default_authenticated_target(store) {
+  const first_nav_route = get_first_nav_route(store.state.auth.admin)
   if (!first_nav_route || !first_nav_route.name) {
     return null
   }
@@ -22,7 +34,8 @@ function default_authenticated_target() {
  * @param {import('vuex').Store} store
  */
 function resolve_navigation(to, from, next, store) {
-  const authenticated_target = default_authenticated_target()
+  const authenticated_target = default_authenticated_target(store)
+  const is_closer = store_admin_is_closer(store)
 
   /** Raíz sin ruta concreta: redirige según sesión. */
   if (to.path === '/') {
@@ -31,6 +44,12 @@ function resolve_navigation(to, from, next, store) {
       return
     }
     next({ name: 'login' })
+    return
+  }
+
+  /** Closers: al entrar por raíz, ir al panel operativo en lugar del listado general. */
+  if (is_closer && to.path === '/') {
+    next({ name: 'closer-panel' })
     return
   }
 

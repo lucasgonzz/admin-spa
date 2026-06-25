@@ -206,6 +206,7 @@
 
 <script>
 import routes, { prefetch_route_component } from '@/router/routes'
+import { get_nav_routes } from '@/router/nav'
 import { useSupportBadgeSocket } from '@/composables/useSupportBadgeSocket'
 import { useLeadSocket } from '@/composables/useLeadSocket'
 
@@ -264,8 +265,13 @@ export default {
     }
   },
   computed: {
+    /**
+     * Ítems del menú lateral según perfil (closers ven el Panel primero).
+     *
+     * @returns {Array<Object>}
+     */
     nav_routes() {
-      return this.routes.filter((r) => r.meta && r.meta.nav)
+      return get_nav_routes(this.$store.state.auth.admin)
     },
     /**
      * Clases del contenedor según drawer móvil abierto.
