@@ -105,7 +105,7 @@
               aria-hidden="true"
             />
           </button>
-          <div v-show="show_calendar_snapshot" class="wa-reasoning text-muted border-top mt-1 pt-1">
+          <div v-show="show_calendar_snapshot" class="wa-calendar-snapshot text-muted border-top mt-1 pt-1">
             <div class="small">
               <div class="mb-1 text-muted" style="font-size: 0.75rem;">
                 Consultado {{ calendar_snapshot_fecha }}
@@ -1289,6 +1289,14 @@ export default {
   font-size: 0.875rem;
   line-height: 1.3;
   max-height: 120px;
+  overflow-y: auto;
+}
+/* Snapshot de disponibilidad: más altura y saltos de línea legibles entre secciones. */
+.wa-calendar-snapshot {
+  font-size: 0.875rem;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  max-height: 480px;
   overflow-y: auto;
 }
 .wa-actions {

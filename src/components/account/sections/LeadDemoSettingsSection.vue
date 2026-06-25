@@ -537,7 +537,17 @@ export default {
           var string_fields = ['recordatorio_manana_hora']
           /* Campos que se tratan como booleano. */
           var bool_fields = ['llamada_debe_terminar_en_horario']
+          /* Campos que maneja apply_closer_horario_from_api — saltear en el forEach general. */
+          var horario_closer_fields = [
+            'closer_lv_inicio', 'closer_lv_fin',
+            'closer_sabado_inicio', 'closer_sabado_fin',
+            'closer_domingo_inicio', 'closer_domingo_fin',
+          ]
           fields.forEach(function (key) {
+            /* Los horarios del closer son strings; no pasarlos por parseInt (vacío → NaN). */
+            if (horario_closer_fields.indexOf(key) !== -1) {
+              return
+            }
             if (data[key] !== undefined) {
               if (bool_fields.indexOf(key) !== -1) {
                 /* El backend devuelve true/false; normalizar a boolean. */
@@ -602,7 +612,17 @@ export default {
           var string_fields = ['recordatorio_manana_hora']
           /* Campos que se tratan como booleano. */
           var bool_fields = ['llamada_debe_terminar_en_horario']
+          /* Campos que maneja apply_closer_horario_from_api — saltear en el forEach general. */
+          var horario_closer_fields = [
+            'closer_lv_inicio', 'closer_lv_fin',
+            'closer_sabado_inicio', 'closer_sabado_fin',
+            'closer_domingo_inicio', 'closer_domingo_fin',
+          ]
           fields.forEach(function (key) {
+            /* Los horarios del closer son strings; no pasarlos por parseInt (vacío → NaN). */
+            if (horario_closer_fields.indexOf(key) !== -1) {
+              return
+            }
             if (data[key] !== undefined) {
               if (bool_fields.indexOf(key) !== -1) {
                 self.local[key]  = data[key] === true || data[key] === 1 || data[key] === '1'
