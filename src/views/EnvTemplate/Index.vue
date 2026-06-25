@@ -1,10 +1,19 @@
 <template>
-  <div class="container-fluid py-4">
+  <div class="container-fluid px-0 py-4">
     <div class="d-flex align-items-center mb-4 gap-3">
       <h2 class="h4 mb-0">Plantilla base .env</h2>
+      <!-- Botón para desplegar el formulario de nueva variable -->
       <button
         type="button"
-        class="btn btn-primary ms-auto"
+        class="btn btn-outline-primary ms-auto"
+        @click="show_new_var_form = !show_new_var_form"
+      >
+        <i class="bi bi-plus-circle me-1" />
+        Agregar variable
+      </button>
+      <button
+        type="button"
+        class="btn btn-primary"
         :disabled="saving"
         @click="save"
       >
@@ -21,6 +30,160 @@
     <!-- Error de carga -->
     <div v-else-if="load_error" class="alert alert-danger">
       {{ load_error }}
+    </div>
+
+    <!-- Formulario colapsable para crear una nueva variable -->
+    <div v-if="show_new_var_form" class="card mb-4 border-primary">
+      <div class="card-header fw-semibold text-primary d-flex align-items-center">
+        <i class="bi bi-plus-circle me-2" />
+        Nueva variable
+        <button
+          type="button"
+          class="btn-close ms-auto"
+          @click="show_new_var_form = false"
+        />
+      </div>
+      <div class="card-body">
+        <!-- Mensaje de error de validación del backend -->
+        <div v-if="new_var_error" class="alert alert-danger py-2 small mb-3">
+          {{ new_var_error }}
+        </div>
+
+        <div class="row g-3">
+          <!-- Nombre de la variable: se convierte a mayúsculas automáticamente -->
+          <div class="col-md-4">
+            <label class="form-label small mb-1 fw-semibold">
+              Nombre de la variable <span class="text-danger">*</span>
+            </label>
+            <input
+              v-model="new_var_form.key"
+              type="text"
+              class="form-control form-control-sm font-monospace text-uppercase"
+              placeholder="NOMBRE_VARIABLE"
+              @input="new_var_form.key = new_var_form.key.toUpperCase().replace(/\s/g, '_')"
+            />
+            <div class="form-text">Se convierte automáticamente a mayúsculas.</div>
+          </div>
+
+          <!-- Grupo: select de existentes o campo libre para grupo nuevo -->
+          <div class="col-md-3">
+            <label class="form-label small mb-1 fw-semibold">
+              Grupo <span class="text-danger">*</span>
+            </label>
+            <!-- Select de grupos existentes más opción "Nuevo grupo" -->
+            <select
+              v-if="!new_var_custom_group"
+              v-model="new_var_form.group"
+              class="form-select form-select-sm"
+              @change="if (new_var_form.group === '__new__') { new_var_custom_group = true; new_var_form.group = '' }"
+            >
+              <option value="" disabled>Seleccionar grupo...</option>
+              <option v-for="g in group_names" :key="g" :value="g">{{ group_label(g) }} ({{ g }})</option>
+              <option value="__new__">+ Nuevo grupo...</option>
+            </select>
+            <!-- Input libre para nombre de grupo personalizado -->
+            <div v-else class="input-group input-group-sm">
+              <input
+                v-model="new_var_form.group"
+                type="text"
+                class="form-control form-control-sm"
+                placeholder="nombre_grupo"
+                @input="new_var_form.group = new_var_form.group.toLowerCase().replace(/\s/g, '_')"
+              />
+              <!-- Botón para volver al select de grupos existentes -->
+              <button
+                type="button"
+                class="btn btn-outline-secondary"
+                title="Volver a grupos existentes"
+                @click="new_var_custom_group = false; new_var_form.group = group_names[0] || 'misc'"
+              >
+                &#8592;
+              </button>
+            </div>
+            <div v-if="new_var_custom_group" class="form-text">
+              Se creará un nuevo grupo con este nombre.
+            </div>
+          </div>
+
+          <!-- Valor del template (opcional) -->
+          <div class="col-md-5">
+            <label class="form-label small mb-1 fw-semibold">Valor</label>
+            <input
+              v-model="new_var_form.value"
+              type="text"
+              class="form-control form-control-sm"
+              placeholder="Dejar vacío si se completará manualmente"
+            />
+          </div>
+
+          <!-- Checkboxes: is_common e is_manual_on_create -->
+          <div class="col-md-3 d-flex flex-column gap-2">
+            <div class="form-check">
+              <input
+                v-model="new_var_form.is_common"
+                type="checkbox"
+                class="form-check-input"
+                id="new-var-common"
+              />
+              <label class="form-check-label small" for="new-var-common">
+                Común <span class="text-muted">(se contrasta al actualizar)</span>
+              </label>
+            </div>
+            <div class="form-check">
+              <input
+                v-model="new_var_form.is_manual_on_create"
+                type="checkbox"
+                class="form-check-input"
+                id="new-var-manual"
+              />
+              <label class="form-check-label small" for="new-var-manual">
+                Manual al crear <span class="text-muted">(recordatorio en alta)</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Orden dentro del grupo -->
+          <div class="col-md-2">
+            <label class="form-label small mb-1 fw-semibold">Orden</label>
+            <input
+              v-model.number="new_var_form.sort_order"
+              type="number"
+              class="form-control form-control-sm"
+              min="1"
+            />
+          </div>
+
+          <!-- Notas internas del operador -->
+          <div class="col-md-7">
+            <label class="form-label small mb-1 fw-semibold">Notas</label>
+            <input
+              v-model="new_var_form.notes"
+              type="text"
+              class="form-control form-control-sm"
+              placeholder="Descripción opcional para el operador"
+            />
+          </div>
+
+          <!-- Botones de acción del formulario -->
+          <div class="col-12 d-flex gap-2 align-items-center">
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              :disabled="!new_var_form.key || !new_var_form.group || new_var_saving"
+              @click="save_new_var"
+            >
+              {{ new_var_saving ? 'Guardando...' : 'Crear variable' }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-outline-secondary btn-sm"
+              @click="cancel_new_var"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Contenido principal: grupos de variables -->
@@ -188,6 +351,29 @@ export default {
 
       /** Orden fijo de grupos para presentación consistente en la UI. */
       group_order: ['app', 'db', 'mail', 'pusher', 'misc'],
+
+      /** Controla la visibilidad del formulario para agregar una nueva variable. */
+      show_new_var_form: false,
+
+      /** true cuando el admin eligió crear un grupo nuevo en lugar de usar uno existente. */
+      new_var_custom_group: false,
+
+      /** true mientras se está enviando la solicitud de creación al backend. */
+      new_var_saving: false,
+
+      /** Mensaje de error del backend para el formulario de nueva variable (null = sin error). */
+      new_var_error: null,
+
+      /** Campos del formulario de nueva variable con valores por defecto. */
+      new_var_form: {
+        key:                  '',
+        group:                '',
+        value:                '',
+        is_common:            false,
+        is_manual_on_create:  false,
+        notes:                '',
+        sort_order:           99,
+      },
     }
   },
 
@@ -345,6 +531,81 @@ export default {
         misc:   'Misc (queue, caché, sesión)',
       }
       return labels[group_name] || group_name
+    },
+
+    /**
+     * Envía el formulario de nueva variable al backend vía POST /env-template.
+     *
+     * En caso de éxito, recarga la lista completa de templates (el backend la devuelve),
+     * reconstruye los drafts, cierra el formulario y muestra un toast de éxito.
+     * En caso de error 422 (validación), muestra el primer mensaje del backend en el formulario.
+     *
+     * @returns {void}
+     */
+    save_new_var() {
+      const self = this
+      self.new_var_error = null
+      self.new_var_saving = true
+
+      api.post('/env-template', self.new_var_form).then(function (res) {
+        /* Actualiza la lista de templates con la respuesta del backend. */
+        const templates = res.data.models || []
+        self.templates = templates
+
+        /* Reconstruye los drafts con la lista actualizada (incluye la nueva variable). */
+        const drafts = {}
+        templates.forEach(function (tpl) {
+          drafts[tpl.id] = {
+            id:                   tpl.id,
+            value:                tpl.value || '',
+            is_common:            !!tpl.is_common,
+            is_manual_on_create:  !!tpl.is_manual_on_create,
+            notes:                tpl.notes || '',
+            group:                tpl.group || '',
+            sort_order:           tpl.sort_order || 0,
+          }
+        })
+        self.drafts = drafts
+
+        self.cancel_new_var()
+        self.new_var_saving = false
+
+        window.dispatchEvent(new CustomEvent('admin-spa-toast', {
+          detail: { message: 'Variable creada correctamente.', variant: 'success' },
+        }))
+      }).catch(function (err) {
+        self.new_var_saving = false
+
+        /* Extrae el primer mensaje de error de validación (422) o muestra error genérico. */
+        const errors = err && err.response && err.response.data && err.response.data.errors
+        if (errors) {
+          const first_key = Object.keys(errors)[0]
+          self.new_var_error = errors[first_key][0]
+        } else {
+          self.new_var_error = 'No se pudo crear la variable. Intentá de nuevo.'
+        }
+      })
+    },
+
+    /**
+     * Cancela el formulario de nueva variable y resetea todos sus campos al estado inicial.
+     *
+     * @returns {void}
+     */
+    cancel_new_var() {
+      const self = this
+      self.show_new_var_form = false
+      self.new_var_custom_group = false
+      self.new_var_error = null
+      self.new_var_form = {
+        key:                  '',
+        group:                '',
+        value:                '',
+        is_common:            false,
+        is_manual_on_create:  false,
+        notes:                '',
+        sort_order:           99,
+      }
     },
   },
 }
