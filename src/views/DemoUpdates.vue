@@ -6,29 +6,24 @@
       @record-selected="on_record_selected"
     />
 
-    <!-- Panel de log: visible cuando hay un registro seleccionado con log registrado -->
-    <div
-      v-if="selected_model && selected_model.log"
+    <!-- Panel de progreso: visible apenas se selecciona un registro, incluso sin log aún -->
+    <demo-update-progress-panel
+      v-if="selected_model"
+      :demo_update="selected_model"
       class="mt-3 mx-3"
-    >
-      <h6 class="text-muted small mb-1">Log de ejecución</h6>
-      <pre
-        ref="log_pre"
-        class="bg-dark text-light p-3 rounded small"
-        style="max-height: 400px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;"
-      >{{ selected_model.log }}</pre>
-    </div>
+    />
   </div>
 </template>
 
 <script>
 import ResourceView from '@/common-vue/components/view/Index.vue'
+import DemoUpdateProgressPanel from '@/components/demo_update/ProgressPanel.vue'
 import api from '@/utils/axios'
 
 export default {
   name: 'ViewDemoUpdates',
 
-  components: { ResourceView },
+  components: { ResourceView, DemoUpdateProgressPanel },
 
   data() {
     return {
@@ -43,7 +38,9 @@ export default {
   methods: {
     /**
      * Callback del evento record-selected del ResourceView.
-     * Asigna el modelo seleccionado e inicia polling si el pipeline está en ejecución.
+     * Asigna el modelo seleccionado e inicia polling si el pipeline está
+     * pendiente o en ejecución, de modo que el progreso sea visible desde
+     * el momento en que el job es tomado por el worker.
      *
      * @param {Object|null} model  Registro seleccionado en la grilla.
      * @returns {void}
@@ -52,8 +49,8 @@ export default {
       this.selected_model = model
       this.stop_polling()
 
-      // Solo inicia polling mientras el job SSH esté activo.
-      if (model && model.status === 'ejecutandose') {
+      /* Inicia polling tanto para 'pendiente' como para 'ejecutandose' */
+      if (model && (model.status === 'pendiente' || model.status === 'ejecutandose')) {
         this.start_polling(model.id)
       }
     },
@@ -66,30 +63,23 @@ export default {
      * @returns {void}
      */
     start_polling(id) {
-      const self = this
+      var self = this
 
       self.polling_interval = setInterval(function () {
         api.get('/demo-update/' + id).then(function (res) {
-          // Modelo actualizado desde el backend.
-          const model = res.data.model
+          /* Modelo actualizado desde el backend */
+          var model = res.data.model
 
-          // Actualiza el panel de log con los datos frescos.
+          /* Actualiza el panel de progreso con los datos frescos */
           self.selected_model = model
 
-          // Sincroniza el modelo en la lista de la grilla (upsert sin recargar todo).
+          /* Sincroniza el modelo en la lista de la grilla (upsert sin recargar todo) */
           self.$store.dispatch('demo_update/upsert_model_in_lists', model)
 
-          // Detiene polling cuando el pipeline ya terminó (exitoso o fallido).
-          if (model.status !== 'ejecutandose') {
+          /* Detiene polling cuando el pipeline ya terminó (exitoso o fallido) */
+          if (model.status === 'completado' || model.status === 'fallido') {
             self.stop_polling()
           }
-
-          // Scroll automático al final del log para seguir la ejecución en tiempo real.
-          self.$nextTick(function () {
-            if (self.$refs.log_pre) {
-              self.$refs.log_pre.scrollTop = self.$refs.log_pre.scrollHeight
-            }
-          })
         })
       }, 4000)
     },
@@ -108,7 +98,7 @@ export default {
   },
 
   beforeUnmount() {
-    // Limpia el intervalo al destruir el componente para evitar memory leaks.
+    /* Limpia el intervalo al destruir el componente para evitar memory leaks */
     this.stop_polling()
   },
 }
