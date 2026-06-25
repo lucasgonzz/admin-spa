@@ -49,6 +49,12 @@
         <tab-notifications
           v-else-if="active_tab === 'notifications'"
           :items="extra_data.notifications"
+          :update="local_update"
+        />
+        <!-- Tab de variables .env: compara template contra el .env real de todas las APIs del cliente -->
+        <tab-env-vars
+          v-else-if="active_tab === 'env_vars'"
+          :update="local_update"
         />
       </div>
 
@@ -63,6 +69,7 @@ import UpdateInfoCard from './InfoCard.vue'
 import UpdateTabNav from './tabs/Index.vue'
 import TabManualTasks from './tabs/ManualTasks.vue'
 import TabNotifications from './tabs/Notifications.vue'
+import TabEnvVars from './tabs/TabEnvVars.vue'
 import OperationsBoard from './operations/OperationsBoard.vue'
 
 /**
@@ -80,6 +87,7 @@ export default {
     UpdateTabNav,
     TabManualTasks,
     TabNotifications,
+    TabEnvVars,
     OperationsBoard,
   },
   props: {
@@ -136,6 +144,12 @@ export default {
           id: 'notifications',
           label: 'Notificaciones',
           count: this.extra_data.notifications.length,
+          has_error: false,
+        },
+        {
+          id:        'env_vars',
+          label:     'Variables .env',
+          count:     0,
           has_error: false,
         },
       ]
