@@ -23,6 +23,8 @@ import ecommerce_implementation from './ecommerce_implementation'
 import demo_update from './demo_update'
 // Panel operativo del closer (tres secciones de leads).
 import closer from './closer'
+// Módulo Agente: variantes A/B de mensajes de onboarding.
+import agente from './agente'
 
 export default createStore({
   modules: {
@@ -52,5 +54,7 @@ export default createStore({
     demo_update,
     // Panel del closer: en curso, agendadas y seguimiento.
     closer,
+    // Variantes de mensajes y métricas del módulo Agente.
+    agente,
   },
 })

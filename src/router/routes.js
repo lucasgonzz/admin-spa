@@ -26,6 +26,14 @@ const routes_def = [
     meta: { requiresAuth: true, nav: true, icon: 'person-lines-fill' },
   },
   {
+    /** Módulo Agente: variantes A/B de mensajes y análisis automático. */
+    path: '/agente',
+    name: 'agente',
+    text: 'Agente',
+    component: () => import('@/views/Agente.vue'),
+    meta: { requiresAuth: true, nav: true, icon: 'robot' },
+  },
+  {
     path: '/soporte',
     name: 'support',
     text: 'Soporte',
