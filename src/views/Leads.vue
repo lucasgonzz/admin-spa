@@ -76,6 +76,22 @@
         >
           <i class="bi bi-window-sidebar" aria-hidden="true" />
         </button>
+        <!-- Botón recuperar leads sin respuesta (batch AI recovery) -->
+        <button
+          type="button"
+          class="btn btn-sm"
+          :class="batch_recovering ? 'btn-warning' : 'btn-outline-warning'"
+          :disabled="batch_recovering"
+          title="Responder todos los leads sin respuesta (recovery)"
+          aria-label="Responder todos los leads sin respuesta"
+          @click="on_batch_recover_unanswered"
+        >
+          <i
+            class="bi"
+            :class="batch_recovering ? 'bi-hourglass-split' : 'bi-robot'"
+            aria-hidden="true"
+          />
+        </button>
       </template>
 
       <template #right>
@@ -379,6 +395,13 @@
         </button>
       </template>
     </base-modal>
+
+    <!-- Sidebar lateral de conversación WhatsApp (solo desktop; en mobile se navega a ruta) -->
+    <lead-conversation-sidebar
+      :lead="sidebar_lead"
+      @close="on_sidebar_close"
+      @record-updated="on_sidebar_record_updated"
+    />
   </div>
 </template>
 
@@ -391,6 +414,7 @@ import LeadResumenTab from '@/components/lead/resumen/Index.vue'
 import LeadConversationTab from '@/components/lead/conversation/Index.vue'
 import LeadContractTab from '@/components/lead/contract/Index.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
+import LeadConversationSidebar from '@/components/lead/LeadConversationSidebar.vue'
 
 /**
  * Definición de pestaña extra fuera de `data()` para no recrear el array por instancia.
@@ -442,7 +466,7 @@ const lead_model_properties_nav_order = [
  */
 export default {
   name: 'ViewLeads',
-  components: { ResourceView, LeadExtraProps, LeadResumenTab, LeadConversationTab, LeadContractTab, BaseModal },
+  components: { ResourceView, LeadExtraProps, LeadResumenTab, LeadConversationTab, LeadContractTab, BaseModal, LeadConversationSidebar },
   data() {
     return {
       /** Controla visibilidad del modal para gestionar catálogo de demos. */
@@ -465,6 +489,10 @@ export default {
       duracion_minutos: 60,
       /** Fecha YYYY-MM-DD para filtrar leads por inicio de conversación WhatsApp. */
       conversation_started_date: '',
+      /** Indica si el batch recovery de leads sin respuesta está en curso. */
+      batch_recovering: false,
+      /** Lead actualmente abierto en el sidebar lateral de conversación (null = cerrado). */
+      sidebar_lead: null,
     }
   },
   computed: {
@@ -474,6 +502,18 @@ export default {
      */
     lead_sort_by() {
       return this.$store.state.lead.sort_by
+    },
+
+    /**
+     * true si el viewport es desktop (≥768px).
+     * Se evalúa en runtime; en contextos sin window devuelve true por defecto.
+     * @returns {boolean}
+     */
+    is_desktop() {
+      if (typeof window === 'undefined') {
+        return true
+      }
+      return window.innerWidth >= 768
     },
   },
   watch: {
@@ -493,6 +533,8 @@ export default {
     this.open_lead_from_query_param()
     /* Sincronizar el input de fecha con un filtro activo previo en el store. */
     this.sync_conversation_started_date_from_store()
+    /* Restaurar scroll si el usuario volvió desde la conversación WhatsApp de un lead. */
+    this.restore_scroll_position()
   },
   methods: {
     /**
@@ -574,7 +616,9 @@ export default {
       })
     },
     /**
-     * Navega a la vista de pantalla completa de la conversación WhatsApp del lead.
+     * Abre la conversación WhatsApp del lead.
+     * En desktop (≥768px): abre el sidebar lateral sin navegar.
+     * En mobile (<768px): navega a la ruta de pantalla completa (comportamiento anterior).
      * @param {Object} lead Lead de la fila clickeada en la tabla.
      * @returns {void}
      */
@@ -582,7 +626,56 @@ export default {
       if (!lead || !lead.id) {
         return
       }
-      this.$router.push({ name: 'lead_conversation', params: { lead_id: lead.id } })
+      /* Desktop: mostrar sidebar; mobile: navegar a ruta de pantalla completa. */
+      if (window.innerWidth >= 768) {
+        this.sidebar_lead = lead
+      } else {
+        /* Guardar scroll actual para restaurarlo al volver desde LeadConversationView. */
+        this.$store.commit('lead/set_scroll_y', window.scrollY || 0)
+        this.$router.push({ name: 'lead_conversation', params: { lead_id: lead.id } })
+      }
+    },
+
+    /**
+     * Cierra el sidebar lateral de conversación limpiando el lead activo.
+     * @returns {void}
+     */
+    on_sidebar_close() {
+      this.sidebar_lead = null
+    },
+
+    /**
+     * Propaga la actualización del lead recibida desde el sidebar.
+     * Si el lead actualizado es el que está abierto, refresca la referencia local
+     * para que el watcher de LeadConversationView detecte el cambio.
+     * @param {Object} model Lead actualizado.
+     * @returns {void}
+     */
+    on_sidebar_record_updated(model) {
+      this.on_record_updated(model)
+      /* Actualizar la referencia del sidebar si el modelo coincide con el lead activo. */
+      if (this.sidebar_lead && model && model.id && this.sidebar_lead.id === model.id) {
+        this.sidebar_lead = Object.assign({}, this.sidebar_lead, model)
+      }
+    },
+    /**
+     * Restaura la posición de scroll guardada en el store después de volver
+     * desde la vista de conversación de un lead.
+     * Usa doble nextTick para esperar a que ResourceView termine de pintar la tabla.
+     * @returns {void}
+     */
+    restore_scroll_position() {
+      var saved_y = this.$store.state.lead.scroll_y
+      if (!saved_y || saved_y <= 0) {
+        return
+      }
+      var self = this
+      this.$nextTick(function () {
+        self.$nextTick(function () {
+          window.scrollTo(0, saved_y)
+          self.$store.commit('lead/set_scroll_y', 0)
+        })
+      })
     },
     /**
      * Cambia el orden del listado base y recarga desde la API.
@@ -1016,6 +1109,30 @@ export default {
       if (status === 'ejecutandose') return 'bg-warning text-dark'
       if (status === 'fallido') return 'bg-danger'
       return 'bg-secondary'
+    },
+    /**
+     * Encola la generación de sugerencia de Claude para todos los leads sin respuesta.
+     * Útil para recuperar leads que quedaron sin job por errores del sistema.
+     * @returns {void}
+     */
+    on_batch_recover_unanswered() {
+      /* Evitar doble envío si ya hay un recovery en curso. */
+      if (this.batch_recovering) {
+        return
+      }
+      var self = this
+      this.batch_recovering = true
+      api.post('/lead/batch-recover-unanswered').then(function (res) {
+        /* Mostrar resultado con cantidad de leads encolados y omitidos. */
+        var dispatched = res.data && res.data.dispatched != null ? res.data.dispatched : '?'
+        var skipped = res.data && res.data.skipped != null ? res.data.skipped : '?'
+        self.$root.$emit('open_toast', 'Recovery iniciado: ' + dispatched + ' leads encolados, ' + skipped + ' omitidos.')
+      }).catch(function () {
+        self.$root.$emit('open_toast', 'Error al iniciar el recovery de leads.')
+      }).then(function () {
+        /* Siempre desactivar el estado de carga al terminar, sea éxito o error. */
+        self.batch_recovering = false
+      })
     },
   },
 }
