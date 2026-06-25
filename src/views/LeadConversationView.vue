@@ -1870,11 +1870,14 @@ export default {
       navigator.mediaDevices.getUserMedia({ audio: true })
         .then(function (stream) {
           self.audio_stream = stream
-          // Intentar grabar en OGG/Opus (Firefox). Chrome lo ignora y cae en webm;
-          // el backend convierte el mime en el upload a Meta.
+          // Preferir formatos que Meta acepta nativamente: OGG (Firefox), MP4 (Chrome si disponible), WebM al final.
           const mimeType = MediaRecorder.isTypeSupported('audio/ogg; codecs=opus')
             ? 'audio/ogg; codecs=opus'
-            : ''
+            : MediaRecorder.isTypeSupported('audio/mp4')
+              ? 'audio/mp4'
+              : MediaRecorder.isTypeSupported('audio/webm; codecs=opus')
+                ? 'audio/webm; codecs=opus'
+                : ''
           const recorder = mimeType
             ? new MediaRecorder(stream, { mimeType: mimeType })
             : new MediaRecorder(stream)
@@ -2020,7 +2023,7 @@ export default {
 /* En móvil, separar el footer del borde inferior (barra del sistema / home indicator). */
 @media (max-width: 767.98px) {
   .conversation-footer {
-    padding-bottom: 25px;
+    padding-bottom: 20px;
   }
 }
 
