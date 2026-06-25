@@ -1,5 +1,10 @@
 <template>
-  <div class="conversation-view">
+  <div
+    :class="{
+      'conversation-view': !is_sidebar_mode,
+      'conversation-view--embedded': is_sidebar_mode,
+    }"
+  >
 
     <!-- ====================================================
          HEADER FIJO: atrás | nombre del lead | 5 botones icono
@@ -9,6 +14,7 @@
       <!-- Izquierda: botón atrás + nombre del lead -->
       <div class="d-flex align-items-center gap-2 overflow-hidden">
         <button
+          v-if="!is_sidebar_mode"
           type="button"
           class="icon-btn"
           title="Volver a Leads"
@@ -432,14 +438,16 @@ import '@/styles/conversation-placeholder-states.css'
 import '@/styles/whatsapp-date-divider.css'
 
 /**
- * Vista de pantalla completa para la conversación WhatsApp de un lead.
+ * Vista de conversación WhatsApp de un lead.
  *
- * Accesible desde /leads/:lead_id/conversacion. Replica toda la lógica de
- * LeadConversationTab (modal) pero como vista independiente con layout WhatsApp:
+ * Modo ruta: pantalla completa en /leads/:lead_id/conversacion; carga el lead desde
+ * this.$route.params.lead_id.
+ *
+ * Modo prop (sidebar): recibe lead_record_prop con el lead ya cargado; no lee la ruta
+ * ni muestra el botón volver. El contenedor padre provee el layout fijo.
+ *
+ * Replica la lógica de LeadConversationTab (modal) con layout WhatsApp:
  * header fijo, área de mensajes scrolleable y footer fijo con textarea auto-expandible.
- *
- * El lead se carga al montar la vista usando el param :lead_id de la ruta.
- * No depende de ResourceView ni de ningún componente de common-vue.
  */
 export default {
   name: 'LeadConversationView',
@@ -449,6 +457,18 @@ export default {
     TemplatePickerModal,
   },
   mixins: [lead_conversation_date_dividers],
+
+  props: {
+    /**
+     * Lead precargado para modo embebido (sidebar). null = modo ruta habitual.
+     *
+     * @type {Object|null}
+     */
+    lead_record_prop: {
+      type: Object,
+      default: null,
+    },
+  },
 
   data() {
     return {
@@ -560,6 +580,15 @@ export default {
   },
 
   computed: {
+    /**
+     * true cuando la vista recibe el lead por prop (sidebar embebido), no por ruta.
+     *
+     * @returns {boolean}
+     */
+    is_sidebar_mode() {
+      return this.lead_record_prop !== null && this.lead_record_prop !== undefined
+    },
+
     /**
      * Nombre visible del lead en el header. Usa contact_name si está disponible,
      * o cae a 'Lead #ID' como fallback mientras carga o si está vacío.
@@ -993,28 +1022,100 @@ export default {
       this.sync_manual_ai_suggestion_state()
       this.sync_countdown_clock()
     },
+
+    /**
+     * Recarga la conversación cuando el sidebar cambia de lead (nuevo lead_record_prop).
+     *
+     * @param {Object|null} new_val Lead recién recibido por prop.
+     * @param {Object|null} old_val Lead anterior en la prop.
+     * @returns {void}
+     */
+    lead_record_prop(new_val, old_val) {
+      if (!this.is_sidebar_mode) {
+        return
+      }
+      if (!new_val || !new_val.id) {
+        return
+      }
+      if (old_val && old_val.id === new_val.id) {
+        return
+      }
+      const self = this
+      const lead_id = new_val.id
+      this.$store.commit('lead/set_lead_conversation_visible_id', lead_id)
+      this.lead_record = Object.assign({}, new_val)
+      this.merge_lead_into_conversation_store(this.lead_record)
+      this.ai_auto_consult_cancelled = false
+      this.loading_conversation = true
+      this.$store
+        .dispatch('lead/fetch_lead_for_conversation', lead_id)
+        .then(function (model) {
+          self.lead_record = model
+          self.merge_lead_into_conversation_store(model)
+          self.sync_manual_ai_suggestion_state()
+          self.sync_countdown_clock()
+          self.$nextTick(function () {
+            self.schedule_scroll_to_bottom()
+          })
+          self.try_mark_followup_suggestion_seen()
+          self.try_mark_whatsapp_messages_read()
+          self.loading_conversation = false
+        })
+        .catch(function () {
+          self.loading_conversation = false
+        })
+    },
   },
 
   mounted() {
     const self = this
-    /* Cargar el lead completo (con mensajes) usando el param de la ruta. */
+    if (this.is_sidebar_mode) {
+      const lead_id = this.lead_record_prop.id
+      this.$store.commit('lead/set_lead_conversation_visible_id', lead_id)
+      this.lead_record = Object.assign({}, this.lead_record_prop)
+      this.merge_lead_into_conversation_store(this.lead_record)
+      this.load_ai_suggestion_settings()
+      this.sync_manual_ai_suggestion_state()
+      this.sync_countdown_clock()
+      this.$nextTick(function () {
+        self.schedule_scroll_to_bottom()
+      })
+      self.try_mark_followup_suggestion_seen()
+      self.try_mark_whatsapp_messages_read()
+      self.loading_conversation = true
+      self.$store
+        .dispatch('lead/fetch_lead_for_conversation', lead_id)
+        .then(function (model) {
+          self.lead_record = model
+          self.merge_lead_into_conversation_store(model)
+          self.sync_manual_ai_suggestion_state()
+          self.sync_countdown_clock()
+          self.$nextTick(function () {
+            self.schedule_scroll_to_bottom()
+          })
+          self.try_mark_followup_suggestion_seen()
+          self.try_mark_whatsapp_messages_read()
+          self.loading_conversation = false
+        })
+        .catch(function () {
+          self.loading_conversation = false
+        })
+      return
+    }
     const lead_id = this.$route.params.lead_id
     this.$store.commit('lead/set_lead_conversation_visible_id', lead_id)
     this.loading_conversation = true
     this.$store
       .dispatch('lead/fetch_lead_for_conversation', lead_id)
       .then(function (model) {
-        /* Almacenar el lead y sincronizar el store de conversación. */
         self.lead_record = model
         self.merge_lead_into_conversation_store(model)
-        /* Inicializar el estado del debounce de IA y el reloj de countdown. */
         self.load_ai_suggestion_settings()
         self.sync_manual_ai_suggestion_state()
         self.sync_countdown_clock()
         self.$nextTick(function () {
           self.schedule_scroll_to_bottom()
         })
-        /* Marcar alertas de seguimiento como vistas y mensajes como leídos. */
         self.try_mark_followup_suggestion_seen()
         self.try_mark_whatsapp_messages_read()
         self.loading_conversation = false
@@ -1025,7 +1126,9 @@ export default {
   },
 
   beforeUnmount() {
-    const lead_id = this.$route.params.lead_id
+    const lead_id = this.is_sidebar_mode
+      ? (this.lead_record && this.lead_record.id ? this.lead_record.id : null)
+      : this.$route.params.lead_id
     const visible_id = this.$store.state.lead.lead_conversation_visible_id
     if (lead_id != null && visible_id != null && String(visible_id) === String(lead_id)) {
       this.$store.commit('lead/set_lead_conversation_visible_id', null)
@@ -1891,6 +1994,18 @@ export default {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* Modo embebido (sidebar): ocupa el 100% del contenedor padre sin position fixed */
+.conversation-view--embedded {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bs-body-bg);
 }
 
 /* Header y footer no ceden espacio al área de mensajes */
