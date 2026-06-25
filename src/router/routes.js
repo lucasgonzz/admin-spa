@@ -165,14 +165,14 @@ const routes_def = [
     path: '/leads/:lead_id/conversacion',
     name: 'lead_conversation',
     component: () => import('@/views/LeadConversationView.vue'),
-    meta: { requiresAuth: true, nav: false },
+    meta: { requiresAuth: true, nav: false, hide_app_nav: true },
   },
   {
     /** Vista fullscreen de la conversación WhatsApp de una implementación. */
     path: '/implementaciones/:implementation_id/conversacion',
     name: 'implementation_conversation',
     component: () => import('@/views/ImplementationConversationView.vue'),
-    meta: { requiresAuth: true, nav: false },
+    meta: { requiresAuth: true, nav: false, hide_app_nav: true },
   },
   {
     path: '/login',

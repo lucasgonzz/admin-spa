@@ -1,4 +1,4 @@
-import __base_store from '@/common-vue/store/__base_store'
+import __base_store, { set_global_filter_loading } from '@/common-vue/store/__base_store'
 import api from '@/utils/axios'
 import { route_string } from '@/utils/route_string'
 
@@ -136,6 +136,8 @@ export default __base_store({
     _mark_read_in_flight: null,
     /** Criterio de ordenamiento activo: 'last_message' | 'created_at'. Por defecto último mensaje. */
     sort_by: 'last_message',
+    /** Posición vertical de scroll guardada al salir hacia la conversación WhatsApp (restaurar al volver). */
+    scroll_y: 0,
   },
   mutations: {
     /**
@@ -237,6 +239,15 @@ export default __base_store({
      */
     set_sort_by(state, value) {
       state.sort_by = value === 'created_at' ? 'created_at' : 'last_message'
+    },
+    /**
+     * Guarda o limpia la posición de scroll de la bandeja de leads.
+     *
+     * @param {Object} state
+     * @param {number} value píxeles desde el tope de la ventana (0 para limpiar)
+     */
+    set_scroll_y(state, value) {
+      state.scroll_y = value || 0
     },
     /**
      * Agrega un mensaje al hilo abierto si no existe (evento Pusher).
@@ -345,6 +356,7 @@ export default __base_store({
       const url =
         '/search/' + route_string(state.model_name) + '/null/1?page=' + page
       commit('set_loading_filtered', true)
+      set_global_filter_loading(commit, true, 'Filtrando leads…')
       return api
         .post(url, {
           filters: state.filters,
@@ -360,9 +372,11 @@ export default __base_store({
           commit('set_total_filter_pages', body.last_page || 1)
           commit('set_total_filter_results', body.total != null ? body.total : rows.length)
           commit('set_loading_filtered', false)
+          set_global_filter_loading(commit, false)
         })
         .catch(function () {
           commit('set_loading_filtered', false)
+          set_global_filter_loading(commit, false)
         })
     },
     /**

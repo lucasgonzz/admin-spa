@@ -83,6 +83,8 @@
         <p v-if="route_navigating_label" class="text-muted small mt-2 mb-0">{{ route_navigating_label }}</p>
       </div>
 
+      <logo-loading />
+
       <main :class="main_content_class">
         <router-view :key="router_view_key" />
       </main>
@@ -105,6 +107,7 @@
 
 <script>
 import AppNav from '@/components/app/Nav/Index.vue'
+import LogoLoading from '@/common-vue/components/LogoLoading.vue'
 import routes from '@/router/routes'
 
 /**
@@ -114,7 +117,7 @@ import routes from '@/router/routes'
  */
 export default {
   name: 'App',
-  components: { AppNav },
+  components: { AppNav, LogoLoading },
   data() {
     return {
       /** Cola de toasts visibles para errores globales de API. */
@@ -145,7 +148,17 @@ export default {
       if (this.$route.meta && this.$route.meta.public) {
         return false
       }
-      return this.$route.name !== 'login'
+      if (this.$route.name === 'login') {
+        return false
+      }
+      /*
+       * Vistas fullscreen (p. ej. conversación WhatsApp): ocultar sidebar y barra
+       * superior móvil para no tapar el header propio de la conversación.
+       */
+      if (this.$route.meta && this.$route.meta.hide_app_nav) {
+        return false
+      }
+      return true
     },
     /**
      * Rutas que ocupan toda el área útil sin padding del layout admin.
@@ -157,6 +170,9 @@ export default {
         return true
       }
       if (this.$route.meta && this.$route.meta.public) {
+        return true
+      }
+      if (this.$route.meta && this.$route.meta.hide_app_nav) {
         return true
       }
       return false
@@ -525,14 +541,21 @@ export default {
   }
 }
 
-/* Con nav lateral: el margen izquierdo lo define app-main-column; evita sumar padding duplicado. */
+/*
+  Respiro horizontal uniforme de todos los módulos (referencia: Leads vía container-fluid).
+  --app-module-gutter-x coincide con el gutter horizontal de Bootstrap (0.75rem).
+  En móvil se suma el padding base del main (0.5rem) para igualar el total que tenía Leads.
+*/
 .app-main-with-nav {
+  --app-module-gutter-x: 0.75rem;
   padding: 0.5rem;
+  padding-left: calc(0.5rem + var(--app-module-gutter-x));
 }
 
 @media (min-width: 768px) {
   .app-root:not(.app-root--mobile) .app-main-with-nav {
-    padding: 1rem 1rem 1rem 0;
+    padding: 1rem;
+    padding-left: var(--app-module-gutter-x);
   }
 }
 

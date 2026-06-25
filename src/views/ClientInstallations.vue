@@ -1,5 +1,5 @@
 <template>
-  <div class="client-installations container-fluid py-4">
+  <div class="client-installations container-fluid px-0 py-4">
 
     <!-- Cabecera con nombre del cliente y botón para crear nueva instalación -->
     <div class="d-flex align-items-center flex-wrap gap-2 mb-4">

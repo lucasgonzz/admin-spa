@@ -28,7 +28,7 @@ export default {
         }
         return moment(d).format('DD/MM/YY')
       }
-      return '—'
+      return ''
     },
   },
 }

@@ -1,5 +1,5 @@
 <template>
-  <div class="installations-view container-fluid py-4">
+  <div class="installations-view container-fluid px-0 py-4">
 
     <!-- Encabezado del listado global -->
     <div class="d-flex align-items-center flex-wrap gap-2 mb-4">

@@ -1,5 +1,6 @@
 <template>
-  <div class="container-fluid">
+  <!-- px-0: el margen horizontal lo define app-main-with-nav en App.vue -->
+  <div class="container-fluid px-0">
     <view-header
       :model_name="model_name"
       :default_properties="meta_properties_for_table_prefs"
@@ -7,9 +8,9 @@
       :is_filtered="st.is_filtered"
       :has_filters="st.filters && st.filters.length > 0"
       :selected_count="st.selected.length"
+      :total_filter_results="st.total_filter_results"
       @create="on_create"
       @toggle-select="on_toggle_select"
-      @act-filtered="on_act_filtered"
       @act-selected="on_act_selected"
       @reset-filters="on_reset_filters"
       @saved="on_props_saved"
@@ -47,6 +48,7 @@
       :show="show_filter_modal"
       :field="filter_field"
       :model_name="model_name"
+      :active_filters="st.filters"
       @close="show_filter_modal = false"
       @add="on_filter_add"
       @add-and-run="on_filter_add_and_run"
@@ -264,24 +266,26 @@ export default {
       this.$store.commit(this.model_name + '/set_is_selectable', v)
       this.$store.commit(this.model_name + '/set_selected', [])
     },
-    on_act_filtered() {
-      const self = this
-      this.$root.$emit('open_toast', 'Acción masiva: implementar con mass-update (filtrados).')
-    },
     on_act_selected() {
       this.$root.$emit('open_toast', 'Acción masiva: ' + this.st.selected.length + ' filas (pendiente de UI).')
     },
     /**
-     * Limpia todos los filtros del recurso y vuelve al listado base en store.models.
+     * Limpia todos los filtros del recurso y recarga el listado base desde la API.
      * @returns {void}
      */
     on_reset_filters() {
+      // Cierra modal de filtro si quedó abierto o con estado inconsistente.
+      this.show_filter_modal = false
+      this.filter_field = null
       // Elimina criterios acumulados de filtros por columna.
       this.$store.commit(this.model_name + '/set_filters', [])
       // Reinicia estado de paginación/filtro para mantener consistencia de la vista.
       this.$store.commit(this.model_name + '/set_filter_page', 1)
       this.$store.commit(this.model_name + '/set_filtered', [])
       this.$store.commit(this.model_name + '/set_is_filtered', false)
+      this.$store.commit(this.model_name + '/set_total_filter_results', 0)
+      // Vuelve a pedir el listado sin criterios para evitar datos stale en store.models.
+      this.$store.dispatch(this.model_name + '/get_models')
     },
     /**
      * Abre modal de filtro para la columna seleccionada.
@@ -289,8 +293,13 @@ export default {
      * @returns {void}
      */
     open_filter(p) {
+      const self = this
+      // Reinicia show para que el watcher del modal vuelva a disparar tras un cierre previo.
+      this.show_filter_modal = false
       this.filter_field = p
-      this.show_filter_modal = true
+      this.$nextTick(function () {
+        self.show_filter_modal = true
+      })
     },
     /**
      * Limpia filtro por key y actualiza datos visibles según el estado actual.

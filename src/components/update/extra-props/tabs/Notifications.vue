@@ -75,6 +75,8 @@ export default {
   name: 'TabNotifications',
   props: {
     items: { type: Array, default: () => [] },
+    /** Upgrade completo (cliente y API destino para el mensaje al copiar). */
+    update: { type: Object, default: null },
   },
   data() {
     return {
@@ -113,7 +115,10 @@ export default {
      */
     copy_all_notifications() {
       var self = this
-      var message = format_notifications_for_clipboard(self.items, { only_active: true })
+      var message = format_notifications_for_clipboard(self.items, {
+        only_active: true,
+        update: self.update,
+      })
 
       if (!message) {
         return

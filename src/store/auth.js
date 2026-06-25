@@ -14,6 +14,8 @@ const state = {
   admin: null,
   token: null,
   loading: false,
+  /** Texto del overlay global de carga (auth/setMessage). */
+  message: '',
   /** false hasta validar token en storage y resolver /me si corresponde. */
   session_ready: false,
 }
@@ -77,6 +79,25 @@ const mutations = {
   },
   set_loading(s, v) {
     s.loading = v
+  },
+  /**
+   * Activa o desactiva el overlay global de carga (mismo estado que set_loading).
+   * Nombre camelCase para compatibilidad con commits auth/setLoading de empresa-spa.
+   *
+   * @param {Object} s  State del módulo auth.
+   * @param {boolean} v  true mientras la operación está en curso.
+   */
+  setLoading(s, v) {
+    s.loading = !!v
+  },
+  /**
+   * Mensaje descriptivo mostrado en el overlay global durante operaciones API.
+   *
+   * @param {Object} s  State del módulo auth.
+   * @param {string} v  Texto en español; cadena vacía al finalizar.
+   */
+  setMessage(s, v) {
+    s.message = v != null ? String(v) : ''
   },
   set_session_ready(s, v) {
     s.session_ready = !!v

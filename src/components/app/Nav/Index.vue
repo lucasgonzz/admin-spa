@@ -632,7 +632,8 @@ export default {
 </script>
 <style lang="sass" scoped>
 /* Tokens visuales alineados con empresa-spa (nav-vertical). */
-$nav_width: 220px
+/* Ancho expandido al hover: debe cubrir el ítem más largo ("Actualizaciones Demo") con icono y badges. */
+$nav_width: 240px
 $nav_collapsed_visible: 56px
 $nav_collapsed_offset: $nav_width - $nav_collapsed_visible
 $nav_bg: #16181d

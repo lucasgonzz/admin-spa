@@ -106,7 +106,7 @@ export default {
         return this.row.to_version.version
       }
       if (k == 'from_version_id' && this.row.from_version) {
-        return this.row.from_version ? this.row.from_version.version : '—'
+        return this.row.from_version ? this.row.from_version.version : ''
       }
       if (k == 'created_by_admin_id' && this.row.created_by_admin) {
         return this.row.created_by_admin.name
@@ -118,7 +118,7 @@ export default {
     },
     text() {
       if (this.raw == null || this.raw === '') {
-        return '—'
+        return ''
       }
       // `is_date` viene declarado en ModelProperties del backend (mismo criterio que empresa-spa).
       if (this.prop.is_date) {

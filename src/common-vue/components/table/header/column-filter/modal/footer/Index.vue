@@ -1,21 +1,21 @@
 <template>
   <div>
-    <button type="button" class="btn btn-secondary me-2" @click="add_only">Agregar filtro</button>
     <button type="button" class="btn btn-primary" @click="do_filter">Filtrar</button>
   </div>
 </template>
 
 <script>
 /**
- * "Agregar filtro" solo encola; "Filtrar" aplica búsqueda inmediata.
+ * Aplica el criterio del modal y ejecuta la búsqueda filtrada de inmediato.
  */
 export default {
   name: 'ColumnFilterFooter',
-  emits: ['add-only', 'filter'],
+  emits: ['filter'],
   methods: {
-    add_only() {
-      this.$emit('add-only')
-    },
+    /**
+     * Emite evento para agregar criterio y correr búsqueda.
+     * @returns {void}
+     */
     do_filter() {
       this.$emit('filter')
     },

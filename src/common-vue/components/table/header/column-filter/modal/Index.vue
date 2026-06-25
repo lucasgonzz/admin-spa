@@ -1,5 +1,5 @@
 <template>
-  <base-modal :show="open_local" :title="title" size="md" @update:show="open_local = $event" @close="on_hidden">
+  <base-modal :show="open_local" :title="title" size="md" @update:show="on_show_update" @close="on_hidden">
     <div v-if="field">
       <filter-text
         v-if="field.type === 'text' || field.type === 'textarea'"
@@ -14,7 +14,7 @@
         @filter="on_filter"
       />
       <filter-date
-        v-else-if="field.type === 'date'"
+        v-else-if="field.type === 'date' || field.type === 'day'"
         ref="active_field"
         :draft="draft"
         @filter="on_filter"
@@ -23,6 +23,7 @@
         v-else-if="field.type === 'select' || field.type === 'pipeline_status'"
         ref="active_field"
         :field="field"
+        :model_name="model_name"
         :draft="draft"
       />
       <filter-search
@@ -41,7 +42,7 @@
       />
     </div>
     <template #footer>
-      <column-filter-footer @add-only="on_add_only" @filter="on_filter" />
+      <column-filter-footer @filter="on_filter" />
     </template>
   </base-modal>
 </template>
@@ -75,6 +76,8 @@ export default {
     show: { type: Boolean, default: false },
     field: { type: Object, default: null },
     model_name: { type: String, default: '' },
+    /** Criterios ya aplicados o pendientes en el store del recurso. */
+    active_filters: { type: Array, default: () => [] },
   },
   emits: ['close', 'add', 'add-and-run'],
   data() {
@@ -92,6 +95,11 @@ export default {
     },
   },
   watch: {
+    /**
+     * Sincroniza visibilidad local con la prop del padre.
+     * @param {boolean} v
+     * @returns {void}
+     */
     show(v) {
       this.open_local = v
       if (v) {
@@ -114,32 +122,73 @@ export default {
         d.menor_que = ''
         d.igual_que = ''
         d.mayor_que = ''
-      } else if (t === 'date') {
+      } else if (t === 'date' || t === 'day') {
         d.menor_que = ''
         d.igual_que = ''
         d.mayor_que = ''
-      } else if (t === 'select') {
+      } else if (t === 'select' || t === 'pipeline_status') {
         d.igual_que = null
       } else if (t === 'search') {
         d.igual_que = ''
       } else if (t === 'checkbox') {
         d.checkbox = -1
       }
+
+      /** Criterio previo de esta columna, si el usuario reabre el modal. */
+      const existing = (this.active_filters || []).find(function (f) {
+        return f && f.key === d.key
+      })
+      if (existing) {
+        Object.keys(existing).forEach(function (k) {
+          d[k] = existing[k]
+        })
+        d.type = t
+        d.key = this.field.key
+      }
+
       this.draft = d
     },
+    /**
+     * Cierra el modal y notifica al padre para resetear show_filter_modal.
+     * @returns {void}
+     */
     on_hidden() {
+      this.open_local = false
       this.$emit('close')
+    },
+    /**
+     * Propaga cierre por backdrop o botón X hacia el padre.
+     * @param {boolean} visible
+     * @returns {void}
+     */
+    on_show_update(visible) {
+      this.open_local = visible
+      if (!visible) {
+        this.$emit('close')
+      }
     },
     on_add_only() {
       this.$emit('add', this.build_payload())
-      this.open_local = false
+      this.on_hidden()
     },
+    /**
+     * Aplica filtro y cierra sincronizando estado con ResourceView.
+     * @returns {void}
+     */
     on_filter() {
       this.$emit('add-and-run', this.build_payload())
-      this.open_local = false
+      this.on_hidden()
     },
+    /**
+     * Arma el payload del filtro normalizando tipos que el backend trata como select.
+     * @returns {Object}
+     */
     build_payload() {
-      return Object.assign({}, this.draft)
+      const payload = Object.assign({}, this.draft)
+      if (payload.type === 'pipeline_status') {
+        payload.type = 'select'
+      }
+      return payload
     },
     /**
      * Enfoca el control del campo activo tras abrir el modal.

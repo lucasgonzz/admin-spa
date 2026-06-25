@@ -29,26 +29,24 @@
         <i class="bi bi-check2-square" aria-hidden="true" />
       </button>
       <button
-        v-if="is_filtered"
-        class="btn btn-warning btn-sm"
-        @click="$emit('act-filtered')"
-      >
-        Actuar (filtrados)
-      </button>
-      <button
         v-if="selected_count > 0"
         class="btn btn-info btn-sm"
         @click="$emit('act-selected')"
       >
         Actuar ({{ selected_count }})
       </button>
-      <button
-        v-if="has_filters"
-        class="btn btn-outline-warning btn-sm"
-        @click="$emit('reset-filters')"
-      >
-        <i class="bi bi-arrow-counterclockwise me-1" /> Resetear filtros
-      </button>
+      <span v-if="show_reset_filters" class="d-inline-flex align-items-center gap-2">
+        <button
+          type="button"
+          class="btn btn-warning btn-sm"
+          @click="$emit('reset-filters')"
+        >
+          <i class="bi bi-arrow-counterclockwise me-1" /> Resetear filtros
+        </button>
+        <span v-if="is_filtered && total_filter_results != null" class="small text-muted">
+          {{ total_filter_results }} resultado{{ total_filter_results === 1 ? '' : 's' }}
+        </span>
+      </span>
 
       <div
         v-if="$slots['toolbar-right']"
@@ -91,8 +89,19 @@ export default {
     is_filtered: { type: Boolean, default: false },
     has_filters: { type: Boolean, default: false },
     selected_count: { type: Number, default: 0 },
+    /** Total de filas devueltas por la última búsqueda filtrada. */
+    total_filter_results: { type: Number, default: 0 },
   },
-  emits: ['create', 'toggle-select', 'act-filtered', 'act-selected', 'reset-filters', 'saved'],
+  emits: ['create', 'toggle-select', 'act-selected', 'reset-filters', 'saved'],
+  computed: {
+    /**
+     * Muestra reset cuando hay criterios pendientes o una búsqueda filtrada activa.
+     * @returns {boolean}
+     */
+    show_reset_filters() {
+      return this.has_filters || this.is_filtered
+    },
+  },
   methods: {
     /**
      * Reenvía la configuración de columnas guardada hacia ResourceView.

@@ -22,6 +22,24 @@ export function api_resource_segment(state) {
 }
 
 /**
+ * Activa o desactiva el overlay global durante búsquedas filtradas.
+ *
+ * @param {Function} commit committer Vuex del módulo de listado
+ * @param {boolean} active true mientras la petición está en curso
+ * @param {string} [message] texto visible en LogoLoading
+ * @returns {void}
+ */
+export function set_global_filter_loading(commit, active, message) {
+  if (active) {
+    commit('auth/setLoading', true, { root: true })
+    commit('auth/setMessage', message || 'Filtrando…', { root: true })
+    return
+  }
+  commit('auth/setLoading', false, { root: true })
+  commit('auth/setMessage', '', { root: true })
+}
+
+/**
  * @param {Object} options
  * @param {Object|Function} options.state
  * @param {Object} [options.mutations]
@@ -208,6 +226,7 @@ export default function __base_store(options = {}) {
       const url =
         '/search/' + route_string(state.model_name) + '/null/1?page=' + page
       commit('set_loading_filtered', true)
+      set_global_filter_loading(commit, true, 'Filtrando…')
       return api
         .post(
           url,
@@ -225,9 +244,11 @@ export default function __base_store(options = {}) {
           commit('set_total_filter_pages', body.last_page || 1)
           commit('set_total_filter_results', body.total != null ? body.total : rows.length)
           commit('set_loading_filtered', false)
+          set_global_filter_loading(commit, false)
         })
         .catch((err) => {
           commit('set_loading_filtered', false)
+          set_global_filter_loading(commit, false)
           log_debug(err)
         })
     },
