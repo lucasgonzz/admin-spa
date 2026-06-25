@@ -1123,14 +1123,15 @@ export default {
       var self = this
       this.batch_recovering = true
       api.post('/lead/batch-recover-unanswered').then(function (res) {
-        /* Mostrar resultado con cantidad de leads encolados y omitidos. */
-        var dispatched = res.data && res.data.dispatched != null ? res.data.dispatched : '?'
-        var skipped = res.data && res.data.skipped != null ? res.data.skipped : '?'
-        self.$root.$emit('open_toast', 'Recovery iniciado: ' + dispatched + ' leads encolados, ' + skipped + ' omitidos.')
+        var dispatched = res.data && res.data.dispatched != null ? res.data.dispatched : 0
+        var skipped = res.data && res.data.skipped != null ? res.data.skipped : 0
+        var msg = dispatched === 0
+          ? 'Sin leads pendientes de respuesta (' + skipped + ' ya respondidos o en proceso).'
+          : 'Recovery iniciado: ' + dispatched + ' lead' + (dispatched === 1 ? '' : 's') + ' encolado' + (dispatched === 1 ? '' : 's') + ', ' + skipped + ' omitido' + (skipped === 1 ? '' : 's') + '.'
+        self.$root.$emit('open_toast', msg)
+        self.batch_recovering = false
       }).catch(function () {
         self.$root.$emit('open_toast', 'Error al iniciar el recovery de leads.')
-      }).then(function () {
-        /* Siempre desactivar el estado de carga al terminar, sea éxito o error. */
         self.batch_recovering = false
       })
     },
