@@ -31,11 +31,47 @@ const pusher_app_key = import.meta.env.VITE_PUSHER_APP_KEY
 const pusher_app_cluster = import.meta.env.VITE_PUSHER_APP_CLUSTER
 if (pusher_app_key && pusher_app_cluster) {
   window.Pusher = Pusher
+
+  /**
+   * Derivar la URL base del broadcasting auth desde VITE_API_URL.
+   * VITE_API_URL termina en /api/admin; la ruta /broadcasting/auth está en la raíz del servidor.
+   * Ej: https://api-admin.comerciocity.com/public/api/admin → https://api-admin.comerciocity.com/public/broadcasting/auth
+   */
+  const vite_api_url = import.meta.env.VITE_API_URL || '/api/admin'
+  const broadcasting_auth_endpoint = vite_api_url.replace(/\/api\/admin$/, '') + '/broadcasting/auth'
+
   window.admin_support_echo = new Echo({
     broadcaster: 'pusher',
     key: pusher_app_key,
     cluster: pusher_app_cluster,
     forceTLS: true,
+    /**
+     * Autorizador personalizado para canales privados.
+     * Lee el token Bearer de localStorage en cada solicitud de auth para que siempre use
+     * el token vigente, incluso si el usuario inició sesión después de que Echo fue creado.
+     *
+     * @param {Object} channel Canal de Pusher que solicita autorización.
+     * @returns {{ authorize: Function }}
+     */
+    authorizer: function (channel) {
+      return {
+        authorize: function (socketId, callback) {
+          var token = window.localStorage.getItem('admin_token') || ''
+          fetch(broadcasting_auth_endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': token ? 'Bearer ' + token : '',
+            },
+            body: JSON.stringify({ socket_id: socketId, channel_name: channel.name }),
+          })
+            .then(function (r) { return r.json() })
+            .then(function (data) { callback(null, data) })
+            .catch(function (err) { callback(err, null) })
+        },
+      }
+    },
   })
 } else {
   window.admin_support_echo = null

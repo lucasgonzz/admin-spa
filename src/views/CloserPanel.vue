@@ -1,5 +1,65 @@
 <template>
   <div class="closer-panel h-100 d-flex flex-column">
+
+    <!-- Modal de alerta "Tomar llamada": se muestra cuando el lead termina la demo -->
+    <div
+      v-if="show_call_alert && alert_lead"
+      class="closer-alert-overlay"
+      aria-modal="true"
+      role="dialog"
+    >
+      <div class="closer-alert-modal">
+        <!-- Encabezado del modal -->
+        <div class="closer-alert-modal__header mb-3">
+          <span class="closer-alert-modal__icon" aria-hidden="true">📞</span>
+          <h2 class="closer-alert-modal__title mb-0">
+            {{ alert_lead.lead_name || 'Un lead' }} terminó la demo
+          </h2>
+        </div>
+
+        <!-- Resumen de la demo si está disponible -->
+        <div v-if="alert_lead.demo_summary" class="closer-alert-modal__summary mb-3">
+          <p
+            v-if="alert_lead.demo_summary.situacion_actual"
+            class="mb-1 small text-muted"
+          >
+            <strong>Situación:</strong> {{ alert_lead.demo_summary.situacion_actual }}
+          </p>
+          <p
+            v-if="alert_lead.demo_summary.empresa"
+            class="mb-1 small text-muted"
+          >
+            <strong>Empresa:</strong> {{ alert_lead.demo_summary.empresa }}
+          </p>
+        </div>
+
+        <!-- Botones de acción -->
+        <div class="closer-alert-modal__actions d-flex gap-2 justify-content-end">
+          <button
+            type="button"
+            class="btn btn-outline-secondary"
+            :disabled="accepting_alert"
+            @click="on_decline_alert"
+          >
+            No puedo ahora
+          </button>
+          <button
+            type="button"
+            class="btn btn-success"
+            :disabled="accepting_alert"
+            @click="on_accept_alert"
+          >
+            <span
+              v-if="accepting_alert"
+              class="spinner-border spinner-border-sm me-1"
+              aria-hidden="true"
+            />
+            Tomar llamada
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Encabezado del panel -->
     <div class="closer-panel__header d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
       <div>
@@ -78,6 +138,7 @@
 
 <script>
 import CloserLeadCard from '@/components/closer/CloserLeadCard.vue'
+import api from '@/utils/axios'
 
 /** Intervalo de polling silencioso en milisegundos. */
 const PANEL_POLL_MS = 60000
@@ -85,6 +146,7 @@ const PANEL_POLL_MS = 60000
 /**
  * Vista dedicada del closer: tres secciones operativas con scroll independiente.
  * En desktop muestra tres columnas; en mobile usa tabs.
+ * Incluye suscripción al canal privado `closer-alerts` para el modal "Tomar llamada".
  */
 export default {
   name: 'CloserPanel',
@@ -103,6 +165,13 @@ export default {
       mobile_media_query: null,
       /** Referencia al setInterval de polling. */
       poll_interval_id: null,
+
+      /** true cuando hay una alerta activa de "Tomar llamada" mostrándose. */
+      show_call_alert: false,
+      /** Payload del evento CloserCallAlert recibido por broadcast. */
+      alert_lead: null,
+      /** true mientras se procesa el POST de aceptación (deshabilita botones). */
+      accepting_alert: false,
     }
   },
 
@@ -184,10 +253,14 @@ export default {
         return null
       })
     }, PANEL_POLL_MS)
+
+    // Suscribirse al canal privado de alertas del closer para el modal "Tomar llamada".
+    self.init_closer_alert_channel()
   },
 
   beforeUnmount() {
     this.teardown_viewport_listener()
+    this.teardown_closer_alert_channel()
     if (this.poll_interval_id) {
       window.clearInterval(this.poll_interval_id)
       this.poll_interval_id = null
@@ -238,6 +311,102 @@ export default {
         this.mobile_media_query.removeListener(this.on_mobile_media_change)
       }
     },
+
+    /**
+     * Suscribe al canal privado `closer-alerts` para recibir alertas "Tomar llamada".
+     * Reproduce sonido de alerta si existe el archivo /sounds/alert.mp3.
+     *
+     * @returns {void}
+     */
+    init_closer_alert_channel() {
+      const self = this
+      const echo = window.admin_support_echo
+      if (!echo) {
+        return
+      }
+
+      // Suscribirse al canal privado; Echo enviará el token Bearer al /broadcasting/auth.
+      self._closer_alert_channel = echo.private('closer-alerts')
+      self._closer_alert_channel.listen('.call.alert', function (data) {
+        // Guardar el payload del evento y mostrar el modal bloqueante.
+        self.alert_lead = data
+        self.show_call_alert = true
+
+        // Intentar reproducir sonido de alerta (si no existe el archivo, ignorar silenciosamente).
+        try {
+          var audio = new Audio('/sounds/alert.mp3')
+          audio.play().catch(function () { return null })
+        } catch (e) {
+          // Ignorar si el navegador bloquea la reproducción automática.
+        }
+      })
+    },
+
+    /**
+     * Desuscribe del canal privado `closer-alerts` al destruir el componente.
+     *
+     * @returns {void}
+     */
+    teardown_closer_alert_channel() {
+      const echo = window.admin_support_echo
+      if (!echo) {
+        return
+      }
+      try {
+        echo.leave('private-closer-alerts')
+      } catch (e) {
+        return null
+      }
+    },
+
+    /**
+     * El closer acepta la alerta: POST al backend → link de Meet al lead → abrir Meet en nueva pestaña.
+     *
+     * @returns {void}
+     */
+    on_accept_alert() {
+      const self = this
+      if (!self.alert_lead || !self.alert_lead.lead_id) {
+        self.show_call_alert = false
+        return
+      }
+
+      self.accepting_alert = true
+
+      api
+        .post('/lead/' + self.alert_lead.lead_id + '/closer-accept-alert')
+        .then(function (res) {
+          // Abrir el link de Meet en nueva pestaña si está disponible.
+          var meet_url = (res.data && res.data.meet_url) ? res.data.meet_url : self.alert_lead.meet_url
+          if (meet_url) {
+            window.open(meet_url, '_blank', 'noopener,noreferrer')
+          }
+
+          // Cerrar el modal y refrescar el panel para reflejar el cambio de estado.
+          self.show_call_alert = false
+          self.alert_lead = null
+          self.$store.dispatch('closer/fetch_panel').catch(function () { return null })
+        })
+        .catch(function () {
+          // En caso de error, cerrar igual (los fallbacks automáticos siguen activos).
+          self.show_call_alert = false
+          self.alert_lead = null
+        })
+        .finally(function () {
+          self.accepting_alert = false
+        })
+    },
+
+    /**
+     * El closer rechaza la alerta: cierra el modal sin avisar al backend.
+     * Los fallbacks automáticos (aviso de demora + reagendado) seguirán ejecutándose.
+     *
+     * @returns {void}
+     */
+    on_decline_alert() {
+      this.show_call_alert = false
+      this.alert_lead = null
+    },
   },
 }
 </script>
@@ -286,4 +455,57 @@ export default {
 		&.active
 			color: #0d6efd
 			font-weight: 600
+
+/* Overlay bloqueante del modal de alerta "Tomar llamada" */
+.closer-alert-overlay
+	position: fixed
+	inset: 0
+	z-index: 9999
+	background: rgba(0, 0, 0, 0.65)
+	display: flex
+	align-items: center
+	justify-content: center
+	padding: 1rem
+
+/* Tarjeta del modal de alerta */
+.closer-alert-modal
+	background: #fff
+	border-radius: 1rem
+	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25)
+	padding: 1.75rem
+	max-width: 480px
+	width: 100%
+	animation: closer-alert-pop 0.2s ease-out
+
+/* Encabezado: icono + título */
+.closer-alert-modal__header
+	display: flex
+	align-items: center
+	gap: 0.75rem
+
+/* Icono grande de teléfono */
+.closer-alert-modal__icon
+	font-size: 2rem
+	line-height: 1
+
+/* Título del modal */
+.closer-alert-modal__title
+	font-size: 1.2rem
+	font-weight: 700
+	line-height: 1.3
+
+/* Bloque de resumen de la demo */
+.closer-alert-modal__summary
+	background: #f8f9fa
+	border-radius: 0.5rem
+	padding: 0.75rem 1rem
+
+/* Animación de entrada del modal */
+@keyframes closer-alert-pop
+	from
+		opacity: 0
+		transform: scale(0.9)
+	to
+		opacity: 1
+		transform: scale(1)
 </style>
