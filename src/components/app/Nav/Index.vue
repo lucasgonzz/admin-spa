@@ -266,7 +266,7 @@ export default {
   },
   computed: {
     /**
-     * Ítems del menú lateral según perfil (closers ven el Panel primero).
+     * Ítems del menú lateral visibles para el admin autenticado.
      *
      * @returns {Array<Object>}
      */

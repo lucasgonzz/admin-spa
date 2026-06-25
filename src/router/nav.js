@@ -12,18 +12,13 @@ function admin_is_closer(admin) {
 
 /**
  * Rutas visibles en la barra de navegación lateral (meta.nav === true).
- * Oculta rutas closer_only cuando el admin no es closer.
  *
- * @param {Object|null|undefined} admin Perfil admin autenticado.
+ * @param {Object|null|undefined} admin Perfil admin autenticado (reservado para filtros futuros por perfil).
  * @returns {Array<object>}
  */
 export function get_nav_routes(admin) {
-  const is_closer = admin_is_closer(admin)
   return routes_def.filter(function (r) {
     if (!r.meta || !r.meta.nav) {
-      return false
-    }
-    if (r.meta.closer_only && !is_closer) {
       return false
     }
     return true
@@ -32,7 +27,7 @@ export function get_nav_routes(admin) {
 
 /**
  * Primer ítem del menú lateral; destino por defecto tras login o bootstrap autenticado.
- * Para closers, el panel operativo queda primero en routes.js.
+ * Closers aterrizan en el panel operativo; el resto en Leads (primer ítem distinto del panel).
  *
  * @param {Object|null|undefined} admin Perfil admin autenticado.
  * @returns {object|null} Definición de ruta con name y path, o null si no hay ítems de nav.
@@ -42,5 +37,20 @@ export function get_first_nav_route(admin) {
   if (!nav_routes.length) {
     return null
   }
-  return nav_routes[0]
+
+  /* Closers: destino por defecto el panel operativo si está en el menú. */
+  if (admin_is_closer(admin)) {
+    const closer_panel_route = nav_routes.find(function (r) {
+      return r.name === 'closer-panel'
+    })
+    if (closer_panel_route) {
+      return closer_panel_route
+    }
+  }
+
+  /* Resto de admins: primer ítem del menú que no sea el panel del closer. */
+  const default_route = nav_routes.find(function (r) {
+    return r.name !== 'closer-panel'
+  })
+  return default_route || nav_routes[0]
 }

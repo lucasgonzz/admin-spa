@@ -150,7 +150,7 @@ export default {
           if (redirect_path) {
             self.$router.push(redirect_path)
           } else {
-            const first_nav_route = get_first_nav_route()
+            const first_nav_route = get_first_nav_route(self.$store.state.auth.admin)
             if (first_nav_route && first_nav_route.name) {
               self.$router.push({ name: first_nav_route.name })
             }
