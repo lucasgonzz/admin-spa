@@ -187,17 +187,37 @@
 
       </div>
 
-      <!-- Spinner de carga inicial de la conversación -->
+      <!-- Carga inicial de la conversación -->
       <div
         v-if="loading_conversation"
-        class="text-muted small p-2 d-flex align-items-center gap-2"
+        class="conversation-placeholder conversation-placeholder--loading"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
       >
-        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-        Cargando conversación…
+        <div class="conversation-placeholder__card">
+          <span
+            class="conversation-placeholder__spinner spinner-border"
+            role="status"
+            aria-hidden="true"
+          />
+          <p class="conversation-placeholder__title">Cargando conversación</p>
+          <p class="conversation-placeholder__subtitle">Un momento…</p>
+        </div>
+        <span class="visually-hidden">Cargando conversación…</span>
       </div>
 
       <!-- Sin mensajes en el hilo -->
-      <div v-else-if="!sorted_messages.length" class="text-muted small p-2">Sin mensajes todavía.</div>
+      <div
+        v-else-if="!sorted_messages.length"
+        class="conversation-placeholder conversation-placeholder--empty"
+      >
+        <div class="conversation-placeholder__card">
+          <i class="bi bi-chat-dots conversation-placeholder__icon" aria-hidden="true" />
+          <p class="conversation-placeholder__title">Sin mensajes todavía</p>
+          <p class="conversation-placeholder__subtitle">Los mensajes con el lead aparecerán aquí.</p>
+        </div>
+      </div>
 
       <!-- Burbujas y divisores de fecha (sticky por sección, estilo WhatsApp) -->
       <div v-else class="conversation-messages-flow">
@@ -228,12 +248,27 @@
 
     <!-- ====================================================
          FOOTER FIJO: textarea auto-expandible + botón mic/enviar
-         (+ herramientas DEV solo en import.meta.env.DEV)
+         (+ panel simulación lead oculto por defecto; forzar seguimiento solo en DEV dentro del panel)
          ==================================================== -->
     <div class="conversation-footer border-top px-3 py-2">
 
       <!-- Área de redacción tipo WhatsApp -->
       <div class="d-flex align-items-end gap-2">
+
+        <!-- Toggle panel simular mensaje del lead (par visual de chevron-up de plantillas) -->
+        <button
+          type="button"
+          class="icon-btn flex-shrink-0"
+          :class="show_simulate_inbound_panel ? 'text-warning' : 'text-muted'"
+          title="Simular mensaje del lead"
+          :aria-label="show_simulate_inbound_panel
+            ? 'Ocultar simulación de mensaje del lead'
+            : 'Mostrar simulación de mensaje del lead'"
+          :aria-expanded="show_simulate_inbound_panel ? 'true' : 'false'"
+          @click="on_toggle_simulate_inbound_panel"
+        >
+          <i class="bi bi-chevron-down" aria-hidden="true" />
+        </button>
 
         <!-- Botón selector de plantillas Meta (útil cuando la ventana de 24hs está cerrada) -->
         <button
@@ -294,37 +329,16 @@
         </button>
       </div>
 
-      <!-- Herramientas de desarrollo (solo en entorno DEV, no se muestran en producción) -->
-      <div v-if="is_dev" class="dev-tools border-top mt-2 pt-2">
-
-        <!-- Simular mensaje entrante del lead (testing sin pasar por WhatsApp) -->
-        <div class="d-flex gap-2 mb-2">
-          <input
-            v-model="mensaje_simulado"
-            type="text"
-            class="form-control form-control-sm"
-            placeholder="Simular mensaje del lead."
-            :disabled="enviando_simulado"
-            @keydown.enter.prevent="on_simular_inbound"
-          />
-          <button
-            type="button"
-            class="btn btn-outline-warning btn-sm d-inline-flex align-items-center justify-content-center"
-            :disabled="enviando_simulado || !has_mensaje_simulado"
-            title="Simular mensaje entrante del lead (testing)"
-            aria-label="Simular mensaje entrante del lead"
-            @click="on_simular_inbound"
-          >
-            <span v-if="enviando_simulado" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-            <i v-else class="bi bi-chat-left-dots" aria-hidden="true" />
-          </button>
-        </div>
-
-        <!-- Forzar seguimiento manual (testing) -->
+      <!-- Simulación de mensaje entrante del lead (oculta por defecto; disponible también en producción) -->
+      <div
+        v-show="show_simulate_inbound_panel"
+        class="simulate-inbound-panel border-top mt-2 pt-2"
+      >
         <div class="d-flex gap-2 align-items-center">
           <button
+            v-if="is_dev"
             type="button"
-            class="btn btn-outline-info btn-sm d-inline-flex align-items-center justify-content-center"
+            class="btn btn-outline-info btn-sm d-inline-flex align-items-center justify-content-center flex-shrink-0"
             :disabled="forzando_seguimiento"
             title="Dispara el seguimiento correspondiente ahora mismo, sin esperar el tiempo configurado"
             aria-label="Forzar seguimiento automático ahora"
@@ -333,9 +347,27 @@
             <span v-if="forzando_seguimiento" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
             <i v-else class="bi bi-clock-history" aria-hidden="true" />
           </button>
-          <span v-if="forzar_seguimiento_resultado" class="small text-muted">{{ forzar_seguimiento_resultado }}</span>
+          <input
+            v-model="mensaje_simulado"
+            type="text"
+            class="form-control form-control-sm flex-grow-1"
+            placeholder="Simular mensaje del lead."
+            :disabled="enviando_simulado"
+            @keydown.enter.prevent="on_simular_inbound"
+          />
+          <button
+            type="button"
+            class="btn btn-outline-warning btn-sm d-inline-flex align-items-center justify-content-center flex-shrink-0"
+            :disabled="enviando_simulado || !has_mensaje_simulado"
+            title="Simular mensaje entrante del lead"
+            aria-label="Simular mensaje entrante del lead"
+            @click="on_simular_inbound"
+          >
+            <span v-if="enviando_simulado" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+            <i v-else class="bi bi-chat-left-dots" aria-hidden="true" />
+          </button>
         </div>
-
+        <span v-if="forzar_seguimiento_resultado" class="small text-muted d-block mt-1">{{ forzar_seguimiento_resultado }}</span>
       </div>
     </div>
 
@@ -396,6 +428,7 @@ import api from '@/utils/axios'
 import { copy_lead_conversation_to_clipboard } from '@/utils/lead_conversation_clipboard'
 import lead_conversation_date_dividers from '@/mixins/lead_conversation_date_dividers'
 import '@/styles/whatsapp-conversation-wallpaper.css'
+import '@/styles/conversation-placeholder-states.css'
 import '@/styles/whatsapp-date-divider.css'
 
 /**
@@ -436,6 +469,9 @@ export default {
 
       /** Texto del mensaje simulado del lead (testing, no pasa por WhatsApp). */
       mensaje_simulado: '',
+
+      /** true cuando el panel de simulación de mensaje entrante del lead está visible. */
+      show_simulate_inbound_panel: false,
 
       /** true mientras se simula el mensaje entrante (evita doble envío). */
       enviando_simulado: false,
@@ -1242,6 +1278,15 @@ export default {
     },
 
     /**
+     * Muestra u oculta el panel para simular un mensaje entrante del lead.
+     *
+     * @returns {void}
+     */
+    on_toggle_simulate_inbound_panel() {
+      this.show_simulate_inbound_panel = !this.show_simulate_inbound_panel
+    },
+
+    /**
      * Simula un mensaje entrante del lead (testing) sin pasar por WhatsApp.
      *
      * @returns {void}
@@ -1722,7 +1767,14 @@ export default {
       navigator.mediaDevices.getUserMedia({ audio: true })
         .then(function (stream) {
           self.audio_stream = stream
-          const recorder = new MediaRecorder(stream)
+          // Intentar grabar en OGG/Opus (Firefox). Chrome lo ignora y cae en webm;
+          // el backend convierte el mime en el upload a Meta.
+          const mimeType = MediaRecorder.isTypeSupported('audio/ogg; codecs=opus')
+            ? 'audio/ogg; codecs=opus'
+            : ''
+          const recorder = mimeType
+            ? new MediaRecorder(stream, { mimeType: mimeType })
+            : new MediaRecorder(stream)
           self.audio_recorder = recorder
           const chunks = []
           recorder.ondataavailable = function (e) {
@@ -1926,8 +1978,8 @@ export default {
   box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
 }
 
-/* Sección DEV con fondo suave para distinguirla del área de producción */
-.dev-tools {
+/* Panel de simulación de mensaje entrante del lead (toggle con chevron-down) */
+.simulate-inbound-panel {
   background: rgba(var(--bs-warning-rgb), 0.05);
   border-radius: 0.375rem;
   padding: 0.5rem;

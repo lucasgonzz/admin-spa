@@ -138,12 +138,32 @@
     <div ref="conversation_scroll_box" class="conversation-scroll whatsapp-conversation-wallpaper border rounded p-2 mb-3">
       <div
         v-if="loading_conversation"
-        class="text-muted small p-2 d-flex align-items-center gap-2"
+        class="conversation-placeholder conversation-placeholder--loading"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
       >
-        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-        Cargando conversación…
+        <div class="conversation-placeholder__card">
+          <span
+            class="conversation-placeholder__spinner spinner-border"
+            role="status"
+            aria-hidden="true"
+          />
+          <p class="conversation-placeholder__title">Cargando conversación</p>
+          <p class="conversation-placeholder__subtitle">Un momento…</p>
+        </div>
+        <span class="visually-hidden">Cargando conversación…</span>
       </div>
-      <div v-else-if="!sorted_messages.length" class="text-muted small p-2">Sin mensajes todavía.</div>
+      <div
+        v-else-if="!sorted_messages.length"
+        class="conversation-placeholder conversation-placeholder--empty"
+      >
+        <div class="conversation-placeholder__card">
+          <i class="bi bi-chat-dots conversation-placeholder__icon" aria-hidden="true" />
+          <p class="conversation-placeholder__title">Sin mensajes todavía</p>
+          <p class="conversation-placeholder__subtitle">Los mensajes con el lead aparecerán aquí.</p>
+        </div>
+      </div>
       <div v-else class="conversation-messages-flow">
         <div
           v-for="section in message_date_sections"
@@ -171,6 +191,19 @@
 
     <!-- Textarea para enviar mensaje directo al lead (Enter = nueva línea; solo el botón envía). -->
     <div class="d-flex align-items-end gap-2 lead-direct-compose">
+      <button
+        type="button"
+        class="btn btn-sm d-inline-flex align-items-center justify-content-center flex-shrink-0"
+        :class="show_simulate_inbound_panel ? 'btn-warning' : 'btn-outline-secondary'"
+        title="Simular mensaje del lead"
+        :aria-label="show_simulate_inbound_panel
+          ? 'Ocultar simulación de mensaje del lead'
+          : 'Mostrar simulación de mensaje del lead'"
+        :aria-expanded="show_simulate_inbound_panel ? 'true' : 'false'"
+        @click="on_toggle_simulate_inbound_panel"
+      >
+        <i class="bi bi-chevron-down" aria-hidden="true" />
+      </button>
       <textarea
         v-model="mensaje_directo"
         class="form-control form-control-sm lead-direct-textarea"
@@ -191,43 +224,44 @@
       </button>
     </div>
 
-    <!-- Input para simular un mensaje entrante del lead (testing, sin pasar por WhatsApp) -->
-    <div class="d-flex align-items-center gap-2 mt-2">
-      <input
-        v-model="mensaje_simulado"
-        type="text"
-        class="form-control form-control-sm"
-        placeholder="Simular mensaje del lead (test)…"
-        :disabled="enviando_simulado"
-        @keydown.enter.prevent="on_simular_inbound"
-      />
-      <button
-        type="button"
-        class="btn btn-outline-warning btn-sm d-inline-flex align-items-center justify-content-center"
-        :disabled="enviando_simulado || !has_mensaje_simulado"
-        title="Simular mensaje entrante del lead (testing)"
-        aria-label="Simular mensaje entrante del lead"
-        @click="on_simular_inbound"
-      >
-        <span v-if="enviando_simulado" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-        <i v-else class="bi bi-chat-left-dots" aria-hidden="true" />
-      </button>
-    </div>
-
-    <!-- Forzar seguimiento manual (testing): dispara el seguimiento que corresponda ahora mismo -->
-    <div class="d-flex align-items-center gap-2 mt-2">
-      <button
-        type="button"
-        class="btn btn-outline-info btn-sm d-inline-flex align-items-center justify-content-center"
-        :disabled="forzando_seguimiento"
-        title="Dispara ahora el seguimiento que corresponda según el estado y los seguimientos ya enviados, sin esperar el tiempo configurado"
-        aria-label="Forzar seguimiento automático ahora"
-        @click="on_forzar_seguimiento"
-      >
-        <span v-if="forzando_seguimiento" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-        <i v-else class="bi bi-clock-history" aria-hidden="true" />
-      </button>
-      <span v-if="forzar_seguimiento_resultado" class="small text-muted">{{ forzar_seguimiento_resultado }}</span>
+    <!-- Simulación de mensaje entrante del lead (oculta por defecto; disponible también en producción) -->
+    <div
+      v-show="show_simulate_inbound_panel"
+      class="simulate-inbound-panel mt-2"
+    >
+      <div class="d-flex align-items-center gap-2">
+        <button
+          type="button"
+          class="btn btn-outline-info btn-sm d-inline-flex align-items-center justify-content-center flex-shrink-0"
+          :disabled="forzando_seguimiento"
+          title="Dispara ahora el seguimiento que corresponda según el estado y los seguimientos ya enviados, sin esperar el tiempo configurado"
+          aria-label="Forzar seguimiento automático ahora"
+          @click="on_forzar_seguimiento"
+        >
+          <span v-if="forzando_seguimiento" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+          <i v-else class="bi bi-clock-history" aria-hidden="true" />
+        </button>
+        <input
+          v-model="mensaje_simulado"
+          type="text"
+          class="form-control form-control-sm flex-grow-1"
+          placeholder="Simular mensaje del lead (test)…"
+          :disabled="enviando_simulado"
+          @keydown.enter.prevent="on_simular_inbound"
+        />
+        <button
+          type="button"
+          class="btn btn-outline-warning btn-sm d-inline-flex align-items-center justify-content-center flex-shrink-0"
+          :disabled="enviando_simulado || !has_mensaje_simulado"
+          title="Simular mensaje entrante del lead"
+          aria-label="Simular mensaje entrante del lead"
+          @click="on_simular_inbound"
+        >
+          <span v-if="enviando_simulado" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+          <i v-else class="bi bi-chat-left-dots" aria-hidden="true" />
+        </button>
+      </div>
+      <span v-if="forzar_seguimiento_resultado" class="small text-muted d-block mt-1">{{ forzar_seguimiento_resultado }}</span>
     </div>
 
     <!-- Botón "Sugerir seguimiento": genera un mensaje de seguimiento post-llamada para el closer -->
@@ -257,6 +291,7 @@ import api from '@/utils/axios'
 import { copy_lead_conversation_to_clipboard } from '@/utils/lead_conversation_clipboard'
 import lead_conversation_date_dividers from '@/mixins/lead_conversation_date_dividers'
 import '@/styles/whatsapp-conversation-wallpaper.css'
+import '@/styles/conversation-placeholder-states.css'
 import '@/styles/whatsapp-date-divider.css'
 
 /**
@@ -285,6 +320,8 @@ export default {
       enviando_directo: false,
       /** Texto del mensaje simulado del lead (testing, no pasa por WhatsApp). */
       mensaje_simulado: '',
+      /** true cuando el panel de simulación de mensaje entrante del lead está visible. */
+      show_simulate_inbound_panel: false,
       /** true mientras se simula el mensaje entrante (evita doble envío). */
       enviando_simulado: false,
       /** true mientras se fuerza el seguimiento manual (testing) (evita doble click). */
@@ -1101,6 +1138,15 @@ export default {
         })
     },
     /**
+     * Muestra u oculta el panel para simular un mensaje entrante del lead.
+     *
+     * @returns {void}
+     */
+    on_toggle_simulate_inbound_panel() {
+      this.show_simulate_inbound_panel = !this.show_simulate_inbound_panel
+    },
+
+    /**
      * Simula un mensaje entrante del lead (testing) sin pasar por WhatsApp.
      * Dispara en el backend el mismo flujo que el webhook real (sugerencia IA con debounce).
      *
@@ -1568,5 +1614,12 @@ export default {
   min-height: 4.5rem;
   resize: vertical;
   line-height: 1.35;
+}
+
+/* Panel de simulación de mensaje entrante del lead (toggle con chevron-down) */
+.simulate-inbound-panel {
+  background: rgba(var(--bs-warning-rgb), 0.05);
+  border-radius: 0.375rem;
+  padding: 0.5rem;
 }
 </style>

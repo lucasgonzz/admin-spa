@@ -1,0 +1,73 @@
+/**
+ * Estados de carga y vacío del área de mensajes (leads e implementaciones).
+ * Tarjeta flotante sobre el wallpaper estilo WhatsApp.
+ */
+
+.conversation-placeholder {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 12rem;
+	padding: 2rem 1.25rem;
+	text-align: center;
+}
+
+.conversation-placeholder__card {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.5rem;
+	max-width: 18rem;
+	padding: 1.35rem 1.6rem;
+	background: rgba(255, 255, 255, 0.9);
+	border-radius: 1rem;
+	box-shadow:
+		0 1px 2px rgba(11, 20, 26, 0.05),
+		0 6px 20px rgba(11, 20, 26, 0.1);
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+	border: 1px solid rgba(11, 20, 26, 0.07);
+	animation: conversation-placeholder-fade-in 0.4s ease-out;
+}
+
+.conversation-placeholder__icon {
+	font-size: 2.1rem;
+	line-height: 1;
+	color: #8696a0;
+	margin-bottom: 0.15rem;
+}
+
+.conversation-placeholder__spinner {
+	width: 1.75rem;
+	height: 1.75rem;
+	border-width: 0.2em;
+	color: #00a884;
+	margin-bottom: 0.15rem;
+}
+
+.conversation-placeholder__title {
+	margin: 0;
+	font-size: 0.9rem;
+	font-weight: 600;
+	color: #3b4a54;
+	letter-spacing: -0.01em;
+}
+
+.conversation-placeholder__subtitle {
+	margin: 0;
+	font-size: 0.8rem;
+	line-height: 1.45;
+	color: #8696a0;
+}
+
+@keyframes conversation-placeholder-fade-in {
+	from {
+		opacity: 0;
+		transform: translateY(8px) scale(0.98);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}

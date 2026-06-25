@@ -18,9 +18,13 @@
       <!-- Estado: sin mensajes -->
       <div
         v-if="!messages_list.length"
-        class="text-muted small"
+        class="conversation-placeholder conversation-placeholder--empty"
       >
-        Sin mensajes registrados.
+        <div class="conversation-placeholder__card">
+          <i class="bi bi-chat-dots conversation-placeholder__icon" aria-hidden="true" />
+          <p class="conversation-placeholder__title">Sin mensajes todavía</p>
+          <p class="conversation-placeholder__subtitle">Los mensajes con el cliente aparecerán aquí.</p>
+        </div>
       </div>
 
       <!-- Lista de burbujas con separadores por etapa -->
@@ -198,6 +202,7 @@
 
 <script>
 import api from '@/utils/axios'
+import '@/styles/conversation-placeholder-states.css'
 
 /**
  * Componente de conversación WhatsApp para el panel de implementación.

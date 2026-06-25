@@ -57,17 +57,37 @@
          ==================================================== -->
     <div ref="conversation_scroll_box" class="conversation-messages whatsapp-conversation-wallpaper px-3 py-2">
 
-      <!-- Spinner de carga inicial -->
+      <!-- Carga inicial de la conversación -->
       <div
         v-if="loading_conversation"
-        class="text-muted small p-2 d-flex align-items-center gap-2"
+        class="conversation-placeholder conversation-placeholder--loading"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
       >
-        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-        Cargando conversación…
+        <div class="conversation-placeholder__card">
+          <span
+            class="conversation-placeholder__spinner spinner-border"
+            role="status"
+            aria-hidden="true"
+          />
+          <p class="conversation-placeholder__title">Cargando conversación</p>
+          <p class="conversation-placeholder__subtitle">Un momento…</p>
+        </div>
+        <span class="visually-hidden">Cargando conversación…</span>
       </div>
 
       <!-- Sin mensajes todavía -->
-      <div v-else-if="!sorted_messages.length" class="text-muted small p-2">Sin mensajes todavía.</div>
+      <div
+        v-else-if="!sorted_messages.length"
+        class="conversation-placeholder conversation-placeholder--empty"
+      >
+        <div class="conversation-placeholder__card">
+          <i class="bi bi-chat-dots conversation-placeholder__icon" aria-hidden="true" />
+          <p class="conversation-placeholder__title">Sin mensajes todavía</p>
+          <p class="conversation-placeholder__subtitle">Los mensajes con el cliente aparecerán aquí.</p>
+        </div>
+      </div>
 
       <!-- Burbujas con divisores de fecha (sticky) y separadores de etapa -->
       <div v-else class="conversation-messages-flow">
@@ -256,6 +276,7 @@
 import api from '@/utils/axios'
 import lead_conversation_date_dividers from '@/mixins/lead_conversation_date_dividers'
 import '@/styles/whatsapp-conversation-wallpaper.css'
+import '@/styles/conversation-placeholder-states.css'
 import '@/styles/whatsapp-date-divider.css'
 
 /**
