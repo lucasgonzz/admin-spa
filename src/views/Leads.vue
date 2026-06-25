@@ -1127,11 +1127,11 @@ export default {
         var skipped = res.data && res.data.skipped != null ? res.data.skipped : 0
         var msg = dispatched === 0
           ? 'Sin leads pendientes de respuesta (' + skipped + ' ya respondidos o en proceso).'
-          : 'Recovery iniciado: ' + dispatched + ' lead' + (dispatched === 1 ? '' : 's') + ' encolado' + (dispatched === 1 ? '' : 's') + ', ' + skipped + ' omitido' + (skipped === 1 ? '' : 's') + '.'
-        self.$root.$emit('open_toast', msg)
+          : 'Recovery: ' + dispatched + ' lead' + (dispatched === 1 ? '' : 's') + ' procesado' + (dispatched === 1 ? '' : 's') + ', ' + skipped + ' omitido' + (skipped === 1 ? '' : 's') + '.'
+        window.dispatchEvent(new CustomEvent('admin-spa-toast', { detail: { message: msg, variant: 'success' } }))
         self.batch_recovering = false
       }).catch(function () {
-        self.$root.$emit('open_toast', 'Error al iniciar el recovery de leads.')
+        window.dispatchEvent(new CustomEvent('admin-spa-toast', { detail: { message: 'Error al iniciar el recovery de leads.', variant: 'danger' } }))
         self.batch_recovering = false
       })
     },
