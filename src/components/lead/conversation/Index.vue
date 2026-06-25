@@ -48,6 +48,22 @@
         </button>
         <button
           type="button"
+          class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center justify-content-center"
+          :disabled="!can_resume_with_claude || resuming_with_claude"
+          title="Retomar con Claude desde el historial actual"
+          aria-label="Retomar conversación con Claude"
+          @click="on_resume_with_claude"
+        >
+          <span
+            v-if="resuming_with_claude"
+            class="spinner-border spinner-border-sm"
+            role="status"
+            aria-hidden="true"
+          />
+          <i v-else class="bi bi-arrow-clockwise" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
           class="btn btn-sm d-inline-flex align-items-center justify-content-center"
           :class="claude_auto_reply_enabled ? 'btn-success' : 'btn-outline-secondary'"
           :disabled="toggling_claude_auto_reply"
@@ -315,6 +331,8 @@ export default {
       export_conversation_feedback: false,
       /** Timer para resetear el feedback del botón de exportación. */
       export_conversation_feedback_timer: null,
+      /** true mientras se pide retomar conversación con Claude desde el historial actual. */
+      resuming_with_claude: false,
     }
   },
   computed: {
@@ -601,6 +619,33 @@ export default {
         return false
       }
       if (this.has_pending_non_followup_suggestion) {
+        return false
+      }
+      return true
+    },
+    /**
+     * true si se puede pedir a Claude que retome desde el historial (último mensaje no es del lead sin responder).
+     *
+     * @returns {boolean}
+     */
+    can_resume_with_claude() {
+      if (!this.effective_record || !this.effective_record.id) {
+        return false
+      }
+      if (this.ai_suggestion_request_loading) {
+        return false
+      }
+      if (this.resuming_with_claude) {
+        return false
+      }
+      if (this.has_pending_non_followup_suggestion) {
+        return false
+      }
+      // Complemento del botón ⚡: solo cuando no hay mensajes del lead pendientes de respuesta.
+      if (this.has_unanswered_lead_messages) {
+        return false
+      }
+      if (this.sorted_messages.length === 0) {
         return false
       }
       return true
@@ -1317,6 +1362,30 @@ export default {
         })
         .catch(function () {
           /* ai_error queda en store para el alert rojo. */
+        })
+    },
+    /**
+     * Pide a Claude una sugerencia a partir del historial completo aunque el último mensaje sea del setter.
+     *
+     * @returns {void}
+     */
+    on_resume_with_claude() {
+      const self = this
+      const rec = this.effective_record
+      if (!rec || !rec.id || !this.can_resume_with_claude || this.resuming_with_claude) {
+        return
+      }
+      this.resuming_with_claude = true
+      api
+        .post('/lead/' + rec.id + '/resume-with-claude')
+        .then(function (res) {
+          self.$emit('record-updated', res.data.model)
+        })
+        .catch(function () {
+          /* error silencioso; el alert del store puede mostrar el detalle si aplica. */
+        })
+        .finally(function () {
+          self.resuming_with_claude = false
         })
     },
     /**
