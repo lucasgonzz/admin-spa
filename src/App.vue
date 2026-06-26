@@ -86,10 +86,20 @@
       <logo-loading />
 
       <main :class="main_content_class">
-        <!-- keep-alive preserva ViewLeads en memoria al navegar a/desde conversación -->
-        <keep-alive :include="['ViewLeads']">
-          <router-view :key="router_view_key_for_non_cached" />
-        </keep-alive>
+        <!--
+          Vue 3: keep-alive debe envolver el componente de ruta (v-slot), no router-view.
+          Así ViewLeads permanece en memoria al ir/volver desde lead_conversation y no
+          se vuelve a ejecutar ResourceView.mounted → get_models.
+        -->
+        <router-view v-slot="{ Component }">
+          <keep-alive :include="['ViewLeads']">
+            <component
+              :is="Component"
+              v-if="Component"
+              :key="router_view_key_for_non_cached"
+            />
+          </keep-alive>
+        </router-view>
       </main>
     </div>
 
@@ -112,6 +122,7 @@
 import AppNav from '@/components/app/Nav/Index.vue'
 import LogoLoading from '@/common-vue/components/LogoLoading.vue'
 import routes from '@/router/routes'
+import api from '@/utils/axios'
 
 /**
  * Layout raíz: barra lateral fija + contenido. Oculta nav en login.
@@ -137,6 +148,8 @@ export default {
       mobile_media_query: null,
       /** true cuando hay una nueva versión del SW lista para activar. */
       pwa_update_available: false,
+      /** true mientras se está chequeando o ejecutando seeders pendientes (evita doble disparo). */
+      pending_seeders_checked: false,
     }
   },
   computed: {
@@ -285,6 +298,28 @@ export default {
     is_mobile_viewport(is_mobile) {
       if (!is_mobile) {
         this.nav_mobile_open = false
+      }
+    },
+    /**
+     * Al terminar el bootstrap de auth, consulta seeders pendientes si hay sesión admin.
+     *
+     * @param {boolean} is_ready
+     * @returns {void}
+     */
+    session_ready(is_ready) {
+      if (is_ready && this.$store.state.auth.admin && !this.pending_seeders_checked) {
+        this.check_pending_seeders()
+      }
+    },
+    /**
+     * Tras login manual, session_ready ya es true; dispara el chequeo cuando aparece admin.
+     *
+     * @param {Object|null} admin
+     * @returns {void}
+     */
+    '$store.state.auth.admin'(admin) {
+      if (admin && this.session_ready && !this.pending_seeders_checked) {
+        this.check_pending_seeders()
       }
     },
   },
@@ -494,6 +529,89 @@ export default {
         window.clearTimeout(this.toast_timeout_by_id[toast_id])
         delete this.toast_timeout_by_id[toast_id]
       }
+    },
+
+    /**
+     * Consulta al backend si hay seeders pendientes de ejecución.
+     * Si los hay, muestra un confirm; si el usuario acepta, los ejecuta.
+     *
+     * @returns {Promise<void>}
+     */
+    check_pending_seeders() {
+      const self = this
+      /* Evitar que se dispare más de una vez por sesión. */
+      this.pending_seeders_checked = true
+
+      return api.get('/pending-seeders')
+        .then(function (response) {
+          const data = response.data
+
+          if (!data || !data.count || data.count === 0) {
+            /* Sin pendientes: nada que hacer. */
+            return
+          }
+
+          const list = data.pending
+            .map(function (s) { return '• ' + s.description })
+            .join('\n')
+
+          const message =
+            '⚠️ Hay ' + data.count + ' seeder' + (data.count === 1 ? '' : 's') + ' pendiente' + (data.count === 1 ? '' : 's') + ' de ejecución:\n\n' +
+            list +
+            '\n\n¿Ejecutarlos ahora?'
+
+          const confirmed = window.confirm(message)
+
+          if (!confirmed) {
+            return
+          }
+
+          return self.run_pending_seeders()
+        })
+        .catch(function (err) {
+          /* Error de red o endpoint inexistente: ignorar silenciosamente. */
+          console.warn('[pending-seeders] Error al chequear seeders pendientes:', err)
+        })
+    },
+
+    /**
+     * Llama al endpoint que ejecuta todos los seeders pendientes y muestra el resultado.
+     *
+     * @returns {Promise<void>}
+     */
+    run_pending_seeders() {
+      return api.post('/pending-seeders/run')
+        .then(function (response) {
+          const data = response.data
+
+          if (!data || !data.results || data.results.length === 0) {
+            window.alert('✅ No había seeders pendientes.')
+            return
+          }
+
+          const ok_lines = data.results
+            .filter(function (r) { return r.status === 'ok' })
+            .map(function (r) { return '✅ ' + r.description })
+
+          const error_lines = data.results
+            .filter(function (r) { return r.status === 'error' })
+            .map(function (r) { return '❌ ' + r.description + '\n   Error: ' + r.error })
+
+          const all_lines = ok_lines.concat(error_lines)
+
+          const summary =
+            (data.error_count === 0
+              ? '✅ Todos los seeders se ejecutaron correctamente.'
+              : '⚠️ ' + data.ok_count + ' ejecutado' + (data.ok_count === 1 ? '' : 's') + ' correctamente, ' + data.error_count + ' con error.') +
+            '\n\n' +
+            all_lines.join('\n')
+
+          window.alert(summary)
+        })
+        .catch(function (err) {
+          window.alert('❌ Error al ejecutar los seeders. Revisá la consola del servidor.')
+          console.error('[pending-seeders] Error al ejecutar seeders:', err)
+        })
     },
   },
 }
