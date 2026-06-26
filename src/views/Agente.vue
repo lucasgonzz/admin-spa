@@ -230,7 +230,7 @@
         </h2>
       </div>
 
-      <!-- Placeholder mientras no hay datos del agente analizador (prompt 132) -->
+      <!-- Placeholder mientras no hay reportes del agente analizador -->
       <div v-if="!analysis_runs.length" class="card border-0 shadow-sm">
         <div class="card-body text-secondary small py-4 px-4 lh-base">
           <p class="mb-2">
@@ -244,7 +244,7 @@
         </div>
       </div>
 
-      <!-- Lista de análisis pasados (se poblará con el prompt 132) -->
+      <!-- Lista de reportes pasados del agente analizador -->
       <div v-else class="d-flex flex-column gap-2">
         <div
           v-for="run in analysis_runs"
@@ -252,8 +252,18 @@
           class="card border-0 shadow-sm"
         >
           <div class="card-body small">
-            <div class="fw-semibold mb-1">{{ format_analysis_date(run.created_at) }}</div>
-            <p class="mb-0 text-secondary">{{ run.summary || run.finding || 'Análisis registrado.' }}</p>
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-1">
+              <span class="fw-semibold">{{ format_analysis_date(run.report_date || run.created_at) }}</span>
+              <span
+                v-if="run.report_type"
+                class="badge bg-primary-subtle text-primary"
+              >
+                {{ run.report_type === 'weekly' ? 'Semanal' : 'Diario' }}
+              </span>
+            </div>
+            <p class="mb-0 text-secondary">
+              {{ run.executive_summary || 'Análisis registrado.' }}
+            </p>
           </div>
         </div>
       </div>
@@ -277,7 +287,7 @@ export default {
       global_welcome_delay_seconds: 30,
       /** Id de variante con acción en curso (toggle o delete). */
       action_loading_id: null,
-      /** Análisis del agente analizador; vacío hasta que exista el endpoint del prompt 132. */
+      /** Reportes del agente analizador devueltos por GET /admin/agent-report. */
       analysis_runs: [],
     }
   },
@@ -394,16 +404,17 @@ export default {
     },
 
     /**
-     * Intenta cargar análisis del agente; si el endpoint no existe, muestra placeholder.
+     * Carga reportes del agente analizador desde GET /admin/agent-report.
+     * Si falla o no hay datos, la sección muestra el placeholder informativo.
      *
      * @returns {void}
      */
     try_fetch_analysis_runs() {
       const self = this
       api
-        .get('/agent-analysis-runs')
+        .get('/agent-report')
         .then(function (res) {
-          self.analysis_runs = (res.data && res.data.models) ? res.data.models : []
+          self.analysis_runs = Array.isArray(res.data) ? res.data : []
         })
         .catch(function () {
           self.analysis_runs = []
@@ -417,6 +428,11 @@ export default {
      * @returns {string}
      */
     message_type_label(message_type) {
+      /* Tipo universal (variantes A/B sin restricción de nombre). */
+      if (message_type === 'welcome') {
+        return 'Welcome'
+      }
+      /* Tipos históricos: retrocompatibilidad con registros previos a la migración. */
       if (message_type === 'welcome_with_name') {
         return 'Welcome con nombre'
       }
