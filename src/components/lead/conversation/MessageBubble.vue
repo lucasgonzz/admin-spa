@@ -1,18 +1,45 @@
 <template>
-  <div class="wa-bubble-row" :class="'wa-bubble-row--' + bubble_side">
+  <!-- Eventos de cambio de estado: separador visual, no burbuja -->
+  <div v-if="is_status_event" class="wa-status-event">
+    <div class="wa-status-event-line" />
+    <span class="wa-status-event-text">{{ message.content }}</span>
+    <div class="wa-status-event-line" />
+  </div>
+
+  <!--
+    Varios WhatsApp en un mismo registro (separador \n---\n) se muestran como burbujas
+    independientes; metadatos y acciones quedan solo en la última burbuja del grupo.
+  -->
+  <div
+    v-else
+    class="wa-message-stack"
+    :class="[
+      'wa-message-stack--' + bubble_side,
+      { 'wa-message-stack--split': is_split_message_display }
+    ]"
+  >
+    <div
+      v-for="segment in display_bubble_segments"
+      :key="segment.key"
+      class="wa-bubble-row"
+      :class="[
+        'wa-bubble-row--' + bubble_side,
+        { 'wa-bubble-row--in-stack': is_split_message_display }
+      ]"
+    >
     <div class="wa-bubble-shell" :class="'wa-bubble-shell--' + bubble_side">
       <div class="wa-bubble" :class="bubble_style_class">
         <!-- Nombre del emisor dentro de la burbuja (solo mensajes de sistema / IA) -->
-        <div v-if="show_sender_name_in_bubble" class="wa-sender-name">
+        <div v-if="segment.is_first && show_sender_name_in_bubble" class="wa-sender-name">
           {{ sender_label }}
         </div>
         <div
-          v-if="is_audio_message && !has_local_attachment"
+          v-if="segment.is_first && is_audio_message && !has_local_attachment"
           class="wa-audio-missing text-muted small mb-1">
           🎤 Audio recibido — transcripción abajo. El archivo aún no está en el servidor.
         </div>
         <!-- Reproductor de audio o enlace al adjunto (documento, imagen, video) -->
-        <template v-if="has_local_attachment">
+        <template v-if="segment.is_first && has_local_attachment">
           <audio-player
             v-if="is_audio_message"
             :src="attachment_open_url(message.attachments[0])"
@@ -40,39 +67,32 @@
             <span class="wa-file-attachment-name">{{ attachment_display_name(message.attachments[0]) }}</span>
           </a>
         </template>
-        <!-- Modo lectura: transcripción / texto (original o editado tras aprobar) -->
-        <!-- Si el contenido tiene separadores ---, se renderiza como múltiples bloques -->
-        <template v-if="!editing && show_message_text">
-          <div
-            v-for="(part, idx) in message_parts"
-            :key="idx"
-            class="message-text"
-            :class="[
-              { 'message-text--not-sent': is_not_sent_suggestion },
-              { 'mt-2 pt-2 border-top border-opacity-25': idx > 0 }
-            ]"
-          >
-            {{ part }}
-          </div>
-        </template>
+        <!-- Modo lectura: una burbuja por cada parte del mensaje (o una sola si no hay separador) -->
+        <div
+          v-if="!editing && show_message_text && segment.display_text"
+          class="message-text"
+          :class="{ 'message-text--not-sent': is_not_sent_suggestion }"
+        >
+          {{ segment.display_text }}
+        </div>
         <!-- Modo edición: textarea precargado con el content original de la sugerencia -->
         <textarea
-          v-else-if="editing"
+          v-else-if="editing && segment.is_first"
           v-model="edited_text"
           class="form-control form-control-sm wa-edit-textarea"
           :rows="textarea_rows"
           :style="{ width: textarea_width }"
           :disabled="busy"
         />
-        <div v-if="pipeline_status_change_label" class="wa-extra mt-1">
+        <div v-if="segment.is_last && pipeline_status_change_label" class="wa-extra mt-1">
           <span class="badge bg-info text-dark wa-badge-tight" :title="pipeline_status_change_title">
             {{ pipeline_status_change_label }}
           </span>
         </div>
-        <div v-if="message.requiere_verificacion" class="wa-extra mt-1">
+        <div v-if="segment.is_last && message.requiere_verificacion" class="wa-extra mt-1">
           <span class="badge bg-warning text-dark wa-badge-tight">Requiere verificación con Lucas</span>
         </div>
-        <div v-if="message.ai_reasoning" class="wa-extra mt-1">
+        <div v-if="segment.is_last && message.ai_reasoning" class="wa-extra mt-1">
           <button
             type="button"
             class="btn btn-link wa-link-tight p-0"
@@ -91,7 +111,7 @@
           </div>
         </div>
         <!-- Snapshot del calendario Google del closer (debug de disponibilidad) -->
-        <div v-if="calendar_snapshot_parsed" class="wa-extra mt-1">
+        <div v-if="segment.is_last && calendar_snapshot_parsed" class="wa-extra mt-1">
           <button
             type="button"
             class="btn btn-link wa-link-tight p-0"
@@ -188,7 +208,7 @@
             </div>
           </div>
         </div>
-        <div v-if="show_pending_suggestion_actions" class="wa-actions d-flex flex-wrap gap-1 align-items-center">
+        <div v-if="segment.is_last && show_pending_suggestion_actions" class="wa-actions d-flex flex-wrap gap-1 align-items-center">
           <template v-if="!editing">
             <button
               type="button"
@@ -234,7 +254,7 @@
             </button>
           </template>
         </div>
-        <div v-if="show_auto_send_timer_block" class="wa-auto-send-timer mt-1">
+        <div v-if="segment.is_last && show_auto_send_timer_block" class="wa-auto-send-timer mt-1">
           <div class="wa-auto-send-timer-row d-flex flex-wrap align-items-center justify-content-between gap-2">
             <span class="wa-auto-send-timer-label text-muted small">
               <template v-if="show_auto_send_countdown">
@@ -255,28 +275,29 @@
           </div>
         </div>
         <div
-          v-else-if="show_pending_confirmation_label"
+          v-else-if="segment.is_last && show_pending_confirmation_label"
           class="wa-pending-confirmation text-muted">
           Esperando confirmación
         </div>
-        <div v-if="is_not_sent_suggestion" class="wa-not-sent-banner text-muted small mt-1">
+        <div v-if="segment.is_last && is_not_sent_suggestion" class="wa-not-sent-banner text-muted small mt-1">
           <i class="bi bi-x-circle me-1" aria-hidden="true" />
           Sugerencia no enviada al lead
         </div>
         <!-- Banner que indica que el mensaje está excluido del historial enviado a Claude -->
-        <div v-if="message.deleted_from_context" class="wa-excluded-banner text-danger small mt-1">
+        <div v-if="segment.is_last && message.deleted_from_context" class="wa-excluded-banner text-danger small mt-1">
           <i class="bi bi-trash-fill me-1" aria-hidden="true" />
           Excluido del contexto de IA
         </div>
-        <div v-if="show_whatsapp_delivery_error" class="wa-delivery-error text-danger small mt-1">
+        <div v-if="segment.is_last && show_whatsapp_delivery_error" class="wa-delivery-error text-danger small mt-1">
           No enviado por WhatsApp
         </div>
-        <div v-if="status_badge_text" class="wa-extra mt-1">
+        <div v-if="segment.is_last && status_badge_text" class="wa-extra mt-1">
           <span class="badge wa-badge-tight" :class="status_badge_class">{{ status_badge_text }}</span>
         </div>
         <!-- Hora y estado de entrega dentro de la burbuja (estilo WhatsApp) -->
         <div class="wa-bubble-footer">
           <button
+            v-if="segment.is_last"
             type="button"
             class="btn btn-link wa-ctx-toggle p-0"
             :class="message.deleted_from_context ? 'wa-ctx-toggle--excluded text-danger' : 'wa-ctx-toggle--included text-muted'"
@@ -293,7 +314,7 @@
             />
           </button>
           <span
-            v-if="show_sending_indicator"
+            v-if="segment.is_last && show_sending_indicator"
             class="wa-meta-sending"
             aria-label="Enviando"
           >Enviando…</span>
@@ -309,13 +330,14 @@
       </div>
       <!-- Reacción del lead sobre este mensaje (estilo pill de WhatsApp) -->
       <div
-        v-if="has_lead_reaction"
+        v-if="segment.is_last && has_lead_reaction"
         class="wa-reaction-pill"
         :title="lead_reaction_title"
         aria-label="Reacción del lead"
       >
         {{ message.lead_reaction_emoji }}
       </div>
+    </div>
     </div>
   </div>
 </template>
@@ -412,6 +434,14 @@ export default {
       return Boolean(this.message.is_followup)
     },
     /**
+     * true si el mensaje es un evento de cambio de estado del lead (ej: "Lead pasado a En Pausa").
+     * Estos mensajes se muestran como separadores visuales, no como burbujas de WhatsApp.
+     * @returns {boolean}
+     */
+    is_status_event() {
+      return Boolean(this.message.is_status_event)
+    },
+    /**
      * Etiqueta legible del emisor.
      * @returns {string}
      */
@@ -501,6 +531,64 @@ export default {
         .filter(function (p) { return p !== '' })
     },
     /**
+     * true cuando el contenido se muestra como varias burbujas separadas (separador \n---\n).
+     *
+     * @returns {boolean}
+     */
+    is_split_message_display() {
+      if (this.editing) {
+        return false
+      }
+      if (!this.show_message_text) {
+        return false
+      }
+      return this.message_parts.length > 1
+    },
+    /**
+     * Segmentos de visualización: una entrada por burbuja en pantalla.
+     * Metadatos y acciones usan is_first / is_last para ubicarse solo donde corresponde.
+     *
+     * @returns {Array<{key: string, display_text: string, is_first: boolean, is_last: boolean}>}
+     */
+    display_bubble_segments() {
+      /* Modo edición: una sola burbuja con el textarea del contenido completo. */
+      if (this.editing) {
+        return [{
+          key: 'edit',
+          display_text: '',
+          is_first: true,
+          is_last: true,
+        }]
+      }
+
+      /* Varios WhatsApp en un registro: una burbuja independiente por parte. */
+      if (this.is_split_message_display) {
+        var split_segments = []
+        var parts = this.message_parts
+        for (var i = 0; i < parts.length; i++) {
+          split_segments.push({
+            key: 'part-' + i,
+            display_text: parts[i],
+            is_first: i === 0,
+            is_last: i === parts.length - 1,
+          })
+        }
+        return split_segments
+      }
+
+      /* Mensaje único (sin separador o sin texto visible). */
+      var single_text = ''
+      if (this.show_message_text) {
+        single_text = this.effective_content
+      }
+      return [{
+        key: 'single',
+        display_text: single_text,
+        is_first: true,
+        is_last: true,
+      }]
+    },
+    /**
      * true si el mensaje fue aprobado con texto distinto al sugerido original.
      * @returns {boolean}
      */
@@ -572,9 +660,11 @@ export default {
     },
     /**
      * Mensaje saliente marcado enviado pero sin id de Meta/Kapso.
+     * Los eventos de cambio de estado nunca muestran este banner aunque no tengan whatsapp_message_id.
      * @returns {boolean}
      */
     show_whatsapp_delivery_error() {
+      if (this.is_status_event) return false
       if (!this.is_outgoing_message) {
         return false
       }
@@ -1135,12 +1225,55 @@ export default {
 </script>
 
 <style scoped>
+/* Separador de evento de cambio de estado (ej: "Lead pasado a En Pausa") */
+.wa-status-event {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.15rem 0.5rem;
+  width: 100%;
+  align-self: stretch;
+}
+.wa-status-event-line {
+  flex: 1;
+  height: 1px;
+  background: rgba(17, 27, 33, 0.15);
+}
+.wa-status-event-text {
+  font-size: 0.72rem;
+  color: rgba(17, 27, 33, 0.45);
+  white-space: nowrap;
+  user-select: none;
+  font-style: italic;
+}
+/* Agrupa varias burbujas del mismo registro lead_messages (separador \n---\n). */
+.wa-message-stack {
+  display: flex;
+  flex-direction: column;
+  max-width: 65%;
+  width: fit-content;
+}
+.wa-message-stack--in {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+.wa-message-stack--out {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.wa-message-stack--split {
+  gap: 0.25rem;
+}
 /* Burbujas estilo WhatsApp Web (modo claro). */
 .wa-bubble-row {
   display: flex;
   flex-direction: column;
   max-width: 65%;
   width: fit-content;
+}
+.wa-bubble-row--in-stack {
+  max-width: 100%;
+  width: 100%;
 }
 /* El espaciado vertical entre burbujas lo define gap en .wa-date-section. */
 .wa-bubble-row--in {
