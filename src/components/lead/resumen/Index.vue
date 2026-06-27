@@ -21,7 +21,7 @@
       </button>
     </div>
 
-    <!-- Acceso rápido a la conversación WhatsApp del lead (módulo de pantalla completa) -->
+    <!-- Acceso rápido a la conversación WhatsApp del lead (sidebar en desktop o ruta en mobile) -->
     <div v-if="show_whatsapp_button" class="mb-3">
       <button
         type="button"
@@ -209,7 +209,7 @@ import CallSummaryPanel from './CallSummaryPanel.vue'
  * Incluye el panel de resumen de llamada del closer (CallSummaryPanel) con escenario
  * de cierre, precio acordado, modificaciones y transcripción colapsable.
  * Incluye botón para regenerar el resumen de demo invocando la acción del store.
- * Incluye acceso rápido al módulo de conversación WhatsApp del lead.
+ * Incluye acceso rápido a la conversación WhatsApp del lead (mismo flujo que el botón de la tabla).
  */
 export default {
   name: 'LeadResumenTab',
@@ -224,7 +224,7 @@ export default {
     record: { type: Object, default: null },
   },
 
-  emits: ['record-updated'],
+  emits: ['record-updated', 'open-conversation'],
 
   data() {
     return {
@@ -235,7 +235,7 @@ export default {
 
   computed: {
     /**
-     * Indica si debe mostrarse el botón para ir al módulo de conversación WhatsApp.
+     * Indica si debe mostrarse el botón para abrir la conversación WhatsApp.
      * Se oculta cuando ya se está viendo la conversación de este mismo lead.
      * @returns {boolean}
      */
@@ -312,15 +312,15 @@ export default {
 
   methods: {
     /**
-     * Navega a la vista de pantalla completa de la conversación WhatsApp del lead.
-     * Reutiliza la misma ruta que el botón de la tabla de leads.
+     * Solicita abrir la conversación WhatsApp del lead.
+     * Emite al padre (Leads.vue) para reutilizar sidebar en desktop o ruta en mobile.
      * @returns {void}
      */
     open_whatsapp_conversation() {
       if (!this.record || !this.record.id) {
         return
       }
-      this.$router.push({ name: 'lead_conversation', params: { lead_id: this.record.id } })
+      this.$emit('open-conversation', this.record)
     },
 
     /**

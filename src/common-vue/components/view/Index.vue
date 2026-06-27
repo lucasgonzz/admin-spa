@@ -68,6 +68,7 @@
       @saved="on_model_saved"
       @deleted="on_model_deleted"
       @extra-record-updated="on_extra_record_updated"
+      @open-conversation="on_extra_open_conversation"
     >
       <template v-for="t in extra_tabs_for_slot_forward" #[`model-extra-${t.key}`]="bind">
         <slot
@@ -100,7 +101,7 @@ import { resolve_props_to_show } from '../../helpers/column_preferences_helper'
  */
 export default {
   name: 'ResourceView',
-  emits: ['extra-record-updated'],
+  emits: ['extra-record-updated', 'open-conversation'],
   components: {
     ViewHeader,
     ViewList,
@@ -373,6 +374,20 @@ export default {
       }
       this.$store.dispatch(this.model_name + '/upsert_model_in_lists', model)
       this.$emit('extra-record-updated', model)
+    },
+    /**
+     * Reenvía al padre la solicitud de abrir conversación WhatsApp emitida
+     * por una pestaña extra del modal (p. ej. Resumen en leads).
+     * Cierra el modal CRUD para no superponerlo con el sidebar de conversación.
+     *
+     * @param {Object} lead Lead cuyo hilo WhatsApp debe mostrarse.
+     * @returns {void}
+     */
+    on_extra_open_conversation(lead) {
+      if (this.show_model_modal) {
+        this.on_model_modal_close()
+      }
+      this.$emit('open-conversation', lead)
     },
     /**
      * Nombre del slot en esta vista: compatibilidad `model-extra` si no hay `model_extra_tabs`.

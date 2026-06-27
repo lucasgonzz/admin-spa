@@ -1,0 +1,214 @@
+// Estilos del módulo Leads: tipografía, botones y badges más modernos.
+// Se activan envolviendo la vista o el modal con la clase `.lead-module`.
+
+.lead-module
+	--lead-font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif
+	--lead-btn-radius: 5px
+	--lead-badge-radius: 5px
+	--lead-btn-shadow: 0 1px 2px rgba(16, 24, 40, 0.06)
+	--lead-btn-shadow-hover: 0 3px 8px rgba(16, 24, 40, 0.1)
+	font-family: var(--lead-font)
+	-webkit-font-smoothing: antialiased
+	-moz-osx-font-smoothing: grayscale
+	letter-spacing: -0.01em
+
+	/* Botones: mismo tamaño Bootstrap, más presencia visual */
+	.btn:not(.btn-link)
+		border-radius: var(--lead-btn-radius)
+		font-weight: 500
+		letter-spacing: 0.01em
+		transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease, color 0.15s ease
+
+	.btn-sm:not(.btn-link)
+		box-shadow: var(--lead-btn-shadow)
+
+	.btn:not(.btn-link):not(:disabled):hover
+		box-shadow: var(--lead-btn-shadow-hover)
+		transform: translateY(-1px)
+
+	.btn:not(.btn-link):not(:disabled):active
+		transform: translateY(0)
+		box-shadow: var(--lead-btn-shadow)
+
+	.btn-outline-primary,
+	.btn-outline-secondary,
+	.btn-outline-success,
+	.btn-outline-warning,
+	.btn-outline-danger,
+	.btn-outline-info
+		border-width: 1.5px
+
+	/* Grupos unidos: solo redondear esquinas exteriores (Bootstrap pierde esto si .btn tiene radius global). */
+	.btn-group
+		box-shadow: var(--lead-btn-shadow)
+		border-radius: var(--lead-btn-radius)
+
+	.btn-group > .btn:not(.btn-link)
+		border-radius: 0
+		box-shadow: none
+
+	.btn-group > .btn:first-child
+		border-top-left-radius: var(--lead-btn-radius)
+		border-bottom-left-radius: var(--lead-btn-radius)
+
+	.btn-group > .btn:last-child
+		border-top-right-radius: var(--lead-btn-radius)
+		border-bottom-right-radius: var(--lead-btn-radius)
+
+	.btn-group > .btn:only-child
+		border-radius: var(--lead-btn-radius)
+
+	.btn-group > .btn:not(:disabled):hover
+		transform: none
+		z-index: 1
+
+	.btn-group > .btn.btn-secondary:not(:disabled):hover,
+	.btn-group > .btn.btn-primary:not(:disabled):hover,
+	.btn-group > .btn.btn-warning:not(:disabled):hover
+		z-index: 2
+
+	/* Botones circulares de ícono en tabla y header */
+	.icon-cell-btn
+		width: 1.9rem
+		height: 1.9rem
+		padding: 0
+		border-radius: 50%
+		display: inline-flex
+		align-items: center
+		justify-content: center
+		box-shadow: var(--lead-btn-shadow)
+
+	.icon-btn
+		border-radius: 50%
+		transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease
+
+	.icon-btn:not(:disabled):hover
+		box-shadow: var(--lead-btn-shadow)
+		transform: translateY(-1px)
+
+	/* Badges: texto centrado y aspecto pill moderno */
+	.badge,
+	.lead-badge
+		display: inline-flex
+		align-items: center
+		justify-content: center
+		gap: 0.3em
+		line-height: 1
+		min-height: 1.45rem
+		font-weight: 600
+		font-size: 0.72rem
+		letter-spacing: 0.03em
+		text-transform: none
+		vertical-align: middle
+		border-radius: var(--lead-badge-radius)
+		padding: 0.32em 0.62em
+		border: 1px solid transparent
+		box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06)
+		white-space: nowrap
+
+	.badge.rounded-pill
+		border-radius: 50rem
+		padding-left: 0.75em
+		padding-right: 0.75em
+
+	.pipeline-status-badge
+		font-size: 0.72rem
+		font-weight: 600
+		min-height: 1.5rem
+		padding: 0.34em 0.68em
+
+	/* Badges Bootstrap con borde sutil para más definición */
+	.badge.bg-warning,
+	.badge.text-bg-warning
+		border-color: rgba(0, 0, 0, 0.08)
+
+	.badge.bg-success,
+	.badge.text-bg-success
+		border-color: rgba(255, 255, 255, 0.2)
+
+	.badge.bg-danger,
+	.badge.text-bg-danger
+		border-color: rgba(255, 255, 255, 0.18)
+
+	.badge.bg-primary,
+	.badge.text-bg-primary
+		border-color: rgba(255, 255, 255, 0.18)
+
+	.badge.bg-secondary,
+	.badge.text-bg-secondary
+		border-color: rgba(255, 255, 255, 0.12)
+
+	.badge.bg-light
+		border-color: rgba(0, 0, 0, 0.08)
+		box-shadow: none
+
+	/* Badges subtle del tab Resumen */
+	.badge.bg-primary-subtle,
+	.badge.bg-warning-subtle,
+	.badge.bg-success-subtle,
+	.badge.bg-danger-subtle,
+	.badge.bg-info-subtle,
+	.badge.bg-secondary-subtle
+		border-color: rgba(0, 0, 0, 0.06)
+		box-shadow: none
+		font-weight: 600
+
+	/* Pestañas del modal de lead */
+	.model-properties-nav__tabs .nav-link
+		font-weight: 500
+		font-size: 0.875rem
+		border-radius: var(--lead-btn-radius) var(--lead-btn-radius) 0 0
+		transition: color 0.15s ease, background-color 0.15s ease
+
+	.model-properties-nav__tabs .nav-link.active
+		font-weight: 600
+
+	/* Cards del pipeline y operaciones */
+	.card.border-secondary
+		border-radius: 8px
+		overflow: hidden
+		box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04)
+
+	.card-header.bg-light
+		font-weight: 600
+		letter-spacing: 0.01em
+
+	/* Panel de demos agendadas: títulos de grupo más legibles */
+	.demos-grupos-grid .badge
+		font-size: 0.7rem
+		text-transform: uppercase
+		letter-spacing: 0.06em
+
+	/* Filtro de fecha en toolbar */
+	.leads-conversation-date-input
+		border-radius: var(--lead-btn-radius)
+		border-color: rgba(0, 0, 0, 0.12)
+		font-size: 0.875rem
+
+	.leads-conversation-date-input:focus
+		border-color: rgba(13, 110, 253, 0.45)
+		box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.12)
+
+// Badges lead fuera del contenedor `.lead-module` (p. ej. celdas compartidas).
+.lead-badge
+	display: inline-flex
+	align-items: center
+	justify-content: center
+	gap: 0.3em
+	line-height: 1
+	min-height: 1.45rem
+	font-weight: 600
+	font-size: 0.72rem
+	letter-spacing: 0.03em
+	vertical-align: middle
+	border-radius: 5px
+	padding: 0.32em 0.62em
+	border: 1px solid transparent
+	box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06)
+	white-space: nowrap
+
+.pipeline-status-badge
+	font-size: 0.72rem
+	font-weight: 600
+	min-height: 1.5rem
+	padding: 0.34em 0.68em

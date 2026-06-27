@@ -6,7 +6,7 @@
   <span v-else-if="prop.type === 'alert_badge'">
     <span
       v-if="raw"
-      class="badge bg-warning text-dark"
+      class="badge lead-badge bg-warning text-dark"
       :title="'Seguimientos sin revisar' + (followup_count > 0 ? ': ' + followup_count + ' enviados' : '')"
     >
       <i class="bi bi-clock-history me-1" aria-hidden="true" />
@@ -14,7 +14,7 @@
     </span>
     <span
       v-else-if="followup_count > 0"
-      class="badge bg-secondary"
+      class="badge lead-badge bg-secondary"
       :title="followup_count + ' seguimiento(s) enviado(s), ya revisados'"
     >
       <i class="bi bi-clock-history me-1" aria-hidden="true" />
@@ -22,20 +22,29 @@
     </span>
     <span v-else class="text-muted"></span>
   </span>
-  <!-- Badge numérico de mensajes sin leer per-usuario: rojo cuando hay no leídos, guión si no -->
-  <span v-else-if="prop.type === 'unread_badge'">
+  <!-- Doble badge per-usuario: rojo = mensajes del lead sin leer; gris = actividad total no vista -->
+  <span v-else-if="prop.type === 'unread_badge'" class="d-flex gap-1 align-items-center">
+    <!-- Badge rojo: solo mensajes recibidos del lead sin leer por el admin -->
     <span
       v-if="raw_unread_count > 0"
-      class="badge bg-danger"
+      class="badge lead-badge bg-danger"
       style="font-size: 0.75em;"
-      :title="'Mensajes sin leer: ' + raw_unread_count"
+      :title="'Mensajes del lead sin leer: ' + raw_unread_count"
     >{{ raw_unread_count }}</span>
-    <span v-else class="text-muted"></span>
+    <!-- Badge gris: actividad total no vista (cualquier emisor) que supera los del lead -->
+    <span
+      v-if="raw_unseen_count > raw_unread_count"
+      class="badge lead-badge bg-secondary"
+      style="font-size: 0.75em;"
+      :title="'Actividad no vista (total): ' + raw_unseen_count"
+    >{{ raw_unseen_count }}</span>
+    <!-- Sin actividad pendiente -->
+    <span v-if="raw_unread_count === 0 && raw_unseen_count === 0" class="text-muted"></span>
   </span>
   <span v-else-if="prop.type === 'pipeline_status'">
     <span
       v-if="pipeline_status_label"
-      class="badge pipeline-status-badge"
+      class="badge lead-badge pipeline-status-badge"
       :style="pipeline_status_badge_style"
     >{{ pipeline_status_label }}</span>
     <span v-else class="text-muted"></span>
@@ -81,6 +90,18 @@ export default {
      */
     raw_unread_count() {
       const n = parseInt(this.row[this.prop.key], 10)
+      return isNaN(n) ? 0 : n
+    },
+    /**
+     * Cantidad de mensajes de cualquier emisor sin "seen" por el admin logueado.
+     * Alimenta el badge gris de actividad total no vista.
+     * Retorna 0 si la prop no define unseen_count_key o el valor no es numérico.
+     *
+     * @returns {number}
+     */
+    raw_unseen_count() {
+      if (!this.prop.unseen_count_key) return 0
+      const n = parseInt(this.row[this.prop.unseen_count_key], 10)
       return isNaN(n) ? 0 : n
     },
     /**
@@ -168,9 +189,14 @@ export default {
     pipeline_status_badge_style() {
       const opt = this.pipeline_status_option
       const bg = opt && opt.color ? String(opt.color) : '#ced4da'
+      const text_color = contrast_text_for_hex(bg)
+      const border_alpha = text_color === '#ffffff' ? '0.22' : '0.12'
       return {
         backgroundColor: bg,
-        color: contrast_text_for_hex(bg),
+        color: text_color,
+        borderColor: text_color === '#ffffff'
+          ? 'rgba(255, 255, 255, ' + border_alpha + ')'
+          : 'rgba(0, 0, 0, ' + border_alpha + ')',
       }
     },
   },
@@ -221,14 +247,7 @@ function contrast_text_for_hex(hex) {
 </script>
 
 <style scoped>
-.pipeline-status-badge {
-  font-size: 0.8rem;
-  font-weight: 500;
-  padding: 0.2em 0.5em;
-  white-space: nowrap;
-}
-
-/* Botón circular de ícono para el tipo router_link_btn */
+/* Fallback mínimo fuera de `.lead-module` (p. ej. otras tablas con router_link_btn). */
 .icon-cell-btn {
   width: 1.9rem;
   height: 1.9rem;

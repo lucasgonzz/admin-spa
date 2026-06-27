@@ -11,7 +11,7 @@
       <span class="spinner-border text-primary" aria-hidden="true" />
       <p class="text-muted small mt-2 mb-0">Cargando registro…</p>
     </div>
-    <template v-else-if="draft">
+    <div v-else-if="draft" :class="{ 'lead-module': is_lead_model }">
       <template v-if="show_properties_nav">
         <!-- Contenedor con scroll horizontal cuando las pestañas no entran (p. ej. móvil). -->
         <div class="model-properties-nav mb-3">
@@ -52,6 +52,7 @@
             :key="'extra-component-' + t.key + '-' + (draft && draft.id ? draft.id : 'new')"
             v-bind="extra_tab_scope"
             @record-updated="on_extra_record_updated"
+            @open-conversation="on_extra_open_conversation"
           />
           <slot
             v-else
@@ -66,9 +67,9 @@
         :all_properties="all_properties"
         :parent_model_name="effective_parent_model_name"
       />
-    </template>
+    </div>
     <template #footer>
-      <div class="d-flex w-100 align-items-center flex-wrap gap-2">
+      <div class="d-flex w-100 align-items-center flex-wrap gap-2" :class="{ 'lead-module': is_lead_model }">
         <button
           v-if="can_delete"
           type="button"
@@ -147,7 +148,7 @@ export default {
      */
     before_create: { type: Function, default: null },
   },
-  emits: ['close', 'saved', 'deleted', 'update:show', 'extra-record-updated'],
+  emits: ['close', 'saved', 'deleted', 'update:show', 'extra-record-updated', 'open-conversation'],
   data() {
     return {
       open: false,
@@ -163,6 +164,13 @@ export default {
     }
   },
   computed: {
+    /**
+     * Indica si el modal edita un lead (activa estilos del módulo leads).
+     * @returns {boolean}
+     */
+    is_lead_model() {
+      return this.model_name === 'lead'
+    },
     /**
      * Path HTTP del recurso (POST/PUT), alineado a `__base_store` cuando `api_resource_path` está seteado.
      * @returns {string}
@@ -829,6 +837,16 @@ export default {
         this.apply_server_model_to_draft(model)
       }
       this.$emit('extra-record-updated', model)
+    },
+    /**
+     * Propaga la solicitud de abrir conversación WhatsApp desde una pestaña extra
+     * (p. ej. botón en Resumen del lead) hacia ResourceView / vista padre.
+     *
+     * @param {Object} lead Lead cuyo hilo WhatsApp debe mostrarse.
+     * @returns {void}
+     */
+    on_extra_open_conversation(lead) {
+      this.$emit('open-conversation', lead)
     },
     /**
      * Copia al borrador los campos del modelo persistido en servidor y normaliza

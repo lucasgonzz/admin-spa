@@ -1,39 +1,19 @@
 <template>
-  <div>
+  <div class="lead-module">
     <resource-view
       ref="lead_resource_view"
       model_name="lead"
       :model_extra_tabs="model_extra_tabs"
       :model_properties_nav_order="model_properties_nav_order"
       @extra-record-updated="on_record_updated"
+      @open-conversation="on_open_conversation"
     >
-      <!-- Acciones rápidas por fila: WhatsApp, fijar/desfijar y respuesta automática Claude. -->
+      <!-- Acciones rápidas por fila: respuesta automática Claude, fijar/desfijar y WhatsApp. -->
       <template #row-actions="{ row }">
-        <!-- Botón abrir conversación WhatsApp del lead -->
-        <button
-          type="button"
-          class="btn btn-outline-success btn-sm me-1"
-          title="Abrir conversación de WhatsApp"
-          aria-label="Abrir conversación de WhatsApp"
-          @click="on_open_conversation(row)"
-        >
-          <i class="bi bi-whatsapp" aria-hidden="true" />
-        </button>
-        <!-- Botón fijar/desfijar lead (pin global, igual a WhatsApp) -->
-        <button
-          type="button"
-          class="btn btn-sm me-1"
-          :class="row.pinned_at ? 'btn-warning' : 'btn-outline-secondary'"
-          :title="row.pinned_at ? 'Desfijar lead' : 'Fijar lead'"
-          :aria-label="row.pinned_at ? 'Desfijar lead' : 'Fijar lead'"
-          @click.stop="on_toggle_pinned(row)"
-        >
-          <i class="bi bi-pin-fill" :class="row.pinned_at ? '' : 'opacity-50'" aria-hidden="true" />
-        </button>
         <!-- Botón activar/desactivar respuesta automática de Claude (cloud) para el lead -->
         <button
           type="button"
-          class="btn btn-sm d-inline-flex align-items-center justify-content-center"
+          class="btn btn-sm me-1 d-inline-flex align-items-center justify-content-center"
           :class="is_claude_auto_reply_enabled(row) ? 'btn-primary' : 'btn-outline-primary'"
           :title="is_claude_auto_reply_enabled(row)
             ? 'Claude responde automáticamente. Clic para desactivar.'
@@ -51,6 +31,27 @@
             aria-hidden="true"
           />
           <i v-else class="bi bi-stars" :class="is_claude_auto_reply_enabled(row) ? '' : 'opacity-50'" aria-hidden="true" />
+        </button>
+        <!-- Botón fijar/desfijar lead (pin global, igual a WhatsApp) -->
+        <button
+          type="button"
+          class="btn btn-sm me-1"
+          :class="row.pinned_at ? 'btn-warning' : 'btn-outline-secondary'"
+          :title="row.pinned_at ? 'Desfijar lead' : 'Fijar lead'"
+          :aria-label="row.pinned_at ? 'Desfijar lead' : 'Fijar lead'"
+          @click.stop="on_toggle_pinned(row)"
+        >
+          <i class="bi bi-pin-fill" :class="row.pinned_at ? '' : 'opacity-50'" aria-hidden="true" />
+        </button>
+        <!-- Botón abrir conversación WhatsApp del lead -->
+        <button
+          type="button"
+          class="btn btn-outline-success btn-sm"
+          title="Abrir conversación de WhatsApp"
+          aria-label="Abrir conversación de WhatsApp"
+          @click="on_open_conversation(row)"
+        >
+          <i class="bi bi-whatsapp" aria-hidden="true" />
         </button>
       </template>
 

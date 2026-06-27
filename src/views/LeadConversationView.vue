@@ -1,5 +1,6 @@
 <template>
   <div
+    class="lead-module"
     :class="{
       'conversation-view': !is_sidebar_mode,
       'conversation-view--embedded': is_sidebar_mode,
@@ -2026,7 +2027,7 @@ export default {
 /* En móvil, separar la fila del input del borde inferior (barra del sistema / home indicator). */
 @media (max-width: 767.98px) {
   .conversation-footer {
-    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(15px + env(safe-area-inset-bottom, 0px));
   }
 }
 

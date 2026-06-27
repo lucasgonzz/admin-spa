@@ -1,5 +1,5 @@
 <template>
-  <div class="closer-panel h-100 d-flex flex-column">
+  <div class="closer-panel lead-module h-100 d-flex flex-column">
 
     <!-- Modal de alerta "Tomar llamada": se muestra cuando el lead termina la demo -->
     <div

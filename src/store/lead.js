@@ -107,6 +107,8 @@ function apply_viewing_unread_override(state, model) {
   return Object.assign({}, model, {
     unread_count: 0,
     unread_messages_count: 0,
+    // También limpia el badge gris al abrir la conversación.
+    unseen_count: 0,
   })
 }
 

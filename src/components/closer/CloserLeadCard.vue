@@ -180,8 +180,8 @@ const STATUS_LABELS = {
 
 /** Clases Bootstrap para badges de estado (alineadas al catálogo de colores del módulo leads). */
 const STATUS_BADGE_CLASSES = {
-  demo_agendada: 'bg-primary',
   solicita_disponibilidad: 'bg-primary',
+  demo_agendada: 'badge-demo-agendada',
   ingresando_demo: 'bg-danger',
   demo_en_curso: 'bg-warning text-dark',
   demo_pendiente_de_ingreso: 'bg-danger',
@@ -598,4 +598,9 @@ export default {
 	50%
 		opacity: 0.5
 		transform: scale(0.85)
+
+/* Azul fuerte de demo agendada (mismo hex que el catálogo del pipeline). */
+.badge-demo-agendada
+	background-color: #0a58ca
+	color: #fff
 </style>
