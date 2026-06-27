@@ -470,7 +470,7 @@ export default {
       return 'https://wa.me/' + digits
     },
     /**
-     * Formatea demo_date a DD/MM/YYYY.
+     * Formatea demo_date a DD/MM/YYYY (Día) usando fecha local sin timezone.
      *
      * @param {string} date_raw
      * @returns {string}
@@ -481,7 +481,10 @@ export default {
       if (parts.length !== 3) {
         return key
       }
-      return parts[2] + '/' + parts[1] + '/' + parts[0]
+      const weekdays = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+      const local_date = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10))
+      const weekday = weekdays[local_date.getDay()] || ''
+      return parts[2] + '/' + parts[1] + '/' + parts[0] + ' (' + weekday + ')'
     },
     /**
      * Formatea datetime ISO a fecha + hora local legible.
