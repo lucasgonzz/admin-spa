@@ -141,6 +141,10 @@ export default {
       if (this.raw == null || this.raw === '') {
         return ''
       }
+      // Tipo `day`: fecha corta con día de la semana (p. ej. demo_date en leads).
+      if (this.prop.type === 'day') {
+        return this.date_with_weekday(this.raw)
+      }
       // `is_date` viene declarado en ModelProperties del backend (mismo criterio que empresa-spa).
       if (this.prop.is_date) {
         if (this.prop.show_full_date) {
