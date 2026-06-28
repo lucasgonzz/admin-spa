@@ -839,14 +839,14 @@ export default {
     },
     /**
      * Ancho del textarea de edición calculado a partir del texto más largo del mensaje.
-     * Se clampea entre MIN_WIDTH y el 65% del viewport para no romper la burbuja.
+     * Se clampea entre MIN_WIDTH y el 80% del viewport para no romper la burbuja.
      * @returns {string} Valor CSS en píxeles, p. ej. "320px".
      */
     textarea_width() {
       /* Ancho mínimo útil para editar cómodamente. */
       var MIN_WIDTH = 280
-      /* Ancho máximo: 65% del viewport (igual que max-width de .wa-bubble-row). */
-      var MAX_WIDTH = Math.floor(window.innerWidth * 0.65)
+      /* Ancho máximo: 80% del viewport (igual que max-width de .wa-message-stack). */
+      var MAX_WIDTH = Math.floor(window.innerWidth * 0.8)
       /* Texto base: si ya se editó usar ese; sino el contenido original. */
       var text = (this.message.content || '') + ''
       /* Línea más larga para estimar el ancho requerido. */
@@ -1250,7 +1250,8 @@ export default {
 .wa-message-stack {
   display: flex;
   flex-direction: column;
-  max-width: 65%;
+  /* Único límite horizontal respecto al hilo: hasta 80% del área de conversación. */
+  max-width: 80%;
   width: fit-content;
 }
 .wa-message-stack--in {
@@ -1268,11 +1269,11 @@ export default {
 .wa-bubble-row {
   display: flex;
   flex-direction: column;
-  max-width: 65%;
+  /* Hereda el tope del stack; no repetir % aquí (evita encogimiento doble). */
+  max-width: 100%;
   width: fit-content;
 }
 .wa-bubble-row--in-stack {
-  max-width: 100%;
   width: 100%;
 }
 /* El espaciado vertical entre burbujas lo define gap en .wa-date-section. */
@@ -1286,7 +1287,10 @@ export default {
 }
 .wa-bubble {
   position: relative;
-  width: fit-content;
+  /* inline-block + max-width evita que el footer flotante encoja la burbuja. */
+  display: inline-block;
+  vertical-align: top;
+  width: auto;
   max-width: 100%;
   font-size: 0.9375rem;
   line-height: 1.35;
