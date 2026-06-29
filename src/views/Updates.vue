@@ -1,11 +1,47 @@
 <template>
   <div>
+  <!-- Timeline agrupado por scheduled_date (vista por defecto) -->
+  <updates-timeline
+    v-if="timeline_mode"
+    :models="update_models"
+    :loading="update_loading"
+    @request-create="on_timeline_create"
+    @request-open="on_timeline_open"
+  >
+    <template #toolbar-right>
+      <button
+        type="button"
+        class="btn btn-outline-secondary btn-sm"
+        title="Ver tabla clásica"
+        @click="timeline_mode = false"
+      >
+        <i class="bi bi-table me-1" aria-hidden="true" />
+        Ver tabla clásica
+      </button>
+    </template>
+  </updates-timeline>
+
+  <!-- Tabla CRUD: permanece montada para modales y carga Vuex -->
   <resource-view
+    ref="update_resource_view"
+    v-show="!timeline_mode"
     model_name="update"
     :model_extra_tabs="model_extra_tabs"
     :before_create_hook="before_create_hook"
     @extra-record-updated="on_record_updated"
-  />
+  >
+    <template #toolbar-right>
+      <button
+        type="button"
+        class="btn btn-outline-secondary btn-sm"
+        title="Ver timeline"
+        @click="timeline_mode = true"
+      >
+        <i class="bi bi-calendar3 me-1" aria-hidden="true" />
+        Ver timeline
+      </button>
+    </template>
+  </resource-view>
 
   <!-- Modal: variables .env con valores distintos al template base -->
   <base-modal
@@ -106,6 +142,7 @@
 <script>
 import { markRaw } from 'vue'
 import ResourceView from '@/common-vue/components/view/Index.vue'
+import UpdatesTimeline from '@/components/update/UpdatesTimeline.vue'
 import UpdateExtraProps from '@/components/update/extra-props/Index.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import api from '@/utils/axios'
@@ -123,9 +160,12 @@ const update_model_extra_tabs = [
 
 export default {
   name: 'ViewUpdates',
-  components: { ResourceView, UpdateExtraProps, BaseModal },
+  components: { ResourceView, UpdatesTimeline, UpdateExtraProps, BaseModal },
   data() {
     return {
+      /** true = vista timeline; false = tabla clásica del ResourceView. */
+      timeline_mode: true,
+
       /** Pestañas del modal CRUD además del grupo Básico del meta. */
       model_extra_tabs: update_model_extra_tabs,
 
@@ -171,6 +211,24 @@ export default {
   },
   computed: {
     /**
+     * Actualizaciones cargadas en Vuex para alimentar el timeline.
+     *
+     * @returns {Array<Object>}
+     */
+    update_models() {
+      return this.$store.state.update.models || []
+    },
+
+    /**
+     * Estado de carga del listado update (misma fuente que la tabla).
+     *
+     * @returns {boolean}
+     */
+    update_loading() {
+      return this.$store.state.update.loading
+    },
+
+    /**
      * Lista de keys seleccionadas para actualizar en el .env del cliente.
      *
      * @returns {string[]}
@@ -187,6 +245,48 @@ export default {
     },
   },
   methods: {
+    /**
+     * Abre el modal de creación reutilizando el handler del ResourceView montado.
+     *
+     * @returns {void}
+     */
+    on_timeline_create() {
+      const resource_view = this.$refs.update_resource_view
+      if (resource_view && typeof resource_view.on_create === 'function') {
+        resource_view.on_create()
+      }
+    },
+
+    /**
+     * Abre el modal de detalle/edición del upgrade indicado por id.
+     *
+     * @param {number|string} id  ID del ClientVersionUpgrade.
+     * @returns {void}
+     */
+    on_timeline_open(id) {
+      if (!id) {
+        return
+      }
+
+      const models = this.update_models
+      let record = null
+
+      models.forEach(function (model) {
+        if (model && model.id == id) {
+          record = model
+        }
+      })
+
+      if (!record) {
+        return
+      }
+
+      const resource_view = this.$refs.update_resource_view
+      if (resource_view && typeof resource_view.on_row === 'function') {
+        resource_view.on_row(record)
+      }
+    },
+
     /**
      * Sincroniza en la tabla los cambios devueltos por acciones de la pestaña Operaciones.
      *
