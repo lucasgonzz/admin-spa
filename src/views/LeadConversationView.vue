@@ -1890,7 +1890,9 @@ export default {
             }
           }
           recorder.onstop = function () {
-            const mime = recorder.mimeType || 'audio/webm'
+            // iOS Safari bug: recorder.mimeType devuelve '' tras grabar aunque el formato sea válido.
+            // Si mimeType (capturado en el constructor) también es '', iOS graba en audio/mp4 por defecto.
+            var mime = mimeType || recorder.mimeType || 'audio/mp4'
             const blob = new Blob(chunks, { type: mime })
             self._pending_audio_blob = blob
             self._pending_audio_mime = mime
