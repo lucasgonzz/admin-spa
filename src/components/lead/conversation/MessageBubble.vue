@@ -98,6 +98,19 @@
         <div v-if="segment.is_last && message.requiere_verificacion" class="wa-extra mt-1">
           <span class="badge bg-warning text-dark wa-badge-tight">Requiere verificación con Lucas</span>
         </div>
+        <div
+          v-if="segment.is_last && admin_notifications_parsed.length > 0"
+          class="wa-extra mt-1 d-flex flex-wrap gap-1"
+        >
+          <span
+            v-for="(n, idx) in admin_notifications_parsed"
+            :key="idx"
+            class="badge bg-secondary wa-badge-tight"
+            :title="'Admins notificados: ' + n.admins.join(', ')"
+          >
+            <i class="bi bi-bell-fill me-1" aria-hidden="true" />{{ n.evento }} → {{ n.admins.join(', ') }}
+          </span>
+        </div>
         <div v-if="segment.is_last && message.ai_reasoning" class="wa-extra mt-1">
           <button
             type="button"
@@ -995,6 +1008,28 @@ export default {
         return parsed
       } catch (e) {
         return null
+      }
+    },
+    /**
+     * Eventos de notificación a admins disparados al procesar este mensaje.
+     * @returns {Array<{evento: string, admins: string[]}>}
+     */
+    admin_notifications_parsed() {
+      if (!this.message.admin_notifications) {
+        return []
+      }
+      try {
+        var parsed = typeof this.message.admin_notifications === 'string'
+          ? JSON.parse(this.message.admin_notifications)
+          : this.message.admin_notifications
+        if (!Array.isArray(parsed)) {
+          return []
+        }
+        return parsed.filter(function (n) {
+          return n && Array.isArray(n.admins) && n.admins.length > 0
+        })
+      } catch (e) {
+        return []
       }
     },
     /**
