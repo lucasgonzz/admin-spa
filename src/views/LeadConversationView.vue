@@ -1750,14 +1750,19 @@ export default {
       navigator.mediaDevices.getUserMedia({ audio: true })
         .then(function (stream) {
           self.audio_stream = stream
-          // Preferir formatos que Meta acepta nativamente: OGG (Firefox), MP4 (Chrome si disponible), WebM al final.
+          // Orden de prioridad: OGG/Opus (Firefox) > WebM/Opus (Chrome) > WebM > MP4 al final.
+          // IMPORTANTE: MP4 debe ir ÚLTIMO porque Chrome genera fragmented MP4 (fMP4) que Meta
+          // acepta como upload pero descarta al procesar (error 131053 "application/octet-stream").
+          // WebM es el formato correcto para Chrome; el backend lo convierte a audio/ogg para Meta.
           const mimeType = MediaRecorder.isTypeSupported('audio/ogg; codecs=opus')
             ? 'audio/ogg; codecs=opus'
-            : MediaRecorder.isTypeSupported('audio/mp4')
-              ? 'audio/mp4'
-              : MediaRecorder.isTypeSupported('audio/webm; codecs=opus')
-                ? 'audio/webm; codecs=opus'
-                : ''
+            : MediaRecorder.isTypeSupported('audio/webm; codecs=opus')
+              ? 'audio/webm; codecs=opus'
+              : MediaRecorder.isTypeSupported('audio/webm')
+                ? 'audio/webm'
+                : MediaRecorder.isTypeSupported('audio/mp4')
+                  ? 'audio/mp4'
+                  : ''
           const recorder = mimeType
             ? new MediaRecorder(stream, { mimeType: mimeType })
             : new MediaRecorder(stream)
@@ -2020,3 +2025,4 @@ export default {
   padding: 1.25rem 1.5rem;
 }
 </style>
+
