@@ -62,11 +62,20 @@
     </router-link>
   </span>
   <span v-else-if="link_text !== null" class="text-break">{{ link_text }}</span>
-  <span v-else class="text-break">{{ text }}</span>
+  <span v-else class="text-break" :class="{ 'text-danger': demo_date_is_pending }">{{ text }}</span>
 </template>
 
 <script>
+import moment from 'moment'
 import generals from '@/common-vue/mixins/generals'
+
+/*
+ * Duración estimada de una demo en minutos cuando se evalúa si "ya se realizó" desde esta celda.
+ * CellRenderer es genérico y no tiene acceso a la duración configurada en Ajustes > Demos
+ * (eso requeriría una llamada a la API por celda), así que se usa el mismo fallback de 60 min
+ * que usa Leads.vue cuando falla la carga de esa configuración.
+ */
+const DEFAULT_DEMO_DURATION_MINUTES = 60
 
 /**
  * Render de celda: fechas, FK con etiqueta si viene la relación en el row.
@@ -203,6 +212,41 @@ export default {
           : 'rgba(0, 0, 0, ' + border_alpha + ')',
       }
     },
+    /**
+     * Indica si la celda es `demo_date` y la demo todavía no se realizó: día futuro,
+     * o el día de hoy mientras no haya pasado la hora estimada de fin (demo_start_time +
+     * duración default). Se usa para resaltar en rojo las demos pendientes en la columna
+     * "Fecha demo" de la tabla de leads (admin-spa).
+     *
+     * @returns {boolean}
+     */
+    demo_date_is_pending() {
+      if (this.prop.key !== 'demo_date' || !this.raw) {
+        return false
+      }
+      const demo_day = moment(this.raw).startOf('day')
+      const today = moment().startOf('day')
+      if (demo_day.isAfter(today)) {
+        return true
+      }
+      if (demo_day.isBefore(today)) {
+        return false
+      }
+      /* Mismo día: sin hora de inicio no se puede saber si ya terminó -> se considera pendiente. */
+      const start_time = this.row.demo_start_time
+      if (!start_time) {
+        return true
+      }
+      const match = (start_time + '').match(/(\d{1,2}):(\d{2})/)
+      if (!match) {
+        return true
+      }
+      const start_minutes = parseInt(match[1], 10) * 60 + parseInt(match[2], 10)
+      const end_minutes = start_minutes + DEFAULT_DEMO_DURATION_MINUTES
+      const now = moment()
+      const now_minutes = now.hours() * 60 + now.minutes()
+      return now_minutes < end_minutes
+    },
   },
   methods: {
     /**
@@ -262,3 +306,4 @@ function contrast_text_for_hex(hex) {
   justify-content: center;
 }
 </style>
+
