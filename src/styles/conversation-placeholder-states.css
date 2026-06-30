@@ -71,3 +71,10 @@
 		transform: translateY(0) scale(1);
 	}
 }
+
+/* Marcador cero altura al final del hilo; scrollIntoView alinea el scroll al último mensaje. */
+.conversation-scroll-end-anchor {
+	height: 0;
+	width: 0;
+	overflow: hidden;
+}

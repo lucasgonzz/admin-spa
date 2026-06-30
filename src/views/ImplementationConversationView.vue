@@ -179,6 +179,8 @@
             </div>
           </template>
         </div>
+        <!-- Ancla al final del hilo para scrollIntoView tras renderizar mensajes -->
+        <div ref="conversation_scroll_end_anchor" class="conversation-scroll-end-anchor" aria-hidden="true" />
       </div>
 
     </div>
@@ -275,6 +277,7 @@
 <script>
 import api from '@/utils/axios'
 import lead_conversation_date_dividers from '@/mixins/lead_conversation_date_dividers'
+import conversation_scroll_behavior from '@/mixins/conversation_scroll_behavior'
 import '@/styles/whatsapp-conversation-wallpaper.css'
 import '@/styles/conversation-placeholder-states.css'
 import '@/styles/whatsapp-date-divider.css'
@@ -291,7 +294,7 @@ import '@/styles/whatsapp-date-divider.css'
 export default {
   name: 'ImplementationConversationView',
 
-  mixins: [lead_conversation_date_dividers],
+  mixins: [lead_conversation_date_dividers, conversation_scroll_behavior],
 
   data() {
     return {
@@ -507,38 +510,6 @@ export default {
   },
 
   methods: {
-    // -------------------------------------------------------------------------
-    // Carga y scroll
-    // -------------------------------------------------------------------------
-
-    /**
-     * Programa el scroll al último mensaje tras actualizar el DOM.
-     * Usa doble nextTick para asegurar que el layout ya terminó de pintar.
-     *
-     * @returns {void}
-     */
-    schedule_scroll_to_bottom() {
-      const self = this
-      this.$nextTick(function () {
-        self.$nextTick(function () {
-          self.scroll_conversation_to_bottom()
-        })
-      })
-    },
-
-    /**
-     * Desplaza el área de mensajes al final del hilo.
-     *
-     * @returns {void}
-     */
-    scroll_conversation_to_bottom() {
-      const el = this.$refs.conversation_scroll_box
-      if (!el) {
-        return
-      }
-      el.scrollTop = el.scrollHeight
-    },
-
     // -------------------------------------------------------------------------
     // Redimensión del textarea (comportamiento tipo WhatsApp)
     // -------------------------------------------------------------------------

@@ -193,6 +193,8 @@
             @toggle_deleted_from_context="on_toggle_deleted_from_context(msg.id)"
           />
         </div>
+        <!-- Ancla al final del hilo para scrollIntoView tras renderizar mensajes -->
+        <div ref="conversation_scroll_end_anchor" class="conversation-scroll-end-anchor" aria-hidden="true" />
       </div>
 
     </div>
@@ -378,6 +380,7 @@ import TemplatePickerModal from '@/components/lead/conversation/TemplatePickerMo
 import api from '@/utils/axios'
 import { copy_lead_conversation_to_clipboard } from '@/utils/lead_conversation_clipboard'
 import lead_conversation_date_dividers from '@/mixins/lead_conversation_date_dividers'
+import conversation_scroll_behavior from '@/mixins/conversation_scroll_behavior'
 import '@/styles/whatsapp-conversation-wallpaper.css'
 import '@/styles/conversation-placeholder-states.css'
 import '@/styles/whatsapp-date-divider.css'
@@ -401,7 +404,7 @@ export default {
     LeadResumenTab,
     TemplatePickerModal,
   },
-  mixins: [lead_conversation_date_dividers],
+  mixins: [lead_conversation_date_dividers, conversation_scroll_behavior],
 
   props: {
     /**
@@ -1160,33 +1163,6 @@ export default {
         return
       }
       this.$store.commit('lead/set_lead_en_conversacion', val)
-    },
-
-    /**
-     * Programa scroll al final del hilo tras actualizar el DOM.
-     *
-     * @returns {void}
-     */
-    schedule_scroll_to_bottom() {
-      const self = this
-      this.$nextTick(function () {
-        self.$nextTick(function () {
-          self.scroll_conversation_to_bottom()
-        })
-      })
-    },
-
-    /**
-     * Desplaza el panel de mensajes hasta el último mensaje.
-     *
-     * @returns {void}
-     */
-    scroll_conversation_to_bottom() {
-      const el = this.$refs.conversation_scroll_box
-      if (!el) {
-        return
-      }
-      el.scrollTop = el.scrollHeight
     },
 
     /**
