@@ -208,6 +208,7 @@
                     <table class="table table-sm table-hover mb-0 demos-agendadas-table">
                       <thead class="table-light">
                         <tr>
+                          <th class="small">Etapa</th>
                           <th class="small">Hora inicio</th>
                           <th class="small">Llamar a las</th>
                           <th class="small">Cliente (demo)</th>
@@ -227,6 +228,9 @@
                           @click="on_demo_row_click(lead)"
                           @keydown.enter="on_demo_row_click(lead)"
                         >
+                          <td class="small">
+                            <span class="badge" :class="demo_lifecycle_badge(lead).class">{{ demo_lifecycle_badge(lead).label }}</span>
+                          </td>
                           <td class="small">{{ lead.demo_start_time || '—' }}</td>
                           <td class="small fw-semibold text-primary">{{ calc_llamar_a_las(lead) }}</td>
                           <td class="small">{{ demo_client_label(lead) }}</td>
@@ -278,6 +282,7 @@
                     <table class="table table-sm table-hover mb-0 demos-agendadas-table">
                       <thead class="table-light">
                         <tr>
+                          <th class="small">Etapa</th>
                           <th class="small">Hora inicio</th>
                           <th class="small">Llamar a las</th>
                           <th class="small">Cliente (demo)</th>
@@ -297,6 +302,9 @@
                           @click="on_demo_row_click(lead)"
                           @keydown.enter="on_demo_row_click(lead)"
                         >
+                          <td class="small">
+                            <span class="badge" :class="demo_lifecycle_badge(lead).class">{{ demo_lifecycle_badge(lead).label }}</span>
+                          </td>
                           <td class="small">{{ lead.demo_start_time || '—' }}</td>
                           <td class="small fw-semibold text-primary">{{ calc_llamar_a_las(lead) }}</td>
                           <td class="small">{{ demo_client_label(lead) }}</td>
@@ -348,6 +356,7 @@
                     <table class="table table-sm table-hover mb-0 demos-agendadas-table">
                       <thead class="table-light">
                         <tr>
+                          <th class="small">Etapa</th>
                           <th class="small">Hora inicio</th>
                           <th class="small">Llamar a las</th>
                           <th class="small">Cliente (demo)</th>
@@ -367,6 +376,9 @@
                           @click="on_demo_row_click(lead)"
                           @keydown.enter="on_demo_row_click(lead)"
                         >
+                          <td class="small">
+                            <span class="badge" :class="demo_lifecycle_badge(lead).class">{{ demo_lifecycle_badge(lead).label }}</span>
+                          </td>
                           <td class="small">{{ lead.demo_start_time || '—' }}</td>
                           <td class="small fw-semibold text-primary">{{ calc_llamar_a_las(lead) }}</td>
                           <td class="small">{{ demo_client_label(lead) }}</td>
@@ -434,7 +446,6 @@ import api from '@/utils/axios'
 import ResourceView from '@/common-vue/components/view/Index.vue'
 import LeadExtraProps from '@/components/lead/extra-props/Index.vue'
 import LeadResumenTab from '@/components/lead/resumen/Index.vue'
-import LeadConversationTab from '@/components/lead/conversation/Index.vue'
 import LeadContractTab from '@/components/lead/contract/Index.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import LeadConversationSidebar from '@/components/lead/LeadConversationSidebar.vue'
@@ -445,11 +456,6 @@ import LeadConversationSidebar from '@/components/lead/LeadConversationSidebar.v
  * y `<component :is>` puede dejar de resolver bien, afectando el modal al guardar).
  */
 const lead_model_extra_tabs = [
-  {
-    key: 'conversation',
-    label: 'WhatsApp',
-    component: markRaw(LeadConversationTab),
-  },
   {
     key: 'resumen',
     label: 'Resumen',
@@ -469,7 +475,6 @@ const lead_model_extra_tabs = [
 
 /**
  * Orden de pestañas del modal de lead: extras intercalados con grupos del meta (Demo, Basico).
- * WhatsApp queda al final para priorizar Resumen y campos operativos al abrir el modal.
  */
 const lead_model_properties_nav_order = [
   'extra:resumen',
@@ -477,7 +482,33 @@ const lead_model_properties_nav_order = [
   'group:Demo',
   'group:Basico',
   'extra:contract',
-  'extra:conversation',
+]
+
+/**
+ * Status del lead que representan el ciclo de vida completo de una demo agendada, desde que se
+ * agenda hasta que se confirma realizada. Se usa para traer todos los leads relevantes del panel
+ * "Demos agendadas" en una sola consulta (antes solo se pedía 'demo_agendada', por lo que un lead
+ * desaparecía del panel apenas el ciclo automatizado le cambiaba el status).
+ */
+const DEMO_LIFECYCLE_STATUSES = [
+  'demo_agendada',
+  'ingresando_demo',
+  'demo_en_curso',
+  'demo_pendiente_de_ingreso',
+  'demo_pendiente_de_terminar',
+  'demo_realizada',
+]
+
+/**
+ * Subconjunto de status que indica que la demo ya arrancó pero todavía no se confirmó su fin.
+ * Se usa para clasificar leads en el grupo "En curso" (solo para días anteriores a hoy; las
+ * demos de hoy en este rango de status van al grupo "Hoy" de Próximas).
+ */
+const EN_CURSO_LIFECYCLE_STATUSES = [
+  'ingresando_demo',
+  'demo_en_curso',
+  'demo_pendiente_de_ingreso',
+  'demo_pendiente_de_terminar',
 ]
 
 /**
@@ -489,7 +520,7 @@ const lead_model_properties_nav_order = [
  */
 export default {
   name: 'ViewLeads',
-  components: { ResourceView, LeadExtraProps, LeadResumenTab, LeadConversationTab, LeadContractTab, BaseModal, LeadConversationSidebar },
+  components: { ResourceView, LeadExtraProps, LeadResumenTab, LeadContractTab, BaseModal, LeadConversationSidebar },
   data() {
     return {
       /** Controla visibilidad del modal para gestionar catálogo de demos. */
@@ -992,78 +1023,6 @@ export default {
       return (lead.demo_date + '').substring(0, 10)
     },
     /**
-     * Parsea demo_date y demo_start_time del lead a minutos desde medianoche (inicio y fin estimado).
-     * @param {Object} lead Lead con demo_date y demo_start_time.
-     * @returns {{ date_key: string, start_minutes: number, end_minutes: number }|null}
-     */
-    get_demo_time_bounds(lead) {
-      var date_key = this.parse_demo_date_key(lead)
-      if (!date_key || !lead.demo_start_time) {
-        return null
-      }
-      var match = (lead.demo_start_time + '').match(/(\d{1,2}):(\d{2})/)
-      if (!match) {
-        return null
-      }
-      /* Minutos desde medianoche del inicio y del fin (inicio + duración configurada). */
-      var start_minutes = parseInt(match[1], 10) * 60 + parseInt(match[2], 10)
-      var end_minutes = start_minutes + (this.duracion_minutos || 60)
-      return {
-        date_key: date_key,
-        start_minutes: start_minutes,
-        end_minutes: end_minutes,
-      }
-    },
-    /**
-     * Indica si la demo del lead está en curso (hoy, entre hora de inicio y fin estimado).
-     * @param {Object} lead Lead con demo_date y demo_start_time.
-     * @returns {boolean}
-     */
-    demo_is_in_progress(lead) {
-      var bounds = this.get_demo_time_bounds(lead)
-      if (!bounds) {
-        return false
-      }
-      var today_str = this.get_today_str()
-      if (bounds.date_key !== today_str) {
-        return false
-      }
-      var now = new Date()
-      var now_minutes = now.getHours() * 60 + now.getMinutes()
-      return now_minutes >= bounds.start_minutes && now_minutes < bounds.end_minutes
-    },
-    /**
-     * Indica si la demo del lead ya finalizó por completo (fecha pasada o hoy con hora de fin superada).
-     * No retorna true mientras la demo sigue en curso.
-     * @param {Object} lead Lead con demo_date y demo_start_time.
-     * @returns {boolean}
-     */
-    demo_has_occurred(lead) {
-      var date_key = this.parse_demo_date_key(lead)
-      if (!date_key) {
-        return false
-      }
-
-      /* Fecha de referencia: hoy en YYYY-MM-DD. */
-      var today_str = this.get_today_str()
-      if (date_key < today_str) {
-        return true
-      }
-      if (date_key > today_str) {
-        return false
-      }
-
-      /* Mismo día: solo realizada cuando la hora de fin estimada ya pasó. */
-      var bounds = this.get_demo_time_bounds(lead)
-      if (!bounds) {
-        return false
-      }
-      var now = new Date()
-      var now_minutes = now.getHours() * 60 + now.getMinutes()
-
-      return now_minutes >= bounds.end_minutes
-    },
-    /**
      * Agrupa leads por demo_date y ordena días y horas según el criterio indicado.
      * @param {Array} leads Lista de leads con demo_date.
      * @param {boolean} sort_dates_asc true = fechas ascendente; false = descendente (más reciente primero).
@@ -1118,15 +1077,17 @@ export default {
       return grouped
     },
     /**
-     * Carga los leads con demo agendada desde la API, separa próximas, en curso y realizadas
-     * y agrupa por fecha para el panel del header.
+     * Carga todos los leads del ciclo de vida de la demo (cualquier status relevante), clasifica
+     * por demo_date + status real, y agrupa por fecha para el panel del header.
+     * Las demos de hoy (cualquier status) van a Próximas; las de días anteriores se dividen
+     * entre "En curso" (status intermedio sin confirmar fin) y "Realizadas" (resto).
      * @returns {void}
      */
     load_demos_agendadas() {
       var self = this
       self.loading_demos_agendadas = true
       api
-        .get('/lead', { params: { status: 'demo_agendada' } })
+        .get('/lead', { params: { status: DEMO_LIFECYCLE_STATUSES.join(',') } })
         .then(function (res) {
           var leads = (res.data && res.data.models)
             ? res.data.models
@@ -1137,23 +1098,41 @@ export default {
             return !!self.parse_demo_date_key(l)
           })
 
-          /* Separar demos en tres grupos: pendientes, en curso y realizadas. */
-          var upcoming_leads = []
-          var in_progress_leads = []
-          var past_leads = []
+          var today_str = self.get_today_str()
+
+          /*
+           * Clasificación en tres grupos, basada en demo_date + status real del lead (ya no en
+           * cálculo de horas estimadas):
+           * - Próximas: hoy (CUALQUIER status, para que una demo en curso o recién realizada nunca
+           *   "desaparezca") + días futuros.
+           * - En curso: días anteriores a hoy cuyo status sigue en un estado intermedio sin
+           *   confirmar fin (caso borde: demo que quedó trabada sin cerrarse).
+           * - Realizadas: días anteriores a hoy con status demo_realizada, o cualquier otro status
+           *   viejo no resuelto (el día ya pasó, no tiene sentido seguir mostrándolo como pendiente).
+           */
+          var proximas_leads = []
+          var en_curso_leads = []
+          var realizadas_leads = []
+
           leads.forEach(function (lead) {
-            if (self.demo_has_occurred(lead)) {
-              past_leads.push(lead)
-            } else if (self.demo_is_in_progress(lead)) {
-              in_progress_leads.push(lead)
-            } else {
-              upcoming_leads.push(lead)
+            var date_key = self.parse_demo_date_key(lead)
+
+            if (date_key >= today_str) {
+              proximas_leads.push(lead)
+              return
             }
+
+            if (EN_CURSO_LIFECYCLE_STATUSES.indexOf(lead.status) >= 0) {
+              en_curso_leads.push(lead)
+              return
+            }
+
+            realizadas_leads.push(lead)
           })
 
-          self.demos_por_dia = self.build_demos_day_groups(upcoming_leads, true)
-          self.demos_en_curso_por_dia = self.build_demos_day_groups(in_progress_leads, true)
-          self.demos_pasadas_por_dia = self.build_demos_day_groups(past_leads, false)
+          self.demos_por_dia = self.build_demos_day_groups(proximas_leads, true)
+          self.demos_en_curso_por_dia = self.build_demos_day_groups(en_curso_leads, true)
+          self.demos_pasadas_por_dia = self.build_demos_day_groups(realizadas_leads, false)
         })
         .catch(function () {
           self.demos_por_dia = []
@@ -1230,6 +1209,22 @@ export default {
       return String(hours).padStart(2, '0') + ':' + String(mins).padStart(2, '0')
     },
     /**
+     * Devuelve label y clase de badge según la etapa del ciclo de vida de la demo
+     * (pendiente / en curso / realizada), a partir del status real del lead.
+     * @param {Object} lead Lead con campo status.
+     * @returns {{label: string, class: string}}
+     */
+    demo_lifecycle_badge(lead) {
+      var status = lead && lead.status
+      if (status === 'demo_realizada') {
+        return { label: 'Realizada', class: 'bg-light text-secondary border' }
+      }
+      if (EN_CURSO_LIFECYCLE_STATUSES.indexOf(status) >= 0) {
+        return { label: 'En curso', class: 'bg-success' }
+      }
+      return { label: 'Pendiente', class: 'bg-primary' }
+    },
+    /**
      * Devuelve la clase CSS del badge según el estado del demo setup.
      * @param {string|null} status Estado del setup.
      * @returns {string} Clase Bootstrap para el badge.
@@ -1292,12 +1287,14 @@ export default {
 
 /* Contenedor con scroll horizontal cuando la tabla no entra en pantallas angostas. */
 .demos-agendadas-table-wrap {
+  overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
 
-/* Ancho mínimo para mantener columnas legibles y forzar scroll horizontal en móvil. */
+/* Ancho mínimo para mantener columnas legibles y forzar scroll horizontal en móvil.
+   Subido de 44rem a 48rem por la columna nueva de Etapa. */
 .demos-agendadas-table {
-  min-width: 44rem;
+  min-width: 48rem;
   white-space: nowrap;
 }
 
