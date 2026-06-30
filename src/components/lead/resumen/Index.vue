@@ -42,8 +42,8 @@
       <p class="small mb-0">Hacé clic en "Regenerar" para generarlo ahora.</p>
     </div>
 
-    <!-- Contenido cuando existe resumen narrativo -->
-    <template v-else>
+    <!-- Contenido cuando existe resumen narrativo de demo -->
+    <template v-if="record && record.demo_summary">
 
       <!-- Card con el resumen narrativo completo generado por Claude -->
       <div class="border-0 bg-light rounded-3 p-3 mb-3">
@@ -169,29 +169,35 @@
       </div>
       <!-- Fin grid de tarjetas estructuradas -->
 
-      <!-- Divisor entre resumen de demo y resumen de llamada (solo si ambos existen) -->
-      <hr v-if="record.call_summary" class="my-4">
-
-      <!-- Subtítulo de la sección de llamada del closer -->
-      <div v-if="record.call_summary" class="d-flex align-items-center justify-content-between mb-3">
-        <span class="small fw-semibold text-secondary">
-          <i class="bi bi-telephone-fill me-2"></i> Llamada del closer
-        </span>
-      </div>
-
-      <!-- Panel de resumen de la llamada del closer (generado por Recall.ai + Claude) -->
-      <call-summary-panel v-if="record.call_summary" :call_summary="record.call_summary" />
-
-      <!-- Estado vacío de llamada: lead hizo la demo pero el closer todavía no llamó -->
-      <div
-        v-else
-        class="text-center py-3 text-muted border rounded-3 mt-3"
-      >
-        <i class="bi bi-telephone d-block mb-2" style="font-size: 1.5rem"></i>
-        <p class="small mb-0">El resumen de la llamada del closer aún no está disponible.</p>
-      </div>
-
     </template>
+
+    <!--
+      Sección de llamada del closer: independiente del resumen de demo.
+      Antes estaba anidada dentro del template de arriba, lo que hacía que nunca se
+      mostrara si el lead no tenía demo_summary generado, aunque sí tuviera call_summary.
+    -->
+
+    <!-- Divisor entre resumen de demo y resumen de llamada (solo si ambos existen) -->
+    <hr v-if="record && record.demo_summary && record.call_summary" class="my-4">
+
+    <!-- Subtítulo de la sección de llamada del closer -->
+    <div v-if="record && record.call_summary" class="d-flex align-items-center justify-content-between mb-3">
+      <span class="small fw-semibold text-secondary">
+        <i class="bi bi-telephone-fill me-2"></i> Llamada del closer
+      </span>
+    </div>
+
+    <!-- Panel de resumen de la llamada del closer (generado por Recall.ai + Claude) -->
+    <call-summary-panel v-if="record && record.call_summary" :call_summary="record.call_summary" />
+
+    <!-- Estado vacío de llamada: el lead tiene demo_summary pero el closer todavía no llamó -->
+    <div
+      v-else-if="record && record.demo_summary"
+      class="text-center py-3 text-muted border rounded-3 mt-3"
+    >
+      <i class="bi bi-telephone d-block mb-2" style="font-size: 1.5rem"></i>
+      <p class="small mb-0">El resumen de la llamada del closer aún no está disponible.</p>
+    </div>
 
   </div>
 </template>
@@ -354,3 +360,4 @@ export default {
   },
 }
 </script>
+
