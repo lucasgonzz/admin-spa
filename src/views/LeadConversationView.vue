@@ -282,23 +282,20 @@
         </button>
       </div>
 
-      <!-- Simulación de mensaje entrante del lead (oculta por defecto; disponible también en producción) -->
+      <!-- Simulación de mensaje entrante del lead (oculta por defecto) -->
       <div
         v-show="show_simulate_inbound_panel"
         class="simulate-inbound-panel border-top mt-2 pt-2"
       >
         <div class="d-flex gap-2 align-items-center">
           <button
-            v-if="is_dev"
             type="button"
             class="btn btn-outline-info btn-sm d-inline-flex align-items-center justify-content-center flex-shrink-0"
-            :disabled="forzando_seguimiento"
-            title="Dispara el seguimiento correspondiente ahora mismo, sin esperar el tiempo configurado"
-            aria-label="Forzar seguimiento automático ahora"
+            title="Probar seguimientos: ver y enviar las plantillas de WhatsApp disponibles"
+            aria-label="Probar seguimientos: ver y enviar las plantillas de WhatsApp disponibles"
             @click="on_forzar_seguimiento"
           >
-            <span v-if="forzando_seguimiento" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-            <i v-else class="bi bi-clock-history" aria-hidden="true" />
+            <i class="bi bi-clock-history" aria-hidden="true" />
           </button>
           <input
             v-model="mensaje_simulado"
@@ -320,7 +317,6 @@
             <i v-else class="bi bi-chat-left-dots" aria-hidden="true" />
           </button>
         </div>
-        <span v-if="forzar_seguimiento_resultado" class="small text-muted d-block mt-1">{{ forzar_seguimiento_resultado }}</span>
       </div>
     </div>
 
@@ -444,12 +440,6 @@ export default {
       /** true mientras se simula el mensaje entrante (evita doble envío). */
       enviando_simulado: false,
 
-      /** true mientras se fuerza el seguimiento manual (testing). */
-      forzando_seguimiento: false,
-
-      /** Texto descriptivo del último resultado de forzar seguimiento (testing). */
-      forzar_seguimiento_resultado: '',
-
       /** Evita doble click mientras se persiste el toggle de notificaciones push. */
       toggling_notify: false,
 
@@ -500,12 +490,6 @@ export default {
 
       /** Timer para resetear el feedback del botón de exportación. */
       export_conversation_feedback_timer: null,
-
-      /**
-       * true si estamos corriendo en entorno de desarrollo (Vite DEV).
-       * Controla la visibilidad de las herramientas de testing en el footer.
-       */
-      is_dev: import.meta.env.DEV,
 
       /** true mientras el micrófono está grabando. */
       recording_audio: false,
@@ -1337,38 +1321,13 @@ export default {
     },
 
     /**
-     * Fuerza el seguimiento que corresponde al lead ahora mismo (testing).
+     * Abre el selector de plantillas para probar el flujo de seguimientos manualmente.
+     * Reutiliza el mismo modal que el botón de chevron-arriba para consistencia.
      *
      * @returns {void}
      */
     on_forzar_seguimiento() {
-      const self = this
-      const rec = this.effective_record
-      if (!rec || !rec.id || this.forzando_seguimiento) {
-        return
-      }
-      this.forzando_seguimiento = true
-      this.forzar_seguimiento_resultado = ''
-      this.$store
-        .dispatch('lead/force_followup', rec.id)
-        .then(function (data) {
-          self.forzando_seguimiento = false
-          self.on_record_updated(data.model)
-          self.schedule_scroll_to_bottom()
-          const outcome = data.outcome || {}
-          if (outcome.result === 'no_rule') {
-            self.forzar_seguimiento_resultado = 'No hay regla de seguimiento activa para este estado.'
-          } else if (outcome.result === 'paused') {
-            self.forzar_seguimiento_resultado = 'Se alcanzó el máximo de seguimientos: el lead pasó a en_pausa.'
-          } else if (outcome.result === 'suggestion') {
-            const via = outcome.via === 'template' ? 'plantilla de WhatsApp' : 'sugerencia de Claude'
-            self.forzar_seguimiento_resultado = 'Seguimiento #' + outcome.followup_number + ' disparado vía ' + via + '.'
-          }
-        })
-        .catch(function () {
-          self.forzando_seguimiento = false
-          self.forzar_seguimiento_resultado = 'Error al forzar el seguimiento.'
-        })
+      this.on_open_template_picker()
     },
 
     /**
