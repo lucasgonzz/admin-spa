@@ -386,12 +386,16 @@ export default {
       if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) {
         return null
       }
+      // Orden de prioridad: OGG/Opus (Firefox) > WebM/Opus (Chrome) > WebM > MP4 al final.
+      // MP4 va último porque Chrome genera fragmented MP4 (fMP4) que Meta rechaza silenciosamente
+      // con error 131053 ("audio/mp4 processed as application/octet-stream"). WebM es el formato
+      // correcto para Chrome; el backend lo convierte a audio/ogg antes de subirlo a Kapso.
       const candidates = [
         'audio/ogg;codecs=opus',
         'audio/ogg',
-        'audio/mp4',
         'audio/webm;codecs=opus',
         'audio/webm',
+        'audio/mp4',
       ]
       let i = 0
       for (i = 0; i < candidates.length; i = i + 1) {
