@@ -339,11 +339,30 @@
           >Enviando…</span>
           <span v-if="formatted_time_short" class="wa-bubble-time">{{ formatted_time_short }}</span>
           <span
-            v-if="show_whatsapp_sent_meta"
+            v-if="whatsapp_check_state"
             class="wa-meta-delivery"
             :title="whatsapp_delivery_title"
           >
-            <i class="bi bi-check2-all wa-tick-double" aria-hidden="true" />
+            <i
+              v-if="whatsapp_check_state === 'enviado'"
+              class="bi bi-check2 wa-tick-single"
+              aria-hidden="true"
+            />
+            <i
+              v-else-if="whatsapp_check_state === 'entregado'"
+              class="bi bi-check2-all wa-tick-double-gray"
+              aria-hidden="true"
+            />
+            <i
+              v-else-if="whatsapp_check_state === 'leido'"
+              class="bi bi-check2-all wa-tick-double"
+              aria-hidden="true"
+            />
+            <i
+              v-else-if="whatsapp_check_state === 'fallido'"
+              class="bi bi-exclamation-circle wa-tick-failed"
+              aria-hidden="true"
+            />
           </span>
         </div>
       </div>
@@ -665,17 +684,33 @@ export default {
       return this.message.sender === 'sistema' && this.message.status === 'sugerido'
     },
     /**
-     * Doble check de entrega WhatsApp (mismo criterio que tickets de soporte).
-     * @returns {boolean}
+     * Estado visual del check de entrega WhatsApp según whatsapp_delivery_status del backend.
+     * null = no mostrar ícono (mensaje entrante, no enviado o sin whatsapp_message_id).
+     *
+     * @returns {'enviado'|'entregado'|'leido'|'fallido'|null}
      */
-    show_whatsapp_sent_meta() {
+    whatsapp_check_state() {
       if (!this.is_outgoing_message) {
-        return false
+        return null
       }
       if (this.message.status !== 'enviado') {
-        return false
+        return null
       }
-      return !!this.message.whatsapp_message_id
+      if (!this.message.whatsapp_message_id) {
+        return null
+      }
+      const delivery_status = this.message.whatsapp_delivery_status
+      if (delivery_status === 'fallido') {
+        return 'fallido'
+      }
+      if (delivery_status === 'leido') {
+        return 'leido'
+      }
+      if (delivery_status === 'entregado') {
+        return 'entregado'
+      }
+      /* null o ausente: mensajes históricos o webhook de entrega aún no llegó. */
+      return 'enviado'
     },
     /**
      * Mensaje saliente marcado enviado pero sin id de Meta/Kapso.
@@ -722,11 +757,37 @@ export default {
       return 'El lead reaccionó a este mensaje'
     },
     /**
-     * Tooltip del check de WhatsApp.
+     * Tooltip del check de WhatsApp según whatsapp_check_state.
      * @returns {string}
      */
     whatsapp_delivery_title() {
-      return 'Enviado por WhatsApp al lead'
+      const state = this.whatsapp_check_state
+      if (!state) {
+        return ''
+      }
+      if (state === 'enviado') {
+        return 'Enviado por WhatsApp al lead'
+      }
+      if (state === 'entregado') {
+        var delivered_label = 'Entregado al lead'
+        var delivered_at = this.format_delivery_timestamp(this.message.whatsapp_delivered_at)
+        if (delivered_at) {
+          return delivered_label + ' · ' + delivered_at
+        }
+        return delivered_label
+      }
+      if (state === 'leido') {
+        var seen_label = 'Visto por el lead'
+        var seen_at = this.format_delivery_timestamp(this.message.whatsapp_seen_at)
+        if (seen_at) {
+          return seen_label + ' · ' + seen_at
+        }
+        return seen_label
+      }
+      if (state === 'fallido') {
+        return 'No se pudo entregar el mensaje'
+      }
+      return ''
     },
     /**
      * Badge solo para estados excepcionales (p. ej. rechazado).
@@ -1082,6 +1143,26 @@ export default {
     },
   },
   methods: {
+    /**
+     * Formatea fecha/hora de entrega o lectura WhatsApp para tooltips (mismo criterio que lead_reaction_at).
+     *
+     * @param {string|null|undefined} raw Timestamp ISO desde la API.
+     * @returns {string} Texto legible o cadena vacía si no aplica.
+     */
+    format_delivery_timestamp(raw) {
+      if (!raw) {
+        return ''
+      }
+      try {
+        var d = new Date(raw)
+        if (isNaN(d.getTime())) {
+          return ''
+        }
+        return d.toLocaleString('es-AR')
+      } catch (e) {
+        return ''
+      }
+    },
     /**
      * Alterna visibilidad del bloque de razonamiento.
      * @returns {void}
@@ -1550,12 +1631,23 @@ export default {
   display: inline-flex;
   align-items: center;
   line-height: 1;
-  color: #53bdeb;
   white-space: nowrap;
+}
+.wa-tick-single {
+  font-size: 0.95rem;
+  color: #8696a0;
+}
+.wa-tick-double-gray {
+  font-size: 0.95rem;
+  color: #8696a0;
 }
 .wa-tick-double {
   font-size: 0.95rem;
   color: #53bdeb;
+}
+.wa-tick-failed {
+  font-size: 0.95rem;
+  color: #dc3545;
 }
 .wa-delivery-error {
   font-size: 0.75rem;

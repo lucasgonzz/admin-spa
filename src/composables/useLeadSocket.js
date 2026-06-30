@@ -212,6 +212,15 @@ export function useLeadSocket(options) {
     const lead = event_data.lead || null
     const message = event_data.message || null
     const lead_id = event_data.lead_id || (lead && lead.id) || null
+
+    /* Solo cambió whatsapp_delivery_status: refrescar hilo abierto, sin badges ni fila de grilla. */
+    if (event_data.is_status_update) {
+      if (lead_id != null) {
+        schedule_conversation_refetch(lead_id)
+      }
+      return
+    }
+
     const lead_message_id = event_data.lead_message_id || (message && message.id) || null
     const viewing_this_lead = is_viewing_lead_conversation(lead_id)
 
