@@ -89,6 +89,12 @@
             {{ pipeline_status_change_label }}
           </span>
         </div>
+        <div v-if="segment.is_last && message.marca_demo_ingreso_confirmado" class="wa-extra mt-1">
+          <span class="badge bg-success wa-badge-tight">✓ Ingreso a demo confirmado</span>
+        </div>
+        <div v-if="segment.is_last && message.marca_demo_terminada_confirmada" class="wa-extra mt-1">
+          <span class="badge bg-success wa-badge-tight">✓ Demo terminada confirmada</span>
+        </div>
         <div v-if="segment.is_last && message.requiere_verificacion" class="wa-extra mt-1">
           <span class="badge bg-warning text-dark wa-badge-tight">Requiere verificación con Lucas</span>
         </div>
