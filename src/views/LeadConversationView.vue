@@ -134,65 +134,9 @@
     </div>
 
     <!-- ====================================================
-         ÁREA DE MENSAJES: scroll vertical, alertas sticky al tope
+         ÁREA DE MENSAJES: scroll vertical sin avisos superpuestos
          ==================================================== -->
     <div ref="conversation_scroll_box" class="conversation-messages whatsapp-conversation-wallpaper px-3 py-2">
-
-      <!-- Alertas contextuales pegadas al tope del scroll -->
-      <div class="conversation-alerts sticky-top-alerts">
-
-        <!-- Alerta cuando Claude está desactivado para este lead -->
-        <div v-if="!claude_auto_reply_enabled" class="alert alert-warning py-2 small mb-2">
-          <i class="bi bi-person-check me-1" aria-hidden="true" />
-          Respondés vos a este lead. Claude <strong>no</strong> generará sugerencias ni enviará respuestas automáticas.
-        </div>
-
-        <!-- Seguimiento automático pendiente de revisión -->
-        <div v-if="has_pending_followup_suggestion" class="alert alert-info py-2 small mb-2">
-          <i class="bi bi-clock-history me-1" aria-hidden="true" />
-          Hay una <strong>sugerencia de seguimiento automático</strong> por inactividad del lead. Revisá el mensaje marcado en la conversación.
-        </div>
-
-        <!-- Error de IA -->
-        <div v-if="ai_error" class="alert alert-danger py-2 small mb-2">{{ ai_error }}</div>
-
-        <!-- Claude está consultando (spinner) -->
-        <div
-          v-if="ai_suggestion_request_loading"
-          class="alert alert-secondary py-2 small mb-2 d-flex align-items-center gap-2"
-        >
-          <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-          Consultando a Claude…
-        </div>
-
-        <!-- Countdown antes de consultar a Claude (mutuamente excluyente con el spinner) -->
-        <div
-          v-else-if="show_ai_consult_countdown"
-          class="alert alert-secondary py-2 small mb-2 d-flex align-items-center justify-content-between gap-2"
-        >
-          <span>
-            <i class="bi bi-stars me-1" aria-hidden="true" />
-            Claude consulta en <strong>{{ ai_consult_remaining_seconds }}</strong> s
-          </span>
-          <button
-            type="button"
-            class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center justify-content-center"
-            :disabled="cancelling_auto_consult"
-            title="Cancelar la petición automática a Claude"
-            aria-label="Cancelar la petición automática a Claude"
-            @click="on_cancel_auto_ai_consult"
-          >
-            <span
-              v-if="cancelling_auto_consult"
-              class="spinner-border spinner-border-sm"
-              role="status"
-              aria-hidden="true"
-            />
-            <i v-else class="bi bi-x-lg" aria-hidden="true" />
-          </button>
-        </div>
-
-      </div>
 
       <!-- Carga inicial de la conversación -->
       <div
@@ -1624,7 +1568,7 @@ export default {
           self.sync_countdown_clock()
         })
         .catch(function () {
-          /* ai_error queda en store para el alert rojo. */
+          /* ai_error queda en store por si otro flujo lo necesita. */
         })
     },
 
@@ -2051,13 +1995,6 @@ export default {
 .conversation-messages-flow {
   display: flex;
   flex-direction: column;
-}
-
-/* Alertas pegadas al tope del área de scroll (no del viewport) */
-.sticky-top-alerts {
-  position: sticky;
-  top: 0;
-  z-index: 4;
 }
 
 /* Botones circulares de solo ícono (header y footer) */

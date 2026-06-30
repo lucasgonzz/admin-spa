@@ -325,6 +325,24 @@
         </div>
       </div>
 
+      <!-- Campo: horas sin ingreso antes de revertir a calificado -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-5">
+          <label class="form-label small" for="demo_pendiente_ingreso_horas_timeout">Horas sin ingreso antes de revertir a calificado</label>
+          <!-- Horas desde el horario de la demo antes de volver a calificado para que el seguimiento retome el contacto -->
+          <input
+            id="demo_pendiente_ingreso_horas_timeout"
+            v-model.number="local.pendiente_ingreso_horas_timeout"
+            type="number"
+            class="form-control form-control-sm"
+            min="1"
+            max="720"
+            :disabled="saving"
+          />
+          <p class="text-muted small mb-0 mt-1">Si el lead queda en 'Demo pendiente de ingreso' más de estas horas desde el horario de la demo, vuelve a Calificado para que el seguimiento lo retome.</p>
+        </div>
+      </div>
+
       <!-- Botón guardar: único para todos los campos -->
       <div class="d-flex align-items-center gap-2">
         <button
@@ -391,6 +409,8 @@ export default {
         fin_seguimiento_minutos: 10,
         /** Minutos desde el check de fin antes de marcar demo_pendiente_de_terminar. */
         fin_timeout_minutos: 25,
+        /** Horas desde el horario de la demo sin ingreso antes de revertir a calificado. */
+        pendiente_ingreso_horas_timeout: 24,
       },
       /** Valores persistidos en servidor (para detectar cambios). */
       stored: {
@@ -425,6 +445,8 @@ export default {
         fin_seguimiento_minutos: 10,
         /** Espejo del servidor: timeout de fin en minutos. */
         fin_timeout_minutos: 25,
+        /** Espejo del servidor: horas sin ingreso antes de revertir a calificado. */
+        pendiente_ingreso_horas_timeout: 24,
       },
       /** Carga inicial GET settings. */
       loading: true,
@@ -603,6 +625,7 @@ export default {
           ingreso_timeout_minutos:             self.local.ingreso_timeout_minutos,
           fin_seguimiento_minutos:             self.local.fin_seguimiento_minutos,
           fin_timeout_minutos:                 self.local.fin_timeout_minutos,
+          pendiente_ingreso_horas_timeout:     self.local.pendiente_ingreso_horas_timeout,
         })
         .then(function (res) {
           /* Actualizar los valores de referencia para que can_save vuelva a false. */

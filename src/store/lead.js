@@ -737,6 +737,22 @@ export default __base_store({
       })
     },
     /**
+     * Activa o desactiva el flag de intervención humana requerida para el lead abierto.
+     *
+     * @param {Object} context
+     * @param {number} lead_id id del lead
+     * @returns {Promise<Object>} modelo lead actualizado
+     */
+    toggle_requiere_intervencion_humana(context, lead_id) {
+      const commit = context.commit
+      return api.post('/lead/' + lead_id + '/toggle-requiere-intervencion-humana').then((res) => {
+        const model = res.data.model
+        commit('update_lead_en_conversacion', model)
+        context.dispatch('upsert_model_in_lists', model)
+        return model
+      })
+    },
+    /**
      * Envía por WhatsApp un mensaje sugerido por IA (sin editar).
      * @param {Object} context
      * @param {number} message_id id de lead_messages

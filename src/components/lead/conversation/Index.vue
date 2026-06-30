@@ -65,6 +65,27 @@
         <button
           type="button"
           class="btn btn-sm d-inline-flex align-items-center justify-content-center"
+          :class="requiere_intervencion_humana_activa ? 'btn-danger' : 'btn-outline-secondary'"
+          :disabled="toggling_requiere_intervencion"
+          :title="requiere_intervencion_humana_activa
+            ? 'Este lead requiere intervención humana. Clic para marcar como resuelto.'
+            : 'Marcar como que este lead requiere intervención humana.'"
+          :aria-label="requiere_intervencion_humana_activa
+            ? 'Desmarcar intervención humana requerida'
+            : 'Marcar intervención humana requerida'"
+          @click="on_toggle_requiere_intervencion_humana"
+        >
+          <span
+            v-if="toggling_requiere_intervencion"
+            class="spinner-border spinner-border-sm"
+            role="status"
+            aria-hidden="true"
+          />
+          <i v-else class="bi bi-person-exclamation" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm d-inline-flex align-items-center justify-content-center"
           :class="claude_auto_reply_enabled ? 'btn-success' : 'btn-outline-secondary'"
           :disabled="toggling_claude_auto_reply"
           :title="claude_auto_reply_enabled
@@ -84,54 +105,6 @@
           <i v-else class="bi bi-stars" aria-hidden="true" />
         </button>
       </div>
-    </div>
-
-    <!-- Alerta cuando Claude está desactivado para este lead -->
-    <div v-if="!claude_auto_reply_enabled" class="alert alert-warning py-2 small mb-2">
-      <i class="bi bi-person-check me-1" aria-hidden="true" />
-      Respondés vos a este lead. Claude <strong>no</strong> generará sugerencias ni enviará respuestas automáticas.
-    </div>
-
-    <!-- Alerta de seguimiento automático -->
-    <div v-if="has_pending_followup_suggestion" class="alert alert-info py-2 small mb-2">
-      <i class="bi bi-clock-history me-1" aria-hidden="true" />
-      Hay una <strong>sugerencia de seguimiento automático</strong> por inactividad del lead. Revisá el mensaje marcado en la conversación.
-    </div>
-
-    <!-- Error de IA -->
-    <div v-if="ai_error" class="alert alert-danger py-2 small mb-2">{{ ai_error }}</div>
-
-    <!-- Claude está consultando -->
-    <div v-if="ai_suggestion_request_loading" class="alert alert-secondary py-2 small mb-2 d-flex align-items-center gap-2">
-      <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-      Consultando a Claude…
-    </div>
-
-    <!-- Countdown antes de consultar a Claude (versión simple) -->
-    <div
-      v-else-if="show_ai_consult_countdown"
-      class="alert alert-secondary py-2 small mb-2 d-flex align-items-center justify-content-between gap-2"
-    >
-      <span>
-        <i class="bi bi-stars me-1" aria-hidden="true" />
-        Claude consulta en <strong>{{ ai_consult_remaining_seconds }}</strong> s
-      </span>
-      <button
-        type="button"
-        class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center justify-content-center"
-        :disabled="cancelling_auto_consult"
-        title="Cancelar la petición automática a Claude"
-        aria-label="Cancelar la petición automática a Claude"
-        @click="on_cancel_auto_ai_consult"
-      >
-        <span
-          v-if="cancelling_auto_consult"
-          class="spinner-border spinner-border-sm"
-          role="status"
-          aria-hidden="true"
-        />
-        <i v-else class="bi bi-x-lg" aria-hidden="true" />
-      </button>
     </div>
 
     <!-- Conversación -->
@@ -358,6 +331,8 @@ export default {
       cancelling_auto_consult: false,
       /** Evita doble POST al activar/desactivar Claude por lead. */
       toggling_claude_auto_reply: false,
+      /** Evita doble POST al activar/desactivar requiere_intervencion_humana por lead. */
+      toggling_requiere_intervencion: false,
       /** Intervalo que actualiza now_tick para los countdown visibles. */
       now_tick_interval_id: null,
       /** Timestamp actual (ms) para countdown de debounce y auto-envío. */
@@ -416,6 +391,19 @@ export default {
         return true
       }
       return Boolean(rec.claude_auto_reply)
+    },
+    /**
+     * true si el lead tiene marcada la intervención humana requerida.
+     * Default false si el campo aún no viene del backend.
+     *
+     * @returns {boolean}
+     */
+    requiere_intervencion_humana_activa() {
+      const rec = this.effective_record
+      if (!rec) {
+        return false
+      }
+      return Boolean(rec.requiere_intervencion_humana)
     },
     /**
      * Mensajes ordenados cronológicamente por id.
@@ -1458,6 +1446,29 @@ export default {
         })
         .catch(function () {
           self.toggling_claude_auto_reply = false
+        })
+    },
+    /**
+     * Activa o desactiva el flag de intervención humana requerida para este lead.
+     * No re-activa claude_auto_reply — eso lo hace el admin manualmente si lo desea.
+     *
+     * @returns {void}
+     */
+    on_toggle_requiere_intervencion_humana() {
+      const self = this
+      const rec = this.effective_record
+      if (!rec || !rec.id || this.toggling_requiere_intervencion) {
+        return
+      }
+      this.toggling_requiere_intervencion = true
+      this.$store
+        .dispatch('lead/toggle_requiere_intervencion_humana', rec.id)
+        .then(function (model) {
+          self.toggling_requiere_intervencion = false
+          self.$emit('record-updated', model)
+        })
+        .catch(function () {
+          self.toggling_requiere_intervencion = false
         })
     },
     /**

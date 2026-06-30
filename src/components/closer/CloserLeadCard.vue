@@ -116,22 +116,13 @@
 
       <!-- Acciones principales -->
       <div class="d-flex flex-wrap gap-2 mt-2">
-        <a
-          v-if="section === 'en_curso' && lead.meet_url"
-          :href="lead.meet_url"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="btn btn-sm btn-primary"
-        >
-          <i class="bi bi-camera-video me-1" aria-hidden="true" />
-          Unirse a Meet
-        </a>
         <button
-          v-else-if="section === 'en_curso'"
+          v-if="section === 'en_curso'"
           type="button"
           class="btn btn-sm btn-primary"
-          disabled
-          title="Sin link de Meet disponible"
+          :disabled="!lead.meet_url"
+          :title="lead.meet_url ? 'Unirse a la llamada y enviar bot de grabación' : 'Sin link de Meet disponible'"
+          @click="join_meet"
         >
           <i class="bi bi-camera-video me-1" aria-hidden="true" />
           Unirse a Meet
@@ -419,6 +410,23 @@ export default {
         name: 'lead_conversation',
         params: { lead_id: this.lead.id },
       })
+    },
+    /**
+     * Abre Google Meet en nueva pestaña y dispara el bot Recall.ai en background.
+     * Fire-and-forget: el Meet se abre de inmediato; el bot se envía sin bloquear.
+     *
+     * @returns {void}
+     */
+    join_meet: function () {
+      if (!this.lead.meet_url) {
+        return
+      }
+
+      /* Abrir Meet inmediatamente sin esperar al bot. */
+      window.open(this.lead.meet_url, '_blank', 'noopener,noreferrer')
+
+      /* Disparar el bot en background — no await, no spinner. */
+      this.$store.dispatch('closer/send_recall_bot', this.lead.id)
     },
     /**
      * Al clic en socio confirmado: abre WhatsApp si hay teléfono, sino alerta con datos.

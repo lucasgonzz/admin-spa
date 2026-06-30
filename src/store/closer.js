@@ -206,5 +206,18 @@ export default {
         return res.data
       })
     },
+    /**
+     * Envía el bot de Recall.ai a la reunión del lead (fire-and-forget).
+     * Los errores se loguean en consola pero no se propagan.
+     *
+     * @param {Object} context
+     * @param {number|string} lead_id ID del lead.
+     * @returns {void}
+     */
+    send_recall_bot: function (context, lead_id) {
+      api.post('/lead/' + lead_id + '/send-recall-bot').catch(function (err) {
+        console.warn('[Recall] Error al enviar bot:', err)
+      })
+    },
   },
 }
