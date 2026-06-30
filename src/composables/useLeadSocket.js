@@ -1,5 +1,6 @@
 import store from '@/store'
 import api from '@/utils/axios'
+import router from '@/router'
 
 /**
  * Suscripción Pusher al canal compartido `leads.admins`.
@@ -22,6 +23,15 @@ export function useLeadSocket(options) {
   let list_row_refetch_debounce_timer = null
   /** Debounce del POST mark-whatsapp-messages-read mientras el operador mira el hilo. */
   let mark_read_if_viewing_debounce_timer = null
+
+  /**
+   * true si el admin está en la grilla de Leads (ruta `leads`, no conversación fullscreen).
+   *
+   * @returns {boolean}
+   */
+  function is_admin_viewing_leads_grid() {
+    return router.currentRoute.value.name === 'leads'
+  }
 
   /**
    * true si el admin tiene visible la conversación WhatsApp del lead indicado.
@@ -236,7 +246,9 @@ export function useLeadSocket(options) {
     } else if (lead_id != null) {
       // Payload mínimo (solo IDs): refetch para obtener datos actualizados
       schedule_conversation_refetch(lead_id)
-      schedule_list_row_refetch(lead_id)
+      if (is_admin_viewing_leads_grid()) {
+        schedule_list_row_refetch(lead_id)
+      }
     }
 
     if (viewing_this_lead && lead_id != null) {

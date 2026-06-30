@@ -599,7 +599,8 @@ export default {
    * keep-alive: se llama cada vez que Leads vuelve a ser la vista activa.
    * Detecta si el usuario clickeó Leads en el menú (reload solicitado) comparando
    * leads_reload_version. En ese caso recarga la lista y resetea filtros, igual que un remount.
-   * Si viene de la conversación de un lead, solo restaura el scroll (el store ya está al día).
+   * Si viene de otro módulo o de la conversación, refresca datos respetando filtros/paginación
+   * y restaura el scroll guardado.
    * @returns {void}
    */
   activated() {
@@ -615,7 +616,14 @@ export default {
       this.$store.dispatch('lead/get_models')
       return
     }
-    /* Viene de la conversación: restaurar scroll guardado si existe. */
+    /* Venimos de otro módulo o de la conversación: la grilla no se actualizó en
+       segundo plano (ver useLeadSocket.js), así que hay que refrescarla acá,
+       sin tocar filtros/paginación/scroll. */
+    if (this.$store.state.lead.is_filtered) {
+      this.$store.dispatch('lead/run_filter', { page: this.$store.state.lead.filter_page })
+    } else {
+      this.$store.dispatch('lead/get_models')
+    }
     this.restore_scroll_position()
   },
 
