@@ -58,11 +58,11 @@
       </div>
 
       <!-- Cards de variantes -->
-      <div v-else class="d-flex flex-column gap-3">
+      <div v-else class="d-flex flex-column gap-4">
         <div
           v-for="variant in variants"
           :key="variant.id"
-          class="card border-0 shadow-sm"
+          class="card border-0 shadow"
         >
           <div class="card-body">
 
