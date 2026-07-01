@@ -4,6 +4,13 @@
       <div class="col-md-3">
         <small class="text-muted d-block">Cliente</small>
         <span>{{ update.client ? update.client.name : '—' }}</span>
+        <span
+          v-if="update.client && update.client.shared_database_group_id"
+          class="badge text-bg-secondary ms-1"
+          title="Este cliente comparte base de datos con otros del mismo grupo"
+        >
+          Comparte BD (grupo #{{ update.client.shared_database_group_id }})
+        </span>
         <small
           v-if="update.client && update.client.user_id"
           class="text-muted d-block"

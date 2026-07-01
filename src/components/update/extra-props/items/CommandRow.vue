@@ -1,6 +1,6 @@
 <template>
   <tbody>
-    <tr>
+    <tr :class="{ 'text-muted': is_auto_skipped }" :style="is_auto_skipped ? { opacity: '0.5' } : null">
       <td>
         <small class="text-muted">{{ version_label }}</small>
       </td>
@@ -18,7 +18,7 @@
             class="btn btn-sm"
             :class="copied ? 'btn-success' : 'btn-outline-secondary'"
             title="Copiar y marcar como ejecutado"
-            :disabled="loading"
+            :disabled="loading || is_auto_skipped"
             @click="copy_and_mark"
           >
             {{ copied ? 'Copiado' : 'Copiar' }}
@@ -39,6 +39,12 @@
           :class="run_scope_badge_class"
           :title="run_scope_title"
         >{{ run_scope_label }}</span>
+        <!-- Badge de auto-skip por BD compartida (además del run_scope) -->
+        <span
+          v-if="is_auto_skipped"
+          class="badge text-bg-light border ms-1"
+          title="Salteado automáticamente: ya fue ejecutado en otro cliente de la misma BD"
+        >Auto-salteado</span>
       </td>
       <td class="text-center">
         <span class="badge" :class="status_badge_class">{{ item.status }}</span>
@@ -176,6 +182,13 @@ export default {
       if (scope === 'per_database') return 'Se ejecuta una sola vez por base de datos'
       if (scope === 'per_user') return 'Se debe ejecutar una vez por cada usuario/tenant'
       return ''
+    },
+    /**
+     * Indica si el ítem fue auto-salteado por compartir BD con otro cliente del grupo.
+     * @returns {boolean}
+     */
+    is_auto_skipped() {
+      return Boolean(this.item.skipped)
     },
   },
   methods: {

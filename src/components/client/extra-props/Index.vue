@@ -13,15 +13,21 @@
     <div v-else class="mb-0">
       <span class="badge" :class="implementation_badge_class">{{ implementation_badge_text }}</span>
     </div>
+
+    <hr class="my-3" />
+
+    <client-shared-database-group :record="record" @record-updated="on_shared_database_updated" />
   </div>
 </template>
 
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
 import { route_string } from '@/utils/route_string'
+import ClientSharedDatabaseGroup from '@/components/client/extra-props/SharedDatabaseGroup.vue'
 
 export default {
   name: 'ClientImplementationExtraProps',
+  components: { ClientSharedDatabaseGroup },
   props: {
     /**
      * Cliente en edición: en el modal CRUD es el borrador (`draft`) del ModelModal.
@@ -158,6 +164,14 @@ export default {
         },
         'Implementación iniciada correctamente.'
       )
+    },
+    /**
+     * Propaga al modal los cambios de BD compartida (asignar o quitar del grupo).
+     * @param {Object} record Cliente actualizado.
+     * @returns {void}
+     */
+    on_shared_database_updated(record) {
+      this.$emit('record-updated', record)
     },
   },
 }

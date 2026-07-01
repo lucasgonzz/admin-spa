@@ -25,6 +25,8 @@ import demo_update from './demo_update'
 import closer from './closer'
 // Módulo Agente: variantes A/B de mensajes de onboarding.
 import agente from './agente'
+// Grupos de BD compartida entre clientes (asignación desde panel de cliente).
+import shared_database_group from './shared_database_group'
 
 export default createStore({
   modules: {
@@ -56,5 +58,7 @@ export default createStore({
     closer,
     // Variantes de mensajes y métricas del módulo Agente.
     agente,
+    // Grupos de BD compartida (endpoints JSON dedicados).
+    shared_database_group,
   },
 })
