@@ -13,7 +13,7 @@
     <div class="conversation-header d-flex align-items-center justify-content-between px-3 py-2 border-bottom bg-white">
 
       <!-- Izquierda: botón atrás + nombre del lead -->
-      <div class="d-flex align-items-center gap-2 overflow-hidden">
+      <div class="d-flex align-items-center gap-2 overflow-hidden flex-shrink-0 conversation-header-left">
         <button
           v-if="!is_sidebar_mode"
           type="button"
@@ -26,6 +26,23 @@
         </button>
         <span class="fw-semibold text-truncate conversation-lead-name">
           {{ lead_name }}
+        </span>
+      </div>
+
+      <!-- Centro: badge de fecha/hora de demo (solo cuando el lead tiene demo agendada) -->
+      <div
+        v-if="demo_badge_text"
+        ref="demo_badge_wrapper"
+        class="demo-date-badge-wrapper"
+      >
+        <span
+          ref="demo_badge_inner"
+          class="demo-date-badge-inner"
+          :class="{ 'demo-date-badge-inner--scrolling': demo_badge_scrolling }"
+          :style="demo_badge_inner_style"
+        >
+          <i class="bi bi-calendar-event" aria-hidden="true" />
+          {{ demo_badge_text }}
         </span>
       </div>
 
@@ -235,6 +252,7 @@
         </button>
 
         <textarea
+          ref="message_input_ref"
           v-model="mensaje_directo"
           class="message-input"
           rows="1"
@@ -508,6 +526,12 @@ export default {
 
       /** Controla la visibilidad del modal de resumen del lead. */
       show_resumen_modal: false,
+
+      /** true cuando el texto del badge desborda el wrapper y se activa el scroll. */
+      demo_badge_scrolling: false,
+
+      /** Píxeles de overflow del badge (alimenta --badge-scroll-px en la animación). */
+      demo_badge_scroll_px: 0,
     }
   },
 
@@ -533,6 +557,50 @@ export default {
         return 'Cargando…'
       }
       return (rec.contact_name || '').trim() || 'Lead #' + rec.id
+    },
+
+    /**
+     * Texto formateado de la fecha de demo del lead. Formato: "Jue 21/06 10:30hs".
+     * Retorna '' si el lead no tiene demo_date (badge oculto con v-if).
+     *
+     * @returns {string}
+     */
+    demo_badge_text() {
+      var rec = this.effective_record
+      if (!rec || !rec.demo_date) {
+        return ''
+      }
+      var date_str = (rec.demo_date + '').substring(0, 10)
+      var date = new Date(date_str + 'T00:00:00')
+      if (isNaN(date.getTime())) {
+        return ''
+      }
+      var days = ['Dom', 'Lun', 'Mar', 'Mi\u00e9', 'Jue', 'Vie', 'S\u00e1b']
+      var day_name = days[date.getDay()]
+      var day = ('0' + date.getDate()).slice(-2)
+      var month = ('0' + (date.getMonth() + 1)).slice(-2)
+      var result = day_name + ' ' + day + '/' + month
+      if (rec.demo_start_time) {
+        var match = (rec.demo_start_time + '').match(/(\d{1,2}):(\d{2})/)
+        if (match) {
+          result = result + ' ' + match[1] + ':' + match[2] + 'hs'
+        }
+      }
+      return result
+    },
+
+    /**
+     * Estilo inline para el <span> del badge: fija --badge-scroll-px cuando hay overflow.
+     *
+     * @returns {Object}
+     */
+    demo_badge_inner_style() {
+      if (!this.demo_badge_scrolling || !this.demo_badge_scroll_px) {
+        return {}
+      }
+      return {
+        '--badge-scroll-px': '-' + this.demo_badge_scroll_px + 'px'
+      }
     },
 
     /**
@@ -930,6 +998,19 @@ export default {
 
   watch: {
     /**
+     * Cuando el texto del badge cambia (lead cargado o fecha actualizada), mide si
+     * desborda el wrapper para activar o desactivar la animación de scroll.
+     */
+    demo_badge_text: function (val) {
+      if (val) {
+        this.setup_demo_badge_scroll()
+      } else {
+        this.demo_badge_scrolling = false
+        this.demo_badge_scroll_px = 0
+      }
+    },
+
+    /**
      * Al terminar la generación de Claude, bajar el scroll para ver la sugerencia.
      *
      * @param {boolean} newVal
@@ -1083,6 +1164,34 @@ export default {
 
   methods: {
     /**
+     * Mide si el texto del badge desborda el wrapper y activa la animación de scroll.
+     * Llamado por el watcher de demo_badge_text después de nextTick para que el DOM
+     * esté actualizado con las dimensiones reales.
+     *
+     * @returns {void}
+     */
+    setup_demo_badge_scroll: function () {
+      var self = this
+      this.$nextTick(function () {
+        var wrapper = self.$refs.demo_badge_wrapper
+        var inner = self.$refs.demo_badge_inner
+        if (!wrapper || !inner) {
+          self.demo_badge_scrolling = false
+          self.demo_badge_scroll_px = 0
+          return
+        }
+        var overflow = inner.scrollWidth - wrapper.offsetWidth
+        if (overflow > 4) {
+          self.demo_badge_scroll_px = overflow
+          self.demo_badge_scrolling = true
+        } else {
+          self.demo_badge_scrolling = false
+          self.demo_badge_scroll_px = 0
+        }
+      })
+    },
+
+    /**
      * Centraliza la actualización del registro local y del store tras cualquier
      * operación que modifique el lead (envío, aprobación, toggle, etc.).
      *
@@ -1098,16 +1207,29 @@ export default {
     },
 
     /**
+     * Sincroniza la altura del textarea del footer con su contenido actual.
+     * Máximo 128px antes de activar scroll interno (comportamiento tipo WhatsApp).
+     *
+     * @param {HTMLTextAreaElement|null} [textarea_el] Textarea a redimensionar; si no se pasa, usa el ref del footer.
+     * @returns {void}
+     */
+    sync_message_input_height(textarea_el) {
+      const el = textarea_el || this.$refs.message_input_ref
+      if (!el) {
+        return
+      }
+      el.style.height = 'auto'
+      el.style.height = Math.min(el.scrollHeight, 128) + 'px'
+    },
+
+    /**
      * Ajusta el alto del textarea al contenido escrito (comportamiento tipo WhatsApp).
-     * Máximo 128px antes de activar el scroll interno.
      *
      * @param {Event} event Evento `input` del textarea.
      * @returns {void}
      */
     on_input_resize(event) {
-      const el = event.target
-      el.style.height = 'auto'
-      el.style.height = Math.min(el.scrollHeight, 128) + 'px'
+      this.sync_message_input_height(event.target)
     },
 
     /**
@@ -1270,12 +1392,9 @@ export default {
         .then(function (model) {
           self.enviando_directo = false
           self.mensaje_directo = ''
-          /* Resetear altura del textarea al vaciarlo. */
+          /* Volver al alto de una línea tras vaciar el textarea. */
           self.$nextTick(function () {
-            const textarea = self.$el && self.$el.querySelector('.message-input')
-            if (textarea) {
-              textarea.style.height = 'auto'
-            }
+            self.sync_message_input_height()
           })
           self.on_record_updated(model)
           self.schedule_scroll_to_bottom()
@@ -2023,6 +2142,59 @@ export default {
   flex: 1;
   overflow-y: auto;
   padding: 1.25rem 1.5rem;
+}
+
+/* Limita el ancho de la sección izquierda del header (nombre del lead) para
+   dejar espacio al badge de demo en el centro. */
+.conversation-header-left {
+  max-width: 40%;
+}
+
+/* Wrapper del badge de demo: ocupa todo el espacio disponible entre nombre y botones */
+.demo-date-badge-wrapper {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  margin: 0 0.3rem;
+  display: flex;
+  align-items: center;
+}
+
+/* Badge visual: píldora azul con ícono de calendario y fecha */
+.demo-date-badge-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--bs-primary);
+  background: rgba(var(--bs-primary-rgb), 0.12);
+  border-radius: 2rem;
+  padding: 0.18rem 0.65rem;
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/*
+  Animación marquee estilo WhatsApp (ciclo de 8s):
+    0s   –  1s  (0  – 12.5%): texto estático — visible sin moverse
+    1s   –  5s  (12.5 – 62.5%): scroll suave hacia la izquierda para revelar el final
+    5s   –  6s  (62.5 – 75%):  pausa al final
+    6s   –  8s  (75 – 100%):   retorno suave al inicio
+  --badge-scroll-px se inyecta vía demo_badge_inner_style como valor negativo (ej: "-72px").
+*/
+@keyframes demo_badge_marquee {
+  0%    { transform: translateX(0); }
+  12.5% { transform: translateX(0); }
+  62.5% { transform: translateX(var(--badge-scroll-px, 0px)); }
+  75%   { transform: translateX(var(--badge-scroll-px, 0px)); }
+  100%  { transform: translateX(0); }
+}
+
+.demo-date-badge-inner--scrolling {
+  animation: demo_badge_marquee 8s ease-in-out infinite;
 }
 </style>
 

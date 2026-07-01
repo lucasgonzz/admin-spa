@@ -2,6 +2,7 @@
   <div class="lead-module">
     <resource-view
       ref="lead_resource_view"
+      :key="'lead-resource-view-' + resource_view_reload_key"
       model_name="lead"
       :model_extra_tabs="model_extra_tabs"
       :model_properties_nav_order="model_properties_nav_order"
@@ -549,6 +550,11 @@ export default {
       sidebar_lead: null,
       /** Ids de leads con toggle de respuesta automática Claude en curso (evita doble clic). */
       claude_auto_reply_toggling_ids: [],
+      /**
+       * Incrementa al recargar el módulo desde el menú para remontar ResourceView
+       * (meta + listado) como en la primera entrada.
+       */
+      resource_view_reload_key: 0,
     }
   },
   computed: {
@@ -573,6 +579,18 @@ export default {
     },
   },
   watch: {
+    /**
+     * keep-alive: si Leads ya está activo, activated() no corre al pulsar Leads otra vez.
+     * El menú incrementa leads_reload_version; este watcher dispara la recarga completa.
+     *
+     * @returns {void}
+     */
+    '$store.state.lead.leads_reload_version'(new_version, old_version) {
+      if (new_version === old_version) {
+        return
+      }
+      this.reload_module_from_nav()
+    },
     /**
      * Mantiene el input de fecha alineado si se resetean filtros desde la tabla o el header.
      * @returns {void}
@@ -606,14 +624,7 @@ export default {
   activated() {
     var current_version = this.$store.state.lead.leads_reload_version
     if (current_version !== this._last_leads_reload_version) {
-      /* El usuario clickeó Leads en el menú: refrescar igual que un remount. */
-      this._last_leads_reload_version = current_version
-      this.$store.commit('lead/set_filters', [])
-      this.$store.commit('lead/set_filter_page', 1)
-      this.$store.commit('lead/set_filtered', [])
-      this.$store.commit('lead/set_is_filtered', false)
-      this.conversation_started_date = ''
-      this.$store.dispatch('lead/get_models')
+      this.reload_module_from_nav()
       return
     }
     /* Venimos de otro módulo o de la conversación: la grilla no se actualizó en
@@ -636,6 +647,27 @@ export default {
     /* Sin acción al salir: el scroll ya fue guardado en on_open_conversation si aplica. */
   },
   methods: {
+    /**
+     * Recarga Leads como primera entrada: resetea filtros/UI local y remonta ResourceView.
+     * Invocado desde activated() (keep-alive) o desde el watcher de leads_reload_version.
+     *
+     * @returns {void}
+     */
+    reload_module_from_nav() {
+      this._last_leads_reload_version = this.$store.state.lead.leads_reload_version
+      this.$store.commit('lead/set_filters', [])
+      this.$store.commit('lead/set_filter_page', 1)
+      this.$store.commit('lead/set_filtered', [])
+      this.$store.commit('lead/set_is_filtered', false)
+      this.$store.commit('lead/set_total_filter_results', 0)
+      this.$store.commit('lead/set_selected', [])
+      this.$store.commit('lead/set_scroll_y', 0)
+      this.conversation_started_date = ''
+      this.sidebar_lead = null
+      this.show_demos_agendadas = false
+      this.resource_view_reload_key = this.resource_view_reload_key + 1
+      window.scrollTo(0, 0)
+    },
     /**
      * Si la URL trae ?lead_id=N (ej. al entrar desde un link de notificación WhatsApp),
      * busca ese lead completo y abre su modal automáticamente. Limpia el query param

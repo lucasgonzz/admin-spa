@@ -465,9 +465,27 @@ export default {
       this.$emit('close-mobile')
     },
     /**
+     * true si el operador pulsó el ítem del menú que ya corresponde al módulo visible.
+     * Usa path (como is_nav_item_active) y name como respaldo.
+     *
+     * @param {object} r Definición de ruta del menú (routes.js)
+     * @returns {boolean}
+     */
+    is_same_module_nav_click(r) {
+      if (!r) {
+        return false
+      }
+      if (r.path && this.$route.path === r.path) {
+        return true
+      }
+      if (r.name && this.$route.name === r.name) {
+        return true
+      }
+      return false
+    },
+    /**
      * Al pulsar un ítem del menú: en móvil cierra el drawer; si ya estamos en esa ruta, fuerza recarga de la vista.
-     * Para Leads (keep-alive activo) no puede remontarse por key: se usa bump_leads_reload_version
-     * en lugar de bump_route_reload, y el hook activated() de Leads.vue detecta el cambio y recarga.
+     * Leads (keep-alive) recarga vía leads_reload_version; el resto remonta por :key en App.vue.
      *
      * @param {object} r Definición de ruta del menú (routes.js)
      * @returns {void}
@@ -479,17 +497,8 @@ export default {
       if (r && r.path) {
         this.$store.commit('general/set_pending_nav_path', r.path)
       }
-      if (r && r.name && this.$route.name === r.name) {
-        if (r.name === 'leads') {
-          /* Leads usa keep-alive: no puede remontarse por key.
-             Incrementar versión propia para que activated() detecte el click. */
-          this.$store.commit('lead/bump_leads_reload_version')
-          /* Limpiar pending_nav_path de inmediato (el spinner global no aplica aquí). */
-          this.$store.commit('general/set_pending_nav_path', null)
-        } else {
-          this.$store.commit('general/set_route_navigating', true)
-          this.$store.commit('general/bump_route_reload', r.name)
-        }
+      if (r && r.name && this.is_same_module_nav_click(r)) {
+        this.$store.dispatch('general/request_module_reload', r.name)
       }
     },
     /**

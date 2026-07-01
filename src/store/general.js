@@ -57,8 +57,40 @@ const mutations = {
   },
 }
 
+/** Rutas cuyo componente raíz está en keep-alive y no puede remontarse por :key. */
+const KEEP_ALIVE_ROUTE_NAMES = ['leads']
+
+const actions = {
+  /**
+   * Fuerza recarga del módulo activo cuando el operador vuelve a pulsar el mismo ítem del menú.
+   * - Rutas normales: incrementa route_reload_versions → App.vue cambia :key → remount + mounted.
+   * - Leads (keep-alive): incrementa leads_reload_version → Leads.vue detecta y recarga en caliente.
+   *
+   * @param {{ commit: Function }} context
+   * @param {string} route_name nombre de la ruta vue-router
+   * @returns {void}
+   */
+  request_module_reload({ commit }, route_name) {
+    if (!route_name) {
+      return
+    }
+
+    if (KEEP_ALIVE_ROUTE_NAMES.indexOf(route_name) !== -1) {
+      if (route_name === 'leads') {
+        commit('lead/bump_leads_reload_version', null, { root: true })
+      }
+      commit('set_pending_nav_path', null)
+      return
+    }
+
+    commit('set_route_navigating', true)
+    commit('bump_route_reload', route_name)
+  },
+}
+
 export default {
   namespaced: true,
   state,
   mutations,
+  actions,
 }
