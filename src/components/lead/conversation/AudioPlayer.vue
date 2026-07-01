@@ -1,6 +1,9 @@
 <template>
-  <!-- Reproductor de audio propio, estética WhatsApp: play/pause + barra de progreso + tiempo + velocidad -->
-  <div class="wa-audio-player">
+  <!-- Reproductor de audio estilo WhatsApp: mic + play + tiempo + waveform + velocidad -->
+  <div
+    class="wa-audio-player"
+    :class="is_outgoing ? 'wa-audio-player--outgoing' : 'wa-audio-player--incoming'"
+  >
 
     <!-- Elemento <audio> real, oculto: se controla por código vía $refs.audio_el -->
     <audio
@@ -9,6 +12,13 @@
       preload="metadata"
       class="wa-audio-native"
     />
+
+    <!-- Ícono de micrófono visible en reposo; se oculta al reproducir -->
+    <span
+      v-if="!is_playing"
+      class="wa-audio-mic"
+      aria-hidden="true"
+    >🎤</span>
 
     <!-- Botón circular play/pause -->
     <button
@@ -20,20 +30,25 @@
       <i class="bi" :class="is_playing ? 'bi-pause-fill' : 'bi-play-fill'" aria-hidden="true" />
     </button>
 
-    <!-- Centro: barra de progreso clickeable + tiempo -->
-    <div class="wa-audio-center">
-      <!-- Barra de progreso: input range para permitir seek arrastrando o clickeando -->
-      <input
-        type="range"
-        class="wa-audio-progress"
-        min="0"
-        :max="progress_max"
-        step="0.1"
-        :value="current_time"
-        @input="on_seek"
+    <!-- Tiempo: duración en reposo, transcurrido mientras reproduce -->
+    <span class="wa-audio-time">{{ time_label }}</span>
+
+    <!-- Waveform pseudo-aleatorio: barras estáticas con progreso por color -->
+    <div
+      class="wa-audio-waveform"
+      role="slider"
+      :aria-valuenow="Math.round(current_time)"
+      :aria-valuemax="has_valid_duration ? Math.round(duration) : 0"
+      aria-label="Posición de reproducción"
+      @click="on_waveform_click"
+    >
+      <span
+        v-for="(bar, bar_index) in waveform_bars"
+        :key="bar_index"
+        class="wa-audio-bar"
+        :class="{ 'wa-audio-bar--played': is_bar_played(bar_index) }"
+        :style="{ height: bar.height + 'px' }"
       />
-      <!-- Tiempo: transcurrido mientras reproduce, duración total en reposo -->
-      <span class="wa-audio-time">{{ time_label }}</span>
     </div>
 
     <!-- Botón de velocidad: cicla 1x -> 1.5x -> 2x -->
@@ -54,13 +69,15 @@
  * Reproductor de audio propio con estética WhatsApp para las burbujas de audio del lead.
  *
  * Reemplaza al control nativo `<audio controls>` controlando un elemento `<audio>` oculto
- * por código. Soporta play/pause, seek por barra de progreso y cambio de velocidad.
+ * por código. Soporta play/pause, seek por waveform y cambio de velocidad.
  */
 export default {
   name: 'LeadAudioPlayer',
   props: {
     /** URL del archivo de audio (URL firmada del adjunto). */
     src: { type: String, required: true },
+    /** true en mensajes salientes (setter/sistema): adapta colores del botón y waveform. */
+    is_outgoing: { type: Boolean, default: false },
   },
   data() {
     return {
@@ -74,6 +91,8 @@ export default {
       playback_rate: 1,
       /** Pasos de velocidad disponibles, en orden de ciclado. */
       rate_steps: [1, 1.5, 2],
+      /** Cantidad fija de barras del waveform (estilo WhatsApp). */
+      waveform_bar_count: 30,
     }
   },
   computed: {
@@ -87,17 +106,36 @@ export default {
       return typeof this.duration === 'number' && isFinite(this.duration) && this.duration > 0
     },
     /**
-     * Máximo de la barra de progreso: la duración si es válida, sino un fallback
-     * para que el slider siga siendo operable mientras no se conoce la duración real.
+     * Semilla numérica derivada del src para generar barras pseudo-aleatorias estables.
      *
      * @returns {number}
      */
-    progress_max() {
-      if (this.has_valid_duration) {
-        return this.duration
+    waveform_seed() {
+      var hash = 0
+      var str = (this.src || '') + ''
+      var i = 0
+      for (i = 0; i < str.length; i = i + 1) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i)
+        hash = hash & hash
       }
-      /* Fallback: al menos el tiempo actual + 1 para que el slider no quede bloqueado en 0. */
-      return Math.max(this.current_time + 1, 1)
+      return Math.abs(hash)
+    },
+    /**
+     * Barras del waveform con alturas entre 4px y 18px según semilla + índice.
+     *
+     * @returns {Array<{height: number}>}
+     */
+    waveform_bars() {
+      var bars = []
+      var seed = this.waveform_seed
+      var i = 0
+      for (i = 0; i < this.waveform_bar_count; i = i + 1) {
+        var pseudo = this.pseudo_random(seed, i)
+        bars.push({
+          height: 4 + Math.floor(pseudo * 14),
+        })
+      }
+      return bars
     },
     /**
      * Etiqueta de tiempo: transcurrido mientras reproduce, duración total en reposo.
@@ -141,6 +179,31 @@ export default {
   },
   methods: {
     /**
+     * Genera un valor pseudo-aleatorio entre 0 y 1 a partir de semilla e índice.
+     *
+     * @param {number} seed Semilla base (derivada del src).
+     * @param {number} index Índice de la barra del waveform.
+     * @returns {number}
+     */
+    pseudo_random(seed, index) {
+      var x = Math.sin((seed + 1) * (index + 1) * 12.9898) * 43758.5453
+      return x - Math.floor(x)
+    },
+    /**
+     * true si la barra ya fue "reproducida" según el progreso actual.
+     *
+     * @param {number} bar_index Índice de la barra (0-based).
+     * @returns {boolean}
+     */
+    is_bar_played(bar_index) {
+      if (!this.has_valid_duration) {
+        return false
+      }
+      var progress = this.current_time / this.duration
+      var bar_progress = (bar_index + 1) / this.waveform_bar_count
+      return bar_progress <= progress
+    },
+    /**
      * Alterna entre reproducir y pausar el audio.
      *
      * @returns {void}
@@ -177,20 +240,23 @@ export default {
       }
     },
     /**
-     * Mueve la reproducción a la posición indicada por la barra de progreso.
+     * Seek al hacer clic en el waveform según posición horizontal del clic.
      *
-     * @param {Event} event Evento input del slider.
+     * @param {MouseEvent} event Clic sobre el contenedor de barras.
      * @returns {void}
      */
-    on_seek(event) {
+    on_waveform_click(event) {
       const el = this.$refs.audio_el
-      if (!el) {
+      if (!el || !this.has_valid_duration) {
         return
       }
-      const new_time = parseFloat(event.target.value)
-      if (isNaN(new_time)) {
+      const rect = event.currentTarget.getBoundingClientRect()
+      if (!rect.width) {
         return
       }
+      const ratio = (event.clientX - rect.left) / rect.width
+      const clamped_ratio = Math.max(0, Math.min(1, ratio))
+      const new_time = clamped_ratio * this.duration
       el.currentTime = new_time
       this.current_time = new_time
     },
@@ -263,83 +329,134 @@ export default {
 </script>
 
 <style scoped>
-/* Contenedor del reproductor: fila horizontal compacta tipo WhatsApp. */
+/* Contenedor pill tipo WhatsApp: mic + play + tiempo + waveform + velocidad. */
 .wa-audio-player {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 220px;
-  max-width: min(100%, 360px);
-  margin-bottom: 0.25rem;
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+	min-width: 200px;
+	max-width: 320px;
+	margin-bottom: 0.25rem;
+	padding: 0.35rem 0.5rem;
+	border-radius: 22px;
+	background: var(--wa-audio-pill-bg, rgba(0, 0, 0, 0.06));
+}
+
+/* Saliente (burbuja verde): botón verde oscuro y barras más contrastadas. */
+.wa-audio-player--outgoing {
+	--wa-audio-pill-bg: rgba(0, 0, 0, 0.05);
+	--wa-audio-btn-bg: #1b8755;
+	--wa-audio-btn-color: #ffffff;
+	--wa-audio-bar-color: rgba(17, 27, 33, 0.28);
+	--wa-audio-bar-played: rgba(17, 27, 33, 0.62);
+	--wa-audio-time-color: rgba(17, 27, 33, 0.55);
+	--wa-audio-rate-bg: rgba(255, 255, 255, 0.65);
+	--wa-audio-rate-color: rgba(17, 27, 33, 0.65);
+}
+
+/* Entrante (burbuja blanca): botón blanco con acento verde. */
+.wa-audio-player--incoming {
+	--wa-audio-pill-bg: rgba(0, 0, 0, 0.04);
+	--wa-audio-btn-bg: #ffffff;
+	--wa-audio-btn-color: #1b8755;
+	--wa-audio-bar-color: rgba(17, 27, 33, 0.22);
+	--wa-audio-bar-played: #1b8755;
+	--wa-audio-time-color: rgba(17, 27, 33, 0.5);
+	--wa-audio-rate-bg: rgba(255, 255, 255, 0.85);
+	--wa-audio-rate-color: rgba(17, 27, 33, 0.6);
 }
 
 /* El <audio> real queda fuera de pantalla; se controla solo por código. */
 .wa-audio-native {
-  display: none;
+	display: none;
+}
+
+/* Ícono de micrófono al inicio (solo en reposo). */
+.wa-audio-mic {
+	flex-shrink: 0;
+	font-size: 0.95rem;
+	line-height: 1;
+	opacity: 0.85;
+	user-select: none;
 }
 
 /* Botón circular play/pause. */
 .wa-audio-play-btn {
-  flex-shrink: 0;
-  width: 2.1rem;
-  height: 2.1rem;
-  border-radius: 50%;
-  border: none;
-  background: var(--bs-primary, #0d6efd);
-  color: #fff;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.15rem;
-  cursor: pointer;
-  padding: 0;
-  transition: filter 0.15s;
+	flex-shrink: 0;
+	width: 2rem;
+	height: 2rem;
+	border-radius: 50%;
+	border: none;
+	background: var(--wa-audio-btn-bg, #1b8755);
+	color: var(--wa-audio-btn-color, #ffffff);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 1.05rem;
+	cursor: pointer;
+	padding: 0;
+	padding-left: 0.05rem;
+	transition: filter 0.15s;
+	box-shadow: 0 1px 2px rgba(11, 20, 26, 0.12);
 }
 .wa-audio-play-btn:hover {
-  filter: brightness(1.08);
+	filter: brightness(1.06);
 }
 
-/* Centro: barra de progreso arriba, tiempo abajo. */
-.wa-audio-center {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  min-width: 0;
-}
-
-/* Barra de progreso (input range) con apariencia fina tipo WhatsApp. */
-.wa-audio-progress {
-  width: 100%;
-  height: 0.35rem;
-  cursor: pointer;
-  accent-color: var(--bs-primary, #0d6efd);
-}
-
-/* Tiempo transcurrido / duración. */
+/* Tiempo a la izquierda del waveform. */
 .wa-audio-time {
-  font-size: 0.7rem;
-  line-height: 1;
-  color: var(--bs-secondary-color, #6c757d);
-  font-variant-numeric: tabular-nums;
+	flex-shrink: 0;
+	font-size: 0.68rem;
+	line-height: 1;
+	color: var(--wa-audio-time-color, rgba(17, 27, 33, 0.5));
+	font-variant-numeric: tabular-nums;
+	min-width: 1.85rem;
+	text-align: center;
+	user-select: none;
+}
+
+/* Contenedor del waveform: barras inline de 2px con gap mínimo. */
+.wa-audio-waveform {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1px;
+	min-width: 0;
+	height: 18px;
+	cursor: pointer;
+	user-select: none;
+}
+
+/* Barra individual del waveform. */
+.wa-audio-bar {
+	display: inline-block;
+	width: 2px;
+	min-height: 4px;
+	border-radius: 1px;
+	background: var(--wa-audio-bar-color, rgba(17, 27, 33, 0.25));
+	transition: background-color 0.08s linear;
+}
+.wa-audio-bar--played {
+	background: var(--wa-audio-bar-played, rgba(17, 27, 33, 0.55));
 }
 
 /* Botón de velocidad de reproducción. */
 .wa-audio-rate-btn {
-  flex-shrink: 0;
-  border: 1px solid var(--bs-border-color, #dee2e6);
-  background: rgba(255, 255, 255, 0.7);
-  color: var(--bs-secondary-color, #6c757d);
-  border-radius: 0.8rem;
-  font-size: 0.7rem;
-  font-weight: 600;
-  line-height: 1;
-  padding: 0.2rem 0.4rem;
-  cursor: pointer;
-  min-width: 2.1rem;
-  text-align: center;
+	flex-shrink: 0;
+	border: none;
+	background: var(--wa-audio-rate-bg, rgba(255, 255, 255, 0.7));
+	color: var(--wa-audio-rate-color, rgba(17, 27, 33, 0.65));
+	border-radius: 0.75rem;
+	font-size: 0.68rem;
+	font-weight: 600;
+	line-height: 1;
+	padding: 0.22rem 0.38rem;
+	cursor: pointer;
+	min-width: 2rem;
+	text-align: center;
 }
 .wa-audio-rate-btn:hover {
-  background: #fff;
+	filter: brightness(1.04);
 }
 </style>

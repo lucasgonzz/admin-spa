@@ -43,6 +43,7 @@
           <audio-player
             v-if="is_audio_message"
             :src="attachment_open_url(message.attachments[0])"
+            :is_outgoing="bubble_side === 'out'"
           />
           <a
             v-else-if="is_image_message"
@@ -1025,6 +1026,10 @@ export default {
       if (text === '') {
         return false
       }
+      /* Placeholder de audio saliente desde admin (setter). */
+      if (text === '[Audio enviado]') {
+        return true
+      }
       return /^\[[A-Z_ ]+ recibido por WhatsApp\]$/i.test(text)
     },
     /**
@@ -1036,7 +1041,7 @@ export default {
       if (text === '') {
         return false
       }
-      if (this.has_local_attachment && !this.is_audio_message) {
+      if (this.has_local_attachment) {
         if (this.is_kapso_media_placeholder || this.is_generic_media_placeholder) {
           return false
         }
