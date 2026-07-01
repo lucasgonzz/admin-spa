@@ -38,6 +38,18 @@
       </button>
     </div>
 
+    <!-- Banner de tiempo virtual activo (solo en desarrollo local) -->
+    <div
+      v-if="debug_virtual_time_available && debug_virtual_time_active"
+      class="virtual-time-banner d-flex align-items-center justify-content-between gap-2 px-3 py-2"
+      role="alert"
+    >
+      <span class="small fw-semibold">
+        <i class="bi bi-clock-history me-1" aria-hidden="true" />
+        TIEMPO VIRTUAL ACTIVO: {{ debug_virtual_time_value }}
+      </span>
+    </div>
+
     <div
       v-if="show_nav && is_mobile_viewport && nav_mobile_open"
       class="app-nav-mobile-backdrop d-md-none"
@@ -103,6 +115,14 @@
       </main>
     </div>
 
+    <virtual-clock-panel
+      v-if="debug_virtual_time_available"
+      :virtual_time="debug_virtual_time_value"
+      :is_active="debug_virtual_time_active"
+      :real_time="debug_real_time"
+      @updated="on_virtual_time_updated"
+    />
+
     <div class="global-toast-container">
       <div
         v-for="toast in toasts"
@@ -121,6 +141,7 @@
 <script>
 import AppNav from '@/components/app/Nav/Index.vue'
 import LogoLoading from '@/common-vue/components/LogoLoading.vue'
+import VirtualClockPanel from '@/components/debug/VirtualClockPanel.vue'
 import routes from '@/router/routes'
 import api from '@/utils/axios'
 
@@ -131,7 +152,7 @@ import api from '@/utils/axios'
  */
 export default {
   name: 'App',
-  components: { AppNav, LogoLoading },
+  components: { AppNav, LogoLoading, VirtualClockPanel },
   data() {
     return {
       /** Cola de toasts visibles para errores globales de API. */
@@ -150,6 +171,11 @@ export default {
       pwa_update_available: false,
       /** true mientras se está chequeando o ejecutando seeders pendientes (evita doble disparo). */
       pending_seeders_checked: false,
+      /** Debug: tiempo virtual (solo activo en entorno local — en producción el endpoint retorna 404). */
+      debug_virtual_time_available: false,
+      debug_virtual_time_active: false,
+      debug_virtual_time_value: null,
+      debug_real_time: null,
     }
   },
   computed: {
@@ -337,6 +363,7 @@ export default {
     window.addEventListener('appinstalled', this.on_pwa_app_installed)
     // Nueva versión del SW lista en waiting: muestra el banner de actualización.
     window.addEventListener('pwa-update-available', this.on_pwa_update_available)
+    this.init_virtual_time()
   },
   beforeUnmount() {
     /**
@@ -531,6 +558,51 @@ export default {
       }
     },
 
+    /**
+     * Base URL de la API sin el sufijo /admin (endpoints /api/debug/*).
+     *
+     * @returns {string}
+     */
+    debug_api_base() {
+      const admin_base = import.meta.env.VITE_API_URL || '/api/admin'
+      const root = admin_base.replace(/\/admin\/?$/, '')
+      return root || '/api'
+    },
+    /**
+     * Consulta si el endpoint de tiempo virtual está disponible (solo local).
+     * En producción responde 404 y el panel queda oculto sin errores visibles.
+     *
+     * @returns {void}
+     */
+    init_virtual_time() {
+      const self = this
+      api
+        .get('/debug/virtual-time', {
+          baseURL: self.debug_api_base(),
+          silent_error: true,
+        })
+        .then(function (response) {
+          const data = response.data
+          self.debug_virtual_time_available = true
+          self.debug_virtual_time_active = data.is_active
+          self.debug_virtual_time_value = data.virtual_time
+          self.debug_real_time = data.real_time
+        })
+        .catch(function () {
+          self.debug_virtual_time_available = false
+        })
+    },
+    /**
+     * Sincroniza el estado del banner tras cambios desde VirtualClockPanel.
+     *
+     * @param {{ is_active: boolean, virtual_time: string|null, real_time: string }} payload
+     * @returns {void}
+     */
+    on_virtual_time_updated(payload) {
+      this.debug_virtual_time_active = payload.is_active
+      this.debug_virtual_time_value = payload.virtual_time
+      this.debug_real_time = payload.real_time
+    },
     /**
      * Consulta al backend si hay seeders pendientes de ejecución.
      * Si los hay, muestra un confirm; si el usuario acepta, los ejecuta.
@@ -764,6 +836,18 @@ export default {
   width: 80vw !important;
   max-width: 80vw !important;
   overflow: visible !important;
+}
+
+/* Banner de tiempo virtual activo — solo visible en entorno local con override activo */
+.virtual-time-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2100;
+  background: #dc3545;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 /* Banner de nueva versión disponible — fijo en la parte superior, sobre la UI */

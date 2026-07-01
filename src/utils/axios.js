@@ -151,7 +151,9 @@ api.interceptors.response.use(
   (error) => {
     /** Status HTTP para evitar toasts en errores de autenticación no relevantes para UX global. */
     const status_code = error && error.response ? error.response.status : null
-    if (status_code !== 401) {
+    /** Peticiones con silent_error: true no muestran toast (p. ej. debug/virtual-time 404 en producción). */
+    const silent_error = error && error.config && error.config.silent_error === true
+    if (status_code !== 401 && !silent_error) {
       /** Mensaje final que se mostrará en la toast. */
       const error_message = resolve_error_message(error)
       emit_api_error_toast(error_message)
