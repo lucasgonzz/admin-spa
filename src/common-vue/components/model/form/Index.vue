@@ -95,13 +95,30 @@
                 :disabled="is_readonly_field(p)"
                 @change="on_select_change(p, $event)"
               >
-                <option
-                  v-for="o in get_select_options(p)"
-                  :key="(o.value !== null && o.value !== undefined) ? o.value : ('empty-' + p.key)"
-                  :value="o.value"
-                >
-                  {{ o.text }}
-                </option>
+                <template v-if="p.type === 'pipeline_status' && pipeline_options_have_groups(get_select_options(p))">
+                  <optgroup
+                    v-for="group in get_pipeline_grouped_options(get_select_options(p))"
+                    :key="group.name"
+                    :label="group.name"
+                  >
+                    <option
+                      v-for="o in group.options"
+                      :key="(o.value !== null && o.value !== undefined) ? o.value : ('empty-' + p.key)"
+                      :value="o.value"
+                    >
+                      {{ o.text }}
+                    </option>
+                  </optgroup>
+                </template>
+                <template v-else>
+                  <option
+                    v-for="o in get_select_options(p)"
+                    :key="(o.value !== null && o.value !== undefined) ? o.value : ('empty-' + p.key)"
+                    :value="o.value"
+                  >
+                    {{ o.text }}
+                  </option>
+                </template>
               </select>
             </div>
             <div v-else-if="p.type === 'checkbox'">
@@ -843,6 +860,40 @@ export default {
           self.form[property.relation] = matched_child
         }
       })
+    },
+    /**
+     * Indica si las opciones de pipeline_status tienen grupo visual.
+     *
+     * @param {Array} options opciones del select
+     * @returns {boolean}
+     */
+    pipeline_options_have_groups(options) {
+      if (!options || !options.length) {
+        return false
+      }
+      return options.some(function (o) { return o.group != null })
+    },
+    /**
+     * Agrupa opciones de pipeline_status por `group` preservando orden de aparición.
+     *
+     * @param {Array} options opciones del select
+     * @returns {Array<{ name: string, options: Array }>}
+     */
+    get_pipeline_grouped_options(options) {
+      if (!options) {
+        return []
+      }
+      var order = []
+      var map = {}
+      options.forEach(function (o) {
+        var g = o.group || 'Otros'
+        if (!map[g]) {
+          map[g] = []
+          order.push(g)
+        }
+        map[g].push(o)
+      })
+      return order.map(function (name) { return { name: name, options: map[name] } })
     },
     /**
      * Sincroniza el objeto anidado de relación al cambiar un select from_has_many.

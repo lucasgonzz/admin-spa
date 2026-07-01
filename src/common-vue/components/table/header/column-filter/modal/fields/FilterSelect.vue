@@ -3,7 +3,14 @@
     <label class="form-label">{{ field.text || 'Valor' }}</label>
     <select ref="first_input" v-model="draft.igual_que" class="form-select" :disabled="loading_relation_options">
       <option :value="null">—</option>
-      <option v-for="o in resolved_options" :key="o.value" :value="o.value">{{ o.text }}</option>
+      <template v-if="has_option_groups">
+        <optgroup v-for="group in grouped_resolved_options" :key="group.name" :label="group.name">
+          <option v-for="o in group.options" :key="o.value" :value="o.value">{{ o.text }}</option>
+        </optgroup>
+      </template>
+      <template v-else>
+        <option v-for="o in resolved_options" :key="o.value" :value="o.value">{{ o.text }}</option>
+      </template>
     </select>
     <div v-if="loading_relation_options" class="form-text">Cargando opciones…</div>
   </div>
@@ -44,6 +51,30 @@ export default {
         return this.field.options
       }
       return this.relation_options
+    },
+    /**
+     * Indica si alguna opción tiene grupo visual (optgroup).
+     * @returns {boolean}
+     */
+    has_option_groups() {
+      return this.resolved_options.some(function (o) { return o.group != null })
+    },
+    /**
+     * Agrupa opciones por `group` preservando el orden de aparición.
+     * @returns {Array<{ name: string, options: Array }>}
+     */
+    grouped_resolved_options() {
+      var order = []
+      var map = {}
+      this.resolved_options.forEach(function (o) {
+        var g = o.group || 'Otros'
+        if (!map[g]) {
+          map[g] = []
+          order.push(g)
+        }
+        map[g].push(o)
+      })
+      return order.map(function (name) { return { name: name, options: map[name] } })
     },
   },
   watch: {
