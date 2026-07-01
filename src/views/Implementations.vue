@@ -17,13 +17,8 @@
       <!-- Lista con scroll propio -->
       <div class="impl-list flex-grow-1 overflow-auto">
 
-        <!-- Estado: cargando lista -->
-        <div v-if="list_loading" class="p-3 text-center text-muted small">
-          Cargando...
-        </div>
-
         <!-- Estado: lista vacía -->
-        <div v-else-if="!implementations.length" class="p-3 text-center text-muted small">
+        <div v-if="!list_loading && !implementations.length" class="p-3 text-center text-muted small">
           No hay implementaciones registradas.
         </div>
 
@@ -86,16 +81,8 @@
         Seleccioná una implementación para ver el detalle.
       </div>
 
-      <!-- Cargando detalle -->
-      <div
-        v-else-if="detail_loading"
-        class="d-flex align-items-center justify-content-center flex-grow-1 text-muted"
-      >
-        Cargando...
-      </div>
-
       <!-- Detalle cargado -->
-      <template v-else-if="selected_implementation">
+      <template v-else-if="selected_implementation && !detail_loading">
 
         <!-- Header del panel derecho -->
         <div class="impl-right-top flex-shrink-0">
@@ -151,7 +138,7 @@
 
           <!-- Resumen: etapas y datos recolectados -->
 
-          <!-- Sección: progreso visual de las 7 etapas -->
+          <!-- Sección: progreso visual de las 8 etapas -->
           <h6 class="impl-section-title">Etapas</h6>
           <div class="impl-stages mb-4">
             <div
@@ -196,7 +183,7 @@
                   class="impl-stage-substeps mt-1"
                 >
                   <div
-                    v-for="substep in substeps_from_stage(stage)"
+                    v-for="substep in substeps_from_stage(stage, selected_implementation)"
                     :key="substep.key"
                     class="impl-stage-substep small"
                     :class="{ 'text-muted': !substep.done }"
@@ -454,6 +441,7 @@
 
 <script>
 import api from '@/utils/axios'
+import { set_global_loading_store } from '@/utils/global_loading'
 
 /**
  * Etiquetas en español de propiedades de sistema (mismo mapa que ImplementationImportService).
@@ -624,6 +612,7 @@ export default {
     load_list() {
       const self = this
       this.list_loading = true
+      set_global_loading_store(self.$store, true, 'Cargando implementaciones…')
 
       api
         .get('/implementation')
@@ -646,6 +635,7 @@ export default {
         })
         .then(function () {
           self.list_loading = false
+          set_global_loading_store(self.$store, false)
         })
     },
 
@@ -671,6 +661,7 @@ export default {
     load_detail(id) {
       const self = this
       this.detail_loading = true
+      set_global_loading_store(self.$store, true, 'Cargando detalle de implementación…')
 
       api
         .get('/implementation/' + id)
@@ -682,6 +673,7 @@ export default {
         })
         .then(function () {
           self.detail_loading = false
+          set_global_loading_store(self.$store, false)
         })
     },
 
@@ -1364,74 +1356,54 @@ export default {
 
     /**
      * Construye el listado de subetapas de cualquier etapa (1 a 8)
-     * a partir del objeto `stage` completo.
+     * a partir del objeto `stage` y la implementación asociada.
      *
-     * Recibe el stage completo (no solo `data`) para poder acceder también
-     * a `stage.status` y `stage.stage_number`, necesarios en etapas 3 y 8.
+     * Recibe el stage completo (no solo `data`) para acceder a `stage.status`
+     * y `stage.stage_number`. La Etapa 1 deriva sus subetapas del objeto
+     * `implementation` (form_token, form_submitted_at), no de stage.data.
      *
-     * Las subetapas condicionales de la Etapa 1 (`price_lists`, `deposit_names`)
-     * solo se incluyen cuando el flag correspondiente está activo.
-     *
-     * @param {Object} stage Objeto de etapa con campos: stage_number, status, data.
+     * @param {Object} stage            Etapa con stage_number, status y data.
+     * @param {Object|null} implementation Implementación padre (form_token, form_submitted_at).
      * @returns {Array<{ key: string, label: string, done: boolean, note?: string }>}
      */
-    substeps_from_stage(stage) {
+    substeps_from_stage(stage, implementation) {
       /* stage.data puede ser null si la etapa todavía no tiene datos recolectados */
-      const raw_data = stage.data || {}
-
-      /* Los datos del formulario web se guardan en form_responses (subclave).
-         Si existe esa subclave usarla; sino leer directo del raíz (legacy WhatsApp). */
-      const data = (raw_data.form_responses && typeof raw_data.form_responses === 'object')
-        ? raw_data.form_responses
-        : raw_data
+      const data = stage.data || {}
 
       /* Número de etapa para elegir el mapa correspondiente */
       const num = stage.stage_number
 
-      /* ------------------------------------------------------------------ */
-      /* Etapa 1 — Info de la empresa (formulario web o legacy WhatsApp)     */
-      /* Formulario web: price_mode ('single'|'lists'), stock_mode           */
-      /* Legacy WhatsApp: use_price_lists (bool), use_deposits (bool)        */
-      /* ------------------------------------------------------------------ */
-      if (num === 1) {
-        const is_form = 'price_mode' in data
-        const uses_lists    = is_form ? data.price_mode === 'lists'    : data.use_price_lists === true
-        const uses_deposits = is_form ? data.stock_mode === 'deposits' : data.use_deposits    === true
-
-        const substeps = [
-          { key: 'price_mode',    label: 'Tipo de precios',   done: is_form ? 'price_mode' in data : 'use_price_lists' in data },
-        ]
-
-        if (uses_lists) {
-          substeps.push({ key: 'price_lists', label: 'Listas de precios', done: Array.isArray(data.price_lists) && data.price_lists.length > 0 })
-        }
-
-        substeps.push(
-          { key: 'dollar_prices',  label: 'Precios en dólares', done: 'dollar_prices' in data },
-          { key: 'stock_mode',     label: 'Tipo de stock',      done: is_form ? 'stock_mode' in data : 'use_deposits' in data },
-        )
-
-        if (uses_deposits) {
-          substeps.push({ key: 'deposit_names', label: 'Depósitos/sucursales', done: Array.isArray(data.deposit_names) && data.deposit_names.length > 0 })
-        }
-
-        substeps.push(
-          { key: 'payment_discounts',        label: 'Descuentos por pago',          done: 'payment_discounts' in data },
-          { key: 'apply_iva',                label: 'IVA en precios',               done: 'apply_iva' in data },
-          { key: 'ask_quantity',             label: 'Cantidad en venta',            done: is_form ? 'ask_quantity' in data : 'ask_amount_in_vender' in data },
-          { key: 'default_cuenta_corriente', label: 'Cuenta corriente por defecto', done: 'default_cuenta_corriente' in data },
-          { key: 'company_name',             label: 'Nombre de empresa',            done: 'company_name' in data },
-          { key: 'address_company',          label: 'Dirección',                    done: 'address_company' in data },
-          { key: 'social_networks',          label: 'Redes sociales',               done: 'social_networks' in data },
-          { key: 'employees',                label: 'Empleados',                    done: Array.isArray(data.employees) ? data.employees.length > 0 : ('employees' in data && data.employees !== null && data.employees !== '') },
-          { key: 'migration_responsible',    label: 'Responsable de migración',     done: 'migration_responsible' in data },
-        )
-
-        return substeps
+      /**
+       * Criterio de "done" para campos de archivos Excel:
+       * el valor debe existir, no ser 'pending', y ser 'skipped' o un array con elementos.
+       *
+       * @param {*} val Valor del campo de archivos.
+       * @returns {boolean}
+       */
+      var files_done = function (val) {
+        return Boolean(val) && val !== 'pending' && (val === 'skipped' || (Array.isArray(val) && val.length > 0))
       }
 
       /* ------------------------------------------------------------------ */
-      /* Etapa 2 — Instalación del sistema (manual, sin data relevante)      */
+      /* Etapa 1 — Información de la empresa (formulario web)                */
+      /* ------------------------------------------------------------------ */
+      if (num === 1) {
+        return [
+          {
+            key: 'form_sent',
+            label: 'Formulario enviado al cliente',
+            done: Boolean(implementation && implementation.form_token),
+          },
+          {
+            key: 'form_submitted',
+            label: 'Cliente completó el formulario',
+            done: Boolean(implementation && implementation.form_submitted_at != null),
+          },
+        ]
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* Etapa 2 — Instalación del sistema                                   */
       /* ------------------------------------------------------------------ */
       if (num === 2) {
         return [
@@ -1444,45 +1416,24 @@ export default {
       /* ------------------------------------------------------------------ */
       if (num === 3) {
         return [
-          /* "done" se deriva del estado de la etapa, no de un campo en data */
-          { key: 'installation', label: 'Sistema instalado', done: stage.status === 'completed' },
+          { key: 'articles_files',  label: 'Excel de artículos',    done: files_done(data.articles_files) },
+          { key: 'clients_files',   label: 'Excel de clientes',     done: files_done(data.clients_files) },
+          { key: 'suppliers_files', label: 'Excel de proveedores', done: files_done(data.suppliers_files) },
+          { key: 'logo',            label: 'Logo de la empresa',    done: data.logo_received === true },
+          { key: 'files_confirmed', label: 'Archivos confirmados',  done: data.files_confirmed_complete === true },
         ]
       }
 
       /* ------------------------------------------------------------------ */
-      /* Etapa 4 — Archivos de migración                                     */
+      /* Etapa 4 — Migración de datos                                        */
       /* ------------------------------------------------------------------ */
       if (num === 4) {
-        /**
-         * Criterio de "done" para archivos de migración:
-         * el campo debe existir, no ser 'pending', y ser 'skipped' o un array con elementos.
-         *
-         * @param {*} val Valor del campo de archivos.
-         * @returns {boolean}
-         */
-        var files_done = function (val) {
-          return Boolean(val) && val !== 'pending' && (val === 'skipped' || (Array.isArray(val) && val.length > 0))
-        }
-
-        return [
-          { key: 'articles_files',    label: 'Excel de artículos',           done: files_done(data.articles_files) },
-          { key: 'clients_files',     label: 'Excel de clientes',            done: files_done(data.clients_files) },
-          { key: 'suppliers_files',   label: 'Excel de proveedores',         done: files_done(data.suppliers_files) },
-          { key: 'confirm_analysis',  label: 'Mapeo confirmado por cliente', done: data.files_confirmed_complete === true },
-        ]
-      }
-
-      /* ------------------------------------------------------------------ */
-      /* Etapa 5 — Migración con IA                                          */
-      /* ------------------------------------------------------------------ */
-      if (num === 5) {
         /* Acceso seguro al objeto import_status (puede no existir todavía) */
         const import_status = data.import_status || {}
 
         return [
-          { key: 'analyzing',         label: 'Análisis IA',            done: data.analysis_result != null },
-          { key: 'confirm_analysis',  label: 'Mapeo confirmado',        done: data.completed === true },
-          /* Las importaciones se muestran siempre; done solo si su status fue 'success' */
+          { key: 'analysis',          label: 'Análisis IA completado',  done: data.analysis_result != null },
+          { key: 'mapping_confirmed', label: 'Mapeo confirmado',        done: data.completed === true },
           { key: 'import_articles',   label: 'Artículos importados',   done: import_status.articles && import_status.articles.status === 'success' },
           { key: 'import_clients',    label: 'Clientes importados',    done: import_status.clients && import_status.clients.status === 'success' },
           { key: 'import_suppliers',  label: 'Proveedores importados', done: import_status.suppliers && import_status.suppliers.status === 'success' },
@@ -1490,35 +1441,57 @@ export default {
       }
 
       /* ------------------------------------------------------------------ */
-      /* Etapa 6 — Acceso de empleados                                       */
+      /* Etapa 5 — Entrega del sistema                                       */
+      /* ------------------------------------------------------------------ */
+      if (num === 5) {
+        return [
+          { key: 'access_sent', label: 'Acceso enviado al cliente', done: stage.status === 'completed' },
+        ]
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* Etapa 6 — Capacitación                                              */
       /* ------------------------------------------------------------------ */
       if (num === 6) {
         return [
-          /* Completada si employees_notified es un array con al menos un elemento */
-          { key: 'employees_notified', label: 'Credenciales enviadas a empleados', done: Array.isArray(data.employees_notified) && data.employees_notified.length > 0 },
+          {
+            key: 'employees_notified',
+            label: 'Credenciales enviadas a empleados',
+            done: Array.isArray(data.employees_notified) && data.employees_notified.length > 0,
+          },
+          {
+            key: 'resources_sent',
+            label: 'Centro de recursos enviado',
+            done: data.resources_sent === true,
+          },
         ]
       }
 
       /* ------------------------------------------------------------------ */
-      /* Etapa 7 — Vinculación AFIP/ARCA                                     */
+      /* Etapa 7 — Vinculación ARCA/AFIP                                     */
       /* ------------------------------------------------------------------ */
       if (num === 7) {
         return [
-          { key: 'afip_contact_name',  label: 'Responsable AFIP identificado', done: 'afip_contact_name' in data },
-          { key: 'afip_contact_phone', label: 'Teléfono del responsable AFIP',  done: 'afip_contact_phone' in data },
-          { key: 'afip_steps_sent',    label: 'Pasos AFIP enviados',            done: data.afip_steps_sent === true },
+          { key: 'afip_contact',    label: 'Responsable AFIP identificado', done: 'afip_contact_name' in data },
+          { key: 'afip_steps_sent', label: 'Pasos AFIP enviados',           done: data.afip_steps_sent === true },
         ]
       }
 
       /* ------------------------------------------------------------------ */
-      /* Etapa 8 — Videollamada                                              */
+      /* Etapa 8 — Videollamada de capacitación                               */
       /* ------------------------------------------------------------------ */
       if (num === 8) {
         return [
-          /* Disponibilidad: confirmada si hay availability en data o se saltó la videollamada */
-          { key: 'availability',        label: 'Disponibilidad confirmada', done: 'availability' in data || data.skip_videocall === true },
-          /* Videollamada realizada: done se deriva del estado de la etapa */
-          { key: 'videocall_scheduled', label: 'Videollamada realizada',    done: stage.status === 'completed' },
+          {
+            key: 'availability',
+            label: 'Disponibilidad confirmada',
+            done: 'availability' in data || data.skip_videocall === true,
+          },
+          {
+            key: 'videocall_done',
+            label: 'Videollamada realizada',
+            done: stage.status === 'completed',
+          },
         ]
       }
 
