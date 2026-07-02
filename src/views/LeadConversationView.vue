@@ -259,6 +259,7 @@
           placeholder="Mensaje."
           :disabled="enviando_directo"
           @input="on_input_resize"
+          @keydown.enter="on_message_input_keydown"
         />
 
         <!-- Botón mic cuando no hay texto: grabación de audio -->
@@ -1374,6 +1375,21 @@ export default {
       })
     },
 
+    /**
+     * Enter envía el mensaje (estilo WhatsApp); Shift+Enter hace salto de línea normal.
+     * Ignora Enter mientras hay una composición IME en curso (tildes con teclado muerto,
+     * chino/japonés/coreano, etc.) para no enviar el mensaje a mitad de escribir.
+     *
+     * @param {KeyboardEvent} event
+     * @returns {void}
+     */
+    on_message_input_keydown(event) {
+      if (event.shiftKey || event.isComposing) {
+        return
+      }
+      event.preventDefault()
+      this.on_enviar_directo()
+    },
     /**
      * Envía un mensaje directo al lead por WhatsApp sin pasar por Claude.
      *
