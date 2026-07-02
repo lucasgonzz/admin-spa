@@ -181,7 +181,7 @@
                 Notificar escalaciones por WhatsApp
               </label>
               <div class="form-text text-muted">
-                Recibir un WhatsApp cuando el agente no puede resolver una conversación y escala al equipo humano.
+                Recibís un WhatsApp cuando el agente no puede resolver algo solo y necesita que un humano intervenga en la conversación (una pregunta fuera de lo habitual, un pedido inusual, una objeción que requiere criterio). También te llega este mismo aviso cuando un lead confirma que terminó la demo y ya está listo para la llamada del closer — comparte este flag con la escalación general.
               </div>
             </div>
 
@@ -197,7 +197,7 @@
                 Notificar demos agendadas por WhatsApp
               </label>
               <div class="form-text text-muted">
-                Recibir un WhatsApp cuando un lead confirma y agenda una demo.
+                Recibís un WhatsApp en cada paso del ciclo de una demo agendada: cuando se agenda o reagenda, cuando se manda el aviso de check-in, cuando el lead confirma que pudo ingresar (o avisa que no pudo), y cuando confirma que la terminó.
               </div>
             </div>
 
@@ -213,7 +213,39 @@
                 Notificar errores de envío por WhatsApp
               </label>
               <div class="form-text text-muted">
-                Recibís un WhatsApp cuando falla el envío automático de un mensaje del sistema (seguimientos, recordatorios de demo).
+                Recibís un WhatsApp cuando falla el envío automático de un mensaje del sistema (ej. un error de conexión). Para no inundarte si hay una ráfaga de fallos seguidos, como máximo se manda uno cada 10 minutos.
+              </div>
+            </div>
+
+            <!-- Campo: Notificar verificación pendiente por ERROR, por WhatsApp -->
+            <div class="mb-3 form-check">
+              <input
+                v-model="form.notify_verificacion_whatsapp"
+                type="checkbox"
+                class="form-check-input"
+                id="notify_verificacion_check"
+              />
+              <label class="form-check-label" for="notify_verificacion_check">
+                Notificar verificación pendiente por error, por WhatsApp
+              </label>
+              <div class="form-text text-muted">
+                Recibís un WhatsApp cuando una sugerencia del agente queda pendiente de aprobación manual por un ERROR interno — por ejemplo, no se pudo consultar la disponibilidad del calendario y el agente no puede armar una respuesta confiable sin ayuda. No se activa por estar coordinando agenda (para eso está el checkbox de abajo) — este es solo para cuando algo salió mal.
+              </div>
+            </div>
+
+            <!-- Campo: Notificar verificación pendiente por AGENDAMIENTO, por WhatsApp -->
+            <div class="mb-3 form-check">
+              <input
+                v-model="form.notify_verificacion_agendamiento_whatsapp"
+                type="checkbox"
+                class="form-check-input"
+                id="notify_verificacion_agendamiento_check"
+              />
+              <label class="form-check-label" for="notify_verificacion_agendamiento_check">
+                Notificar por WhatsApp cuando un lead está coordinando agenda
+              </label>
+              <div class="form-text text-muted">
+                Desde que un lead entra a coordinar la agenda de la demo hasta que llega a closer activo, todo mensaje del agente requiere tu aprobación antes de salir — no porque haya un error, es el proceso normal para ese tramo. Este aviso ya te llega siempre como notificación push y sonido en el navegador (si lo tenés abierto); activá este checkbox si además querés un WhatsApp.
               </div>
             </div>
 
@@ -285,6 +317,10 @@ export default {
         notify_demo_scheduled_whatsapp: false,
         /* Flag para recibir WhatsApp cuando falla el envío automático de un mensaje del sistema. */
         notify_send_errors_whatsapp: false,
+        /* Flag para recibir WhatsApp cuando una verificación queda pendiente por error interno. */
+        notify_verificacion_whatsapp: false,
+        /* Flag para recibir WhatsApp cuando un lead está coordinando agenda (verificación por agendamiento). */
+        notify_verificacion_agendamiento_whatsapp: false,
       },
       /** Errores de validación por campo. */
       form_errors: {},
@@ -338,6 +374,8 @@ export default {
         notify_lead_escalation_whatsapp: false,
         notify_demo_scheduled_whatsapp: false,
         notify_send_errors_whatsapp: false,
+        notify_verificacion_whatsapp: false,
+        notify_verificacion_agendamiento_whatsapp: false,
       }
       this.form_errors = {}
       this.save_error = ''
@@ -362,6 +400,8 @@ export default {
         notify_lead_escalation_whatsapp: !!admin.notify_lead_escalation_whatsapp,
         notify_demo_scheduled_whatsapp:  !!admin.notify_demo_scheduled_whatsapp,
         notify_send_errors_whatsapp:     !!admin.notify_send_errors_whatsapp,
+        notify_verificacion_whatsapp:    !!admin.notify_verificacion_whatsapp,
+        notify_verificacion_agendamiento_whatsapp: !!admin.notify_verificacion_agendamiento_whatsapp,
       }
       this.form_errors = {}
       this.save_error = ''
@@ -398,6 +438,8 @@ export default {
         notify_lead_escalation_whatsapp: self.form.notify_lead_escalation_whatsapp,
         notify_demo_scheduled_whatsapp:  self.form.notify_demo_scheduled_whatsapp,
         notify_send_errors_whatsapp:     self.form.notify_send_errors_whatsapp,
+        notify_verificacion_whatsapp:    self.form.notify_verificacion_whatsapp,
+        notify_verificacion_agendamiento_whatsapp: self.form.notify_verificacion_agendamiento_whatsapp,
       }
       if (self.form.password) {
         payload.password = self.form.password
