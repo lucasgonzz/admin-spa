@@ -128,6 +128,7 @@
 import ImageAnnotationEditor from '@/components/support/ImageAnnotationEditor.vue'
 import BorderProgressWrap from '@/components/support/BorderProgressWrap.vue'
 import api from '@/utils/axios'
+import { OggOpusRecorder } from '@/utils/oggOpusRecorder'
 
 export default {
   name: 'SupportMessageInput',
@@ -165,12 +166,10 @@ export default {
       image_editor_visible: false,
       /** Imagen en edición antes de confirmar adjunto. */
       image_editor_source_file: null,
-      /** true mientras MediaRecorder está activo. */
+      /** true mientras el OggOpusRecorder está activo. */
       recording: false,
-      /** Instancia activa de MediaRecorder; null si no hay grabación. */
+      /** Instancia activa de OggOpusRecorder; null si no hay grabación. */
       media_recorder: null,
-      /** Chunks binarios acumulados durante la grabación. */
-      audio_chunks: [],
       /** true si no se puede grabar (contexto inseguro, permiso o API ausente). */
       mic_error: false,
       /** Texto del aviso rojo según el motivo del fallo. */
@@ -378,53 +377,8 @@ export default {
       return 'No se puede acceder al micrófono en este navegador. Usá Adjuntar para subir un archivo de audio.'
     },
     /**
-     * Elige mime de grabación compatible con WhatsApp (prioriza OGG/Opus para nota de voz).
-     *
-     * @returns {string|null}
-     */
-    pick_recorder_mime_type() {
-      if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) {
-        return null
-      }
-      // Orden de prioridad: OGG/Opus (Firefox) > WebM/Opus (Chrome) > WebM > MP4 al final.
-      // MP4 va último porque Chrome genera fragmented MP4 (fMP4) que Meta rechaza silenciosamente
-      // con error 131053 ("audio/mp4 processed as application/octet-stream"). WebM es el formato
-      // correcto para Chrome; el backend lo convierte a audio/ogg antes de subirlo a Kapso.
-      const candidates = [
-        'audio/ogg;codecs=opus',
-        'audio/ogg',
-        'audio/webm;codecs=opus',
-        'audio/webm',
-        'audio/mp4',
-      ]
-      let i = 0
-      for (i = 0; i < candidates.length; i = i + 1) {
-        if (MediaRecorder.isTypeSupported(candidates[i])) {
-          return candidates[i]
-        }
-      }
-      return null
-    },
-    /**
-     * Extensión de archivo según el mime del MediaRecorder.
-     *
-     * @param {string} mime_type
-     * @returns {string}
-     */
-    recorder_file_extension(mime_type) {
-      if (!mime_type) {
-        return 'webm'
-      }
-      if (mime_type.indexOf('ogg') >= 0) {
-        return 'ogg'
-      }
-      if (mime_type.indexOf('mp4') >= 0) {
-        return 'm4a'
-      }
-      return 'webm'
-    },
-    /**
-     * Inicia o detiene grabación de audio (OGG/Opus preferido para WhatsApp).
+     * Inicia o detiene grabación de audio directamente a Ogg/Opus (vía OggOpusRecorder), sin
+     * depender de qué formato soporte el MediaRecorder nativo de cada navegador.
      * Si el navegador rechaza el permiso, muestra aviso en lugar de fallar silenciosamente.
      */
     toggle_recording() {
@@ -435,61 +389,39 @@ export default {
       }
       this.mic_error = false
       this.mic_error_message = ''
-      if (!this.microphone_available) {
+      if (!this.microphone_available || !OggOpusRecorder.isSupported()) {
         this.mic_error = true
         this.mic_error_message = this.build_mic_unavailable_message()
         return
       }
-      const recorder_mime = this.pick_recorder_mime_type()
-      if (!recorder_mime) {
-        this.mic_error = true
-        this.mic_error_message = 'Tu navegador no permite grabar audio. Usá Adjuntar para subir un .ogg o .mp3.'
-        return
-      }
-      navigator.mediaDevices.getUserMedia({ audio: true })
-        .then(function (stream) {
-          self.audio_chunks = []
-          const recorder_options = { mimeType: recorder_mime }
-          self.media_recorder = new MediaRecorder(stream, recorder_options)
-          self.media_recorder.ondataavailable = function (audio_event) {
-            if (audio_event.data && audio_event.data.size > 0) {
-              self.audio_chunks.push(audio_event.data)
-            }
-          }
-          self.media_recorder.onstop = function () {
-            /* Detener timer de duración. */
-            clearInterval(self.recording_timer_id)
-            self.recording_timer_id = null
-            self.recording_seconds = 0
-
-            const blob_mime = self.media_recorder.mimeType || recorder_mime
-            const file_ext = self.recorder_file_extension(blob_mime)
-            const audio_blob = new Blob(self.audio_chunks, { type: blob_mime })
-            self.attachment = new File(
-              [audio_blob],
-              'audio_' + Date.now() + '.' + file_ext,
-              { type: blob_mime }
-            )
-            self.recording = false
-            stream.getTracks().forEach(function (track) {
-              track.stop()
-            })
-          }
-          /* Iniciar timer de duración visible en el botón. */
+      const recorder = new OggOpusRecorder({
+        onData: function (blob) {
+          clearInterval(self.recording_timer_id)
+          self.recording_timer_id = null
           self.recording_seconds = 0
-          self.recording_timer_id = setInterval(function () {
-            self.recording_seconds++
-          }, 1000)
-
-          self.recording = true
-          self.media_recorder.start()
-        })
-        .catch(function (error) {
-          console.warn('[SupportChat] getUserMedia error:', error)
+          self.attachment = new File([blob], 'audio_' + Date.now() + '.ogg', { type: 'audio/ogg' })
+          self.recording = false
+          self.media_recorder = null
+        },
+        onError: function (error) {
+          console.warn('[SupportChat] error al grabar audio:', error)
           self.mic_error = true
-          self.mic_error_message =
-            'Sin acceso al micrófono. Verificá los permisos del navegador o usá Adjuntar.'
-        })
+          self.mic_error_message = 'Sin acceso al micrófono. Verificá los permisos del navegador o usá Adjuntar.'
+          self.recording = false
+          self.media_recorder = null
+          clearInterval(self.recording_timer_id)
+          self.recording_timer_id = null
+        },
+      })
+      self.media_recorder = recorder
+      self.recording_seconds = 0
+      self.recording_timer_id = setInterval(function () {
+        self.recording_seconds++
+      }, 1000)
+      self.recording = true
+      recorder.start().catch(function () {
+        /* el error ya se maneja en onError */
+      })
     },
     /**
      * Solicita sugerencia IA al backend y completa el textarea.

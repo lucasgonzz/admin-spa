@@ -393,6 +393,7 @@ import MessageBubble from '@/components/lead/conversation/MessageBubble.vue'
 import LeadResumenTab from '@/components/lead/resumen/Index.vue'
 import TemplatePickerModal from '@/components/lead/conversation/TemplatePickerModal.vue'
 import api from '@/utils/axios'
+import { OggOpusRecorder } from '@/utils/oggOpusRecorder'
 import { copy_lead_conversation_to_clipboard } from '@/utils/lead_conversation_clipboard'
 import lead_conversation_date_dividers from '@/mixins/lead_conversation_date_dividers'
 import conversation_scroll_behavior from '@/mixins/conversation_scroll_behavior'
@@ -513,11 +514,8 @@ export default {
       /** true mientras el micrófono está grabando. */
       recording_audio: false,
 
-      /** Instancia MediaRecorder activa (null cuando no graba). */
+      /** Instancia OggOpusRecorder activa (null cuando no graba). */
       audio_recorder: null,
-
-      /** Stream de micrófono activo (null cuando no graba). */
-      audio_stream: null,
 
       /** true mientras se envía el audio al backend. */
       enviando_audio: false,
@@ -1869,7 +1867,8 @@ export default {
     },
 
     /**
-     * Solicita acceso al micrófono y empieza a grabar con MediaRecorder.
+     * Inicia una grabación de audio directamente a Ogg/Opus (vía OggOpusRecorder), sin depender
+     * de qué formato soporte el MediaRecorder nativo de cada navegador.
      *
      * @returns {void}
      */
@@ -1878,55 +1877,30 @@ export default {
       if (this.recording_audio || this.enviando_audio) {
         return
       }
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      if (!OggOpusRecorder.isSupported()) {
         alert('Tu navegador no soporta grabación de audio.')
         return
       }
-      navigator.mediaDevices.getUserMedia({ audio: true })
-        .then(function (stream) {
-          self.audio_stream = stream
-          // Orden de prioridad: OGG/Opus (Firefox) > WebM/Opus (Chrome) > WebM > MP4 al final.
-          // IMPORTANTE: MP4 debe ir ÚLTIMO porque Chrome genera fragmented MP4 (fMP4) que Meta
-          // acepta como upload pero descarta al procesar (error 131053 "application/octet-stream").
-          // WebM es el formato correcto para Chrome; el backend lo convierte a audio/ogg para Meta.
-          const mimeType = MediaRecorder.isTypeSupported('audio/ogg; codecs=opus')
-            ? 'audio/ogg; codecs=opus'
-            : MediaRecorder.isTypeSupported('audio/webm; codecs=opus')
-              ? 'audio/webm; codecs=opus'
-              : MediaRecorder.isTypeSupported('audio/webm')
-                ? 'audio/webm'
-                : MediaRecorder.isTypeSupported('audio/mp4')
-                  ? 'audio/mp4'
-                  : ''
-          const recorder = mimeType
-            ? new MediaRecorder(stream, { mimeType: mimeType })
-            : new MediaRecorder(stream)
-          self.audio_recorder = recorder
-          const chunks = []
-          recorder.ondataavailable = function (e) {
-            if (e.data && e.data.size > 0) {
-              chunks.push(e.data)
-            }
-          }
-          recorder.onstop = function () {
-            // iOS Safari bug: recorder.mimeType devuelve '' tras grabar aunque el formato sea válido.
-            // Si mimeType (capturado en el constructor) también es '', iOS graba en audio/mp4 por defecto.
-            var mime = mimeType || recorder.mimeType || 'audio/mp4'
-            const blob = new Blob(chunks, { type: mime })
-            self._pending_audio_blob = blob
-            self._pending_audio_mime = mime
-            self.recording_audio = false
-            self.release_audio_stream()
-            self.send_pending_audio()
-          }
-          recorder.start()
-          self.recording_audio = true
-        })
-        .catch(function (err) {
+      const recorder = new OggOpusRecorder({
+        onData: function (blob) {
+          self._pending_audio_blob = blob
+          self._pending_audio_mime = 'audio/ogg'
+          self.recording_audio = false
+          self.audio_recorder = null
+          self.send_pending_audio()
+        },
+        onError: function (err) {
           console.error('Error al acceder al micrófono', err)
           alert('No se pudo acceder al micrófono. Verificá los permisos del navegador.')
           self.recording_audio = false
-        })
+          self.audio_recorder = null
+        },
+      })
+      self.audio_recorder = recorder
+      self.recording_audio = true
+      recorder.start().catch(function () {
+        /* el error ya se maneja en onError */
+      })
     },
 
     /**
@@ -1941,24 +1915,18 @@ export default {
       try {
         this.audio_recorder.stop()
       } catch (err) {
-        console.error('Error al detener el MediaRecorder', err)
+        console.error('Error al detener el grabador de audio', err)
         this.recording_audio = false
         this.release_audio_stream()
       }
     },
 
     /**
-     * Libera el stream del micrófono (apaga el LED de grabación en el sistema operativo).
+     * Libera la instancia del grabador (el micrófono se libera solo al cerrar el encoder).
      *
      * @returns {void}
      */
     release_audio_stream() {
-      if (this.audio_stream) {
-        this.audio_stream.getTracks().forEach(function (t) {
-          t.stop()
-        })
-        this.audio_stream = null
-      }
       this.audio_recorder = null
     },
 
