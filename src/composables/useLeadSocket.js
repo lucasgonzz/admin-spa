@@ -286,6 +286,28 @@ export function useLeadSocket(options) {
   channel.listen('.LeadAiSuggestionGenerating', handle_ai_suggestion_generating)
   channel.listen('.LeadAiSuggestionFinished', handle_ai_suggestion_finished)
 
+  /*
+   * Canal privado de alerta cuando un mensaje requiere verificación por agendamiento (ver
+   * prompt 233). Sonido en el navegador — mismo patrón que closer-alerts en CloserPanel.vue.
+   * Además del sonido, refresca badges/grilla igual que un mensaje nuevo (reutiliza el mismo
+   * mecanismo de refetch que ya existe para no duplicar lógica de actualización de la UI).
+   */
+  const verificacion_channel_name = 'verificacion-agendamiento-alerts'
+  channels_to_leave.push(verificacion_channel_name)
+  const verificacion_channel = echo.private(verificacion_channel_name)
+  verificacion_channel.listen('.verificacion.agendamiento.alert', function (event_data) {
+    try {
+      var audio = new Audio('/sounds/alert.mp3')
+      audio.play().catch(function () { return null })
+    } catch (e) {
+      // Ignorar si el navegador bloquea la reproducción automática.
+    }
+    if (event_data && event_data.lead_id != null) {
+      schedule_list_row_refetch(event_data.lead_id)
+      schedule_conversation_refetch(event_data.lead_id)
+    }
+  })
+
   return {
     disconnect() {
       if (unread_badges_debounce_timer) {
@@ -306,7 +328,14 @@ export function useLeadSocket(options) {
       }
       let i = 0
       for (i = 0; i < channels_to_leave.length; i = i + 1) {
-        echo.leave(channels_to_leave[i])
+        // Los canales privados se registran en Echo con el prefijo "private-"; echo.leave()
+        // lo requiere para desuscribir correctamente (mismo patrón que teardown_closer_alert_channel
+        // en CloserPanel.vue, que usa 'private-closer-alerts').
+        if (channels_to_leave[i] === verificacion_channel_name) {
+          echo.leave('private-' + channels_to_leave[i])
+        } else {
+          echo.leave(channels_to_leave[i])
+        }
       }
     },
   }
