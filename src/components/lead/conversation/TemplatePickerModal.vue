@@ -1,13 +1,15 @@
 <template>
-  <!-- Modal Bootstrap para seleccionar y enviar plantillas Meta manualmente -->
-  <div
-    class="modal fade"
-    id="templatePickerModal"
-    tabindex="-1"
-    aria-labelledby="templatePickerModalLabel"
-    aria-hidden="true"
-    ref="modal_el"
-  >
+  <!-- Teleport al body: evita que el stacking context del padre bloquee el modal -->
+  <Teleport to="body">
+    <!-- Modal Bootstrap para seleccionar y enviar plantillas Meta manualmente -->
+    <div
+      class="modal fade"
+      id="templatePickerModal"
+      tabindex="-1"
+      aria-labelledby="templatePickerModalLabel"
+      aria-hidden="true"
+      ref="modal_el"
+    >
     <div class="modal-dialog modal-dialog-scrollable">
       <div class="modal-content">
 
@@ -74,12 +76,22 @@
                 Sugeridas para este lead (estado: {{ lead_estado }})
               </small>
               <div
-                v-for="tpl in sugeridas"
+                v-for="(tpl, tpl_index) in sugeridas"
                 :key="tpl.id"
                 class="template-item border rounded p-2 mb-2"
                 @click="on_select(tpl)"
               >
-                <div class="fw-semibold small">{{ tpl.template_name }}</div>
+                <div class="d-flex justify-content-between align-items-start">
+                  <div class="fw-semibold small">{{ tpl.template_name }}</div>
+                  <!-- Badge de próximo envío solo para la plantilla que sigue en la cola -->
+                  <span
+                    v-if="tpl_index === next_template_index && next_followup_label"
+                    class="badge bg-primary bg-opacity-10 text-primary ms-2 flex-shrink-0"
+                    style="font-size: 0.7rem; font-weight: 500;"
+                  >
+                    <i class="bi bi-clock me-1" />{{ next_followup_label }}
+                  </span>
+                </div>
                 <div
                   v-if="tpl.body_template"
                   class="text-muted"
@@ -121,11 +133,13 @@
 
       </div>
     </div>
-  </div>
+    </div>
+  </Teleport>
 </template>
 
 <script>
 import { Modal } from 'bootstrap'
+import api from '@/utils/axios'
 
 /**
  * Mapeo de placeholders Meta a campos del lead y etiquetas legibles para el usuario.
@@ -160,6 +174,10 @@ export default {
       empty_variables: [],
       /* Indica si se está procesando el envío para bloquear el botón. */
       enviando: false,
+      /* Reglas de followup cargadas desde la API para calcular el countdown. */
+      followup_rules: [],
+      /* Evita repetir la petición de reglas en cada apertura del modal. */
+      rules_loaded: false,
     }
   },
 
@@ -256,6 +274,92 @@ export default {
 
       return result
     },
+
+    /**
+     * Regla de followup activa para el estado actual del lead.
+     *
+     * @returns {Object|null}
+     */
+    followup_rule_for_lead() {
+      const estado = this.lead_estado
+      return this.followup_rules.find(function (r) {
+        return r.estado === estado && r.activa
+      }) || null
+    },
+
+    /**
+     * Timestamp del último mensaje no rechazado del lead.
+     * Cae al created_at del lead si no hay mensajes.
+     *
+     * @returns {number}
+     */
+    last_lead_message_at() {
+      const msgs = (this.lead.messages || []).slice()
+      const valid = msgs.filter(function (m) {
+        return m.status !== 'rechazado'
+      })
+      valid.sort(function (a, b) {
+        return (b.id || 0) - (a.id || 0)
+      })
+      const m = valid[0]
+      if (m && m.created_at) {
+        return new Date(m.created_at).getTime()
+      }
+      if (this.lead.created_at) {
+        return new Date(this.lead.created_at).getTime()
+      }
+      return Date.now()
+    },
+
+    /**
+     * Índice (0-based) de la próxima plantilla sugerida a enviarse automáticamente.
+     * Equivale al count de followups ya enviados/en proceso (no rechazados).
+     *
+     * @returns {number}
+     */
+    next_template_index() {
+      const msgs = (this.lead.messages || []).filter(function (m) {
+        return m.is_followup && m.status !== 'rechazado'
+      })
+      return msgs.length
+    },
+
+    /**
+     * Label de cuánto falta para el próximo envío automático.
+     * Cadena vacía si no hay regla o no aplica.
+     *
+     * @returns {string}
+     */
+    next_followup_label() {
+      const rule = this.followup_rule_for_lead
+      if (!rule || !rule.horas_espera) {
+        return ''
+      }
+      const last_at = this.last_lead_message_at
+      const sends_at = last_at + rule.horas_espera * 3600000
+      const remaining_ms = sends_at - Date.now()
+      if (remaining_ms <= 0) {
+        return 'en cola'
+      }
+      const total_mins = Math.ceil(remaining_ms / 60000)
+      const hours = Math.floor(total_mins / 60)
+      const mins = total_mins % 60
+      if (hours > 0 && mins > 0) {
+        return 'en ' + hours + 'h ' + mins + 'min'
+      }
+      if (hours > 0) {
+        return 'en ' + hours + 'h'
+      }
+      return 'en ' + mins + 'min'
+    },
+  },
+
+  /**
+   * Limpia el modal de Bootstrap si el componente se destruye con el modal abierto.
+   */
+  beforeUnmount() {
+    const modal = Modal.getInstance(this.$refs.modal_el)
+    if (modal) modal.hide()
   },
 
   methods: {
@@ -272,6 +376,17 @@ export default {
       /* Cargar templates si el store está vacío. */
       if (this.all_templates.length === 0) {
         this.$store.dispatch('followup_template/fetch')
+      }
+
+      /* Cargar reglas de followup una sola vez para el countdown de envío automático. */
+      if (!this.rules_loaded) {
+        const self = this
+        api.get('/followup-rule').then(function (res) {
+          self.followup_rules = res.data.models || []
+          self.rules_loaded = true
+        }).catch(function () {
+          /* Silencioso: no mostrar countdown si falla la carga. */
+        })
       }
 
       const modal = Modal.getOrCreateInstance(this.$refs.modal_el)

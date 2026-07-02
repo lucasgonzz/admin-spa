@@ -364,12 +364,12 @@ export default {
 .virtual-clock-fab {
 	position: fixed;
 	bottom: 20px;
-	right: 20px;
+	left: 20px;
 	z-index: 1500;
 	width: 44px;
 	height: 44px;
 	border-radius: 50%;
-	background: #343a40;
+	background: #198754;
 	color: #fff;
 	border: none;
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
@@ -381,7 +381,7 @@ export default {
 	transition: background 0.15s;
 
 	&:hover {
-		background: #0d6efd;
+		background: #157347;
 	}
 }
 
@@ -393,13 +393,13 @@ export default {
 	height: 9px;
 	border-radius: 50%;
 	background: #dc3545;
-	border: 2px solid #343a40;
+	border: 2px solid #198754;
 }
 
 .virtual-clock-panel {
 	position: fixed;
 	bottom: 74px;
-	right: 20px;
+	left: 20px;
 	z-index: 1500;
 	width: 300px;
 	max-height: 70vh;

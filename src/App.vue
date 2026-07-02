@@ -46,7 +46,7 @@
     >
       <span class="small fw-semibold">
         <i class="bi bi-clock-history me-1" aria-hidden="true" />
-        TIEMPO VIRTUAL ACTIVO: {{ debug_virtual_time_value }}
+        TIEMPO VIRTUAL ACTIVO: {{ debug_virtual_time_label }}
       </span>
     </div>
 
@@ -293,6 +293,14 @@ export default {
         return String(this.$route.meta.title)
       }
       return 'ComercioCity'
+    },
+    /**
+     * Texto legible del tiempo virtual para el banner: "sábado d/m H:mm".
+     *
+     * @returns {string}
+     */
+    debug_virtual_time_label() {
+      return this.format_debug_virtual_time_label(this.debug_virtual_time_value)
     },
   },
   watch: {
@@ -604,6 +612,79 @@ export default {
       this.debug_real_time = payload.real_time
     },
     /**
+     * Parsea el datetime virtual del backend en Date local (sin desfase por timezone).
+     *
+     * @param {string|null} virtual_time Valor Y-m-d H:i(:s) o ISO con T.
+     * @returns {Date|null}
+     */
+    parse_debug_virtual_time_datetime(virtual_time) {
+      if (!virtual_time) {
+        return null
+      }
+
+      /** Cadena normalizada del valor recibido desde la API o el input datetime-local. */
+      const raw_value = String(virtual_time).trim()
+      /** Partes Y-m-d y hora opcional separada por espacio o T. */
+      const parts_match = raw_value.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/)
+
+      if (parts_match) {
+        return new Date(
+          parseInt(parts_match[1], 10),
+          parseInt(parts_match[2], 10) - 1,
+          parseInt(parts_match[3], 10),
+          parseInt(parts_match[4] || '0', 10),
+          parseInt(parts_match[5] || '0', 10),
+          parseInt(parts_match[6] || '0', 10)
+        )
+      }
+
+      /** Fallback por si el backend devuelve otro formato parseable por el motor. */
+      const fallback_date = new Date(raw_value)
+      if (isNaN(fallback_date.getTime())) {
+        return null
+      }
+
+      return fallback_date
+    },
+    /**
+     * Formatea el tiempo virtual como "sábado d/m H:mm" para el banner superior.
+     *
+     * @param {string|null} virtual_time Valor crudo del override de tiempo virtual.
+     * @returns {string}
+     */
+    format_debug_virtual_time_label(virtual_time) {
+      if (!virtual_time) {
+        return ''
+      }
+
+      /** Instante local construido desde el string del backend. */
+      const parsed_date = this.parse_debug_virtual_time_datetime(virtual_time)
+      if (!parsed_date) {
+        return String(virtual_time)
+      }
+
+      /** Nombres de días en minúsculas, alineados al locale es-AR del resto del admin. */
+      const weekday_names = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+      /** Día del mes y mes sin ceros a la izquierda (formato d/m pedido). */
+      const day_of_month = parsed_date.getDate()
+      const month_number = parsed_date.getMonth() + 1
+      /** Hora y minutos en formato H:mm (minutos siempre con dos dígitos). */
+      const hour = parsed_date.getHours()
+      const minute = String(parsed_date.getMinutes()).padStart(2, '0')
+
+      return (
+        weekday_names[parsed_date.getDay()] +
+        ' ' +
+        day_of_month +
+        '/' +
+        month_number +
+        ' ' +
+        hour +
+        ':' +
+        minute
+      )
+    },
+    /**
      * Consulta al backend si hay seeders pendientes de ejecución.
      * Si los hay, muestra un confirm; si el usuario acepta, los ejecuta.
      *
@@ -838,16 +919,20 @@ export default {
   overflow: visible !important;
 }
 
-/* Banner de tiempo virtual activo — solo visible en entorno local con override activo */
+/* Banner de tiempo virtual activo — centrado, solo el ancho del contenido */
 .virtual-time-banner {
   position: fixed;
   top: 0;
-  left: 0;
-  right: 0;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 2100;
+  width: fit-content;
+  max-width: calc(100vw - 2rem);
   background: #dc3545;
   color: #fff;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  border-radius: 0 0 8px 8px;
+  white-space: nowrap;
 }
 
 /* Banner de nueva versión disponible — fijo en la parte superior, sobre la UI */
