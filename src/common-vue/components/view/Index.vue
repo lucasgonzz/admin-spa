@@ -33,6 +33,7 @@
       :table_properties="table_properties"
       :filters="st.filters"
       :selected="st.selected"
+      :highlighted_row_id="highlighted_row_id"
       @open-filter="open_filter"
       @clear-filter="on_clear_filter"
       @row="on_row"
@@ -146,6 +147,14 @@ export default {
      */
     before_create_hook: {
       type: Function,
+      default: null,
+    },
+    /**
+     * Id opcional de fila a resaltar en la tabla (p. ej. lead con conversación abierta).
+     * null = sin resaltado.
+     */
+    highlighted_row_id: {
+      type: [Number, String],
       default: null,
     },
   },

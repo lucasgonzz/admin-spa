@@ -233,6 +233,15 @@
 		line-height: 1
 		flex: none
 
+	/* Fila del lead cuya conversación WhatsApp está abierta en el sidebar lateral. */
+	.table tbody tr.table-success > *
+		--bs-table-bg-state: var(--bs-success-bg-subtle)
+		--bs-table-color-state: var(--bs-success-text-emphasis)
+		box-shadow: inset 0 0 0 9999px var(--bs-success-bg-subtle)
+
+	.table tbody tr.table-success:hover > *
+		box-shadow: inset 0 0 0 9999px var(--bs-success-border-subtle)
+
 // Badges lead fuera del contenedor `.lead-module` (p. ej. celdas compartidas).
 .lead-badge
 	display: inline-flex

@@ -132,6 +132,11 @@ export default __base_store({
     ai_error: null,
     /** Total global de mensajes del lead sin leer (badge menú Leads). */
     unread_total: 0,
+    /**
+     * Mensajes sin leer por slug de estado del lead (badges barra de navegación de Leads).
+     * @type {Record<string, number>}
+     */
+    unread_by_status: {},
     /** Id de lead con GET conversación en curso (evita duplicados). */
     _conversation_fetch_in_flight: null,
     /** Id del lead cuyo mark-whatsapp-messages-read está en vuelo (null si ninguno). */
@@ -240,6 +245,19 @@ export default __base_store({
     set_unread_total(state, value) {
       const n = parseInt(value, 10)
       state.unread_total = isNaN(n) ? 0 : n
+    },
+    /**
+     * Totales de mensajes sin leer agrupados por estado del lead (slug => cantidad).
+     *
+     * @param {Object} state
+     * @param {Record<string, number>|null|undefined} value
+     */
+    set_unread_by_status(state, value) {
+      if (!value || typeof value !== 'object') {
+        state.unread_by_status = {}
+        return
+      }
+      state.unread_by_status = value
     },
     /**
      * @param {Object} state
@@ -857,6 +875,9 @@ export default __base_store({
       return api.get('/lead/unread-badges').then((res) => {
         if (res.data && res.data.unread_total != null) {
           commit('set_unread_total', res.data.unread_total)
+        }
+        if (res.data && res.data.unread_by_status != null) {
+          commit('set_unread_by_status', res.data.unread_by_status)
         }
         return context.state.unread_total
       })

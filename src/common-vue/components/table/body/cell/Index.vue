@@ -146,7 +146,17 @@ export default {
     link_text() {
       const k = this.prop.key
       if (k == 'client_id' && this.row.client) {
-        return this.row.client.name
+        /** Etiqueta declarada en meta (p. ej. company_name en actualizaciones); fallback a name. */
+        const label_key = this.prop.relation_label || 'name'
+        const client = this.row.client
+        const primary_label = client[label_key] ? String(client[label_key]).trim() : ''
+        if (primary_label) {
+          return primary_label
+        }
+        if (label_key !== 'name' && client.name) {
+          return String(client.name).trim()
+        }
+        return ''
       }
       if (k == 'current_version_id' && this.row.current_version) {
         return this.row.current_version.version

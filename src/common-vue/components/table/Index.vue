@@ -45,6 +45,7 @@
           :table_properties="table_properties"
           :is_selectable="is_selectable"
           :selected="selected"
+          :highlighted_row_id="highlighted_row_id"
           @row="$emit('row', $event)"
           @toggle="$emit('toggle', $event)"
         >
@@ -77,6 +78,11 @@ export default {
     model_name: { type: String, default: '' },
     filters: { type: Array, default: () => [] },
     selected: { type: Array, default: () => [] },
+    /** Id de fila resaltada (opcional); se reenvía al cuerpo de la tabla. */
+    highlighted_row_id: {
+      type: [Number, String],
+      default: null,
+    },
   },
   emits: ['open-filter', 'clear-filter', 'row', 'toggle'],
   computed: {

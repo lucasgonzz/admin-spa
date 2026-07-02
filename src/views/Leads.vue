@@ -6,6 +6,7 @@
       model_name="lead"
       :model_extra_tabs="model_extra_tabs"
       :model_properties_nav_order="model_properties_nav_order"
+      :highlighted_row_id="sidebar_lead ? sidebar_lead.id : null"
       @extra-record-updated="on_record_updated"
       @open-conversation="on_open_conversation"
     >

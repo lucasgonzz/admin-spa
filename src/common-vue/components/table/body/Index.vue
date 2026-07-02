@@ -4,7 +4,7 @@
       v-for="row in rows"
       :key="row.id"
       class="clickable"
-      :class="{ 'table-primary': is_selected(row) }"
+      :class="row_highlight_classes(row)"
       @click="$emit('row', row)"
     >
       <td v-if="is_selectable" @click.stop>
@@ -45,9 +45,40 @@ export default {
     table_properties: { type: Array, default: () => [] },
     is_selectable: { type: Boolean, default: false },
     selected: { type: Array, default: () => [] },
+    /**
+     * Id opcional de fila a resaltar (p. ej. lead con conversación WhatsApp abierta en sidebar).
+     * null = ninguna fila resaltada.
+     */
+    highlighted_row_id: {
+      type: [Number, String],
+      default: null,
+    },
   },
   emits: ['row', 'toggle'],
   methods: {
+    /**
+     * true si la fila coincide con highlighted_row_id (conversación u otro contexto activo).
+     * @param {Object} row
+     * @returns {boolean}
+     */
+    is_row_highlighted(row) {
+      if (this.highlighted_row_id == null || this.highlighted_row_id === '') {
+        return false
+      }
+      return row && row.id != null && String(row.id) === String(this.highlighted_row_id)
+    },
+    /**
+     * Clases Bootstrap de la fila: verde si hay conversación activa; azul solo si está seleccionada.
+     * @param {Object} row
+     * @returns {Object}
+     */
+    row_highlight_classes(row) {
+      var highlighted = this.is_row_highlighted(row)
+      return {
+        'table-success': highlighted,
+        'table-primary': !highlighted && this.is_selected(row),
+      }
+    },
     is_selected(row) {
       return this.selected.some((s) => s.id == row.id)
     },

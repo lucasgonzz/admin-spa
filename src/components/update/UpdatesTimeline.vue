@@ -65,7 +65,7 @@
                   >
                     <td class="align-middle">{{ update.id }}</td>
                     <td class="align-middle">
-                      {{ update.client ? update.client.name : '—' }}
+                      {{ client_display_name(update.client) }}
                     </td>
                     <td class="align-middle">
                       {{ format_target_version(update) }}
@@ -230,6 +230,26 @@ export default {
   },
 
   methods: {
+    /**
+     * Nombre visible del cliente en listados: razón social con fallback al contacto.
+     *
+     * @param {Object|null} client Relación client del upgrade.
+     * @returns {string}
+     */
+    client_display_name(client) {
+      if (!client) {
+        return '—'
+      }
+
+      const company_name = client.company_name ? String(client.company_name).trim() : ''
+      if (company_name) {
+        return company_name
+      }
+
+      const person_name = client.name ? String(client.name).trim() : ''
+      return person_name || '—'
+    },
+
     /**
      * Etiqueta legible del estado del upgrade.
      *
