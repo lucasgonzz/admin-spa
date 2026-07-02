@@ -116,11 +116,20 @@
             aria-hidden="true"
           />
         </button>
-      </template>
+        <!-- Filtro rápido: ver solo leads calificados (separarlos visualmente de nuevo/contactado/etc.) -->
+        <button
+          type="button"
+          class="btn btn-sm me-2"
+          :class="only_calificados_active ? 'btn-primary' : 'btn-outline-primary'"
+          title="Ver solo leads en estado Calificado"
+          @click="on_toggle_only_calificados"
+        >
+          <i class="bi bi-funnel" aria-hidden="true" />
+          Solo calificados
+        </button>
 
-      <template #right>
-        <!-- Filtro rápido por fecha de inicio de conversación WhatsApp -->
-        <div class="d-flex align-items-center w-100 w-md-auto leads-conversation-date-filter">
+        <!-- Filtro por inicio de conversación: misma fila que los botones en escritorio. -->
+        <div class="d-flex align-items-center leads-conversation-date-filter">
           <label class="small text-muted mb-0 me-1 text-nowrap" for="lead_conversation_started_date">
             Inicio conv.
           </label>
@@ -148,42 +157,54 @@
       <template #header>
         <!-- Barra de navegación por grupo/estado del pipeline de leads -->
         <div v-if="lead_status_groups.length" class="lead-status-nav mb-3">
-          <div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Filtrar por grupo de estado">
-            <button
-              type="button"
-              class="btn"
-              :class="active_status_group == null ? 'btn-secondary' : 'btn-outline-secondary'"
-              title="Ver todos los leads, sin filtrar por estado"
-              @click="on_select_status_all"
-            >
-              Todos
-            </button>
-            <button
-              v-for="group in lead_status_groups"
-              :key="'status-group-' + group.name"
-              type="button"
-              class="btn"
-              :class="active_status_group === group.name ? 'btn-secondary' : 'btn-outline-secondary'"
-              :title="'Ver leads del grupo ' + group.name"
-              @click="on_select_status_group(group)"
-            >
-              {{ group.name }}
-            </button>
+          <!-- Fila 1: grupos del pipeline (Todos, Calificación, Demo, …) -->
+          <div class="lead-status-nav__row">
+            <div class="btn-group btn-group-sm" role="group" aria-label="Filtrar por grupo de estado">
+              <button
+                type="button"
+                class="btn"
+                :class="active_status_group == null ? 'btn-secondary' : 'btn-outline-secondary'"
+                title="Ver todos los leads, sin filtrar por estado"
+                @click="on_select_status_all"
+              >
+                Todos
+              </button>
+              <button
+                v-for="group in lead_status_groups"
+                :key="'status-group-' + group.name"
+                type="button"
+                class="btn d-inline-flex align-items-center"
+                :class="active_status_group === group.name ? 'btn-secondary' : 'btn-outline-secondary'"
+                :title="status_group_nav_title(group.name)"
+                @click="on_select_status_group(group)"
+              >
+                {{ group.name }}
+                <span
+                  v-if="status_group_unread_count(group.name) > 0"
+                  class="badge bg-danger rounded-pill lead-status-nav__badge ms-1"
+                  :title="'Mensajes sin leer en ' + group.name + ': ' + status_group_unread_count(group.name)"
+                >{{ format_status_nav_unread_count(status_group_unread_count(group.name)) }}</span>
+              </button>
+            </div>
           </div>
 
+          <!-- Fila 2: estados del grupo activo (scroll horizontal si no entran en una línea) -->
           <div
             v-if="active_status_group_options.length"
-            class="btn-group btn-group-sm flex-wrap mt-2"
-            role="group"
-            aria-label="Filtrar por estado dentro del grupo"
+            class="lead-status-nav__row lead-status-nav__row--sub"
           >
+            <div
+              class="btn-group btn-group-sm"
+              role="group"
+              aria-label="Filtrar por estado dentro del grupo"
+            >
             <button
               v-for="opt in active_status_group_options"
               :key="'status-opt-' + opt.value"
               type="button"
               class="btn d-inline-flex align-items-center"
               :class="active_status_slug === opt.value ? 'btn-secondary' : 'btn-outline-secondary'"
-              :title="'Ver solo leads en ' + opt.text"
+              :title="status_nav_title(opt)"
               @click="on_select_status(opt)"
             >
               <span
@@ -192,7 +213,13 @@
                 aria-hidden="true"
               />
               {{ opt.text }}
+              <span
+                v-if="status_unread_count(opt.value) > 0"
+                class="badge bg-danger rounded-pill lead-status-nav__badge ms-1"
+                :title="'Mensajes sin leer en ' + opt.text + ': ' + status_unread_count(opt.value)"
+              >{{ format_status_nav_unread_count(status_unread_count(opt.value)) }}</span>
             </button>
+            </div>
           </div>
         </div>
 
@@ -594,6 +621,8 @@ export default {
       duracion_minutos: 60,
       /** Fecha YYYY-MM-DD para filtrar leads por inicio de conversación WhatsApp. */
       conversation_started_date: '',
+      /** true mientras el filtro rápido "solo calificados" está activo (toggle del botón). */
+      only_calificados_active: false,
       /** Indica si el batch recovery de leads sin respuesta está en curso. */
       batch_recovering: false,
       /** Lead actualmente abierto en el sidebar lateral de conversación (null = cerrado). */
@@ -683,6 +712,14 @@ export default {
     },
 
     /**
+     * Mapa slug de estado => cantidad de mensajes sin leer (API /lead/unread-badges).
+     * @returns {Record<string, number>}
+     */
+    lead_unread_by_status() {
+      return this.$store.state.lead.unread_by_status || {}
+    },
+
+    /**
      * true si el viewport es desktop (≥768px).
      * Se evalúa en runtime; en contextos sin window devuelve true por defecto.
      * @returns {boolean}
@@ -714,6 +751,7 @@ export default {
     '$store.state.lead.filters': {
       handler() {
         this.sync_conversation_started_date_from_store()
+        this.sync_only_calificados_from_store()
         this.sync_status_nav_from_store()
       },
       deep: true,
@@ -726,8 +764,11 @@ export default {
     this.open_lead_from_query_param()
     /* Sincronizar el input de fecha con un filtro activo previo en el store. */
     this.sync_conversation_started_date_from_store()
+    this.sync_only_calificados_from_store()
     /* Sincronizar la barra de navegación de estados con un filtro activo previo en el store. */
     this.sync_status_nav_from_store()
+    /* Totales de no leídos por estado para los badges de la barra de navegación. */
+    this.$store.dispatch('lead/fetch_unread_badges')
     /* Restaurar scroll si el usuario volvió desde la conversación WhatsApp de un lead (primera carga). */
     this.restore_scroll_position()
   },
@@ -754,6 +795,7 @@ export default {
     } else {
       this.$store.dispatch('lead/get_models')
     }
+    this.$store.dispatch('lead/fetch_unread_badges')
     this.restore_scroll_position()
   },
 
@@ -782,6 +824,7 @@ export default {
       this.$store.commit('lead/set_selected', [])
       this.$store.commit('lead/set_scroll_y', 0)
       this.conversation_started_date = ''
+      this.only_calificados_active = false
       this.active_status_group = null
       this.active_status_slug = null
       this.sidebar_lead = null
@@ -1029,6 +1072,48 @@ export default {
       this.conversation_started_date = ''
     },
     /**
+     * Aplica o quita el filtro rápido "solo calificados" (igual_que en status).
+     * Mismo patrón que on_conversation_started_date_change, pero como toggle on/off en vez de
+     * un valor libre: un solo click activa, otro click lo saca.
+     * @returns {void}
+     */
+    on_toggle_only_calificados() {
+      if (this.only_calificados_active) {
+        this.$store.commit('lead/remove_filter_by_key', 'status')
+        this.only_calificados_active = false
+      } else {
+        var payload = {
+          type: 'text',
+          key: 'status',
+          igual_que: 'calificado',
+        }
+        this.$store.commit('lead/add_filter', payload)
+        this.only_calificados_active = true
+      }
+      this.$store.commit('lead/set_filter_page', 1)
+      this.$store.dispatch('lead/run_filter', { page: 1 })
+    },
+    /**
+     * Lee del store el filtro activo sobre status=calificado para reflejarlo en el botón toggle.
+     * @returns {void}
+     */
+    sync_only_calificados_from_store() {
+      var filters = this.$store.state.lead.filters || []
+      var i = 0
+      for (i = 0; i < filters.length; i = i + 1) {
+        var filter_row = filters[i]
+        if (
+          filter_row
+          && filter_row.key === 'status'
+          && filter_row.igual_que === 'calificado'
+        ) {
+          this.only_calificados_active = true
+          return
+        }
+      }
+      this.only_calificados_active = false
+    },
+    /**
      * Aplica o quita el filtro por fecha de inicio de conversación (igual_que en first_message_at).
      * @returns {void}
      */
@@ -1080,6 +1165,81 @@ export default {
       this.$store.dispatch('lead/get_models').then(function () {
         self.sync_conversation_started_date_from_store()
       })
+    },
+    /**
+     * Cantidad de mensajes sin leer en un estado puntual del pipeline.
+     *
+     * @param {string} status_slug slug del estado (ej. `calificado`).
+     * @returns {number}
+     */
+    status_unread_count(status_slug) {
+      var by_status = this.lead_unread_by_status
+      var n = parseInt(by_status[status_slug], 10)
+      return isNaN(n) ? 0 : n
+    },
+    /**
+     * Suma de mensajes sin leer de todos los estados que pertenecen a un grupo.
+     *
+     * @param {string} group_name nombre visible del grupo (ej. `Calificación`).
+     * @returns {number}
+     */
+    status_group_unread_count(group_name) {
+      var total = 0
+      var by_status = this.lead_unread_by_status
+      this.lead_status_groups.forEach(function (g) {
+        if (g.name !== group_name) {
+          return
+        }
+        g.options.forEach(function (o) {
+          var n = parseInt(by_status[o.value], 10)
+          if (!isNaN(n)) {
+            total = total + n
+          }
+        })
+      })
+      return total
+    },
+    /**
+     * Formatea el número del badge de la barra de estados (tope visual 99+).
+     *
+     * @param {number} count
+     * @returns {string}
+     */
+    format_status_nav_unread_count(count) {
+      var n = parseInt(count, 10)
+      if (isNaN(n) || n < 1) {
+        return '0'
+      }
+      return n > 99 ? '99+' : String(n)
+    },
+    /**
+     * Título del botón de grupo con hint de no leídos si aplica.
+     *
+     * @param {string} group_name
+     * @returns {string}
+     */
+    status_group_nav_title(group_name) {
+      var unread = this.status_group_unread_count(group_name)
+      if (unread > 0) {
+        return 'Ver leads del grupo ' + group_name + ' (' + unread + ' sin leer)'
+      }
+      return 'Ver leads del grupo ' + group_name
+    },
+    /**
+     * Título del botón de estado puntual con hint de no leídos si aplica.
+     *
+     * @param {{ text: string, value: string }} opt
+     * @returns {string}
+     */
+    status_nav_title(opt) {
+      if (!opt) {
+        return ''
+      }
+      var unread = this.status_unread_count(opt.value)
+      if (unread > 0) {
+        return 'Ver solo leads en ' + opt.text + ' (' + unread + ' sin leer)'
+      }
+      return 'Ver solo leads en ' + opt.text
     },
     /**
      * Reconstruye la selección activa de la barra de navegación de estados a partir del

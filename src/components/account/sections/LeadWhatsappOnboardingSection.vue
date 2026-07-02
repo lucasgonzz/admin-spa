@@ -78,6 +78,30 @@
       </div>
 
       <div class="mb-3">
+        <label class="form-label small fw-semibold" for="lead_verificacion_agendamiento_auto_send_delay">
+          Demora antes de auto-enviar en el tramo de agendamiento (segundos)
+        </label>
+        <input
+          id="lead_verificacion_agendamiento_auto_send_delay"
+          v-model.number="form.verificacion_agendamiento_auto_send_delay_seconds"
+          type="number"
+          class="form-control form-control-sm"
+          style="max-width: 8rem"
+          :min="auto_send_delay_min"
+          :max="auto_send_delay_max"
+          :disabled="saving"
+          @input="on_input_change"
+        />
+        <p class="form-text small text-muted mb-0">
+          Desde que un lead entra a coordinar la agenda de la demo (solicita disponibilidad, demo agendada, ingresando a
+          demo, demo en curso, demo pendiente de terminar) hasta closer activo, todo mensaje de Claude requiere
+          verificación de Martín antes de salir. Si nadie lo revisa, se manda igual al vencer este tiempo — para no
+          dejar a un lead esperando horas. Entre {{ auto_send_delay_min }} y {{ auto_send_delay_max }} segundos
+          (por defecto 1800 = 30 minutos).
+        </p>
+      </div>
+
+      <div class="mb-3">
         <label class="form-label small fw-semibold" for="lead_welcome_delay">Demora antes del mensaje de bienvenida (segundos)</label>
         <input
           id="lead_welcome_delay"
@@ -182,6 +206,7 @@ export default {
         welcome_delay_seconds: 60,
         ai_suggestion_delay_seconds: 60,
         ai_suggestion_auto_send_delay_seconds: 120,
+        verificacion_agendamiento_auto_send_delay_seconds: 1800,
       },
       /** Snapshot persistido para detectar cambios. */
       stored_form: null,
@@ -208,6 +233,7 @@ export default {
       const welcome_delay = parseInt(this.form.welcome_delay_seconds, 10)
       const ai_delay = parseInt(this.form.ai_suggestion_delay_seconds, 10)
       const auto_send_delay = parseInt(this.form.ai_suggestion_auto_send_delay_seconds, 10)
+      const verif_agendamiento_delay = parseInt(this.form.verificacion_agendamiento_auto_send_delay_seconds, 10)
       if (
         isNaN(welcome_delay) ||
         welcome_delay < this.delay_min ||
@@ -217,7 +243,10 @@ export default {
         ai_delay > this.ai_suggestion_delay_max ||
         isNaN(auto_send_delay) ||
         auto_send_delay < this.auto_send_delay_min ||
-        auto_send_delay > this.auto_send_delay_max
+        auto_send_delay > this.auto_send_delay_max ||
+        isNaN(verif_agendamiento_delay) ||
+        verif_agendamiento_delay < this.auto_send_delay_min ||
+        verif_agendamiento_delay > this.auto_send_delay_max
       ) {
         return false
       }
@@ -278,6 +307,10 @@ export default {
         ai_suggestion_auto_send_delay_seconds: self.parse_delay_seconds(
           data && data.ai_suggestion_auto_send_delay_seconds,
           120
+        ),
+        verificacion_agendamiento_auto_send_delay_seconds: self.parse_delay_seconds(
+          data && data.verificacion_agendamiento_auto_send_delay_seconds,
+          1800
         ),
       }
       self.form = JSON.parse(JSON.stringify(snapshot))
@@ -366,6 +399,21 @@ export default {
         return
       }
 
+      const verif_agendamiento_delay = parseInt(self.form.verificacion_agendamiento_auto_send_delay_seconds, 10)
+      if (
+        isNaN(verif_agendamiento_delay) ||
+        verif_agendamiento_delay < self.auto_send_delay_min ||
+        verif_agendamiento_delay > self.auto_send_delay_max
+      ) {
+        self.error_message =
+          'La demora de auto-envío en agendamiento debe estar entre ' +
+          self.auto_send_delay_min +
+          ' y ' +
+          self.auto_send_delay_max +
+          ' segundos.'
+        return
+      }
+
       const placeholder = self.placeholder_nombre
       if (self.form.auto_message_with_name.indexOf(placeholder) === -1) {
         self.error_message = 'El mensaje automático con nombre debe incluir ' + placeholder + '.'
@@ -389,6 +437,7 @@ export default {
           welcome_delay_seconds: welcome_delay,
           ai_suggestion_delay_seconds: ai_delay,
           ai_suggestion_auto_send_delay_seconds: auto_send_delay,
+          verificacion_agendamiento_auto_send_delay_seconds: verif_agendamiento_delay,
         })
         .then(function (res) {
           self.apply_from_response(res.data)
