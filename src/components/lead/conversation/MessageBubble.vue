@@ -99,6 +99,10 @@
         <div v-if="segment.is_last && message.requiere_verificacion" class="wa-extra mt-1">
           <span class="badge bg-warning text-dark wa-badge-tight">Requiere verificación con Lucas</span>
         </div>
+        <div v-if="segment.is_last && has_pending_actions" class="wa-extra wa-pending-actions-note mt-1 text-muted">
+          <i class="bi bi-hourglass-split me-1" aria-hidden="true" />
+          Este mensaje incluye acciones pendientes (agendar demo / enviar mail) que se van a aplicar recién al aprobar.
+        </div>
         <div
           v-if="segment.is_last && admin_notifications_parsed.length > 0"
           class="wa-extra mt-1 d-flex flex-wrap gap-1"
@@ -816,6 +820,21 @@ export default {
         return 'bg-warning text-dark'
       }
       return 'bg-secondary'
+    },
+    /**
+     * true si el mensaje quedó pendiente con acciones sin aplicar (motivo agendamiento, ver
+     * LeadAiService::requires_agendamiento_verification_gate). Se aplican recién al aprobar.
+     * @returns {boolean}
+     */
+    has_pending_actions() {
+      const actions = this.message.pending_actions
+      if (!actions) {
+        return false
+      }
+      if (typeof actions === 'object') {
+        return Object.keys(actions).length > 0
+      }
+      return String(actions).trim() !== ''
     },
     /**
      * Acciones Enviar / Editar para sugerencias de Claude aún no enviadas por WhatsApp.
@@ -1583,6 +1602,12 @@ export default {
   font-size: 0.75rem;
   line-height: 1.2;
   margin-top: 0.25rem;
+  font-style: italic;
+  clear: both;
+}
+.wa-pending-actions-note {
+  font-size: 0.75rem;
+  line-height: 1.25;
   font-style: italic;
   clear: both;
 }
