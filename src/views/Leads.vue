@@ -146,6 +146,56 @@
       </template>
 
       <template #header>
+        <!-- Barra de navegación por grupo/estado del pipeline de leads -->
+        <div v-if="lead_status_groups.length" class="lead-status-nav mb-3">
+          <div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Filtrar por grupo de estado">
+            <button
+              type="button"
+              class="btn"
+              :class="active_status_group == null ? 'btn-secondary' : 'btn-outline-secondary'"
+              title="Ver todos los leads, sin filtrar por estado"
+              @click="on_select_status_all"
+            >
+              Todos
+            </button>
+            <button
+              v-for="group in lead_status_groups"
+              :key="'status-group-' + group.name"
+              type="button"
+              class="btn"
+              :class="active_status_group === group.name ? 'btn-secondary' : 'btn-outline-secondary'"
+              :title="'Ver leads del grupo ' + group.name"
+              @click="on_select_status_group(group)"
+            >
+              {{ group.name }}
+            </button>
+          </div>
+
+          <div
+            v-if="active_status_group_options.length"
+            class="btn-group btn-group-sm flex-wrap mt-2"
+            role="group"
+            aria-label="Filtrar por estado dentro del grupo"
+          >
+            <button
+              v-for="opt in active_status_group_options"
+              :key="'status-opt-' + opt.value"
+              type="button"
+              class="btn d-inline-flex align-items-center"
+              :class="active_status_slug === opt.value ? 'btn-secondary' : 'btn-outline-secondary'"
+              :title="'Ver solo leads en ' + opt.text"
+              @click="on_select_status(opt)"
+            >
+              <span
+                class="lead-status-nav-dot me-1"
+                :style="{ backgroundColor: opt.color || '#ced4da' }"
+                aria-hidden="true"
+              />
+              {{ opt.text }}
+            </button>
+          </div>
+        </div>
+
         <!-- Panel de demos agendadas: visible solo cuando el toggle está activo -->
         <div v-if="show_demos_agendadas" class="card mt-3 mb-3">
           <div class="card-body">
@@ -555,6 +605,10 @@ export default {
        * (meta + listado) como en la primera entrada.
        */
       resource_view_reload_key: 0,
+      /** Grupo de estado activo en la barra de navegación de leads (null = "Todos"). */
+      active_status_group: null,
+      /** Estado puntual activo dentro del grupo seleccionado (null = todo el grupo). */
+      active_status_slug: null,
     }
   },
   computed: {
@@ -564,6 +618,68 @@ export default {
      */
     lead_sort_by() {
       return this.$store.state.lead.sort_by
+    },
+
+    /**
+     * Definición meta del campo `status` del recurso lead (viene de options_for_meta() en
+     * admin-api, incluye `options` con `{ value, text, color, group }` por cada estado no
+     * oculto). null hasta que resource-view termine de cargar el meta.
+     * @returns {Object|null}
+     */
+    lead_status_field() {
+      var props = this.$store.getters['meta/properties']('lead') || []
+      var i = 0
+      for (i = 0; i < props.length; i = i + 1) {
+        if (props[i] && props[i].key === 'status') {
+          return props[i]
+        }
+      }
+      return null
+    },
+    /**
+     * Opciones de estado tal cual las expone el meta (sin agrupar).
+     * @returns {Array<{ value: string, text: string, color: string, group: string|null }>}
+     */
+    lead_status_options() {
+      return (this.lead_status_field && this.lead_status_field.options) || []
+    },
+    /**
+     * Opciones de estado agrupadas por `group`, preservando el orden de aparición (mismo
+     * criterio que grouped_resolved_options en FilterSelect.vue). Los estados sin grupo no
+     * se muestran en la barra de navegación (no tienen un botón de nivel 1 al que pertenecer).
+     * @returns {Array<{ name: string, options: Array }>}
+     */
+    lead_status_groups() {
+      var order = []
+      var map = {}
+      this.lead_status_options.forEach(function (o) {
+        if (!o.group) {
+          return
+        }
+        if (!map[o.group]) {
+          map[o.group] = []
+          order.push(o.group)
+        }
+        map[o.group].push(o)
+      })
+      return order.map(function (name) {
+        return { name: name, options: map[name] }
+      })
+    },
+    /**
+     * Opciones (nivel 2) del grupo actualmente activo en la barra de navegación.
+     * Array vacío si no hay grupo seleccionado (vista "Todos").
+     * @returns {Array<{ value: string, text: string, color: string, group: string }>}
+     */
+    active_status_group_options() {
+      var active = this.active_status_group
+      var found = null
+      this.lead_status_groups.forEach(function (g) {
+        if (g.name === active) {
+          found = g
+        }
+      })
+      return found ? found.options : []
     },
 
     /**
@@ -598,6 +714,7 @@ export default {
     '$store.state.lead.filters': {
       handler() {
         this.sync_conversation_started_date_from_store()
+        this.sync_status_nav_from_store()
       },
       deep: true,
     },
@@ -609,6 +726,8 @@ export default {
     this.open_lead_from_query_param()
     /* Sincronizar el input de fecha con un filtro activo previo en el store. */
     this.sync_conversation_started_date_from_store()
+    /* Sincronizar la barra de navegación de estados con un filtro activo previo en el store. */
+    this.sync_status_nav_from_store()
     /* Restaurar scroll si el usuario volvió desde la conversación WhatsApp de un lead (primera carga). */
     this.restore_scroll_position()
   },
@@ -663,6 +782,8 @@ export default {
       this.$store.commit('lead/set_selected', [])
       this.$store.commit('lead/set_scroll_y', 0)
       this.conversation_started_date = ''
+      this.active_status_group = null
+      this.active_status_slug = null
       this.sidebar_lead = null
       this.show_demos_agendadas = false
       this.resource_view_reload_key = this.resource_view_reload_key + 1
@@ -959,6 +1080,124 @@ export default {
       this.$store.dispatch('lead/get_models').then(function () {
         self.sync_conversation_started_date_from_store()
       })
+    },
+    /**
+     * Reconstruye la selección activa de la barra de navegación de estados a partir del
+     * filtro `status` en el store (si existe) — sin importar si lo generó esta barra, el
+     * modal de filtro por columna "Estado" de la tabla, u otro control. Mismo patrón que
+     * sync_conversation_started_date_from_store.
+     * @returns {void}
+     */
+    sync_status_nav_from_store() {
+      var filters = this.$store.state.lead.filters || []
+      var status_filter = null
+      var i = 0
+      for (i = 0; i < filters.length; i = i + 1) {
+        if (filters[i] && filters[i].key === 'status') {
+          status_filter = filters[i]
+          break
+        }
+      }
+
+      if (!status_filter || status_filter.igual_que == null || status_filter.igual_que === '') {
+        this.active_status_group = null
+        this.active_status_slug = null
+        return
+      }
+
+      var value = status_filter.igual_que
+
+      if (Array.isArray(value)) {
+        var matched_group = null
+        this.lead_status_groups.forEach(function (g) {
+          var slugs = g.options.map(function (o) { return o.value })
+          var same_set = slugs.length === value.length && slugs.every(function (s) {
+            return value.indexOf(s) !== -1
+          })
+          if (same_set) {
+            matched_group = g.name
+          }
+        })
+        this.active_status_group = matched_group
+        this.active_status_slug = null
+        return
+      }
+
+      var matched_group_for_value = null
+      this.lead_status_groups.forEach(function (g) {
+        g.options.forEach(function (o) {
+          if (o.value === value) {
+            matched_group_for_value = g.name
+          }
+        })
+      })
+      this.active_status_group = matched_group_for_value
+      this.active_status_slug = matched_group_for_value ? value : null
+    },
+    /**
+     * Botón "Todos": quita el filtro de estado sin tocar otros filtros activos (nombre,
+     * teléfono, fecha de inicio de conversación, etc.). Mismo patrón que
+     * on_clear_conversation_started_date.
+     * @returns {void}
+     */
+    on_select_status_all() {
+      var self = this
+      this.active_status_group = null
+      this.active_status_slug = null
+      this.$store.commit('lead/remove_filter_by_key', 'status')
+
+      if (!this.$store.state.lead.is_filtered) {
+        return
+      }
+
+      var remaining_filters = this.$store.state.lead.filters || []
+      if (remaining_filters.length > 0) {
+        this.$store.commit('lead/set_filter_page', 1)
+        this.$store.dispatch('lead/run_filter', { page: 1 })
+        return
+      }
+
+      this.$store.commit('lead/set_filter_page', 1)
+      this.$store.commit('lead/set_filtered', [])
+      this.$store.commit('lead/set_is_filtered', false)
+      this.$store.dispatch('lead/get_models').then(function () {
+        self.sync_status_nav_from_store()
+      })
+    },
+    /**
+     * Selecciona un grupo completo (ej. "Demo"): filtra por todos los slugs del grupo a la
+     * vez (whereIn en el backend — ver prompt 238, dependencia dura de este botón).
+     * @param {{ name: string, options: Array }} group
+     * @returns {void}
+     */
+    on_select_status_group(group) {
+      if (!group || !group.options || !group.options.length) {
+        return
+      }
+      var slugs = group.options.map(function (o) { return o.value })
+
+      this.active_status_group = group.name
+      this.active_status_slug = null
+      this.$store.commit('lead/add_filter', { type: 'select', key: 'status', igual_que: slugs })
+      this.$store.commit('lead/set_filter_page', 1)
+      this.$store.dispatch('lead/run_filter', { page: 1 })
+    },
+    /**
+     * Selecciona un estado puntual dentro del grupo activo (igualdad simple, mecanismo ya
+     * existente — no depende del prompt 238).
+     * @param {{ value: string, text: string, color: string, group: string }} opt
+     * @returns {void}
+     */
+    on_select_status(opt) {
+      if (!opt) {
+        return
+      }
+
+      this.active_status_group = opt.group
+      this.active_status_slug = opt.value
+      this.$store.commit('lead/add_filter', { type: 'select', key: 'status', igual_que: opt.value })
+      this.$store.commit('lead/set_filter_page', 1)
+      this.$store.dispatch('lead/run_filter', { page: 1 })
     },
     /**
      * Abre modal fullscreen con el CRUD de demos.
