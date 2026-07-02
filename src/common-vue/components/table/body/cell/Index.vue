@@ -22,7 +22,8 @@
     </span>
     <span v-else class="text-muted"></span>
   </span>
-  <!-- Doble badge per-usuario: rojo = mensajes del lead sin leer; gris = actividad total no vista -->
+  <!-- Triple badge per-usuario: rojo = mensajes del lead sin leer; gris = actividad total no vista;
+       punto = marca manual "no leído" estilo WhatsApp (solo si no hay actividad real pendiente) -->
   <span v-else-if="prop.type === 'unread_badge'" class="d-flex gap-1 align-items-center">
     <!-- Badge rojo: solo mensajes recibidos del lead sin leer por el admin -->
     <span
@@ -38,8 +39,14 @@
       style="font-size: 0.75em;"
       :title="'Actividad no vista (total): ' + raw_unseen_count"
     >{{ raw_unseen_count }}</span>
-    <!-- Sin actividad pendiente -->
-    <span v-if="raw_unread_count === 0 && raw_unseen_count === 0" class="text-muted"></span>
+    <!-- Punto rojo sin número: marcado manualmente como no leído, sin actividad real pendiente -->
+    <span
+      v-if="raw_unread_count === 0 && raw_unseen_count === 0 && raw_manually_unread"
+      class="unread-dot-badge"
+      title="Marcado manualmente como no leído"
+    ></span>
+    <!-- Sin actividad pendiente ni marca manual -->
+    <span v-if="raw_unread_count === 0 && raw_unseen_count === 0 && !raw_manually_unread" class="text-muted"></span>
   </span>
   <span v-else-if="prop.type === 'pipeline_status'">
     <span
@@ -112,6 +119,18 @@ export default {
       if (!this.prop.unseen_count_key) return 0
       const n = parseInt(this.row[this.prop.unseen_count_key], 10)
       return isNaN(n) ? 0 : n
+    },
+    /**
+     * true si el admin actual marcó manualmente este lead como "no leído" (estilo WhatsApp).
+     * Solo se refleja en la UI como punto sin número cuando no hay actividad real pendiente
+     * (raw_unread_count y raw_unseen_count en 0) — ver template de prop.type === 'unread_badge'.
+     * Retorna false si la prop no define manually_unread_key.
+     *
+     * @returns {boolean}
+     */
+    raw_manually_unread() {
+      if (!this.prop.manually_unread_key) return false
+      return Boolean(this.row[this.prop.manually_unread_key])
     },
     /**
      * Cantidad de seguimientos enviados para el badge de alerta.

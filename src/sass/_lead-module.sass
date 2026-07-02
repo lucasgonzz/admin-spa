@@ -189,6 +189,50 @@
 		border-color: rgba(13, 110, 253, 0.45)
 		box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.12)
 
+	/* Filtro de fecha: inline en escritorio; en móvil baja a segunda línea del toolbar. */
+	.leads-conversation-date-filter
+		flex: 0 0 auto
+
+	@media (min-width: 768px)
+		.view-header-toolbar-right
+			flex-wrap: nowrap
+
+	@media (max-width: 767.98px)
+		.view-header-toolbar-right
+			width: 100%
+			justify-content: flex-end
+
+		.leads-conversation-date-filter
+			flex: 1 1 100%
+
+	/* Barras de navegación por estado del pipeline (grupos + sub-estados). */
+	.lead-status-nav
+		display: flex
+		flex-direction: column
+		align-items: flex-start
+		gap: 0.5rem
+		width: 100%
+
+	.lead-status-nav__row
+		max-width: 100%
+
+	/* Sub-barra: etiquetas largas; scroll horizontal en escritorio sin romper el btn-group. */
+	.lead-status-nav__row--sub
+		overflow-x: auto
+		max-width: 100%
+		-webkit-overflow-scrolling: touch
+		padding-bottom: 0.125rem
+
+		.btn-group
+			flex-wrap: nowrap
+
+	.lead-status-nav__badge
+		font-size: 0.65rem
+		font-weight: 600
+		padding: 0.2em 0.45em
+		line-height: 1
+		flex: none
+
 // Badges lead fuera del contenedor `.lead-module` (p. ej. celdas compartidas).
 .lead-badge
 	display: inline-flex
@@ -206,6 +250,16 @@
 	border: 1px solid transparent
 	box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06)
 	white-space: nowrap
+
+// Punto sin número: marca manual de "no leído" (estilo WhatsApp) en el badge de la grilla de leads.
+.unread-dot-badge
+	display: inline-block
+	width: 0.55rem
+	height: 0.55rem
+	min-width: 0.55rem
+	border-radius: 50%
+	background-color: #dc3545
+	flex-shrink: 0
 
 .pipeline-status-badge
 	font-size: 0.72rem

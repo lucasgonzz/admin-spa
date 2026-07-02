@@ -33,17 +33,30 @@
           />
           <i v-else class="bi bi-stars" :class="is_claude_auto_reply_enabled(row) ? '' : 'opacity-50'" aria-hidden="true" />
         </button>
-        <!-- Botón fijar/desfijar lead (pin global, igual a WhatsApp) -->
-        <button
-          type="button"
-          class="btn btn-sm me-1"
-          :class="row.pinned_at ? 'btn-warning' : 'btn-outline-secondary'"
-          :title="row.pinned_at ? 'Desfijar lead' : 'Fijar lead'"
-          :aria-label="row.pinned_at ? 'Desfijar lead' : 'Fijar lead'"
-          @click.stop="on_toggle_pinned(row)"
-        >
-          <i class="bi bi-pin-fill" :class="row.pinned_at ? '' : 'opacity-50'" aria-hidden="true" />
-        </button>
+        <!-- Grupo: fijar/desfijar chat + marcar/desmarcar como no leído (igual a WhatsApp) -->
+        <div class="btn-group btn-group-sm me-1" role="group" aria-label="Acciones de chat">
+          <button
+            type="button"
+            class="btn"
+            :class="row.pinned_at ? 'btn-warning' : 'btn-outline-secondary'"
+            :title="row.pinned_at ? 'Desfijar lead' : 'Fijar lead'"
+            :aria-label="row.pinned_at ? 'Desfijar lead' : 'Fijar lead'"
+            @click.stop="on_toggle_pinned(row)"
+          >
+            <i class="bi bi-pin-fill" :class="row.pinned_at ? '' : 'opacity-50'" aria-hidden="true" />
+          </button>
+          <!-- Botón marcar/desmarcar conversación como no leída (marca manual per-admin, igual a WhatsApp) -->
+          <button
+            type="button"
+            class="btn"
+            :class="row.manually_marked_unread ? 'btn-danger' : 'btn-outline-secondary'"
+            :title="row.manually_marked_unread ? 'Marcar como leído' : 'Marcar como no leído'"
+            :aria-label="row.manually_marked_unread ? 'Marcar como leído' : 'Marcar como no leído'"
+            @click.stop="on_toggle_manual_unread(row)"
+          >
+            <i class="bi" :class="row.manually_marked_unread ? 'bi-envelope-fill' : 'bi-envelope'" aria-hidden="true" />
+          </button>
+        </div>
         <!-- Botón abrir conversación WhatsApp del lead -->
         <button
           type="button"
@@ -908,6 +921,29 @@ export default {
         }
       }).catch(function () {
         self.$root.$emit('open_toast', 'No se pudo cambiar el estado del pin.')
+      })
+    },
+    /**
+     * Marca o desmarca manualmente un lead como "no leído" para el admin logueado (estilo WhatsApp).
+     *
+     * Es per-admin: no afecta lo que ven los demás admins. Se muestra en la columna "Sin leer" como
+     * un punto rojo sin número, solo mientras no haya actividad real pendiente (unread_count y
+     * unseen_count en 0 — ver CellRenderer). Se limpia sola la próxima vez que se abra la conversación.
+     *
+     * @param {Object} lead Lead de la fila clickeada.
+     * @returns {void}
+     */
+    on_toggle_manual_unread(lead) {
+      if (!lead || !lead.id) {
+        return
+      }
+      var self = this
+      api.post('/lead/' + lead.id + '/toggle-manual-unread').then(function (res) {
+        if (res.data && res.data.model) {
+          self.$store.dispatch('lead/upsert_model_in_lists', res.data.model)
+        }
+      }).catch(function () {
+        self.$root.$emit('open_toast', 'No se pudo cambiar el estado de no leído.')
       })
     },
     /**
