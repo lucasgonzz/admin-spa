@@ -114,14 +114,14 @@
         >
           <i class="bi bi-window-sidebar" aria-hidden="true" />
         </button>
-        <!-- Botón recuperar leads sin respuesta (batch AI recovery) -->
+        <!-- Botón recuperar leads sin respuesta + reintentar seguimientos fallidos (batch AI recovery) -->
         <button
           type="button"
           class="btn btn-sm"
           :class="batch_recovering ? 'btn-warning' : 'btn-outline-warning'"
           :disabled="batch_recovering"
-          title="Responder todos los leads sin respuesta (recovery)"
-          aria-label="Responder todos los leads sin respuesta"
+          title="Responder leads sin respuesta y reintentar seguimientos fallidos (recovery)"
+          aria-label="Recovery: responder leads sin respuesta y reintentar seguimientos fallidos"
           @click="on_batch_recover_unanswered"
         >
           <i
@@ -1712,8 +1712,10 @@ export default {
       return 'bg-secondary'
     },
     /**
-     * Encola la generación de sugerencia de Claude para todos los leads sin respuesta.
-     * Útil para recuperar leads que quedaron sin job por errores del sistema.
+     * Encola la generación de sugerencia de Claude para todos los leads sin respuesta, y además
+     * reintenta seguimientos automáticos por plantilla que fallaron al enviarse (backend: prompts
+     * 245-246). Útil para recuperar leads que quedaron sin job por errores del sistema, y
+     * seguimientos que el scheduler ya intentó pero nunca llegaron por un error de WhatsApp.
      * @returns {void}
      */
     on_batch_recover_unanswered() {
@@ -1726,9 +1728,13 @@ export default {
       api.post('/lead/batch-recover-unanswered').then(function (res) {
         var dispatched = res.data && res.data.dispatched != null ? res.data.dispatched : 0
         var skipped = res.data && res.data.skipped != null ? res.data.skipped : 0
+        var followups_retried = res.data && res.data.followups_retried != null ? res.data.followups_retried : 0
         var msg = dispatched === 0
           ? 'Sin leads pendientes de respuesta (' + skipped + ' ya respondidos o en proceso).'
           : 'Recovery: ' + dispatched + ' lead' + (dispatched === 1 ? '' : 's') + ' procesado' + (dispatched === 1 ? '' : 's') + ', ' + skipped + ' omitido' + (skipped === 1 ? '' : 's') + '.'
+        if (followups_retried > 0) {
+          msg += ' Además, ' + followups_retried + ' seguimiento' + (followups_retried === 1 ? '' : 's') + ' fallido' + (followups_retried === 1 ? '' : 's') + ' se reintentó' + (followups_retried === 1 ? '' : 'aron') + '.'
+        }
         window.dispatchEvent(new CustomEvent('admin-spa-toast', { detail: { message: msg, variant: 'success' } }))
         self.batch_recovering = false
       }).catch(function () {
