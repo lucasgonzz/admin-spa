@@ -87,8 +87,7 @@
           type="number"
           class="form-control form-control-sm"
           style="max-width: 8rem"
-          :min="auto_send_delay_min"
-          :max="auto_send_delay_max"
+          :min="verificacion_agendamiento_auto_send_delay_min"
           :disabled="saving"
           @input="on_input_change"
         />
@@ -96,8 +95,8 @@
           Desde que un lead entra a coordinar la agenda de la demo (solicita disponibilidad, demo agendada, ingresando a
           demo, demo en curso, demo pendiente de terminar) hasta closer activo, todo mensaje de Claude requiere
           verificación de Martín antes de salir. Si nadie lo revisa, se manda igual al vencer este tiempo — para no
-          dejar a un lead esperando horas. Entre {{ auto_send_delay_min }} y {{ auto_send_delay_max }} segundos
-          (por defecto 1800 = 30 minutos).
+          dejar a un lead esperando horas. Mínimo {{ verificacion_agendamiento_auto_send_delay_min }} segundos
+          (por defecto 1800 = 30 minutos). Sin límite superior.
         </p>
       </div>
 
@@ -180,6 +179,9 @@ const AUTO_SEND_DELAY_MIN_SECONDS = 0
 /** Auto-envío máximo en segundos (debe coincidir con admin-api). */
 const AUTO_SEND_DELAY_MAX_SECONDS = 3600
 
+/** Mínimo para auto-envío en tramo de agendamiento: 0 = inmediato (debe coincidir con admin-api). */
+const VERIFICACION_AGENDAMIENTO_AUTO_SEND_DELAY_MIN_SECONDS = 0
+
 /**
  * Sección de cuenta: mensajes automáticos de onboarding WhatsApp para leads nuevos.
  */
@@ -197,6 +199,8 @@ export default {
       ai_suggestion_delay_max: AI_SUGGESTION_DELAY_MAX_SECONDS,
       auto_send_delay_min: AUTO_SEND_DELAY_MIN_SECONDS,
       auto_send_delay_max: AUTO_SEND_DELAY_MAX_SECONDS,
+      /** Mínimo de demora en tramo de agendamiento (sin tope superior; sincronizado con backend). */
+      verificacion_agendamiento_auto_send_delay_min: VERIFICACION_AGENDAMIENTO_AUTO_SEND_DELAY_MIN_SECONDS,
       /** Valores editables del formulario. */
       form: {
         auto_message_with_name: '',
@@ -245,8 +249,7 @@ export default {
         auto_send_delay < this.auto_send_delay_min ||
         auto_send_delay > this.auto_send_delay_max ||
         isNaN(verif_agendamiento_delay) ||
-        verif_agendamiento_delay < this.auto_send_delay_min ||
-        verif_agendamiento_delay > this.auto_send_delay_max
+        verif_agendamiento_delay < this.verificacion_agendamiento_auto_send_delay_min
       ) {
         return false
       }
@@ -402,14 +405,11 @@ export default {
       const verif_agendamiento_delay = parseInt(self.form.verificacion_agendamiento_auto_send_delay_seconds, 10)
       if (
         isNaN(verif_agendamiento_delay) ||
-        verif_agendamiento_delay < self.auto_send_delay_min ||
-        verif_agendamiento_delay > self.auto_send_delay_max
+        verif_agendamiento_delay < self.verificacion_agendamiento_auto_send_delay_min
       ) {
         self.error_message =
-          'La demora de auto-envío en agendamiento debe estar entre ' +
-          self.auto_send_delay_min +
-          ' y ' +
-          self.auto_send_delay_max +
+          'La demora de auto-envío en agendamiento debe ser mayor o igual a ' +
+          self.verificacion_agendamiento_auto_send_delay_min +
           ' segundos.'
         return
       }
