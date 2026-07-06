@@ -111,6 +111,19 @@
             Incluye acciones pendientes (agendar demo / enviar mail) que se aplican recién al aprobar.
           </div>
         </div>
+        <!-- Acciones ya ejecutadas por el backend al aplicar el paquete (prompt 277), una vez aprobado el mensaje -->
+        <div
+          v-if="segment.is_last && message.status !== 'sugerido' && applied_actions_summary.length > 0"
+          class="wa-extra wa-applied-actions-note mt-1"
+        >
+          <div class="wa-applied-actions-title text-muted">
+            <i class="bi bi-check2-circle me-1" aria-hidden="true" />
+            Acciones ejecutadas:
+          </div>
+          <ul class="wa-applied-actions-list mb-0">
+            <li v-for="(accion, idx) in applied_actions_summary" :key="idx">{{ accion }}</li>
+          </ul>
+        </div>
         <div
           v-if="segment.is_last && admin_notifications_parsed.length > 0"
           class="wa-extra mt-1 d-flex flex-wrap gap-1"
@@ -290,7 +303,13 @@
           <div class="wa-auto-send-timer-row d-flex flex-wrap align-items-center justify-content-between gap-2">
             <span class="wa-auto-send-timer-label text-muted small">
               <template v-if="show_auto_send_countdown">
-                Envío automático en <strong class="wa-auto-send-seconds">{{ auto_send_remaining_seconds }}</strong> s
+                <!-- Mensajes de verificación: aviso de que se envía solo si no se aprueba antes -->
+                <template v-if="message.requiere_verificacion">
+                  Se envía solo en <strong class="wa-auto-send-seconds">{{ auto_send_remaining_label }}</strong> si no lo aprobás
+                </template>
+                <template v-else>
+                  Envío automático en <strong class="wa-auto-send-seconds">{{ auto_send_remaining_label }}</strong>
+                </template>
               </template>
               <template v-else-if="show_auto_send_dispatching">Enviando automáticamente…</template>
             </span>
@@ -859,6 +878,18 @@ export default {
       return []
     },
     /**
+     * Lista de acciones que el mensaje ya ejecutó (persistida por el backend al aplicar el paquete,
+     * prompt 277). Se muestra una vez que el mensaje fue aprobado/enviado.
+     * @returns {Array<string>}
+     */
+    applied_actions_summary() {
+      const summary = this.message.applied_actions_summary
+      if (Array.isArray(summary)) {
+        return summary
+      }
+      return []
+    },
+    /**
      * Acciones Enviar / Editar para sugerencias de Claude aún no enviadas por WhatsApp.
      * @returns {boolean}
      */
@@ -896,9 +927,8 @@ export default {
       if (!this.show_pending_suggestion_actions) {
         return 0
       }
-      if (this.message.requiere_verificacion) {
-        return 0
-      }
+      /* Nota: el corte por requiere_verificacion se quitó (prompt 278) - también estos
+         mensajes muestran countdown cuando el backend seteó ai_auto_send_at o hay demora configurada. */
       const delay_seconds = parseInt(this.auto_send_delay_seconds, 10)
       if (isNaN(delay_seconds) || delay_seconds <= 0) {
         return 0
@@ -922,9 +952,8 @@ export default {
       if (!this.show_pending_suggestion_actions) {
         return false
       }
-      if (this.message.requiere_verificacion) {
-        return false
-      }
+      /* Nota: el corte por requiere_verificacion se quitó (prompt 278) - el bloque del timer
+         se muestra siempre que haya un effective_auto_send_at_ms > 0, sea o no verificación. */
       return this.effective_auto_send_at_ms > 0
     },
     show_auto_send_countdown() {
@@ -958,6 +987,24 @@ export default {
         return 0
       }
       return Math.ceil(remaining_ms / 1000)
+    },
+    /**
+     * Tiempo restante hasta el auto-envío en formato legible (mm:ss, o "Xm Ys" si >= 1 min).
+     * @returns {string}
+     */
+    auto_send_remaining_label() {
+      /* Total de segundos restantes según auto_send_remaining_seconds. */
+      const total = this.auto_send_remaining_seconds
+      if (total <= 0) {
+        return '0s'
+      }
+      /* Minutos y segundos restantes para armar el label. */
+      const min = Math.floor(total / 60)
+      const sec = total % 60
+      if (min <= 0) {
+        return sec + 's'
+      }
+      return min + 'm ' + String(sec).padStart(2, '0') + 's'
     },
     /**
      * Ancho del textarea de edición calculado a partir del texto más largo del mensaje.
@@ -1624,6 +1671,14 @@ export default {
   font-size: 0.8rem;
 }
 .wa-pending-actions-list {
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
+}
+/* Mismo tamaño/sangría que las acciones pendientes; se diferencian por el ícono y el título. */
+.wa-applied-actions-title {
+  font-size: 0.8rem;
+}
+.wa-applied-actions-list {
   padding-left: 1.1rem;
   font-size: 0.8rem;
 }
