@@ -152,15 +152,24 @@
             :key="tab.key + '-' + lead.id"
             :lead="lead"
             :section="tab.key"
+            @open-conversation="on_open_conversation"
           />
         </div>
       </section>
     </div>
+
+    <!-- Sidebar lateral de conversación WhatsApp (solo desktop; en mobile se navega a ruta) -->
+    <lead-conversation-sidebar
+      :lead="sidebar_lead"
+      @close="on_sidebar_close"
+      @record-updated="on_sidebar_record_updated"
+    />
   </div>
 </template>
 
 <script>
 import CloserLeadCard from '@/components/closer/CloserLeadCard.vue'
+import LeadConversationSidebar from '@/components/lead/LeadConversationSidebar.vue'
 import api from '@/utils/axios'
 
 /** Intervalo de polling silencioso en milisegundos. */
@@ -176,6 +185,7 @@ export default {
 
   components: {
     CloserLeadCard,
+    LeadConversationSidebar,
   },
 
   data() {
@@ -195,6 +205,8 @@ export default {
       alert_lead: null,
       /** true mientras se procesa el POST de aceptación (deshabilita botones). */
       accepting_alert: false,
+      /** Lead actualmente abierto en el sidebar lateral de conversación (null = cerrado). */
+      sidebar_lead: null,
     }
   },
 
@@ -280,10 +292,10 @@ export default {
       return [
         {
           key: 'en_curso',
-          title: 'Ahora / Pronto',
+          title: 'Hoy',
           leads: state.en_curso || [],
           count: (state.en_curso || []).length,
-          empty_message: 'No hay demos activas en este momento',
+          empty_message: 'No hay demos para hoy',
         },
         {
           key: 'agendadas',
@@ -467,6 +479,40 @@ export default {
     on_decline_alert() {
       this.show_call_alert = false
       this.alert_lead = null
+    },
+
+    /**
+     * Abre la conversación del lead. Desktop (>=768px): sidebar lateral.
+     * Mobile (<768px): navega a la pantalla completa (comportamiento anterior).
+     *
+     * @param {Object} lead
+     * @returns {void}
+     */
+    on_open_conversation(lead) {
+      if (!lead || !lead.id) {
+        return
+      }
+      if (window.innerWidth >= 768) {
+        this.sidebar_lead = lead
+      } else {
+        this.$router.push({ name: 'lead_conversation', params: { lead_id: lead.id } })
+      }
+    },
+    /**
+     * Cierra el sidebar lateral limpiando el lead activo.
+     *
+     * @returns {void}
+     */
+    on_sidebar_close() {
+      this.sidebar_lead = null
+    },
+    /**
+     * Refresca el panel en silencio para reflejar cambios de estado del lead.
+     *
+     * @returns {void}
+     */
+    on_sidebar_record_updated() {
+      this.$store.dispatch('closer/refresh_panel').catch(function () { return null })
     },
   },
 }

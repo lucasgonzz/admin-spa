@@ -193,6 +193,8 @@ export default {
     CloserPartnerRow,
   },
 
+  emits: ['open-conversation'],
+
   props: {
     /** Lead completo devuelto por GET /closer/panel. */
     lead: {
@@ -401,15 +403,12 @@ export default {
 
   methods: {
     /**
-     * Navega a la vista fullscreen de conversación del lead.
+     * Emite el evento para que el panel abra la conversación (sidebar en desktop, ruta en mobile).
      *
      * @returns {void}
      */
     go_to_conversation() {
-      this.$router.push({
-        name: 'lead_conversation',
-        params: { lead_id: this.lead.id },
-      })
+      this.$emit('open-conversation', this.lead)
     },
     /**
      * Abre Google Meet en nueva pestaña y dispara el bot Recall.ai en background.

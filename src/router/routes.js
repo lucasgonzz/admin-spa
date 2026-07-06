@@ -13,7 +13,7 @@ const routes_def = [
     /** Panel operativo del closer: visible para cualquier admin autenticado. */
     path: '/closer',
     name: 'closer-panel',
-    text: 'Panel',
+    text: 'Closer',
     component: () => import('@/views/CloserPanel.vue'),
     meta: { requiresAuth: true, nav: true, icon: 'speedometer2' },
   },
