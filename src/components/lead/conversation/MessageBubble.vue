@@ -97,11 +97,19 @@
           <span class="badge bg-success wa-badge-tight">✓ Demo terminada confirmada</span>
         </div>
         <div v-if="segment.is_last && message.requiere_verificacion" class="wa-extra mt-1">
-          <span class="badge bg-warning text-dark wa-badge-tight">Requiere verificación con Lucas</span>
+          <span class="badge bg-warning text-dark wa-badge-tight">Requiere verificación</span>
         </div>
-        <div v-if="segment.is_last && has_pending_actions" class="wa-extra wa-pending-actions-note mt-1 text-muted">
-          <i class="bi bi-hourglass-split me-1" aria-hidden="true" />
-          Este mensaje incluye acciones pendientes (agendar demo / enviar mail) que se van a aplicar recién al aprobar.
+        <div v-if="segment.is_last && has_pending_actions" class="wa-extra wa-pending-actions-note mt-1">
+          <div class="wa-pending-actions-title text-muted">
+            <i class="bi bi-hourglass-split me-1" aria-hidden="true" />
+            Al aprobar, este mensaje va a:
+          </div>
+          <ul v-if="pending_actions_summary.length > 0" class="wa-pending-actions-list mb-0">
+            <li v-for="(accion, idx) in pending_actions_summary" :key="idx">{{ accion }}</li>
+          </ul>
+          <div v-else class="text-muted">
+            Incluye acciones pendientes (agendar demo / enviar mail) que se aplican recién al aprobar.
+          </div>
         </div>
         <div
           v-if="segment.is_last && admin_notifications_parsed.length > 0"
@@ -835,6 +843,20 @@ export default {
         return Object.keys(actions).length > 0
       }
       return String(actions).trim() !== ''
+    },
+    /**
+     * Lista legible de acciones que el mensaje va a desencadenar al aprobarse (agendar demo,
+     * enviar mail, cambio de estado, etc.). La provee el backend en pending_actions_summary
+     * (ver prompt 267). Array de strings ya formateados en español. Si el backend no lo trae
+     * (versión anterior), devolver [] para caer en el texto genérico de fallback.
+     * @returns {Array<string>}
+     */
+    pending_actions_summary() {
+      const summary = this.message.pending_actions_summary
+      if (Array.isArray(summary)) {
+        return summary
+      }
+      return []
     },
     /**
      * Acciones Enviar / Editar para sugerencias de Claude aún no enviadas por WhatsApp.
@@ -1597,6 +1619,13 @@ export default {
   font-size: 0.9rem;
   font-weight: 500;
   padding: 0.15em 0.45em;
+}
+.wa-pending-actions-title {
+  font-size: 0.8rem;
+}
+.wa-pending-actions-list {
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
 }
 .wa-pending-confirmation {
   font-size: 0.75rem;
