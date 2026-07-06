@@ -10,10 +10,12 @@
 
     <div class="mb-3">
       <p class="small mb-1"><strong>Archivos sincronizados:</strong></p>
-      <ul class="small text-muted mb-0">
-        <li><code>prompts_agentes/setter_identidad.md</code> → identidad del agente (quién es Martín)</li>
-        <li><code>prompts_agentes/setter_system_prompt.md</code> → system prompt base (formato JSON de respuesta)</li>
-        <li><code>comercial/leads_protocolo_whatsapp.md</code> → protocolo de ventas por WhatsApp</li>
+      <p v-if="loading_files" class="small text-muted mb-0">Cargando lista de archivos…</p>
+      <p v-else-if="files_error" class="small text-danger mb-0">No se pudo cargar la lista de archivos.</p>
+      <ul v-else class="small text-muted mb-0">
+        <li v-for="f in files" :key="f.repo_path">
+          <code>{{ f.repo_path }}</code> → {{ f.label }}
+        </li>
       </ul>
     </div>
 
@@ -54,6 +56,7 @@ import api from '@/utils/axios'
 /**
  * Sección en Cuenta: sincroniza prompts de agentes desde GitHub a la BD.
  *
+ * GET  /settings/agent-prompts/files — lista de archivos que se sincronizan
  * POST /settings/agent-prompts/sync
  */
 export default {
@@ -66,7 +69,27 @@ export default {
       results: [],
       /** Error genérico de red o servidor. */
       error_message: '',
+      /** Archivos configurados en el backend para sincronización. */
+      files: [],
+      /** Carga inicial de la lista de archivos. */
+      loading_files: true,
+      /** Falló el GET de archivos al montar. */
+      files_error: false,
     }
+  },
+  mounted() {
+    var self = this
+    api
+      .get('/settings/agent-prompts/files')
+      .then(function (res) {
+        self.files = res.data.files || []
+      })
+      .catch(function () {
+        self.files_error = true
+      })
+      .then(function () {
+        self.loading_files = false
+      })
   },
   computed: {
     all_ok() {
