@@ -1,105 +1,50 @@
 <template>
-  <div>
-    <resource-view
-      model_name="demo_update"
-      resource_api_path="demo-update"
-      @record-selected="on_record_selected"
-    />
-
-    <!-- Panel de progreso: visible apenas se selecciona un registro, incluso sin log aún -->
-    <demo-update-progress-panel
-      v-if="selected_model"
-      :demo_update="selected_model"
-      class="mt-3 mx-3"
-    />
-  </div>
+  <resource-view
+    model_name="demo_update"
+    resource_api_path="demo-update"
+    :model_extra_tabs="model_extra_tabs"
+    @extra-record-updated="on_record_updated"
+  />
 </template>
 
 <script>
+import { markRaw } from 'vue'
 import ResourceView from '@/common-vue/components/view/Index.vue'
-import DemoUpdateProgressPanel from '@/components/demo_update/ProgressPanel.vue'
-import api from '@/utils/axios'
+import DemoUpdateExtraProps from '@/components/demo_update/extra-props/Index.vue'
+
+/**
+ * Pestaña extra del modal de actualizaciones de demo (log en vivo + checklist).
+ */
+const demo_update_model_extra_tabs = [
+  {
+    key: 'operations',
+    label: 'Operaciones',
+    component: markRaw(DemoUpdateExtraProps),
+  },
+]
 
 export default {
   name: 'ViewDemoUpdates',
 
-  components: { ResourceView, DemoUpdateProgressPanel },
+  components: { ResourceView },
 
   data() {
     return {
-      /** Registro seleccionado actualmente en la grilla. */
-      selected_model: null,
-
-      /** ID del intervalo de polling activo (null si no hay polling en curso). */
-      polling_interval: null,
+      /** Pestañas del modal CRUD además del grupo Básico del meta. */
+      model_extra_tabs: demo_update_model_extra_tabs,
     }
   },
 
   methods: {
     /**
-     * Callback del evento record-selected del ResourceView.
-     * Asigna el modelo seleccionado e inicia polling si el pipeline está
-     * pendiente o en ejecución, de modo que el progreso sea visible desde
-     * el momento en que el job es tomado por el worker.
+     * Sincroniza en la tabla los cambios devueltos por el polling de la pestaña Operaciones.
      *
-     * @param {Object|null} model  Registro seleccionado en la grilla.
+     * @param {Object} model  DemoUpdate actualizado en backend.
      * @returns {void}
      */
-    on_record_selected(model) {
-      this.selected_model = model
-      this.stop_polling()
-
-      /* Inicia polling tanto para 'pendiente' como para 'ejecutandose' */
-      if (model && (model.status === 'pendiente' || model.status === 'ejecutandose')) {
-        this.start_polling(model.id)
-      }
+    on_record_updated(model) {
+      this.$store.dispatch('demo_update/upsert_model_in_lists', model)
     },
-
-    /**
-     * Inicia polling cada 4 segundos para refrescar el log y el estado del registro.
-     * Al detectar un status final (completado/fallido) detiene el intervalo.
-     *
-     * @param {number} id  ID del DemoUpdate a refrescar.
-     * @returns {void}
-     */
-    start_polling(id) {
-      var self = this
-
-      self.polling_interval = setInterval(function () {
-        api.get('/demo-update/' + id).then(function (res) {
-          /* Modelo actualizado desde el backend */
-          var model = res.data.model
-
-          /* Actualiza el panel de progreso con los datos frescos */
-          self.selected_model = model
-
-          /* Sincroniza el modelo en la lista de la grilla (upsert sin recargar todo) */
-          self.$store.dispatch('demo_update/upsert_model_in_lists', model)
-
-          /* Detiene polling cuando el pipeline ya terminó (exitoso o fallido) */
-          if (model.status === 'completado' || model.status === 'fallido') {
-            self.stop_polling()
-          }
-        })
-      }, 4000)
-    },
-
-    /**
-     * Detiene el intervalo de polling activo y limpia la referencia.
-     *
-     * @returns {void}
-     */
-    stop_polling() {
-      if (this.polling_interval) {
-        clearInterval(this.polling_interval)
-        this.polling_interval = null
-      }
-    },
-  },
-
-  beforeUnmount() {
-    /* Limpia el intervalo al destruir el componente para evitar memory leaks */
-    this.stop_polling()
   },
 }
 </script>
