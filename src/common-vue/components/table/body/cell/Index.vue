@@ -32,6 +32,13 @@
       style="font-size: 0.75em;"
       :title="'Mensajes del lead sin leer: ' + raw_unread_count"
     >{{ raw_unread_count }}</span>
+    <!-- Badge violeta: seguimientos por aprobar (pendientes de verificación del setter) -->
+    <span
+      v-if="raw_pending_followups_count > 0"
+      class="badge lead-badge"
+      style="font-size: 0.75em; background-color: #7c3aed; color: #fff;"
+      :title="'Seguimientos por aprobar: ' + raw_pending_followups_count"
+    >{{ raw_pending_followups_count }}</span>
     <!-- Badge gris: actividad total no vista (cualquier emisor) que supera los del lead -->
     <span
       v-if="raw_unseen_count > raw_unread_count"
@@ -141,6 +148,17 @@ export default {
     followup_count() {
       if (!this.prop.badge_count_key) return 0
       const n = parseInt(this.row[this.prop.badge_count_key], 10)
+      return isNaN(n) ? 0 : n
+    },
+    /**
+     * Cantidad de seguimientos por aprobar (pendientes de verificación del setter).
+     * Alimenta el badge violeta en la columna "Sin leer". 0 si la prop no define la clave.
+     *
+     * @returns {number}
+     */
+    raw_pending_followups_count() {
+      if (!this.prop.pending_followups_count_key) return 0
+      const n = parseInt(this.row[this.prop.pending_followups_count_key], 10)
       return isNaN(n) ? 0 : n
     },
     link_text() {
