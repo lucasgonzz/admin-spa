@@ -1,6 +1,12 @@
 <template>
+  <!-- Registro de error de sistema (fallo de envío o de generación): bloque rojo centrado, no burbuja -->
+  <div v-if="is_error" class="wa-error-event">
+    <i class="bi bi-exclamation-triangle-fill wa-error-event-icon" aria-hidden="true" />
+    <span class="wa-error-event-text">{{ message.content }}</span>
+  </div>
+
   <!-- Eventos de cambio de estado: separador visual, no burbuja -->
-  <div v-if="is_status_event" class="wa-status-event">
+  <div v-else-if="is_status_event" class="wa-status-event">
     <div class="wa-status-event-line" />
     <span class="wa-status-event-text">{{ message.content }}</span>
     <div class="wa-status-event-line" />
@@ -510,6 +516,13 @@ export default {
      */
     is_status_event() {
       return Boolean(this.message.is_status_event)
+    },
+    /**
+     * true si el mensaje es un registro de error de sistema (fallo de envío/generación).
+     * @returns {boolean}
+     */
+    is_error() {
+      return Boolean(this.message.is_error)
     },
     /**
      * Etiqueta legible del emisor.
@@ -1460,6 +1473,30 @@ export default {
   white-space: nowrap;
   user-select: none;
   font-style: italic;
+}
+/* Bloque rojo centrado para registros de error de sistema (fallo de envío o generación). */
+.wa-error-event {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  margin: 0.25rem auto;
+  max-width: 92%;
+  padding: 0.4rem 0.7rem;
+  background: #fdecea;
+  border: 1px solid #f5c2c0;
+  border-radius: 0.5rem;
+  color: #b02a37;
+  font-size: 0.78rem;
+  align-self: center;
+}
+.wa-error-event-icon {
+  flex: 0 0 auto;
+  font-size: 0.85rem;
+}
+.wa-error-event-text {
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 /* Agrupa varias burbujas del mismo registro lead_messages (separador \n---\n). */
 .wa-message-stack {
