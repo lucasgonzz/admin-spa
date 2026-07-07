@@ -68,15 +68,29 @@ export default {
       return row && row.id != null && String(row.id) === String(this.highlighted_row_id)
     },
     /**
-     * Clases Bootstrap de la fila: verde si hay conversación activa; azul solo si está seleccionada.
+     * true si la fila trae el flag genérico `row_warning` (fila que necesita atención). En leads lo
+     * setea el backend (prompt 294) cuando el lead tiene ≥1 mensaje pendiente de verificación del
+     * setter. Reservado y genérico: cualquier módulo puede exponer row.row_warning para pintar la
+     * fila de amarillo, sin threadear props.
+     * @param {Object} row
+     * @returns {boolean}
+     */
+    is_row_warning(row) {
+      return Boolean(row && row.row_warning)
+    },
+    /**
+     * Clases Bootstrap de la fila. Prioridad (una sola gana): verde (conversación activa) > amarillo
+     * (necesita atención / verificación pendiente) > azul (seleccionada con checkbox).
      * @param {Object} row
      * @returns {Object}
      */
     row_highlight_classes(row) {
       var highlighted = this.is_row_highlighted(row)
+      var warning = !highlighted && this.is_row_warning(row)
       return {
         'table-success': highlighted,
-        'table-primary': !highlighted && this.is_selected(row),
+        'table-warning': warning,
+        'table-primary': !highlighted && !warning && this.is_selected(row),
       }
     },
     is_selected(row) {
