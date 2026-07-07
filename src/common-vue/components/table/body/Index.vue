@@ -53,6 +53,13 @@ export default {
       type: [Number, String],
       default: null,
     },
+    /**
+     * Ids de filas a pintar en rojo (p. ej. leads pendientes de revisión). Vacío = ninguna.
+     */
+    danger_row_ids: {
+      type: Array,
+      default: () => [],
+    },
   },
   emits: ['row', 'toggle'],
   methods: {
@@ -79,18 +86,36 @@ export default {
       return Boolean(row && row.row_warning)
     },
     /**
-     * Clases Bootstrap de la fila. Prioridad (una sola gana): verde (conversación activa) > amarillo
-     * (necesita atención / verificación pendiente) > azul (seleccionada con checkbox).
+     * true si la fila está en la lista de filas "peligro" (rojo), p. ej. leads pendientes de
+     * revisión (prompt 296). Vacío en danger_row_ids = ninguna fila en rojo.
+     * @param {Object} row
+     * @returns {boolean}
+     */
+    is_row_danger(row) {
+      if (!this.danger_row_ids || this.danger_row_ids.length === 0) {
+        return false
+      }
+      if (!row || row.id == null) {
+        return false
+      }
+      return this.danger_row_ids.some((id) => String(id) === String(row.id))
+    },
+    /**
+     * Clases Bootstrap de la fila. Prioridad (una sola gana): verde (conversación activa) > rojo
+     * (pendiente de revisión) > amarillo (necesita atención / verificación pendiente) > azul
+     * (seleccionada con checkbox).
      * @param {Object} row
      * @returns {Object}
      */
     row_highlight_classes(row) {
       var highlighted = this.is_row_highlighted(row)
-      var warning = !highlighted && this.is_row_warning(row)
+      var danger = !highlighted && this.is_row_danger(row)
+      var warning = !highlighted && !danger && this.is_row_warning(row)
       return {
         'table-success': highlighted,
+        'table-danger': danger,
         'table-warning': warning,
-        'table-primary': !highlighted && !warning && this.is_selected(row),
+        'table-primary': !highlighted && !danger && !warning && this.is_selected(row),
       }
     },
     is_selected(row) {

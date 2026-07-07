@@ -10,6 +10,7 @@
       :filters="filters"
       :selected="selected"
       :highlighted_row_id="highlighted_row_id"
+      :danger_row_ids="danger_row_ids"
       @open-filter="$emit('open-filter', $event)"
       @clear-filter="$emit('clear-filter', $event)"
       @row="$emit('row', $event)"
@@ -44,6 +45,10 @@ export default {
     highlighted_row_id: {
       type: [Number, String],
       default: null,
+    },
+    danger_row_ids: {
+      type: Array,
+      default: function () { return [] },
     },
   },
   emits: ['open-filter', 'clear-filter', 'row', 'toggle'],

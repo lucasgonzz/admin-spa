@@ -7,6 +7,7 @@
       :model_extra_tabs="model_extra_tabs"
       :model_properties_nav_order="model_properties_nav_order"
       :highlighted_row_id="sidebar_lead ? sidebar_lead.id : null"
+      :danger_row_ids="danger_row_ids"
       @extra-record-updated="on_record_updated"
       @open-conversation="on_open_conversation"
     >
@@ -114,19 +115,20 @@
         >
           <i class="bi bi-window-sidebar" aria-hidden="true" />
         </button>
-        <!-- Botón recuperar leads sin respuesta + reintentar seguimientos fallidos (batch AI recovery) -->
+        <!-- Botón marcar leads pendientes de revisión (sin respuesta o con error de envío/generación).
+             No envía ni genera nada: solo marca para que aparezcan en rojo en la grilla. -->
         <button
           type="button"
           class="btn btn-sm"
-          :class="batch_recovering ? 'btn-warning' : 'btn-outline-warning'"
-          :disabled="batch_recovering"
-          title="Responder leads sin respuesta y reintentar seguimientos fallidos (recovery)"
-          aria-label="Recovery: responder leads sin respuesta y reintentar seguimientos fallidos"
-          @click="on_batch_recover_unanswered"
+          :class="marking_pending ? 'btn-warning' : 'btn-outline-warning'"
+          :disabled="marking_pending"
+          title="Marcar leads pendientes de revisión (sin respuesta o con envío fallido)"
+          aria-label="Marcar leads pendientes de revisión (sin respuesta o con envío fallido)"
+          @click="on_mark_pending_review"
         >
           <i
             class="bi"
-            :class="batch_recovering ? 'bi-hourglass-split' : 'bi-robot'"
+            :class="marking_pending ? 'bi-hourglass-split' : 'bi-search'"
             aria-hidden="true"
           />
         </button>
@@ -637,8 +639,8 @@ export default {
       conversation_started_date: '',
       /** true mientras el filtro rápido "solo calificados" está activo (toggle del botón). */
       only_calificados_active: false,
-      /** Indica si el batch recovery de leads sin respuesta está en curso. */
-      batch_recovering: false,
+      /** Indica si el marcado de leads pendientes de revisión está en curso. */
+      marking_pending: false,
       /** Lead actualmente abierto en el sidebar lateral de conversación (null = cerrado). */
       sidebar_lead: null,
       /** Ids de leads con toggle de respuesta automática Claude en curso (evita doble clic). */
@@ -743,6 +745,24 @@ export default {
         return true
       }
       return window.innerWidth >= 768
+    },
+
+    /**
+     * Ids de los leads visibles marcados como pendientes de revisión (pendiente_revision_at seteado).
+     * Se pasan a la grilla para pintar esas filas en rojo (mismo mecanismo que highlighted_row_id).
+     * @returns {Array<number>}
+     */
+    danger_row_ids() {
+      var rows = this.$store.state.lead.is_filtered
+        ? (this.$store.state.lead.filtered || [])
+        : (this.$store.state.lead.models || [])
+      var ids = []
+      rows.forEach(function (row) {
+        if (row && row.pendiente_revision_at) {
+          ids.push(row.id)
+        }
+      })
+      return ids
     },
   },
   watch: {
@@ -1712,34 +1732,36 @@ export default {
       return 'bg-secondary'
     },
     /**
-     * Encola la generación de sugerencia de Claude para todos los leads sin respuesta, y además
-     * reintenta seguimientos automáticos por plantilla que fallaron al enviarse (backend: prompts
-     * 245-246). Útil para recuperar leads que quedaron sin job por errores del sistema, y
-     * seguimientos que el scheduler ya intentó pero nunca llegaron por un error de WhatsApp.
+     * Marca como pendientes de revisión los leads sin responder o con un error de envío/generación
+     * sin resolver (backend: LeadPendingReviewService). No envía ni genera nada. Al terminar, refresca
+     * la lista para que las filas marcadas se pinten en rojo.
      * @returns {void}
      */
-    on_batch_recover_unanswered() {
-      /* Evitar doble envío si ya hay un recovery en curso. */
-      if (this.batch_recovering) {
+    on_mark_pending_review() {
+      if (this.marking_pending) {
         return
       }
       var self = this
-      this.batch_recovering = true
-      api.post('/lead/batch-recover-unanswered').then(function (res) {
-        var dispatched = res.data && res.data.dispatched != null ? res.data.dispatched : 0
-        var skipped = res.data && res.data.skipped != null ? res.data.skipped : 0
-        var followups_retried = res.data && res.data.followups_retried != null ? res.data.followups_retried : 0
-        var msg = dispatched === 0
-          ? 'Sin leads pendientes de respuesta (' + skipped + ' ya respondidos o en proceso).'
-          : 'Recovery: ' + dispatched + ' lead' + (dispatched === 1 ? '' : 's') + ' procesado' + (dispatched === 1 ? '' : 's') + ', ' + skipped + ' omitido' + (skipped === 1 ? '' : 's') + '.'
-        if (followups_retried > 0) {
-          msg += ' Además, ' + followups_retried + ' seguimiento' + (followups_retried === 1 ? '' : 's') + ' fallido' + (followups_retried === 1 ? '' : 's') + ' se reintentó' + (followups_retried === 1 ? '' : 'aron') + '.'
-        }
+      this.marking_pending = true
+      api.post('/lead/mark-pending-review').then(function (res) {
+        var marcados = res.data && res.data.marcados != null ? res.data.marcados : 0
+        var ya = res.data && res.data.ya_marcados != null ? res.data.ya_marcados : 0
+        var msg = marcados === 0
+          ? (ya > 0
+            ? 'Sin nuevos pendientes (' + ya + ' ya estaban marcados).'
+            : 'No hay leads pendientes de revisión.')
+          : marcados + ' lead' + (marcados === 1 ? '' : 's') + ' marcado' + (marcados === 1 ? '' : 's') + ' para revisión.'
         window.dispatchEvent(new CustomEvent('admin-spa-toast', { detail: { message: msg, variant: 'success' } }))
-        self.batch_recovering = false
+        /* Refrescar la lista para traer pendiente_revision_at actualizado y repintar las filas. */
+        if (self.$store.state.lead.is_filtered) {
+          self.$store.dispatch('lead/run_filter', { page: self.$store.state.lead.filter_page })
+        } else {
+          self.$store.dispatch('lead/get_models')
+        }
+        self.marking_pending = false
       }).catch(function () {
-        window.dispatchEvent(new CustomEvent('admin-spa-toast', { detail: { message: 'Error al iniciar el recovery de leads.', variant: 'danger' } }))
-        self.batch_recovering = false
+        window.dispatchEvent(new CustomEvent('admin-spa-toast', { detail: { message: 'Error al marcar leads pendientes de revisión.', variant: 'danger' } }))
+        self.marking_pending = false
       })
     },
   },

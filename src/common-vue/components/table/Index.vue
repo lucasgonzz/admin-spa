@@ -46,6 +46,7 @@
           :is_selectable="is_selectable"
           :selected="selected"
           :highlighted_row_id="highlighted_row_id"
+          :danger_row_ids="danger_row_ids"
           @row="$emit('row', $event)"
           @toggle="$emit('toggle', $event)"
         >
@@ -82,6 +83,10 @@ export default {
     highlighted_row_id: {
       type: [Number, String],
       default: null,
+    },
+    danger_row_ids: {
+      type: Array,
+      default: function () { return [] },
     },
   },
   emits: ['open-filter', 'clear-filter', 'row', 'toggle'],

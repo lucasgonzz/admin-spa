@@ -34,6 +34,7 @@
       :filters="st.filters"
       :selected="st.selected"
       :highlighted_row_id="highlighted_row_id"
+      :danger_row_ids="danger_row_ids"
       @open-filter="open_filter"
       @clear-filter="on_clear_filter"
       @row="on_row"
@@ -156,6 +157,13 @@ export default {
     highlighted_row_id: {
       type: [Number, String],
       default: null,
+    },
+    /**
+     * Ids de filas a marcar como "peligro" (rojo). Se reenvía tal cual a la tabla. Vacío = ninguna.
+     */
+    danger_row_ids: {
+      type: Array,
+      default: function () { return [] },
     },
   },
   data() {
