@@ -193,6 +193,37 @@
             </div>
           </div>
 
+          <!-- ============================================================ -->
+          <!-- Sincronización OPCIONAL con la empresa-api del cliente        -->
+          <!-- (prompt 335). Se degrada sola si el cliente no la soporta:    -->
+          <!-- los botones quedan deshabilitados con un aviso, sin romper el -->
+          <!-- flujo de carga manual + guardado de arriba.                  -->
+          <!-- ============================================================ -->
+          <div class="d-flex flex-wrap gap-2 align-items-center mt-3 border-top pt-3">
+            <button
+              type="button"
+              class="btn btn-outline-secondary btn-sm"
+              :disabled="sync_no_soportado || trayendo_del_cliente"
+              :title="sync_no_soportado ? sync_no_soportado_motivo : ''"
+              @click="traer_del_cliente"
+            >
+              {{ trayendo_del_cliente ? 'Trayendo...' : 'Traer datos del cliente' }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-outline-secondary btn-sm"
+              :disabled="sync_no_soportado || actualizando_en_cliente"
+              :title="sync_no_soportado ? sync_no_soportado_motivo : ''"
+              @click="actualizar_en_cliente"
+            >
+              {{ actualizando_en_cliente ? 'Actualizando...' : 'Actualizar fecha en el cliente' }}
+            </button>
+            <!-- Aviso cuando ya se detectó que el cliente no soporta sincronización -->
+            <span v-if="sync_no_soportado" class="text-muted small fst-italic">
+              {{ sync_no_soportado_motivo }}
+            </span>
+          </div>
+
           <div class="d-flex justify-content-end mt-3">
             <button type="button" class="btn btn-primary btn-sm" :disabled="saving" @click="guardar">
               {{ saving ? 'Guardando...' : 'Guardar' }}
@@ -319,6 +350,19 @@ export default {
       record_total_mensualidad: 0,
       // Resultado de la última emisión de factura intentada en esta sesión del modal.
       factura_result: null,
+      // true mientras se consultan los conteos vivos del cliente (botón "Traer datos del cliente").
+      trayendo_del_cliente: false,
+      // true mientras se empuja la fecha/precios al cliente (botón "Actualizar fecha en el cliente").
+      actualizando_en_cliente: false,
+      /**
+       * null mientras no se detectó todavía si el cliente soporta la sincronización
+       * (prompt 335); true si ya se comprobó que NO la soporta (versión antigua de
+       * empresa-api o sin api_url/api_key). Se detecta de forma perezosa en el
+       * primer intento, sin bloquear la carga de la pestaña.
+       */
+      sync_no_soportado: false,
+      // Motivo devuelto por el backend cuando el cliente no soporta sincronización, para el tooltip/aviso.
+      sync_no_soportado_motivo: '',
       /**
        * Inputs de mensualidad + datos fiscales del receptor, precargados desde
        * el backend al montar. Se editan a mano (sin datos vivos del cliente).
@@ -403,6 +447,9 @@ export default {
     'record.id': function (new_id, old_id) {
       if (new_id && new_id !== old_id) {
         this.cargar_mensualidad()
+        // Nuevo cliente: se vuelve a detectar el soporte de sincronización desde cero.
+        this.sync_no_soportado = false
+        this.sync_no_soportado_motivo = ''
       }
     },
   },
@@ -612,6 +659,120 @@ export default {
         .then(function () {
           self.descargando_pdf = false
         })
+    },
+    /**
+     * Trae del empresa-api del cliente los conteos vivos (empleados,
+     * ecommerce, mercado libre, tienda nube) y los precarga en el formulario
+     * para que Lucas los revise y confirme con "Guardar" (prompt 335, capa
+     * opcional). Si el cliente no soporta sincronización (versión vieja o
+     * sin api_url/api_key), deshabilita los botones con el aviso devuelto.
+     * @returns {void}
+     */
+    traer_del_cliente() {
+      const self = this
+      if (!this.record || !this.record.id || this.sync_no_soportado) {
+        return
+      }
+      self.trayendo_del_cliente = true
+      api
+        .post('/client/' + this.record.id + '/mensualidad/traer-del-cliente')
+        .then(function (res) {
+          const data = res.data || {}
+          self.trayendo_del_cliente = false
+          if (!data.soportado) {
+            self.marcar_sync_no_soportado(data.error)
+            return
+          }
+          // Se rellenan solo cantidad de empleados y toggles de módulos (conteos vivos);
+          // los precios y datos fiscales los revisa Lucas antes de Guardar.
+          self.form.cantidad_empleados = Number(data.cantidad_empleados || 0)
+          self.form.tiene_ecommerce = !!data.tiene_ecommerce
+          self.form.tiene_mercado_libre = !!data.tiene_mercado_libre
+          self.form.tiene_tienda_nube = !!data.tiene_tienda_nube
+          // Datos fiscales: solo se precargan los campos que están vacíos en admin, sin pisar lo ya cargado.
+          if (data.afip_information) {
+            if (!self.form.afip_cuit && data.afip_information.cuit) {
+              self.form.afip_cuit = data.afip_information.cuit
+            }
+            if (!self.form.afip_razon_social && data.afip_information.razon_social) {
+              self.form.afip_razon_social = data.afip_information.razon_social
+            }
+            if (!self.form.afip_condicion_iva && data.afip_information.condicion_iva) {
+              self.form.afip_condicion_iva = data.afip_information.condicion_iva
+            }
+            if (!self.form.afip_domicilio && data.afip_information.domicilio_comercial) {
+              self.form.afip_domicilio = data.afip_information.domicilio_comercial
+            }
+          }
+          window.dispatchEvent(new CustomEvent('admin-spa-toast', {
+            detail: {
+              message: 'Datos traídos del cliente. Revisá y presioná Guardar para confirmarlos.',
+              variant: 'success',
+            },
+          }))
+        })
+        .catch(function () {
+          self.trayendo_del_cliente = false
+          window.dispatchEvent(new CustomEvent('admin-spa-toast', {
+            detail: { message: 'No se pudo consultar la mensualidad del cliente.', variant: 'danger' },
+          }))
+        })
+    },
+    /**
+     * Empuja al empresa-api del cliente la fecha de próximo pago y los
+     * precios actuales ya guardados en admin (prompt 335, capa opcional),
+     * previa confirmación porque sobrescribe datos en el sistema del
+     * cliente. Si no soporta sincronización, deshabilita los botones con el
+     * aviso devuelto.
+     * @returns {void}
+     */
+    actualizar_en_cliente() {
+      const self = this
+      if (!this.record || !this.record.id || this.sync_no_soportado) {
+        return
+      }
+      const confirmado = window.confirm(
+        '¿Actualizar la fecha de próximo pago y los precios en el sistema de ' +
+          (this.record.company_name || this.record.name || 'este cliente') +
+          '?'
+      )
+      if (!confirmado) {
+        return
+      }
+      self.actualizando_en_cliente = true
+      api
+        .post('/client/' + this.record.id + '/mensualidad/actualizar-en-cliente')
+        .then(function (res) {
+          const data = res.data || {}
+          self.actualizando_en_cliente = false
+          if (!data.soportado) {
+            self.marcar_sync_no_soportado(data.error)
+            return
+          }
+          window.dispatchEvent(new CustomEvent('admin-spa-toast', {
+            detail: {
+              message: 'Fecha y precios actualizados en el sistema del cliente.',
+              variant: 'success',
+            },
+          }))
+        })
+        .catch(function () {
+          self.actualizando_en_cliente = false
+          window.dispatchEvent(new CustomEvent('admin-spa-toast', {
+            detail: { message: 'No se pudo actualizar la mensualidad en el cliente.', variant: 'danger' },
+          }))
+        })
+    },
+    /**
+     * Marca el cliente actual como no soportado para sincronización,
+     * deshabilitando ambos botones con el motivo devuelto por el backend
+     * (versión antigua de empresa-api o configuración faltante).
+     * @param {string} [motivo]
+     * @returns {void}
+     */
+    marcar_sync_no_soportado(motivo) {
+      this.sync_no_soportado = true
+      this.sync_no_soportado_motivo = motivo || 'Este cliente todavía no soporta sincronización — cargá los datos a mano.'
     },
   },
 }
