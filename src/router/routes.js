@@ -154,6 +154,14 @@ const routes_def = [
     meta: { requiresAuth: true, nav: true, icon: 'people-fill' },
   },
   {
+    /** Configuración fiscal (AFIP) propia de ComercioCity: fila única para la facturación de mensualidad. */
+    path: '/configuracion-fiscal',
+    name: 'comerciocity_afip_config',
+    text: 'Configuración fiscal',
+    component: () => import('@/views/ComerciocityAfipConfig.vue'),
+    meta: { requiresAuth: true, nav: true, icon: 'receipt' },
+  },
+  {
     path: '/cuenta',
     name: 'account',
     text: 'Cuenta',
