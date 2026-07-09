@@ -105,18 +105,19 @@
         <div v-if="segment.is_last && message.requiere_verificacion" class="wa-extra mt-1">
           <span class="badge bg-warning text-dark wa-badge-tight">Requiere verificación</span>
         </div>
-        <div v-if="segment.is_last && has_pending_actions" class="wa-extra wa-pending-actions-note mt-1">
-          <div class="wa-pending-actions-title text-muted">
-            <i class="bi bi-hourglass-split me-1" aria-hidden="true" />
-            Al aprobar, este mensaje va a:
-          </div>
-          <ul v-if="pending_actions_summary.length > 0" class="wa-pending-actions-list mb-0">
-            <li v-for="(accion, idx) in pending_actions_summary" :key="idx">{{ accion }}</li>
-          </ul>
-          <div v-else class="text-muted">
-            Incluye acciones pendientes (agendar demo / enviar mail) que se aplican recién al aprobar.
-          </div>
-        </div>
+        <!--
+          Panel de acciones editables (prompt 323): reemplaza la lista de solo lectura para
+          mensajes en verificación. Siempre visible en status==='sugerido' + requiere_verificacion,
+          precargado con lo que sugirió Claude (o vacío si no sugirió nada).
+        -->
+        <verification-actions-panel
+          v-if="segment.is_last && show_verification_panel"
+          ref="verification_panel"
+          :message="message"
+          :lead_status="lead_status"
+          :disabled="busy"
+          @update:final_actions="on_panel_final_actions_update"
+        />
         <!-- Acciones ya ejecutadas por el backend al aplicar el paquete (prompt 277), una vez aprobado el mensaje -->
         <div
           v-if="segment.is_last && message.status !== 'sugerido' && applied_actions_summary.length > 0"
@@ -420,14 +421,22 @@
 
 <script>
 import AudioPlayer from '@/components/lead/conversation/AudioPlayer.vue'
+import VerificationActionsPanel from '@/components/lead/conversation/verification-panel/Index.vue'
 
 /**
  * Burbuja de mensaje de la conversación WhatsApp (lead, setter, sistema / IA).
  */
 export default {
   name: 'LeadMessageBubble',
-  components: { AudioPlayer },
-  emits: ['enviar', 'guardar_y_enviar', 'cancelar_envio_automatico', 'toggle_deleted_from_context'],
+  components: { AudioPlayer, VerificationActionsPanel },
+  emits: [
+    'enviar',
+    'guardar_y_enviar',
+    'cancelar_envio_automatico',
+    'toggle_deleted_from_context',
+    /** Aprobar con el paquete de acciones editado en el panel de verificación (prompt 323). */
+    'aprobar_con_acciones',
+  ],
   props: {
     /** Fila `lead_messages` desde la API. */
     message: { type: Object, required: true },
@@ -437,6 +446,8 @@ export default {
     now_tick: { type: Number, default: 0 },
     /** Segundos configurados antes del envío automático (fallback si falta ai_auto_send_at en el mensaje). */
     auto_send_delay_seconds: { type: Number, default: 0 },
+    /** Estado actual (slug) del lead dueño de la conversación, para el panel de verificación. */
+    lead_status: { type: String, default: '' },
   },
   data() {
     return {
@@ -448,6 +459,8 @@ export default {
       editing: false,
       /** Texto en edición (precargado con content original). */
       edited_text: '',
+      /** Último paquete de acciones armado por el panel de verificación (prompt 323). */
+      panel_final_actions: null,
     }
   },
   computed: {
@@ -862,33 +875,15 @@ export default {
       return 'bg-secondary'
     },
     /**
-     * true si el mensaje quedó pendiente con acciones sin aplicar (motivo agendamiento, ver
-     * LeadAiService::requires_agendamiento_verification_gate). Se aplican recién al aprobar.
+     * true si corresponde mostrar el panel de acciones editables (prompt 323) en vez de
+     * la lista de solo lectura que existía antes: cualquier mensaje `status==='sugerido'`
+     * que quedó retenido por requiere_verificacion (el backend generaliza el diferido,
+     * prompt 319), tenga o no pending_actions cargadas (si Claude no sugirió nada, el
+     * panel se muestra vacío para que el admin pueda completarlo igual).
      * @returns {boolean}
      */
-    has_pending_actions() {
-      const actions = this.message.pending_actions
-      if (!actions) {
-        return false
-      }
-      if (typeof actions === 'object') {
-        return Object.keys(actions).length > 0
-      }
-      return String(actions).trim() !== ''
-    },
-    /**
-     * Lista legible de acciones que el mensaje va a desencadenar al aprobarse (agendar demo,
-     * enviar mail, cambio de estado, etc.). La provee el backend en pending_actions_summary
-     * (ver prompt 267). Array de strings ya formateados en español. Si el backend no lo trae
-     * (versión anterior), devolver [] para caer en el texto genérico de fallback.
-     * @returns {Array<string>}
-     */
-    pending_actions_summary() {
-      const summary = this.message.pending_actions_summary
-      if (Array.isArray(summary)) {
-        return summary
-      }
-      return []
+    show_verification_panel() {
+      return this.message.status === 'sugerido' && Boolean(this.message.requiere_verificacion)
     },
     /**
      * Lista de acciones que el mensaje ya ejecutó (persistida por el backend al aplicar el paquete,
@@ -1330,14 +1325,25 @@ export default {
       this.edited_text = ''
     },
     /**
-     * Envía la sugerencia tal como la generó Claude.
+     * Envía la sugerencia tal como la generó Claude. Si el mensaje tiene panel de
+     * verificación (prompt 323), manda el paquete de acciones editado por el admin en
+     * lugar del endpoint simple de aprobar; mantiene compatibilidad con mensajes viejos
+     * sin panel usando el flujo anterior.
      * @returns {void}
      */
     on_enviar() {
+      if (this.show_verification_panel) {
+        this.$emit('aprobar_con_acciones', {
+          edited_content: '',
+          final_actions: this.panel_final_actions || {},
+        })
+        return
+      }
       this.$emit('enviar')
     },
     /**
-     * Envía el texto editado en el textarea.
+     * Envía el texto editado en el textarea. Igual que on_enviar: usa el endpoint con
+     * acciones cuando hay panel de verificación, o el flujo de edición simple si no.
      * @returns {void}
      */
     on_guardar_y_enviar() {
@@ -1345,7 +1351,23 @@ export default {
       if (!text) {
         return
       }
+      if (this.show_verification_panel) {
+        this.$emit('aprobar_con_acciones', {
+          edited_content: text,
+          final_actions: this.panel_final_actions || {},
+        })
+        return
+      }
       this.$emit('guardar_y_enviar', text)
+    },
+    /**
+     * Guarda el último paquete de acciones armado por el panel de verificación, para
+     * mandarlo recién cuando el admin efectivamente aprueba (Enviar / Guardar y enviar).
+     * @param {Object} value final_actions actual del panel.
+     * @returns {void}
+     */
+    on_panel_final_actions_update(value) {
+      this.panel_final_actions = value
     },
     /**
      * Pide al padre cancelar el envío automático programado de esta sugerencia.
@@ -1704,14 +1726,8 @@ export default {
   font-weight: 500;
   padding: 0.15em 0.45em;
 }
-.wa-pending-actions-title {
-  font-size: 0.8rem;
-}
-.wa-pending-actions-list {
-  padding-left: 1.1rem;
-  font-size: 0.8rem;
-}
-/* Mismo tamaño/sangría que las acciones pendientes; se diferencian por el ícono y el título. */
+/* Mismo tamaño/sangría que usaba la lista de solo lectura de acciones pendientes (reemplazada
+   por el panel editable, prompt 323); se diferencian por el ícono y el título. */
 .wa-applied-actions-title {
   font-size: 0.8rem;
 }
@@ -1723,12 +1739,6 @@ export default {
   font-size: 0.75rem;
   line-height: 1.2;
   margin-top: 0.25rem;
-  font-style: italic;
-  clear: both;
-}
-.wa-pending-actions-note {
-  font-size: 0.75rem;
-  line-height: 1.25;
   font-style: italic;
   clear: both;
 }

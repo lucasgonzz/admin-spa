@@ -803,6 +803,43 @@ export default __base_store({
         })
     },
     /**
+     * Envía por WhatsApp un mensaje sugerido aplicando el paquete de acciones editado por el
+     * admin en el panel de verificación (prompt 323): permite tocar estado sugerido, agendar/
+     * cancelar demo, mails y campos de contacto antes de aprobar. Espeja approve_message_with_edit
+     * pero pega contra el endpoint que acepta `final_actions` (prompt 320).
+     * @param {Object} context
+     * @param {{ message_id: number, edited_content?: string, final_actions?: Object }} payload
+     * @returns {Promise<Object>} modelo lead
+     */
+    approve_message_with_actions(context, payload) {
+      const commit = context.commit
+      return api
+        .put('/lead-message/' + payload.message_id + '/approve-with-actions', {
+          edited_content: payload.edited_content || '',
+          final_actions: payload.final_actions || {},
+        })
+        .then((res) => {
+          const model = res.data.model
+          commit('update_lead_en_conversacion', model)
+          return model
+        })
+    },
+    /**
+     * Trae demos disponibles y slots libres por fecha para armar el panel de agendamiento
+     * (selector de demo/fecha/hora) del panel de verificación (prompt 321).
+     * @param {Object} context
+     * @param {number} lead_id id del lead
+     * @returns {Promise<{demos: Array<{demo_id:number,label:string}>, slots: Object}>}
+     */
+    fetch_panel_availability(context, lead_id) {
+      return api.get('/lead/' + lead_id + '/panel-availability').then((res) => {
+        return {
+          demos: (res.data && res.data.demos) || [],
+          slots: (res.data && res.data.slots) || {},
+        }
+      })
+    },
+    /**
      * Rechaza un mensaje sugerido por IA.
      * @param {Object} context
      * @param {number} message_id id de lead_messages

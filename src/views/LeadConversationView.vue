@@ -204,8 +204,10 @@
             :busy="busy_message_id === msg.id"
             :now_tick="now_tick"
             :auto_send_delay_seconds="ai_suggestion_auto_send_delay_seconds"
+            :lead_status="effective_record ? effective_record.status : ''"
             @enviar="on_enviar_sugerencia(msg.id)"
             @guardar_y_enviar="on_guardar_y_enviar_sugerencia(msg.id, $event)"
+            @aprobar_con_acciones="on_aprobar_con_acciones(msg.id, $event)"
             @cancelar_envio_automatico="on_cancelar_envio_automatico(msg.id)"
             @toggle_deleted_from_context="on_toggle_deleted_from_context(msg.id)"
           />
@@ -1706,6 +1708,34 @@ export default {
         .dispatch('lead/approve_message_with_edit', {
           message_id: message_id,
           edited_content: text,
+        })
+        .then(function (model) {
+          self.busy_message_id = null
+          self.on_record_updated(model)
+          self.schedule_scroll_to_bottom()
+        })
+        .catch(function () {
+          self.busy_message_id = null
+        })
+    },
+
+    /**
+     * Aprueba un mensaje de verificación mandando el paquete de acciones editado en el panel
+     * (prompt 323): estado sugerido, agendamiento/cancelación de demo, mails y campos de
+     * contacto, además del texto editado si el admin lo tocó.
+     *
+     * @param {number} message_id Id del mensaje a aprobar.
+     * @param {{ edited_content: string, final_actions: Object }} payload Paquete armado por MessageBubble.
+     * @returns {void}
+     */
+    on_aprobar_con_acciones(message_id, payload) {
+      const self = this
+      this.busy_message_id = message_id
+      this.$store
+        .dispatch('lead/approve_message_with_actions', {
+          message_id: message_id,
+          edited_content: payload && payload.edited_content ? payload.edited_content : '',
+          final_actions: payload && payload.final_actions ? payload.final_actions : {},
         })
         .then(function (model) {
           self.busy_message_id = null
