@@ -94,6 +94,18 @@
               <span class="badge" :class="status_badge_class(selected_implementation.status)">
                 {{ status_label(selected_implementation.status) }}
               </span>
+              <!--
+                Badge de modo automático: solo se muestra cuando la implementación
+                responde y avanza sola (automation_mode === 'auto'). En modo manual
+                (default) no se muestra nada, es el comportamiento esperado.
+              -->
+              <span
+                v-if="selected_implementation.automation_mode === 'auto'"
+                class="badge bg-warning text-dark ms-2"
+                title="Esta implementación responde y avanza sola"
+              >
+                Automática
+              </span>
             </div>
 
             <!-- Acciones del header: botón conversación + botón avanzar etapa -->
@@ -196,101 +208,35 @@
             </div>
           </div>
 
-          <!-- Sección: datos recolectados en etapa 1 (si existen) -->
-          <template v-if="stage_1_data">
+          <!-- Sección: datos recolectados en el formulario de la etapa 1 -->
+          <template v-if="form_summary_sections.length > 0">
             <h6 class="impl-section-title">Datos recolectados (Etapa 1)</h6>
-            <div class="card mb-4">
+
+            <div class="card impl-card mb-3">
               <div class="card-body">
-                <dl class="row mb-0 small">
-
-                  <!-- Nombre de empresa -->
-                  <template v-if="'company_name' in stage_1_data">
-                    <dt class="col-sm-4 text-muted">Empresa</dt>
-                    <dd class="col-sm-8">{{ stage_1_data.company_name || '—' }}</dd>
-                  </template>
-
-                  <!--
-                    Listas de precios: sí/no según use_price_lists.
-                    Si es verdadero y existe price_lists, se muestra el detalle debajo.
-                  -->
-                  <template v-if="'use_price_lists' in stage_1_data">
-                    <dt class="col-sm-4 text-muted">Listas de precios</dt>
-                    <dd class="col-sm-8">
-                      {{ stage_1_data.use_price_lists ? 'Sí' : 'No' }}
-                      <div v-if="stage_1_data.use_price_lists && stage_1_data.price_lists" class="text-muted small mt-1">
-                        {{ stage_1_data.price_lists }}
-                      </div>
-                    </dd>
-                  </template>
-
-                  <!--
-                    Depósitos/sucursales: sí/no según use_deposits.
-                    Si es verdadero y existe deposit_names, se muestran los nombres debajo.
-                  -->
-                  <template v-if="'use_deposits' in stage_1_data">
-                    <dt class="col-sm-4 text-muted">Depósitos/sucursales</dt>
-                    <dd class="col-sm-8">
-                      {{ stage_1_data.use_deposits ? 'Sí' : 'No' }}
-                      <div v-if="stage_1_data.use_deposits && stage_1_data.deposit_names" class="text-muted small mt-1">
-                        {{ stage_1_data.deposit_names }}
-                      </div>
-                    </dd>
-                  </template>
-
-                  <!--
-                    Descuentos por método de pago: se muestra el texto tal cual
-                    salvo que sea "no"/"No", en cuyo caso se muestra "No aplica".
-                  -->
-                  <template v-if="'payment_discounts' in stage_1_data">
-                    <dt class="col-sm-4 text-muted">Descuentos por pago</dt>
-                    <dd class="col-sm-8">{{ payment_discounts_label(stage_1_data.payment_discounts) }}</dd>
-                  </template>
-
-                  <!--
-                    Empleados: texto libre separado por saltos de línea.
-                    Se parsea y se muestra como lista de ítems con bullet, uno por línea.
-                    Solo se muestra si el campo existe y no está vacío.
-                  -->
-                  <template v-if="'employees' in stage_1_data && stage_1_data.employees">
-                    <dt class="col-sm-4 text-muted">Empleados</dt>
-                    <dd class="col-sm-8">
-                      <ul class="mb-0 ps-3">
-                        <li v-for="(line, idx) in employees_lines(stage_1_data.employees)" :key="idx">{{ line }}</li>
-                      </ul>
-                    </dd>
-                  </template>
-
-                  <!-- Logo recibido: sí/no según logo_received === true -->
-                  <template v-if="'logo_received' in stage_1_data">
-                    <dt class="col-sm-4 text-muted">Logo recibido</dt>
-                    <dd class="col-sm-8">{{ stage_1_data.logo_received === true ? 'Sí' : 'No' }}</dd>
-                  </template>
-
-                  <!--
-                    Cantidad en venta: si true → "Preguntar cantidad";
-                    si false → "Agregar 1 unidad automáticamente".
-                  -->
-                  <template v-if="'ask_amount_in_vender' in stage_1_data">
-                    <dt class="col-sm-4 text-muted">Cantidad en venta</dt>
-                    <dd class="col-sm-8">
-                      {{ stage_1_data.ask_amount_in_vender === true ? 'Preguntar cantidad' : 'Agregar 1 unidad automáticamente' }}
-                    </dd>
-                  </template>
-
-                  <!--
-                    Cuenta corriente por defecto: si true → va a cc por defecto;
-                    si false → indicar manualmente.
-                  -->
-                  <template v-if="'default_cuenta_corriente' in stage_1_data">
-                    <dt class="col-sm-4 text-muted">Cuenta corriente</dt>
-                    <dd class="col-sm-8">
-                      {{ stage_1_data.default_cuenta_corriente === true ? 'Sí, va a cuenta corriente por defecto' : 'No, indicar manualmente' }}
-                    </dd>
-                  </template>
-
-                </dl>
+                <div
+                  v-for="section in form_summary_sections"
+                  :key="section.name"
+                  class="mb-3"
+                >
+                  <div class="text-muted small text-uppercase mb-2">{{ section.name }}</div>
+                  <dl class="row mb-0">
+                    <template v-for="(item, index) in section.items" :key="section.name + index">
+                      <dt class="col-sm-5 fw-normal text-muted">{{ item.label }}</dt>
+                      <dd class="col-sm-7">{{ item.value }}</dd>
+                    </template>
+                  </dl>
+                </div>
               </div>
             </div>
+          </template>
+
+          <!-- Formulario todavía sin enviar -->
+          <template v-else-if="selected_implementation">
+            <h6 class="impl-section-title">Datos recolectados (Etapa 1)</h6>
+            <p class="text-muted small">
+              El cliente todavía no envió el formulario.
+            </p>
           </template>
 
           <!-- Sección: archivos recibidos en etapa 4 (si la etapa ya comenzó) -->
@@ -518,28 +464,32 @@ export default {
 
   computed: {
     /**
-     * Datos recolectados en la etapa 1 del detalle activo.
+     * Resumen del formulario de la etapa 1, agrupado por sección para el render.
      *
-     * Devuelve el campo `data` de la etapa con stage_number === 1
-     * si existe y no es null. De lo contrario devuelve null.
+     * Consume implementation.form_summary (lista de { section, label, value } que
+     * arma ImplementationFormMapper::build_summary en el backend). Preserva el orden
+     * en que vino del backend, tanto de las secciones como de los ítems.
      *
-     * @returns {Object|null}
+     * @returns {Array<{name: string, items: Array<{label: string, value: string}>}>}
      */
-    stage_1_data() {
-      if (!this.selected_implementation || !this.selected_implementation.stages) {
-        return null
-      }
+    form_summary_sections() {
+      const summary = (this.selected_implementation && this.selected_implementation.form_summary) || []
+      const sections = []
 
-      /** Dato encontrado en la etapa 1. */
-      let found = null
+      summary.forEach(function (item) {
+        let section = sections.find(function (s) {
+          return s.name === item.section
+        })
 
-      this.selected_implementation.stages.forEach(function (stage) {
-        if (stage.stage_number === 1 && stage.data != null) {
-          found = stage.data
+        if (!section) {
+          section = { name: item.section, items: [] }
+          sections.push(section)
         }
+
+        section.items.push({ label: item.label, value: item.value })
       })
 
-      return found
+      return sections
     },
 
     /**
@@ -1384,21 +1334,29 @@ export default {
         return Boolean(val) && val !== 'pending' && (val === 'skipped' || (Array.isArray(val) && val.length > 0))
       }
 
+      /* Acciones manuales ya ejecutadas en esta etapa (las registra ImplementationActionService). */
+      const actions = Array.isArray(data.actions) ? data.actions : []
+
+      /**
+       * Indica si una acción manual ya fue ejecutada en esta etapa.
+       *
+       * @param {string} key Clave de la acción (ej: 'form_link').
+       * @returns {boolean}
+       */
+      const action_done = function (key) {
+        return actions.some(function (a) {
+          return a.action === key
+        })
+      }
+
       /* ------------------------------------------------------------------ */
       /* Etapa 1 — Información de la empresa (formulario web)                */
       /* ------------------------------------------------------------------ */
       if (num === 1) {
         return [
-          {
-            key: 'form_sent',
-            label: 'Formulario enviado al cliente',
-            done: Boolean(implementation && implementation.form_token),
-          },
-          {
-            key: 'form_submitted',
-            label: 'Cliente completó el formulario',
-            done: Boolean(implementation && implementation.form_submitted_at != null),
-          },
+          { key: 'presentacion',   label: 'Presentación enviada',           done: action_done('presentacion') },
+          { key: 'form_sent',      label: 'Link del formulario enviado',    done: action_done('form_link') },
+          { key: 'form_submitted', label: 'Cliente completó el formulario', done: Boolean(implementation && implementation.form_submitted_at != null) },
         ]
       }
 
@@ -1407,7 +1365,8 @@ export default {
       /* ------------------------------------------------------------------ */
       if (num === 2) {
         return [
-          { key: 'installation', label: 'Sistema instalado', done: stage.status === 'completed' },
+          { key: 'installation', label: 'Sistema instalado',                     done: stage.status === 'completed' },
+          { key: 'user_setup',   label: 'Configuración del formulario aplicada', done: action_done('user_setup') },
         ]
       }
 
@@ -1416,6 +1375,7 @@ export default {
       /* ------------------------------------------------------------------ */
       if (num === 3) {
         return [
+          { key: 'files_requested', label: 'Archivos pedidos al cliente', done: action_done('pedir_archivos') },
           { key: 'articles_files',  label: 'Excel de artículos',    done: files_done(data.articles_files) },
           { key: 'clients_files',   label: 'Excel de clientes',     done: files_done(data.clients_files) },
           { key: 'suppliers_files', label: 'Excel de proveedores', done: files_done(data.suppliers_files) },
@@ -1445,7 +1405,7 @@ export default {
       /* ------------------------------------------------------------------ */
       if (num === 5) {
         return [
-          { key: 'access_sent', label: 'Acceso enviado al cliente', done: stage.status === 'completed' },
+          { key: 'access_sent', label: 'Acceso enviado al cliente', done: action_done('entrega') || stage.status === 'completed' },
         ]
       }
 
@@ -1497,48 +1457,6 @@ export default {
 
       /* Etapa fuera del rango conocido: sin subetapas */
       return []
-    },
-
-    /**
-     * Formatea el valor del campo `payment_discounts` para mostrar en la UI.
-     *
-     * Si el valor es "no" o "No" (en cualquier capitalización), devuelve "No aplica".
-     * De lo contrario devuelve el texto tal cual.
-     *
-     * @param {string|null} value Valor del campo payment_discounts.
-     * @returns {string}
-     */
-    payment_discounts_label(value) {
-      if (!value) {
-        return '—'
-      }
-
-      /** Versión normalizada para comparar sin distinción de mayúsculas. */
-      const normalized = String(value).toLowerCase().trim()
-
-      if (normalized === 'no') {
-        return 'No aplica'
-      }
-
-      return value
-    },
-
-    /**
-     * Separa el texto libre de empleados en líneas individuales para renderizado como lista.
-     *
-     * Divide por salto de línea y filtra líneas vacías para evitar ítems en blanco.
-     *
-     * @param {string} employees_text Texto libre con los empleados, separados por \n.
-     * @returns {string[]}
-     */
-    employees_lines(employees_text) {
-      if (!employees_text) {
-        return []
-      }
-
-      return String(employees_text).split('\n').filter(function (line) {
-        return line.trim() !== ''
-      })
     },
 
     // -------------------------------------------------------------------------
