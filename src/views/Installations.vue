@@ -65,36 +65,58 @@
               {{ format_datetime(installation.finished_at) || '—' }}
             </td>
             <td class="text-end">
-              <router-link
-                v-if="installation.client_id"
-                :to="{
-                  name: 'client_installations',
-                  params: { clientId: installation.client_id },
-                }"
+              <!-- Abre el modal de gestión de esta instalación puntual (reemplaza la navegación anterior) -->
+              <button
+                type="button"
                 class="btn btn-sm btn-outline-primary"
+                @click="open_manage_modal(installation)"
               >
                 Gestionar
-              </router-link>
+              </button>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
 
+    <!-- Modal de gestión: muestra InstallationDetail de la instalación seleccionada -->
+    <base-modal
+      :show="show_manage_modal"
+      title="Gestionar instalación"
+      size="lg"
+      @update:show="show_manage_modal = $event"
+      @close="on_manage_modal_closed"
+    >
+      <installation-detail
+        v-if="selected_installation"
+        :installation="selected_installation"
+        @update:installation="on_modal_installation_updated"
+        @deleted="on_modal_installation_deleted"
+      />
+    </base-modal>
+
   </div>
 </template>
 
 <script>
 import api from '@/utils/axios'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import InstallationDetail from '@/components/installation/InstallationDetail.vue'
 
 /**
  * Listado global de instalaciones iniciales (visible en el menú lateral).
  *
- * Muestra todas las ClientInstallation del sistema y enlaza a la vista
- * de gestión por cliente (/clientes/:clientId/instalaciones).
+ * Muestra todas las ClientInstallation del sistema. El botón "Gestionar" de cada fila
+ * abre un modal con InstallationDetail para esa instalación puntual (variables manuales,
+ * iniciar, logs con polling propio y eliminar), en vez de navegar a otra vista.
  */
 export default {
   name: 'ViewInstallations',
+
+  components: {
+    BaseModal,
+    InstallationDetail,
+  },
 
   data() {
     return {
@@ -103,6 +125,12 @@ export default {
 
       /** true mientras se carga el listado. */
       loading: false,
+
+      /** Instalación seleccionada para el modal de gestión (null = modal cerrado). */
+      selected_installation: null,
+
+      /** Controla la visibilidad del modal de gestión. */
+      show_manage_modal: false,
     }
   },
 
@@ -111,6 +139,54 @@ export default {
   },
 
   methods: {
+    /**
+     * Abre el modal de gestión para una instalación puntual del listado.
+     *
+     * @param {Object} installation
+     * @returns {void}
+     */
+    open_manage_modal(installation) {
+      this.selected_installation = installation
+      this.show_manage_modal = true
+    },
+
+    /**
+     * Limpia la selección al cerrar el modal (backdrop, Escape o botón cerrar).
+     *
+     * @returns {void}
+     */
+    on_manage_modal_closed() {
+      this.selected_installation = null
+    },
+
+    /**
+     * Refleja en la tabla global un cambio emitido por el InstallationDetail del modal.
+     *
+     * @param {Object} updated
+     * @returns {void}
+     */
+    on_modal_installation_updated(updated) {
+      this.selected_installation = updated
+      const index = this.installations.findIndex(function (i) { return i.id === updated.id })
+      if (index !== -1) {
+        this.installations.splice(index, 1, updated)
+      }
+    },
+
+    /**
+     * Cierra el modal y quita la instalación eliminada de la tabla global.
+     *
+     * @param {number} installation_id
+     * @returns {void}
+     */
+    on_modal_installation_deleted(installation_id) {
+      this.installations = this.installations.filter(function (i) {
+        return i.id !== installation_id
+      })
+      this.show_manage_modal = false
+      this.selected_installation = null
+    },
+
     /**
      * Carga el listado global desde GET /installations.
      *
