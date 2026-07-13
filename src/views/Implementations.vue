@@ -150,6 +150,16 @@
 
           <!-- Resumen: etapas y datos recolectados -->
 
+          <!--
+            Barra de acciones manuales (prompt 345): todo a un clic, nada sin aprobación.
+            Va arriba de "Etapas" para que sea lo primero que Martín ve al abrir la implementación.
+          -->
+          <implementation-action-bar
+            v-if="selected_implementation"
+            :implementation="selected_implementation"
+            @updated="on_implementation_updated"
+          />
+
           <!-- Sección: progreso visual de las 8 etapas -->
           <h6 class="impl-section-title">Etapas</h6>
           <div class="impl-stages mb-4">
@@ -388,6 +398,7 @@
 <script>
 import api from '@/utils/axios'
 import { set_global_loading_store } from '@/utils/global_loading'
+import ImplementationActionBar from '@/components/implementation/ImplementationActionBar.vue'
 
 /**
  * Etiquetas en español de propiedades de sistema (mismo mapa que ImplementationImportService).
@@ -407,6 +418,8 @@ const STAGE_4_PROPERTY_LABELS = {
 
 export default {
   name: 'ViewImplementations',
+
+  components: { ImplementationActionBar },
 
   data() {
     return {
@@ -1490,6 +1503,25 @@ export default {
         name: 'implementation_conversation',
         params: { implementation_id: impl_id },
       })
+    },
+
+    /**
+     * Reemplaza la implementación seleccionada por la versión fresca que devuelve el backend
+     * tras ejecutar una acción (etapas, checklists y mensajes ya vienen actualizados).
+     *
+     * @param {Object} updated
+     * @returns {void}
+     */
+    on_implementation_updated(updated) {
+      this.selected_implementation = updated
+
+      const index = this.implementations.findIndex(function (i) {
+        return i.id === updated.id
+      })
+
+      if (index !== -1) {
+        this.implementations.splice(index, 1, updated)
+      }
     },
   },
 }
