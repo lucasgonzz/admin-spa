@@ -87,6 +87,26 @@ function extract_laravel_validation_messages(errors_payload) {
  * @param {import('axios').AxiosError} error
  * @returns {string}
  */
+/**
+ * Devuelve el origen (protocolo + host, sin el sufijo `/api/admin`) del servidor de admin-api.
+ *
+ * Se usa para armar URLs de recursos servidos por admin-api fuera del prefijo `/api/admin`
+ * (ej. `logo_path` de la config fiscal, servido como archivo público estático), ya que el
+ * cliente axios `api` de este archivo tiene `baseURL` apuntando a `/api/admin` y no sirve para
+ * construir esas rutas directamente.
+ *
+ * @returns {string} Origen absoluto (ej. "http://localhost:8003") o "" si `VITE_API_URL` es
+ *   relativo (mismo origen que el front).
+ */
+export function admin_api_origin() {
+  /** Mismo valor de baseURL usado al crear el cliente `api` de este archivo. */
+  const base = import.meta.env.VITE_API_URL || '/api/admin'
+  /* Si `base` es una URL absoluta con el sufijo /api/admin, nos quedamos con el origen.
+     Si es relativa (default '/api/admin', mismo origen que el front), el replace matchea
+     la cadena completa y devuelve '' (string vacío = mismo origen). */
+  return base.replace(/\/api\/admin\/?$/, '')
+}
+
 export function resolve_error_message(error) {
   /** Mensaje por defecto para fallas sin detalle de backend. */
   const fallback_message = 'Ocurrió un error al comunicarse con el servidor.'
