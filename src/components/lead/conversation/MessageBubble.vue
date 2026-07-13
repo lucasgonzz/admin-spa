@@ -386,7 +386,14 @@
           Excluido del contexto de IA
         </div>
         <div v-if="segment.is_last && show_whatsapp_delivery_error" class="wa-delivery-error text-danger small mt-1">
-          No enviado por WhatsApp
+          <div class="wa-delivery-error-title">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true" />
+            No enviado por WhatsApp
+          </div>
+          <!-- Motivo real del fallo, si el backend lo capturó (prompt 336); si no, solo se ve el título de arriba. -->
+          <div v-if="whatsapp_send_error_text" class="wa-delivery-error-detail">
+            {{ whatsapp_send_error_text }}
+          </div>
         </div>
         <div v-if="segment.is_last && status_badge_text" class="wa-extra mt-1">
           <span class="badge wa-badge-tight" :class="status_badge_class">{{ status_badge_text }}</span>
@@ -823,6 +830,15 @@ export default {
         return false
       }
       return !this.message.whatsapp_message_id
+    },
+    /**
+     * Motivo legible del fallo de envío por WhatsApp, si el backend lo capturó (prompt 336).
+     * Cadena vacía en mensajes viejos sin la columna o cuando no se pudo capturar ningún motivo:
+     * en ese caso solo se ve el título "No enviado por WhatsApp" como antes.
+     * @returns {string}
+     */
+    whatsapp_send_error_text() {
+      return ((this.message.whatsapp_send_error || '') + '').trim()
     },
     /**
      * true si el lead reaccionó a este mensaje con un emoji de WhatsApp.
@@ -1890,6 +1906,20 @@ export default {
 .wa-delivery-error {
   font-size: 0.75rem;
   clear: both;
+}
+/* Título del banner de fallo de entrega ("No enviado por WhatsApp"). */
+.wa-delivery-error-title {
+  font-weight: 500;
+}
+/* Motivo real del fallo (prompt 336): tono más tenue que el título, corte de palabra para
+   excepciones largas (mensajes de error de Kapso/Meta pueden ser extensos). */
+.wa-delivery-error-detail {
+  margin-top: 0.1rem;
+  font-size: 0.7rem;
+  line-height: 1.25;
+  color: #c05a63;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 /* Burbuja excluida del contexto de Claude. */
 .wa-bubble--excluded {
