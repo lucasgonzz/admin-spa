@@ -635,6 +635,20 @@ export default __base_store({
       })
     },
     /**
+     * Actualiza uno o más flags de automatización del ciclo de demo del lead: el switch
+     * maestro (`automatizaciones_demo_activas`) y los toggles por operación (recordatorio,
+     * check de ingreso, check de fin, resumen del closer). El endpoint acepta cambios
+     * parciales; cualquier flag ausente del payload conserva su valor actual en backend.
+     * @param {Object} context contexto del módulo Vuex.
+     * @param {{ lead_id: number, changes: Object }} payload id del lead y flags a actualizar (clave: nombre del flag, valor: boolean).
+     * @returns {Promise<Object>} modelo actualizado devuelto por el backend.
+     */
+    update_lead_automations(context, payload) {
+      return api.patch('/lead/' + payload.lead_id + '/automations', payload.changes).then(function (res) {
+        return res.data.model
+      })
+    },
+    /**
      * Envía un mensaje directo al lead por WhatsApp sin pasar por Claude.
      *
      * @param {Object} context

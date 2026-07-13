@@ -1,6 +1,30 @@
 <template>
   <div v-if="record && record.id" class="lead-pipeline-panel">
 
+    <!-- Switch maestro: apaga toda la automatización del ciclo de demo para este lead -->
+    <div class="card border-secondary border-opacity-25 mb-3">
+      <div class="card-body py-2">
+        <div class="form-check form-switch mb-0">
+          <input
+            id="lead_manual_mode_switch"
+            class="form-check-input"
+            type="checkbox"
+            role="switch"
+            :checked="manual_mode_active"
+            :disabled="toggling_flag === 'automatizaciones_demo_activas'"
+            @change="toggle_master_automation"
+          />
+          <label class="form-check-label small fw-semibold" for="lead_manual_mode_switch">
+            Estoy manejando este lead — no automatizar
+          </label>
+        </div>
+        <!-- Aclaración: qué apaga el master y qué sigue disponible -->
+        <p class="text-muted small mb-0 mt-1">
+          Si lo activás, se apaga todo el ciclo automático de este lead (recordatorio, checks, resumen); los botones manuales de cada etapa siguen disponibles.
+        </p>
+      </div>
+    </div>
+
     <!-- Panel principal: pipeline visual de 8 etapas del funnel comercial -->
     <div class="card border-secondary border-opacity-25 mb-3">
       <div class="card-header d-flex align-items-center gap-2 bg-light py-2">
@@ -57,12 +81,11 @@
                   {{ summary_expanded ? 'Ocultar resumen' : 'Ver resumen' }}
                 </button>
               </div>
-              <!-- Botón de acción manual: visible si la etapa tiene acción, permite repetir o aún no completó -->
-              <div
-                v-if="stage.action && stage.status !== 'running' && (stage.status !== 'completed' || stage.allow_repeat)"
-                class="mt-1"
-              >
+              <!-- Fila de acciones de la etapa: botón manual (siempre disponible) + toggle de automático -->
+              <div v-if="stage.action" class="mt-1 d-flex align-items-center gap-3 flex-wrap">
+                <!-- Botón de acción manual: visible si la etapa permite repetir o aún no completó -->
                 <button
+                  v-if="stage.status !== 'running' && (stage.status !== 'completed' || stage.allow_repeat)"
                   type="button"
                   class="btn btn-outline-secondary btn-sm"
                   :disabled="loading_stage === stage.id"
@@ -71,6 +94,25 @@
                   <span v-if="loading_stage === stage.id" class="spinner-border spinner-border-sm me-1"></span>
                   {{ stage_action_button_label(stage) }}
                 </button>
+
+                <!-- Toggle "Automático" por operación: apaga solo el disparo del scheduler, no el botón manual -->
+                <div
+                  v-if="stage.automation_flag"
+                  class="form-check form-switch mb-0"
+                  :class="{ 'opacity-50': manual_mode_active }"
+                >
+                  <input
+                    :id="'stage_auto_' + stage.id"
+                    class="form-check-input"
+                    type="checkbox"
+                    role="switch"
+                    :checked="record[stage.automation_flag]"
+                    :disabled="manual_mode_active || toggling_flag === stage.automation_flag"
+                    title="Apaga solo el disparo automático de esta etapa; el botón manual sigue funcionando."
+                    @change="toggle_automation_flag(stage.automation_flag)"
+                  />
+                  <label class="form-check-label small text-muted" :for="'stage_auto_' + stage.id">Automático</label>
+                </div>
               </div>
             </div>
           </div>
@@ -288,6 +330,11 @@ export default {
        * Subdominio sugerido por Claude o editado por el operador antes de confirmar la promoción.
        */
       subdomain_preview: '',
+      /**
+       * Nombre del flag de automatización con un PATCH en curso (null = ninguno).
+       * Bloquea ese switch puntual mientras se espera la confirmación del backend.
+       */
+      toggling_flag: null,
     }
   },
   computed: {
@@ -388,6 +435,8 @@ export default {
           allow_repeat: true,
           execution_at: r.recordatorio_demo_enviado_at ? this.format_datetime(r.recordatorio_demo_enviado_at) : null,
           execution_source: this.format_execution_source(r.recordatorio_demo_manual),
+          /* Flag del lead que controla si el scheduler dispara este recordatorio solo. */
+          automation_flag: 'auto_recordatorio_demo',
         },
         {
           id: 6,
@@ -401,6 +450,8 @@ export default {
           allow_repeat: true,
           execution_at: r.demo_check_ingreso_enviado_at ? this.format_datetime(r.demo_check_ingreso_enviado_at) : null,
           execution_source: this.format_execution_source(r.demo_check_ingreso_manual),
+          /* Flag del lead que controla si el scheduler dispara este check solo. */
+          automation_flag: 'auto_check_ingreso_demo',
         },
         {
           id: 7,
@@ -432,6 +483,8 @@ export default {
           allow_repeat: true,
           execution_at: null,
           execution_source: null,
+          /* Flag del lead que controla si el scheduler dispara este check solo. */
+          automation_flag: 'auto_check_fin_demo',
         },
         {
           id: 9,
@@ -465,6 +518,8 @@ export default {
             ? this.format_datetime(r.demo_summary_generated_at)
             : null,
           execution_source: this.format_execution_source(r.demo_summary_manual),
+          /* Flag del lead que controla si el scheduler dispara este resumen solo. */
+          automation_flag: 'auto_resumen_closer',
         },
         {
           id: 11,
@@ -565,6 +620,18 @@ export default {
         return false
       }
       return !this.record.promoted_client.implementation
+    },
+    /**
+     * True cuando el switch maestro "Estoy manejando este lead" está activo, es decir
+     * cuando `automatizaciones_demo_activas` vale false (el control se muestra invertido:
+     * activarlo el operador significa "no automatizar nada del ciclo de demo").
+     * @returns {boolean}
+     */
+    manual_mode_active() {
+      if (!this.record) {
+        return false
+      }
+      return this.record.automatizaciones_demo_activas === false
     },
     /**
      * Tarjetas de estado de los envíos de mail comercial (Mail 1 demo + Mail 2 seguimiento).
@@ -668,6 +735,51 @@ export default {
         })
         .then(function () {
           self.loading_stage = null
+        })
+    },
+    /**
+     * Alterna el switch maestro de automatización del lead. Es un caso particular de
+     * `toggle_automation_flag` sobre `automatizaciones_demo_activas` (invertido en la UI).
+     * @returns {void}
+     */
+    toggle_master_automation() {
+      this.toggle_automation_flag('automatizaciones_demo_activas')
+    },
+    /**
+     * Alterna un flag booleano de automatización del lead (master o por etapa) con
+     * actualización optimista en el draft y reversión si el backend rechaza el cambio.
+     * Persiste vía `lead/update_lead_automations` (PATCH /lead/{id}/automations, prompt 321),
+     * que acepta cambios parciales sin afectar los demás flags.
+     * @param {string} flag_key nombre del flag en el lead (p. ej. 'auto_check_ingreso_demo').
+     * @returns {void}
+     */
+    toggle_automation_flag(flag_key) {
+      var self = this
+      /* Evita disparar un segundo PATCH mientras el anterior sigue en vuelo. */
+      if (!self.record || self.toggling_flag) {
+        return
+      }
+      /* Valor previo para poder revertir si el guardado falla. */
+      var previous_value = self.record[flag_key]
+      var new_value = !previous_value
+      self.toggling_flag = flag_key
+      /* Actualización optimista: refleja el cambio antes de la confirmación del servidor. */
+      self.record[flag_key] = new_value
+
+      var changes = {}
+      changes[flag_key] = new_value
+
+      self.$store.dispatch('lead/update_lead_automations', { lead_id: self.record.id, changes: changes })
+        .then(function (model) {
+          self.sync_model(model)
+        })
+        .catch(function (error) {
+          /* Revertir el valor local si el backend no aceptó el cambio. */
+          self.record[flag_key] = previous_value
+          self.open_feedback(self.get_error_message(error))
+        })
+        .then(function () {
+          self.toggling_flag = null
         })
     },
     /**
