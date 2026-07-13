@@ -224,6 +224,24 @@
          ==================================================== -->
     <div class="conversation-footer border-top px-3">
 
+      <!-- Aviso cuando Meta no permite mensajes libres (ventana 24hs cerrada). -->
+      <div
+        v-if="!whatsapp_window_open"
+        class="whatsapp-window-closed-notice d-flex align-items-center justify-content-between gap-2 mb-2"
+      >
+        <span class="small text-muted">
+          Ventana de 24hs cerrada — para contactar al lead tenés que usar una plantilla.
+        </span>
+        <button
+          type="button"
+          class="btn btn-outline-primary btn-sm flex-shrink-0"
+          :disabled="!effective_record"
+          @click="on_open_template_picker"
+        >
+          Usar plantilla
+        </button>
+      </div>
+
       <!-- Área de redacción tipo WhatsApp -->
       <div class="d-flex align-items-end gap-2">
 
@@ -242,7 +260,7 @@
           <i class="bi bi-chevron-down" aria-hidden="true" />
         </button>
 
-        <!-- Botón selector de plantillas Meta (útil cuando la ventana de 24hs está cerrada) -->
+        <!-- Botón selector de plantillas Meta (siempre habilitado; útil con ventana 24hs cerrada) -->
         <button
           type="button"
           class="icon-btn flex-shrink-0 text-muted"
@@ -258,8 +276,10 @@
           v-model="mensaje_directo"
           class="message-input"
           rows="1"
-          placeholder="Mensaje."
-          :disabled="enviando_directo"
+          :placeholder="whatsapp_window_open
+            ? 'Mensaje.'
+            : 'Ventana de 24hs cerrada — usá una plantilla'"
+          :disabled="enviando_directo || !whatsapp_window_open"
           @input="on_input_resize"
           @keydown.enter="on_message_input_keydown"
         />
@@ -270,7 +290,7 @@
           type="button"
           class="icon-btn flex-shrink-0"
           :class="recording_audio ? 'text-danger audio-recording-pulse' : 'text-muted'"
-          :disabled="enviando_audio"
+          :disabled="enviando_audio || !whatsapp_window_open"
           :title="recording_audio ? 'Grabando. Tocá para detener y enviar' : 'Mantené pulsado o tocá para grabar audio'"
           @click="on_mic_click"
           @mousedown="on_mic_mousedown"
@@ -288,7 +308,7 @@
           v-else
           type="button"
           class="icon-btn flex-shrink-0 text-primary"
-          :disabled="enviando_directo"
+          :disabled="enviando_directo || !whatsapp_window_open"
           title="Enviar mensaje"
           aria-label="Enviar mensaje"
           @click="on_enviar_directo"
@@ -503,6 +523,15 @@ export default {
 
       /** Timestamp actual (ms) para countdown de debounce y auto-envío. */
       now_tick: Date.now(),
+
+      /**
+       * Timestamp actual (ms) exclusivo para recalcular la ventana WhatsApp de 24hs
+       * por el paso del tiempo (tick cada 60s).
+       */
+      whatsapp_window_now_tick: Date.now(),
+
+      /** Intervalo que actualiza whatsapp_window_now_tick mientras la vista está montada. */
+      whatsapp_window_interval_id: null,
 
       /** true mientras se copia la conversación al portapapeles. */
       export_conversation_loading: false,
@@ -901,6 +930,26 @@ export default {
     },
 
     /**
+     * true si la ventana de mensajería libre de WhatsApp (24hs desde el último inbound
+     * del lead con status 'enviado') sigue abierta. Sin inbound previo o con 24hs o más
+     * desde ese mensaje, Meta exige plantilla y este computed es false.
+     *
+     * Lee whatsapp_window_now_tick para recalcularse también por el paso del tiempo.
+     *
+     * @returns {boolean}
+     */
+    whatsapp_window_open() {
+      /* Referencia al tick para forzar reactividad cada ~60s. */
+      const now_ms = this.whatsapp_window_now_tick
+      if (!this.last_lead_inbound_at_ms) {
+        return false
+      }
+      /* 24 horas en milisegundos: ventana de conversación libre de Meta. */
+      const window_ms = 24 * 60 * 60 * 1000
+      return now_ms - this.last_lead_inbound_at_ms < window_ms
+    },
+
+    /**
      * true cuando ya transcurrió la demora configurada desde el último mensaje del lead.
      *
      * @returns {boolean}
@@ -1083,6 +1132,8 @@ export default {
 
   mounted() {
     const self = this
+    /* Reloj de ventana 24hs: corre siempre mientras la vista esté montada. */
+    this.start_whatsapp_window_clock()
     if (this.is_sidebar_mode) {
       const lead_id = this.lead_record_prop.id
       this.$store.commit('lead/set_lead_conversation_visible_id', lead_id)
@@ -1148,6 +1199,7 @@ export default {
       this.$store.commit('lead/set_lead_conversation_visible_id', null)
     }
     this.stop_countdown_clock()
+    this.stop_whatsapp_window_clock()
     if (this.export_conversation_feedback_timer) {
       clearTimeout(this.export_conversation_feedback_timer)
       this.export_conversation_feedback_timer = null
@@ -1387,6 +1439,10 @@ export default {
       if (event.shiftKey || event.isComposing) {
         return
       }
+      /* Sin ventana 24hs abierta no se puede enviar texto libre. */
+      if (!this.whatsapp_window_open) {
+        return
+      }
       event.preventDefault()
       this.on_enviar_directo()
     },
@@ -1397,6 +1453,10 @@ export default {
      */
     on_enviar_directo() {
       const self = this
+      /* Defensa: Meta rechaza texto libre fuera de la ventana de 24hs. */
+      if (!this.whatsapp_window_open) {
+        return
+      }
       const rec = this.effective_record
       const text = (this.mensaje_directo || '').trim()
       if (!text || !rec || !rec.id || this.enviando_directo) {
@@ -1591,6 +1651,36 @@ export default {
       }
       clearInterval(this.now_tick_interval_id)
       this.now_tick_interval_id = null
+    },
+
+    /**
+     * Arranca el intervalo que actualiza whatsapp_window_now_tick cada 60s para que
+     * whatsapp_window_open se recalcule aunque no lleguen mensajes nuevos.
+     *
+     * @returns {void}
+     */
+    start_whatsapp_window_clock() {
+      const self = this
+      if (this.whatsapp_window_interval_id) {
+        return
+      }
+      this.whatsapp_window_now_tick = Date.now()
+      this.whatsapp_window_interval_id = setInterval(function () {
+        self.whatsapp_window_now_tick = Date.now()
+      }, 60000)
+    },
+
+    /**
+     * Detiene el intervalo del reloj de ventana WhatsApp de 24hs.
+     *
+     * @returns {void}
+     */
+    stop_whatsapp_window_clock() {
+      if (!this.whatsapp_window_interval_id) {
+        return
+      }
+      clearInterval(this.whatsapp_window_interval_id)
+      this.whatsapp_window_interval_id = null
     },
 
     /**
@@ -1829,6 +1919,9 @@ export default {
      * @returns {void}
      */
     on_mic_click() {
+      if (!this.whatsapp_window_open) {
+        return
+      }
       if (this.audio_hold_mode) {
         this.audio_hold_mode = false
         return
@@ -1847,6 +1940,9 @@ export default {
      * @returns {void}
      */
     on_mic_mousedown() {
+      if (!this.whatsapp_window_open) {
+        return
+      }
       const self = this
       this._mic_hold_timer = setTimeout(function () {
         self.audio_hold_mode = true
@@ -1877,6 +1973,9 @@ export default {
      * @returns {void}
      */
     on_mic_touchstart(event) {
+      if (!this.whatsapp_window_open) {
+        return
+      }
       event.preventDefault()
       this.audio_hold_mode = true
       this.start_audio_recording()
@@ -2041,6 +2140,11 @@ export default {
   /* Padding vertical propio: py-2 de Bootstrap no se usa porque sus utilidades llevan !important y pisan el padding inferior en móvil. */
   padding-top: 0.5rem;
   padding-bottom: 0.5rem;
+}
+
+/* Aviso compacto encima del input cuando la ventana de 24hs está cerrada. */
+.whatsapp-window-closed-notice {
+  padding: 0.35rem 0.15rem 0;
 }
 
 /* En móvil, separar la fila del input del borde inferior (barra del sistema / home indicator). */
