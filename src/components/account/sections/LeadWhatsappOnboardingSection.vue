@@ -79,11 +79,11 @@
 
       <div class="mb-3">
         <label class="form-label small fw-semibold" for="lead_verificacion_agendamiento_auto_send_delay">
-          Demora antes de auto-enviar en el tramo de agendamiento (segundos)
+          Demora antes de auto-enviar en el tramo de agendamiento (minutos)
         </label>
         <input
           id="lead_verificacion_agendamiento_auto_send_delay"
-          v-model.number="form.verificacion_agendamiento_auto_send_delay_seconds"
+          v-model.number="form.verificacion_agendamiento_auto_send_delay_minutes"
           type="number"
           class="form-control form-control-sm"
           style="max-width: 8rem"
@@ -95,8 +95,8 @@
           Desde que un lead entra a coordinar la agenda de la demo (solicita disponibilidad, demo agendada, ingresando a
           demo, demo en curso, demo pendiente de terminar) hasta closer activo, todo mensaje de Claude requiere
           verificación de Martín antes de salir. Si nadie lo revisa, se manda igual al vencer este tiempo — para no
-          dejar a un lead esperando horas. Mínimo {{ verificacion_agendamiento_auto_send_delay_min }} segundos
-          (por defecto 1800 = 30 minutos). Sin límite superior.
+          dejar a un lead esperando horas. Mínimo {{ verificacion_agendamiento_auto_send_delay_min }} minutos
+          (por defecto 30). Sin límite superior.
         </p>
       </div>
 
@@ -179,8 +179,8 @@ const AUTO_SEND_DELAY_MIN_SECONDS = 0
 /** Auto-envío máximo en segundos (debe coincidir con admin-api). */
 const AUTO_SEND_DELAY_MAX_SECONDS = 3600
 
-/** Mínimo para auto-envío en tramo de agendamiento: 0 = inmediato (debe coincidir con admin-api). */
-const VERIFICACION_AGENDAMIENTO_AUTO_SEND_DELAY_MIN_SECONDS = 0
+/** Mínimo para auto-envío en tramo de agendamiento, en minutos: 0 = inmediato (debe coincidir con admin-api). */
+const VERIFICACION_AGENDAMIENTO_AUTO_SEND_DELAY_MIN_MINUTES = 0
 
 /**
  * Sección de cuenta: mensajes automáticos de onboarding WhatsApp para leads nuevos.
@@ -200,7 +200,7 @@ export default {
       auto_send_delay_min: AUTO_SEND_DELAY_MIN_SECONDS,
       auto_send_delay_max: AUTO_SEND_DELAY_MAX_SECONDS,
       /** Mínimo de demora en tramo de agendamiento (sin tope superior; sincronizado con backend). */
-      verificacion_agendamiento_auto_send_delay_min: VERIFICACION_AGENDAMIENTO_AUTO_SEND_DELAY_MIN_SECONDS,
+      verificacion_agendamiento_auto_send_delay_min: VERIFICACION_AGENDAMIENTO_AUTO_SEND_DELAY_MIN_MINUTES,
       /** Valores editables del formulario. */
       form: {
         auto_message_with_name: '',
@@ -210,7 +210,7 @@ export default {
         welcome_delay_seconds: 60,
         ai_suggestion_delay_seconds: 60,
         ai_suggestion_auto_send_delay_seconds: 120,
-        verificacion_agendamiento_auto_send_delay_seconds: 1800,
+        verificacion_agendamiento_auto_send_delay_minutes: 30,
       },
       /** Snapshot persistido para detectar cambios. */
       stored_form: null,
@@ -237,7 +237,7 @@ export default {
       const welcome_delay = parseInt(this.form.welcome_delay_seconds, 10)
       const ai_delay = parseInt(this.form.ai_suggestion_delay_seconds, 10)
       const auto_send_delay = parseInt(this.form.ai_suggestion_auto_send_delay_seconds, 10)
-      const verif_agendamiento_delay = parseInt(this.form.verificacion_agendamiento_auto_send_delay_seconds, 10)
+      const verif_agendamiento_delay = parseInt(this.form.verificacion_agendamiento_auto_send_delay_minutes, 10)
       if (
         isNaN(welcome_delay) ||
         welcome_delay < this.delay_min ||
@@ -311,9 +311,9 @@ export default {
           data && data.ai_suggestion_auto_send_delay_seconds,
           120
         ),
-        verificacion_agendamiento_auto_send_delay_seconds: self.parse_delay_seconds(
-          data && data.verificacion_agendamiento_auto_send_delay_seconds,
-          1800
+        verificacion_agendamiento_auto_send_delay_minutes: self.parse_delay_seconds(
+          data && data.verificacion_agendamiento_auto_send_delay_minutes,
+          30
         ),
       }
       self.form = JSON.parse(JSON.stringify(snapshot))
@@ -402,7 +402,7 @@ export default {
         return
       }
 
-      const verif_agendamiento_delay = parseInt(self.form.verificacion_agendamiento_auto_send_delay_seconds, 10)
+      const verif_agendamiento_delay = parseInt(self.form.verificacion_agendamiento_auto_send_delay_minutes, 10)
       if (
         isNaN(verif_agendamiento_delay) ||
         verif_agendamiento_delay < self.verificacion_agendamiento_auto_send_delay_min
@@ -410,7 +410,7 @@ export default {
         self.error_message =
           'La demora de auto-envío en agendamiento debe ser mayor o igual a ' +
           self.verificacion_agendamiento_auto_send_delay_min +
-          ' segundos.'
+          ' minutos.'
         return
       }
 
@@ -437,7 +437,7 @@ export default {
           welcome_delay_seconds: welcome_delay,
           ai_suggestion_delay_seconds: ai_delay,
           ai_suggestion_auto_send_delay_seconds: auto_send_delay,
-          verificacion_agendamiento_auto_send_delay_seconds: verif_agendamiento_delay,
+          verificacion_agendamiento_auto_send_delay_minutes: verif_agendamiento_delay,
         })
         .then(function (res) {
           self.apply_from_response(res.data)
