@@ -286,10 +286,10 @@
                 <button
                   type="button"
                   class="btn btn-outline-success btn-sm"
-                  :disabled="descargando_pdf"
-                  @click="descargar_pdf"
+                  :disabled="viendo_pdf"
+                  @click="ver_pdf"
                 >
-                  {{ descargando_pdf ? 'Descargando...' : 'Descargar PDF' }}
+                  {{ viendo_pdf ? 'Abriendo...' : 'Ver PDF' }}
                 </button>
               </div>
             </div>
@@ -313,7 +313,7 @@
 </template>
 
 <script>
-import api from '@/utils/axios'
+import api, { admin_api_origin } from '@/utils/axios'
 
 /**
  * Pestaña "Mensualidad" del detalle del cliente (admin-spa).
@@ -344,8 +344,8 @@ export default {
       saving: false,
       // true mientras se emite la factura (POST emitir-factura).
       emitiendo_factura: false,
-      // true mientras se descarga el PDF de la factura ya autorizada.
-      descargando_pdf: false,
+      // true mientras se pide el token de vista y se abre la pestaña con el PDF ya autorizado.
+      viendo_pdf: false,
       // Total de mensualidad confirmado por el backend (el que se factura realmente).
       record_total_mensualidad: 0,
       // Resultado de la última emisión de factura intentada en esta sesión del modal.
@@ -627,37 +627,42 @@ export default {
         })
     },
     /**
-     * Descarga el PDF de la última factura emitida (GET .../factura/{invoiceId}/pdf),
-     * siguiendo el mismo patrón de blob que `lead/contract/Index.vue`.
+     * Abre en una pestaña nueva el PDF ya autorizado de la última factura
+     * emitida. En vez de descargarlo por blob, pide un token de vista de un
+     * solo uso (POST .../pdf-access-token, autenticado) y arma la URL pública
+     * de `pdf-view/{token}` (prompt 362/363) para que el navegador la renderice
+     * de forma nativa; desde ahí el usuario descarga con el visor propio si
+     * quiere. La ruta de vista no vive bajo el prefijo /api/admin del cliente
+     * axios compartido, por eso se arma con `admin_api_origin()`.
      * @returns {void}
      */
-    descargar_pdf() {
+    ver_pdf() {
       const self = this
       if (!this.record || !this.record.id || !this.factura_result || !this.factura_result.invoice_id) {
         return
       }
-      self.descargando_pdf = true
+      self.viendo_pdf = true
       api
-        .get('/client/' + this.record.id + '/factura/' + this.factura_result.invoice_id + '/pdf', {
-          responseType: 'blob',
-        })
+        .post('/client/' + this.record.id + '/factura/' + this.factura_result.invoice_id + '/pdf-access-token')
         .then(function (response) {
-          const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
-          const link = document.createElement('a')
-          link.href = url
-          link.setAttribute('download', 'factura_mensualidad_' + self.record.id + '.pdf')
-          document.body.appendChild(link)
-          link.click()
-          link.remove()
-          window.URL.revokeObjectURL(url)
+          const token = response.data && response.data.token
+          if (!token) {
+            throw new Error('Sin token')
+          }
+          const url =
+            admin_api_origin() +
+            '/api/admin/client/' + self.record.id +
+            '/factura/' + self.factura_result.invoice_id +
+            '/pdf-view/' + token
+          window.open(url, '_blank')
         })
         .catch(function () {
           window.dispatchEvent(new CustomEvent('admin-spa-toast', {
-            detail: { message: 'No se pudo descargar el PDF de la factura.', variant: 'danger' },
+            detail: { message: 'No se pudo abrir el PDF de la factura.', variant: 'danger' },
           }))
         })
         .then(function () {
-          self.descargando_pdf = false
+          self.viendo_pdf = false
         })
     },
     /**
