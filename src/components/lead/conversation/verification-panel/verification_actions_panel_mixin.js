@@ -68,7 +68,15 @@ export default {
      */
     final_actions() {
       return {
-        estado_sugerido: this.estado_sugerido || null,
+        /*
+         * FIX (prompt 348): apply_pending_actions() interpreta `estado_sugerido: null` como "el admin
+         * no tocó el estado → se conserva el de Claude", NO como "no cambiar el estado". Con el select
+         * en "— sin cambio —" el backend aplicaba igual el estado crudo de Claude: la opción vacía era
+         * una trampa. Mandando el estado ACTUAL del lead, apply_parsed_response() calcula
+         * $estado === $previous_status y no lo mueve (ni genera badge de cambio), sin tocar el backend.
+         * Si por lo que sea no tenemos el estado actual, se cae al comportamiento anterior (null).
+         */
+        estado_sugerido: this.estado_sugerido || this.lead_status || null,
         agendar_demo: this.agendar_demo && this.agendar_demo.demo_id
           ? {
             demo_id: this.agendar_demo.demo_id,
@@ -120,9 +128,29 @@ export default {
       }
       pending = pending || {}
 
-      /* Solo preseleccionar si Claude sugirió un estado distinto al actual del lead. */
-      var suggested_status = pending.estado_sugerido || ''
-      this.estado_sugerido = (suggested_status && suggested_status !== this.lead_status) ? suggested_status : null
+      /*
+       * FIX (prompt 348): el select se precarga con `message.suggested_lead_status` — la MISMA
+       * fuente que alimenta el badge "Cambio de estado: …" de la burbuja, y que el backend ya
+       * calculó contra el estado previo del lead y pasó por la guardia de "no retroceder de tramo"
+       * (ver create_pending_agendamiento_message / apply_parsed_response en LeadAiService).
+       *
+       * NO se compara contra `lead_status`: en el tramo de agenda el lead YA fue movido a
+       * `solicita_disponibilidad` en el momento de generar el mensaje (FIX del 6/7/2026, la única
+       * transición que se aplica sin esperar la aprobación), así que compararlo anulaba la
+       * preselección justo en el caso más frecuente y dejaba el select en "— sin cambio —"
+       * contradiciendo al badge. Reaplicar un estado que el lead ya tiene es idempotente en el
+       * backend ($estado === $previous_status → no se guarda cambio).
+       *
+       * Fallback a `pending_actions.estado_sugerido` solo si el mensaje no trae la columna
+       * (registros viejos, previos a la migración de suggested_lead_status).
+       */
+      var suggested_status = (this.message && this.message.suggested_lead_status)
+        ? String(this.message.suggested_lead_status)
+        : ''
+      if (suggested_status === '' && pending.estado_sugerido) {
+        suggested_status = String(pending.estado_sugerido)
+      }
+      this.estado_sugerido = suggested_status !== '' ? suggested_status : null
       this.agendar_demo = pending.agendar_demo
         ? {
           demo_id: pending.agendar_demo.demo_id,

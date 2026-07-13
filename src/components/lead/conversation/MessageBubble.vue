@@ -353,15 +353,21 @@
               </template>
               <template v-else-if="show_auto_send_dispatching">Enviando automáticamente…</template>
             </span>
+            <!--
+              Prompt 348: antes era un botón de solo ícono (bi-stop-circle) y no se entendía qué hacía.
+              Ahora sigue el mismo criterio del prompt 324 (ícono + label) que ya usan Enviar / Editar,
+              en rojo porque es la acción destructiva de la burbuja: frena el envío automático.
+            -->
             <button
               type="button"
-              class="btn btn-outline-secondary btn-sm wa-btn-tight d-inline-flex align-items-center justify-content-center"
+              class="btn btn-danger btn-sm wa-btn-tight d-inline-flex align-items-center justify-content-center gap-1"
               :disabled="busy"
               title="Cancelar el envío automático por WhatsApp"
               aria-label="Cancelar el envío automático por WhatsApp"
               @click="on_cancelar_envio_automatico"
             >
               <i class="bi bi-stop-circle" aria-hidden="true" />
+              <span>Cancelar envío</span>
             </button>
           </div>
         </div>
