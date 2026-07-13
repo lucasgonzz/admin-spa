@@ -63,7 +63,7 @@
                   multiple
                   size="3"
                 >
-                  <option v-for="c in clients_options" :key="c.id" :value="c.id">{{ c.name }}</option>
+                  <option v-for="c in clients_options" :key="c.id" :value="c.id">{{ client_option_label(c) }}</option>
                 </select>
               </td>
               <td class="text-nowrap">
@@ -123,7 +123,7 @@
               <td><span class="small">{{ scope_label(row) }}</span></td>
               <td>
                 <select v-model="row.client_ids" class="form-select form-select-sm" multiple size="3">
-                  <option v-for="c in clients_options" :key="c.id" :value="c.id">{{ c.name }}</option>
+                  <option v-for="c in clients_options" :key="c.id" :value="c.id">{{ client_option_label(c) }}</option>
                 </select>
               </td>
               <td class="text-nowrap">
@@ -186,7 +186,7 @@
               <td><span class="small">{{ scope_label(row) }}</span></td>
               <td>
                 <select v-model="row.client_ids" class="form-select form-select-sm" multiple size="3">
-                  <option v-for="c in clients_options" :key="c.id" :value="c.id">{{ c.name }}</option>
+                  <option v-for="c in clients_options" :key="c.id" :value="c.id">{{ client_option_label(c) }}</option>
                 </select>
               </td>
               <td class="text-nowrap">
@@ -230,7 +230,7 @@
               <td><span class="small">{{ scope_label(row) }}</span></td>
               <td>
                 <select v-model="row.client_ids" class="form-select form-select-sm" multiple size="3">
-                  <option v-for="c in clients_options" :key="c.id" :value="c.id">{{ c.name }}</option>
+                  <option v-for="c in clients_options" :key="c.id" :value="c.id">{{ client_option_label(c) }}</option>
                 </select>
               </td>
               <td class="text-nowrap">
@@ -450,9 +450,14 @@ export default {
         .then(function (res) {
           const m = res.data && res.data.models
           const raw = Array.isArray(m) ? m : (m && m.data) || []
-          self.clients_options = raw.filter(function (c) {
+          const active_clients = raw.filter(function (c) {
             return c.is_active !== false && c.is_active !== 0
           })
+          /* Orden alfabético por razón social para facilitar la búsqueda en el multiselect */
+          active_clients.sort(function (a, b) {
+            return self.client_option_label(a).localeCompare(self.client_option_label(b), 'es')
+          })
+          self.clients_options = active_clients
         })
         .catch(function () {
           self.clients_error = 'No se pudieron cargar los clientes para el multiselect.'
@@ -614,13 +619,36 @@ export default {
       }
     },
     /**
+     * Etiqueta visible de un cliente en los multiselect de alcance.
+     * Prioriza la razón social (company_name); si no hay, usa el nombre de contacto.
+     * @param {Object|null} client registro de cliente del API.
+     * @returns {string}
+     */
+    client_option_label(client) {
+      if (!client) {
+        return '—'
+      }
+
+      const company_name = client.company_name ? String(client.company_name).trim() : ''
+      if (company_name) {
+        return company_name
+      }
+
+      const contact_name = client.name ? String(client.name).trim() : ''
+      if (contact_name) {
+        return contact_name
+      }
+
+      return 'Cliente #' + client.id
+    },
+    /**
      * Nombre de cliente asociado a un upgrade, si vino anidado en el JSON.
      * @param {Object} u registro de upgrade.
      * @returns {string}
      */
     upgrade_client_name(u) {
-      if (u && u.client && u.client.name) {
-        return u.client.name
+      if (u && u.client) {
+        return this.client_option_label(u.client)
       }
       return '—'
     },

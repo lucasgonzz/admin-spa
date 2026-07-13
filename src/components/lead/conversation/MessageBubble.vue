@@ -144,40 +144,58 @@
             <i class="bi bi-bell-fill me-1" aria-hidden="true" />{{ n.evento }} → {{ n.admins.join(', ') }}
           </span>
         </div>
-        <div v-if="segment.is_last && message.ai_reasoning" class="wa-extra mt-1">
+        <!--
+          Reveals de razonamiento/horarios (prompt 324): antes eran links sueltos de bajo
+          contraste; ahora son botones de verdad (ícono + label), agrupados en una fila
+          alineada a la derecha al pie de la burbuja. El contenido desplegable de cada uno
+          no cambia, solo el disparador.
+        -->
+        <div
+          v-if="segment.is_last && (message.ai_reasoning || calendar_snapshot_parsed)"
+          class="wa-reveals-row d-flex justify-content-end flex-wrap gap-2 mt-1"
+        >
           <button
+            v-if="message.ai_reasoning"
             type="button"
-            class="btn btn-link wa-link-tight p-0"
+            class="btn btn-sm btn-outline-secondary wa-reveal-btn d-inline-flex align-items-center gap-1"
             :title="show_reasoning ? 'Ocultar razonamiento de Claude' : 'Ver razonamiento de Claude'"
             :aria-label="show_reasoning ? 'Ocultar razonamiento de Claude' : 'Ver razonamiento de Claude'"
             @click="toggle_reasoning"
           >
+            <i class="bi bi-lightbulb" aria-hidden="true" />
+            <span>Razonamiento</span>
             <i
               class="bi"
-              :class="show_reasoning ? 'bi-chevron-up' : 'bi-lightbulb'"
+              :class="show_reasoning ? 'bi-chevron-up' : 'bi-chevron-down'"
               aria-hidden="true"
             />
           </button>
-          <div v-show="show_reasoning" class="wa-reasoning text-muted border-top mt-1 pt-1">
-            {{ message.ai_reasoning }}
-          </div>
-        </div>
-        <!-- Snapshot del calendario Google del closer (debug de disponibilidad) -->
-        <div v-if="segment.is_last && calendar_snapshot_parsed" class="wa-extra mt-1">
           <button
+            v-if="calendar_snapshot_parsed"
             type="button"
-            class="btn btn-link wa-link-tight p-0"
+            class="btn btn-sm btn-outline-secondary wa-reveal-btn d-inline-flex align-items-center gap-1"
             :title="show_calendar_snapshot ? 'Ocultar eventos del calendario' : 'Ver eventos del calendario del closer'"
             :aria-label="show_calendar_snapshot ? 'Ocultar eventos del calendario' : 'Ver eventos del calendario del closer'"
             @click="toggle_calendar_snapshot"
           >
+            <i class="bi bi-clock-history" aria-hidden="true" />
+            <span>Horarios enviados</span>
             <i
               class="bi"
-              :class="show_calendar_snapshot ? 'bi-chevron-up' : 'bi-calendar3'"
+              :class="show_calendar_snapshot ? 'bi-chevron-up' : 'bi-chevron-down'"
               aria-hidden="true"
             />
           </button>
-          <div v-show="show_calendar_snapshot" class="wa-calendar-snapshot text-muted border-top mt-1 pt-1">
+        </div>
+        <!-- Contenido del razonamiento de Claude (disparado por el botón "Razonamiento" de arriba) -->
+        <div v-if="segment.is_last && message.ai_reasoning" v-show="show_reasoning" class="wa-extra mt-1">
+          <div class="wa-reasoning text-muted border-top mt-1 pt-1">
+            {{ message.ai_reasoning }}
+          </div>
+        </div>
+        <!-- Snapshot del calendario Google del closer (disparado por el botón "Horarios enviados" de arriba) -->
+        <div v-if="segment.is_last && calendar_snapshot_parsed" v-show="show_calendar_snapshot" class="wa-extra mt-1">
+          <div class="wa-calendar-snapshot text-muted border-top mt-1 pt-1">
             <div class="small">
               <div class="mb-1 text-muted" style="font-size: 0.75rem;">
                 Consultado {{ calendar_snapshot_fecha }}
@@ -260,49 +278,64 @@
             </div>
           </div>
         </div>
+        <!--
+          Botones de acción con texto (prompt 324): antes eran solo íconos; ahora
+          llevan ícono + label para que la acción sea clara de un vistazo (estética
+          Apple: contraste sobrio, sin sobrecargar). wa-btn-tight se mantiene para
+          el padding/alto compacto, ajustado para convivir con el texto.
+        -->
         <div v-if="segment.is_last && show_pending_suggestion_actions" class="wa-actions d-flex flex-wrap gap-1 align-items-center">
           <template v-if="!editing">
             <button
               type="button"
-              class="btn btn-success btn-sm wa-btn-tight d-inline-flex align-items-center justify-content-center"
+              class="btn btn-success btn-sm wa-btn-tight d-inline-flex align-items-center justify-content-center gap-1"
               :disabled="busy || !has_sendable_text"
               title="Enviar sugerencia por WhatsApp"
               aria-label="Enviar sugerencia por WhatsApp"
               @click="on_enviar"
             >
               <i class="bi bi-send" aria-hidden="true" />
+              <span>Enviar</span>
             </button>
             <button
               type="button"
-              class="btn btn-outline-primary btn-sm wa-btn-tight d-inline-flex align-items-center justify-content-center"
+              class="btn btn-outline-primary btn-sm wa-btn-tight d-inline-flex align-items-center justify-content-center gap-1"
               :disabled="busy"
               title="Editar sugerencia antes de enviar"
               aria-label="Editar sugerencia antes de enviar"
               @click="on_start_edit"
             >
               <i class="bi bi-pencil" aria-hidden="true" />
+              <span>Editar</span>
             </button>
           </template>
           <template v-else>
             <button
               type="button"
-              class="btn btn-success btn-sm wa-btn-tight d-inline-flex align-items-center justify-content-center"
+              class="btn btn-success btn-sm wa-btn-tight d-inline-flex align-items-center justify-content-center gap-1"
               :disabled="busy || !has_edited_text_for_send"
               title="Guardar texto editado y enviar por WhatsApp"
               aria-label="Guardar texto editado y enviar por WhatsApp"
               @click="on_guardar_y_enviar"
             >
               <i class="bi bi-send-check" aria-hidden="true" />
+              <span>Enviar</span>
             </button>
+            <!--
+              "Cancelar" sale del modo edición; el mismo label sirve también para el
+              flujo de rechazo donde hoy corresponda (on_cancel_edit no cambia de lógica,
+              solo se agrega el texto visible).
+            -->
             <button
               type="button"
-              class="btn btn-outline-secondary btn-sm wa-btn-tight d-inline-flex align-items-center justify-content-center"
+              class="btn btn-outline-secondary btn-sm wa-btn-tight d-inline-flex align-items-center justify-content-center gap-1"
               :disabled="busy"
               title="Cancelar edición"
               aria-label="Cancelar edición"
               @click="on_cancel_edit"
             >
               <i class="bi bi-x-lg" aria-hidden="true" />
+              <span>Cancelar</span>
             </button>
           </template>
         </div>
@@ -1693,8 +1726,22 @@ export default {
 .wa-extra {
   font-size: 0.875rem;
 }
-.wa-link-tight {
-  font-size: 0.7rem;
+/*
+  Fila de botones "Razonamiento" / "Horarios enviados" (prompt 324): reemplaza los
+  antiguos btn-link sueltos (.wa-link-tight, ya sin uso) por botones con buen contraste,
+  alineados abajo a la derecha de la burbuja.
+*/
+.wa-reveals-row {
+  clear: both;
+}
+.wa-reveal-btn {
+  font-size: 0.72rem;
+  padding: 0.18rem 0.55rem;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.wa-reveal-btn .bi {
+  font-size: 0.85rem;
 }
 .wa-reasoning {
   font-size: 0.875rem;
@@ -1714,12 +1761,36 @@ export default {
   margin-top: 0.35rem;
   clear: both;
 }
+/*
+  Botones Enviar/Editar/Cancelar (prompt 324): antes cuadrados de solo ícono
+  (min-width/min-height fijos); ahora llevan ícono + texto, así que el ancho se
+  adapta al contenido y solo se conserva el alto mínimo para no perder el tamaño
+  de tap-target en mobile.
+*/
 .wa-btn-tight.btn-sm {
-  font-size: 0.9rem;
-  padding: 0.1rem 0.42rem;
+  font-size: 0.8rem;
+  padding: 0.22rem 0.6rem;
   line-height: 1.2;
-  min-width: 1.85rem;
   min-height: 1.85rem;
+}
+.wa-btn-tight.btn-sm .bi {
+  font-size: 0.95rem;
+}
+/* Sidebar angosto / mobile: textos e íconos más compactos para no desbordar la burbuja. */
+@media (max-width: 480px) {
+  .wa-btn-tight.btn-sm {
+    font-size: 0.74rem;
+    padding: 0.2rem 0.45rem;
+  }
+  .wa-reveal-btn {
+    font-size: 0.68rem;
+    padding: 0.16rem 0.45rem;
+  }
+  .wa-reveal-btn span {
+    max-width: 6.2rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 .wa-badge-tight {
   font-size: 0.9rem;
