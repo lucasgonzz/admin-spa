@@ -26,6 +26,16 @@
         <span>{{ demo_update.started_at ? format_date(demo_update.started_at) : '—' }}</span>
       </div>
       <div class="col-md-3">
+        <small class="text-muted d-block">Finalizado</small>
+        <span>{{ demo_update.finished_at ? format_date(demo_update.finished_at) : '—' }}</span>
+      </div>
+    </div>
+    <div class="row g-2 mt-1">
+      <div class="col-md-2">
+        <small class="text-muted d-block">Duración</small>
+        <span>{{ duration_label }}</span>
+      </div>
+      <div class="col-md-3">
         <small class="text-muted d-block">Creada por</small>
         <span>{{ demo_update.created_by_admin ? demo_update.created_by_admin.name : '—' }}</span>
         <small class="text-muted d-block">{{ demo_update.created_at ? format_date(demo_update.created_at) : '' }}</small>
@@ -65,6 +75,27 @@ export default {
       if (status === 'completado') return 'Completado'
       if (status === 'fallido') return 'Fallido'
       return status || 'Desconocido'
+    },
+    /**
+     * Duración del pipeline en formato "Xm Ys".
+     * Requiere started_at y finished_at; si el proceso sigue en curso (sin finished_at)
+     * todavía no hay duración final que mostrar.
+     * @returns {string}
+     */
+    duration_label() {
+      if (!this.demo_update.started_at || !this.demo_update.finished_at) return '—'
+
+      // Diferencia en milisegundos entre inicio y fin, convertida a segundos totales.
+      var started = new Date(this.demo_update.started_at)
+      var finished = new Date(this.demo_update.finished_at)
+      var total_seconds = Math.max(0, Math.round((finished - started) / 1000))
+
+      var minutes = Math.floor(total_seconds / 60)
+      var seconds = total_seconds % 60
+      // Segundos siempre con dos dígitos (ej: "12m 04s").
+      var seconds_text = seconds < 10 ? '0' + seconds : String(seconds)
+
+      return minutes + 'm ' + seconds_text + 's'
     },
   },
   methods: {
