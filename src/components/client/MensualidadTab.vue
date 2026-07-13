@@ -286,10 +286,10 @@
                 <button
                   type="button"
                   class="btn btn-outline-success btn-sm"
-                  :disabled="viendo_pdf"
-                  @click="ver_pdf"
+                  :disabled="viendo_pdf_invoice_id === factura_result.invoice_id"
+                  @click="ver_pdf(factura_result.invoice_id)"
                 >
-                  {{ viendo_pdf ? 'Abriendo...' : 'Ver PDF' }}
+                  {{ viendo_pdf_invoice_id === factura_result.invoice_id ? 'Abriendo...' : 'Ver PDF' }}
                 </button>
               </div>
             </div>
@@ -306,6 +306,68 @@
           >
             {{ emitiendo_factura ? 'Emitiendo...' : 'Emitir factura' }}
           </button>
+
+          <!-- ============================================================ -->
+          <!-- Historial de facturas emitidas (prompt 365). Se carga al      -->
+          <!-- montar el componente y se refresca tras cada emisión OK,     -->
+          <!-- para no depender de reabrir el modal para verla.             -->
+          <!-- ============================================================ -->
+          <hr class="my-3" />
+          <p class="mb-2"><strong>Facturas emitidas</strong></p>
+
+          <!-- Estado de carga del historial -->
+          <div v-if="cargando_facturas" class="text-muted small">
+            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+            Cargando facturas...
+          </div>
+
+          <!-- Historial vacío: todavía no se emitió ninguna factura para este cliente -->
+          <p v-else-if="facturas.length === 0" class="text-muted small mb-0">
+            Todavía no se emitieron facturas para este cliente.
+          </p>
+
+          <!-- Tabla de historial: incluye autorizadas y rechazadas -->
+          <table v-else class="table table-sm table-bordered small mb-0">
+            <thead>
+              <tr class="table-light">
+                <th>Período</th>
+                <th>Comprobante</th>
+                <th>Fecha</th>
+                <th>Importe</th>
+                <th>Estado</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="factura in facturas" :key="factura.id">
+                <td>{{ factura.periodo }}</td>
+                <!-- Comprobante formateado 0002-00000014, o — si fue rechazada antes de numerarse -->
+                <td>{{ formatear_comprobante(factura) }}</td>
+                <td>{{ formatear_fecha(factura.created_at) }}</td>
+                <td>${{ format_numero(factura.importe_total) }}</td>
+                <td>
+                  <span v-if="factura.resultado === 'A'" class="badge bg-success">Autorizada</span>
+                  <span v-else class="badge bg-danger">Rechazada</span>
+                  <!-- Homologación no tiene validez fiscal: distinguirla siempre a la vista -->
+                  <span v-if="!factura.afip_produccion" class="badge bg-secondary ms-1">Homologación</span>
+                  <div v-if="factura.resultado !== 'A' && factura.error_message" class="text-muted small">
+                    {{ factura.error_message }}
+                  </div>
+                </td>
+                <td>
+                  <button
+                    v-if="factura.resultado === 'A' && factura.cae"
+                    type="button"
+                    class="btn btn-outline-success btn-sm"
+                    :disabled="viendo_pdf_invoice_id === factura.id"
+                    @click="ver_pdf(factura.id)"
+                  >
+                    {{ viendo_pdf_invoice_id === factura.id ? 'Abriendo...' : 'Ver PDF' }}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -344,12 +406,17 @@ export default {
       saving: false,
       // true mientras se emite la factura (POST emitir-factura).
       emitiendo_factura: false,
-      // true mientras se pide el token de vista y se abre la pestaña con el PDF ya autorizado.
-      viendo_pdf: false,
+      // id de la factura cuyo PDF se está abriendo (null = ninguna); por fila, no global,
+      // para no deshabilitar el botón de "Ver PDF" de las demás filas del historial.
+      viendo_pdf_invoice_id: null,
       // Total de mensualidad confirmado por el backend (el que se factura realmente).
       record_total_mensualidad: 0,
       // Resultado de la última emisión de factura intentada en esta sesión del modal.
       factura_result: null,
+      // Historial completo de facturas emitidas para este cliente (GET client/{id}/facturas, prompt 364).
+      facturas: [],
+      // true mientras se carga el historial de facturas.
+      cargando_facturas: false,
       // true mientras se consultan los conteos vivos del cliente (botón "Traer datos del cliente").
       trayendo_del_cliente: false,
       // true mientras se empuja la fecha/precios al cliente (botón "Actualizar fecha en el cliente").
@@ -447,6 +514,8 @@ export default {
     'record.id': function (new_id, old_id) {
       if (new_id && new_id !== old_id) {
         this.cargar_mensualidad()
+        // Nuevo cliente: recarga también su historial de facturas (si no, se vería el del cliente anterior).
+        this.cargar_facturas()
         // Nuevo cliente: se vuelve a detectar el soporte de sincronización desde cero.
         this.sync_no_soportado = false
         this.sync_no_soportado_motivo = ''
@@ -455,6 +524,7 @@ export default {
   },
   mounted() {
     this.cargar_mensualidad()
+    this.cargar_facturas()
   },
   methods: {
     /**
@@ -466,6 +536,60 @@ export default {
     format_numero(valor) {
       const numero = Number(valor || 0)
       return numero.toLocaleString('es-AR', { maximumFractionDigits: 0 })
+    },
+    /**
+     * Formatea el número de comprobante como lo muestra el PDF: punto de
+     * venta a 4 dígitos + número a 8 dígitos (ej: 0002-00000014). Si la
+     * factura fue rechazada antes de numerarse (`cbte_numero` null), muestra "—".
+     * @param {Object} factura Fila del historial (punto_venta, cbte_numero).
+     * @returns {string}
+     */
+    formatear_comprobante(factura) {
+      if (!factura || factura.cbte_numero === null || factura.cbte_numero === undefined) {
+        return '—'
+      }
+      const punto_venta = String(factura.punto_venta || 0).padStart(4, '0')
+      const numero = String(factura.cbte_numero).padStart(8, '0')
+      return punto_venta + '-' + numero
+    },
+    /**
+     * Formatea una fecha ISO (`created_at`) como dd/mm/yyyy para la tabla de historial.
+     * @param {string} fecha_iso
+     * @returns {string}
+     */
+    formatear_fecha(fecha_iso) {
+      if (!fecha_iso) {
+        return ''
+      }
+      const fecha = new Date(fecha_iso)
+      const dd = String(fecha.getDate()).padStart(2, '0')
+      const mm = String(fecha.getMonth() + 1).padStart(2, '0')
+      const yyyy = fecha.getFullYear()
+      return dd + '/' + mm + '/' + yyyy
+    },
+    /**
+     * Carga el historial completo de facturas emitidas para este cliente
+     * (GET client/{id}/facturas, prompt 364), incluidas las rechazadas.
+     * @returns {void}
+     */
+    cargar_facturas() {
+      const self = this
+      if (!this.record || !this.record.id) {
+        return
+      }
+      self.cargando_facturas = true
+      api
+        .get('/client/' + this.record.id + '/facturas')
+        .then(function (res) {
+          self.facturas = (res.data && res.data.facturas) || []
+          self.cargando_facturas = false
+        })
+        .catch(function () {
+          self.cargando_facturas = false
+          window.dispatchEvent(new CustomEvent('admin-spa-toast', {
+            detail: { message: 'No se pudo cargar el historial de facturas.', variant: 'danger' },
+          }))
+        })
     },
     /**
      * Carga el snapshot de mensualidad del cliente (GET admin/client/{id}/mensualidad)
@@ -608,6 +732,8 @@ export default {
                 variant: 'success',
               },
             }))
+            // Refresca el historial para que la factura recién emitida aparezca sin recargar el modal.
+            self.cargar_facturas()
           } else {
             window.dispatchEvent(new CustomEvent('admin-spa-toast', {
               detail: {
@@ -627,32 +753,40 @@ export default {
         })
     },
     /**
-     * Abre en una pestaña nueva el PDF ya autorizado de la última factura
-     * emitida. En vez de descargarlo por blob, pide un token de vista de un
-     * solo uso (POST .../pdf-access-token, autenticado) y arma la URL pública
-     * de `pdf-view/{token}` (prompt 362/363) para que el navegador la renderice
+     * Abre en una pestaña nueva el PDF ya autorizado de una factura emitida.
+     * En vez de descargarlo por blob, pide un token de vista de un solo uso
+     * (POST .../pdf-access-token, autenticado) y arma la URL pública de
+     * `pdf-view/{token}` (prompt 362/363) para que el navegador la renderice
      * de forma nativa; desde ahí el usuario descarga con el visor propio si
      * quiere. La ruta de vista no vive bajo el prefijo /api/admin del cliente
      * axios compartido, por eso se arma con `admin_api_origin()`.
+     *
+     * Parametrizado por `invoice_id` (prompt 365) para poder abrir el PDF de
+     * cualquier fila del historial, no solo de la última emisión de la
+     * sesión; el estado de "abriendo" se guarda por factura
+     * (`viendo_pdf_invoice_id`) para no deshabilitar los botones de las demás.
+     * @param {number} invoice_id Id de la factura (MensualidadInvoice) a visualizar.
      * @returns {void}
      */
-    ver_pdf() {
+    ver_pdf(invoice_id) {
       const self = this
-      if (!this.record || !this.record.id || !this.factura_result || !this.factura_result.invoice_id) {
+      if (!this.record || !this.record.id || !invoice_id) {
         return
       }
-      self.viendo_pdf = true
+      self.viendo_pdf_invoice_id = invoice_id
       api
-        .post('/client/' + this.record.id + '/factura/' + this.factura_result.invoice_id + '/pdf-access-token')
+        .post('/client/' + this.record.id + '/factura/' + invoice_id + '/pdf-access-token')
         .then(function (response) {
           const token = response.data && response.data.token
           if (!token) {
             throw new Error('Sin token')
           }
+          // Ruta pública registrada fuera del grupo `admin` (sin Sanctum):
+          // api/client/.../pdf-view/{token}, no api/admin/client/...
           const url =
             admin_api_origin() +
-            '/api/admin/client/' + self.record.id +
-            '/factura/' + self.factura_result.invoice_id +
+            '/api/client/' + self.record.id +
+            '/factura/' + invoice_id +
             '/pdf-view/' + token
           window.open(url, '_blank')
         })
@@ -662,7 +796,7 @@ export default {
           }))
         })
         .then(function () {
-          self.viendo_pdf = false
+          self.viendo_pdf_invoice_id = null
         })
     },
     /**
