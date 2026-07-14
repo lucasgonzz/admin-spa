@@ -49,6 +49,7 @@
         <sub-task-item label="Subir SPA al hosting" :status="get_step_status('upload_spa')" />
         <sub-task-item label="Subir API al hosting" :status="get_step_status('upload_api')" />
         <sub-task-item label="Instalar composer" :status="get_step_status('install_composer')" />
+        <sub-task-item label="Migraciones" :status="get_step_status('run_migrations')" />
       </div>
     </div>
   </div>
@@ -58,7 +59,7 @@
 import SubTaskItem from '@/components/update/extra-props/operations/SubTaskItem.vue'
 
 /** Orden de las etapas de log del pipeline de DemoUpdate. */
-var LOG_STEPS_ORDER = ['compile_spa', 'upload_spa', 'upload_api', 'run_demo_setup']
+var LOG_STEPS_ORDER = ['compile_spa', 'upload_spa', 'upload_api', 'run_migrations']
 
 /** Marcador de inicio de "composer install" dentro del tag upload_api. */
 var COMPOSER_START_MARKER = 'Corriendo composer install en hosting'
@@ -179,7 +180,7 @@ export default {
     /**
      * Determina el estado visual de un ítem del checklist a partir del log parseado.
      *
-     * @param {string} key - 'compile_spa' | 'upload_spa' | 'upload_api' | 'install_composer'
+     * @param {string} key - 'compile_spa' | 'upload_spa' | 'upload_api' | 'install_composer' | 'run_migrations'
      * @returns {string} - 'pending' | 'running' | 'completed' | 'failed'
      */
     get_step_status(key) {
@@ -199,6 +200,15 @@ export default {
           return this.demo_update.status === 'fallido' ? 'failed' : 'running'
         }
         return 'pending'
+      }
+      /* run_migrations: es la última etapa del pipeline, no hay etapa siguiente cuyos logs indiquen
+         que terminó. El early-return de 'completado' ya cubre el caso feliz; acá se distinguen
+         'ejecutandose' y 'fallido' en base a si ya empezó a loguear. */
+      if (key === 'run_migrations') {
+        if (!this.has_logs_for('run_migrations')) return 'pending'
+        if (this.demo_update.status === 'fallido') return 'failed'
+        if (this.demo_update.status === 'completado') return 'completed'
+        return 'running'
       }
       /* compile_spa / upload_spa: se completan cuando el siguiente tag del pipeline ya tiene logs */
       var idx = LOG_STEPS_ORDER.indexOf(key)
