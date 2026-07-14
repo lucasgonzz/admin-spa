@@ -28,3 +28,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Carpeta local del loop de Claude Code (hooks compartidos + scratch de prompts en curso).
+# No se versiona: current-prompt.md cambia en cada corrida y no aporta nada al historico del repo.
+.claude/
