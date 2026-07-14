@@ -44,12 +44,27 @@
               </small>
               <div v-for="v in empty_variables" :key="v.placeholder" class="mb-2">
                 <label class="form-label form-label-sm mb-1">{{ v.label }}</label>
-                <input
-                  v-model="v.value"
-                  type="text"
-                  class="form-control form-control-sm"
-                  :placeholder="v.placeholder"
-                />
+                <div class="d-flex gap-2 align-items-start">
+                  <input
+                    v-model="v.value"
+                    type="text"
+                    class="form-control form-control-sm"
+                    :placeholder="v.placeholder"
+                  />
+                  <!-- Botón de sugerencia por IA: solo para variables marcadas como ai_suggestable -->
+                  <button
+                    v-if="v.ai_suggestable"
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm flex-shrink-0 text-nowrap"
+                    :disabled="v.loading"
+                    @click="on_suggest_motivo(v)"
+                  >
+                    <span v-if="v.loading" class="spinner-border spinner-border-sm" />
+                    <template v-else>Sugerir con IA</template>
+                  </button>
+                </div>
+                <!-- Texto de error discreto si la sugerencia por IA falló -->
+                <small v-if="v.error" class="text-danger d-block mt-1">{{ v.error }}</small>
               </div>
             </div>
 
@@ -69,29 +84,33 @@
           <!-- Vista de lista: se muestra cuando no hay plantilla seleccionada aún -->
           <div v-else>
 
-            <!-- Plantillas sugeridas según el estado actual del lead -->
-            <div v-if="sugeridas.length > 0" class="mb-3">
+            <!-- Buscador de plantillas por nombre o texto del cuerpo -->
+            <div class="mb-3">
+              <div class="input-group input-group-sm">
+                <span class="input-group-text bg-white border-end-0">
+                  <i class="bi bi-search text-muted" />
+                </span>
+                <input
+                  v-model="search_text"
+                  type="text"
+                  class="form-control form-control-sm border-start-0"
+                  placeholder="Buscar plantilla..."
+                />
+              </div>
+            </div>
+
+            <!-- Modo búsqueda: lista plana de resultados, se ignoran sugeridas y grupos -->
+            <div v-if="is_searching">
               <small class="text-muted fw-semibold d-block mb-2">
-                <i class="bi bi-stars me-1 text-warning" />
-                Sugeridas para este lead (estado: {{ lead_estado }})
+                {{ filtered_templates.length }} resultado(s)
               </small>
               <div
-                v-for="(tpl, tpl_index) in sugeridas"
+                v-for="tpl in filtered_templates"
                 :key="tpl.id"
                 class="template-item border rounded p-2 mb-2"
                 @click="on_select(tpl)"
               >
-                <div class="d-flex justify-content-between align-items-start">
-                  <div class="fw-semibold small">{{ tpl.template_name }}</div>
-                  <!-- Badge de próximo envío solo para la plantilla que sigue en la cola -->
-                  <span
-                    v-if="tpl_index === next_template_index && next_followup_label"
-                    class="badge bg-primary bg-opacity-10 text-primary ms-2 flex-shrink-0"
-                    style="font-size: 0.7rem; font-weight: 500;"
-                  >
-                    <i class="bi bi-clock me-1" />{{ next_followup_label }}
-                  </span>
-                </div>
+                <div class="fw-semibold small">{{ tpl.template_name }}</div>
                 <div
                   v-if="tpl.body_template"
                   class="text-muted"
@@ -102,31 +121,83 @@
               </div>
             </div>
 
-            <!-- Todas las plantillas activas ordenadas -->
-            <div>
-              <small class="text-muted fw-semibold d-block mb-2">
-                <i class="bi bi-collection me-1" />
-                Todas las plantillas
-              </small>
-              <div
-                v-for="tpl in todas_activas"
-                :key="tpl.id"
-                class="template-item border rounded p-2 mb-2"
-                @click="on_select(tpl)"
-              >
-                <div class="fw-semibold small">{{ tpl.template_name }}</div>
-                <div class="text-muted" style="font-size: 0.75rem;">
-                  Estado: {{ tpl.estado }} · Día {{ tpl.dia_numero }}
-                </div>
+            <!-- Modo normal: sugeridas + grupos plegables por categoría -->
+            <template v-else>
+
+              <!-- Plantillas sugeridas según el estado actual del lead -->
+              <div v-if="sugeridas.length > 0" class="mb-3">
+                <small class="text-muted fw-semibold d-block mb-2">
+                  <i class="bi bi-stars me-1 text-warning" />
+                  Sugeridas para este lead (estado: {{ lead_estado }})
+                </small>
                 <div
-                  v-if="tpl.body_template"
-                  class="text-muted"
-                  style="font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+                  v-for="(tpl, tpl_index) in sugeridas"
+                  :key="tpl.id"
+                  class="template-item border rounded p-2 mb-2"
+                  @click="on_select(tpl)"
                 >
-                  {{ tpl.body_template }}
+                  <div class="d-flex justify-content-between align-items-start">
+                    <div class="fw-semibold small">{{ tpl.template_name }}</div>
+                    <!-- Badge de próximo envío solo para la plantilla que sigue en la cola -->
+                    <span
+                      v-if="tpl_index === next_template_index && next_followup_label"
+                      class="badge bg-primary bg-opacity-10 text-primary ms-2 flex-shrink-0"
+                      style="font-size: 0.7rem; font-weight: 500;"
+                    >
+                      <i class="bi bi-clock me-1" />{{ next_followup_label }}
+                    </span>
+                  </div>
+                  <div
+                    v-if="tpl.body_template"
+                    class="text-muted"
+                    style="font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+                  >
+                    {{ tpl.body_template }}
+                  </div>
                 </div>
               </div>
-            </div>
+
+              <!-- Grupos plegables por categoría (accessors categoria/categoria_label/categoria_orden) -->
+              <div v-for="grupo in grupos" :key="grupo.categoria" class="mb-2">
+                <!-- Cabecera de grupo: discreta, clickeable para plegar/desplegar -->
+                <div
+                  class="group-header d-flex align-items-center justify-content-between py-1"
+                  @click="toggle_grupo(grupo.categoria)"
+                >
+                  <div class="d-flex align-items-center">
+                    <i
+                      class="bi me-1 text-muted"
+                      :class="grupos_abiertos[grupo.categoria] ? 'bi-chevron-down' : 'bi-chevron-right'"
+                    />
+                    <small class="fw-semibold">{{ grupo.label }}</small>
+                  </div>
+                  <small class="text-muted">{{ grupo.templates.length }}</small>
+                </div>
+
+                <!-- Plantillas del grupo, solo si está abierto -->
+                <div v-if="grupos_abiertos[grupo.categoria]" class="ps-1">
+                  <div
+                    v-for="tpl in grupo.templates"
+                    :key="tpl.id"
+                    class="template-item border rounded p-2 mb-2"
+                    @click="on_select(tpl)"
+                  >
+                    <div class="fw-semibold small">{{ tpl.template_name }}</div>
+                    <div class="text-muted" style="font-size: 0.75rem;">
+                      Estado: {{ tpl.estado }} · Día {{ tpl.dia_numero }}
+                    </div>
+                    <div
+                      v-if="tpl.body_template"
+                      class="text-muted"
+                      style="font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+                    >
+                      {{ tpl.body_template }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </template>
 
           </div>
         </div>
@@ -142,12 +213,13 @@ import { Modal } from 'bootstrap'
 import api from '@/utils/axios'
 
 /**
- * Mapeo de placeholders Meta a campos del lead y etiquetas legibles para el usuario.
- * Si en el futuro se agregan nuevas variables, se extiende este array.
+ * Fallback defensivo de variables cuando el backend todavía no envía `tpl.variables`
+ * (plantilla sin body, o admin-api desactualizado). Reproduce el comportamiento
+ * anterior a este componente: {{1}} = nombre de contacto, {{2}} = hora de la demo.
  */
-const VARIABLE_MAP = [
-  { placeholder: '{{1}}', field: 'contact_name',    label: 'Nombre del contacto' },
-  { placeholder: '{{2}}', field: 'demo_start_time', label: 'Hora de la demo (HH:MM)' },
+const FALLBACK_VARIABLE_MAP = [
+  { placeholder: '{{1}}', field: 'contact_name',    label: 'Nombre del contacto',      ai_suggestable: false },
+  { placeholder: '{{2}}', field: 'demo_start_time', label: 'Hora de la demo (HH:MM)',  ai_suggestable: false },
 ]
 
 export default {
@@ -178,6 +250,10 @@ export default {
       followup_rules: [],
       /* Evita repetir la petición de reglas en cada apertura del modal. */
       rules_loaded: false,
+      /* Texto de búsqueda del buscador de plantillas. Si tiene contenido, se aplanan los grupos. */
+      search_text: '',
+      /* Estado de apertura de cada grupo de categoría (clave = slug de categoria). */
+      grupos_abiertos: { recuperacion: true },
     }
   },
 
@@ -218,6 +294,86 @@ export default {
     },
 
     /**
+     * Indica si el buscador tiene texto cargado: en ese caso se aplanan
+     * sugeridas + grupos y se muestra únicamente la lista de resultados.
+     *
+     * @returns {boolean}
+     */
+    is_searching() {
+      return this.search_text.trim().length > 0
+    },
+
+    /**
+     * Plantillas activas cuyo nombre o cuerpo matchea el texto del buscador
+     * (comparación en minúsculas, sin distinción de mayúsculas).
+     *
+     * @returns {Array}
+     */
+    filtered_templates() {
+      const query = this.search_text.trim().toLowerCase()
+      if (!query) return []
+      return this.todas_activas.filter((tpl) => {
+        const name = (tpl.template_name || '').toLowerCase()
+        const body = (tpl.body_template || '').toLowerCase()
+        return name.includes(query) || body.includes(query)
+      })
+    },
+
+    /**
+     * Plantillas activas agrupadas por `categoria`, ordenadas por `categoria_orden`
+     * (grupo) y por `dia_numero` (plantillas dentro del grupo).
+     *
+     * @returns {Array<{categoria: string, label: string, orden: number, templates: Array}>}
+     */
+    grupos() {
+      /* Acumulador por slug de categoria. */
+      const map = {}
+
+      this.todas_activas.forEach((tpl) => {
+        const categoria = tpl.categoria || 'otros'
+        if (!map[categoria]) {
+          map[categoria] = {
+            categoria,
+            label: tpl.categoria_label || 'Otras plantillas',
+            orden: tpl.categoria_orden != null ? tpl.categoria_orden : 99,
+            templates: [],
+          }
+        }
+        map[categoria].templates.push(tpl)
+      })
+
+      const grupos_list = Object.values(map)
+
+      /* Plantillas dentro de cada grupo, ordenadas por día de seguimiento. */
+      grupos_list.forEach((g) => {
+        g.templates.sort((a, b) => (a.dia_numero || 0) - (b.dia_numero || 0))
+      })
+
+      /* Grupos ordenados según el criterio de presentación del backend. */
+      grupos_list.sort((a, b) => a.orden - b.orden)
+
+      return grupos_list
+    },
+
+    /**
+     * Variables de la plantilla seleccionada, tal como las expone el backend
+     * (`tpl.variables`, prompt 389). Si no vienen (backend viejo o plantilla
+     * sin body), cae al mapeo defensivo `FALLBACK_VARIABLE_MAP`.
+     *
+     * @returns {Array<{placeholder: string, field: string|null, label: string, ai_suggestable: boolean}>}
+     */
+    active_variables() {
+      if (!this.selected_template) return []
+
+      const vars = this.selected_template.variables
+      if (Array.isArray(vars) && vars.length > 0) return vars
+
+      /* Fallback: solo incluir del mapeo legacy los placeholders que aparecen en el body. */
+      const body = this.selected_template.body_template || ''
+      return FALLBACK_VARIABLE_MAP.filter((v) => body.includes(v.placeholder))
+    },
+
+    /**
      * Texto de la plantilla con las variables reemplazadas por datos del lead.
      * Si el usuario completó manualmente alguna variable vacía, también se aplica.
      * @returns {string}
@@ -228,15 +384,15 @@ export default {
       /* Empezar con el body_template y reemplazar variable por variable. */
       let text = this.selected_template.body_template
 
-      VARIABLE_MAP.forEach(({ placeholder, field }) => {
-        /* Valor del lead para esta variable (puede ser vacío si no está cargado). */
-        const value = this.lead?.[field] || ''
-        text = text.replaceAll(placeholder, value)
-      })
+      this.active_variables.forEach(({ placeholder, field }) => {
+        /* Valor resuelto automáticamente desde el lead (si corresponde). */
+        let value = field ? (this.lead?.[field] || '') : ''
 
-      /* Aplicar encima los overrides que el usuario completó manualmente. */
-      this.empty_variables.forEach(({ placeholder, value }) => {
-        if (value) text = text.replaceAll(placeholder, value)
+        /* Los overrides manuales/IA cargados en empty_variables tienen prioridad. */
+        const override = this.empty_variables.find((v) => v.placeholder === placeholder)
+        if (override && override.value) value = override.value
+
+        text = text.replaceAll(placeholder, value)
       })
 
       return text
@@ -256,19 +412,15 @@ export default {
      * @returns {string[]}
      */
     resolved_variables() {
-      const body = this.selected_template?.body_template || ''
       const result = []
 
-      VARIABLE_MAP.forEach(({ placeholder, field }) => {
-        /* Si la variable no aparece en este template, no la incluir. */
-        if (!body.includes(placeholder)) return
-
-        /* Buscar si el usuario completó este placeholder manualmente. */
+      this.active_variables.forEach(({ placeholder, field }) => {
+        /* Buscar si el usuario completó (a mano o con IA) este placeholder manualmente. */
         const manual = this.empty_variables.find((v) => v.placeholder === placeholder)
         if (manual) {
           result.push(manual.value || '')
         } else {
-          result.push(this.lead?.[field] || '')
+          result.push(field ? (this.lead?.[field] || '') : '')
         }
       })
 
@@ -327,7 +479,6 @@ export default {
     /**
      * Label de cuánto falta para el próximo envío automático.
      * Cadena vacía si no hay regla o no aplica.
-     *
      * @returns {string}
      */
     next_followup_label() {
@@ -372,6 +523,7 @@ export default {
       this.selected_template = null
       this.empty_variables = []
       this.enviando = false
+      this.search_text = ''
 
       /* Cargar templates si el store está vacío. */
       if (this.all_templates.length === 0) {
@@ -402,8 +554,18 @@ export default {
     },
 
     /**
+     * Pliega/despliega un grupo de categoría al hacer click en su cabecera.
+     *
+     * @param {string} categoria slug de la categoría a alternar
+     */
+    toggle_grupo(categoria) {
+      this.grupos_abiertos[categoria] = !this.grupos_abiertos[categoria]
+    },
+
+    /**
      * Selecciona una plantilla y detecta qué variables están vacías en el lead.
-     * Las variables vacías se agregan a `empty_variables` para que el usuario las complete.
+     * Las variables vacías (o sin `field`, como el motivo sugerido por IA) se agregan
+     * a `empty_variables` para que el usuario las complete.
      *
      * @param {Object} tpl Plantilla seleccionada por el usuario.
      */
@@ -413,15 +575,48 @@ export default {
 
       if (!tpl.body_template) return
 
-      /* Recorrer el mapeo y detectar qué variables faltan en el lead. */
-      VARIABLE_MAP.forEach(({ placeholder, field, label }) => {
-        if (!tpl.body_template.includes(placeholder)) return
-        /* Si el lead no tiene el dato, pedir al usuario que lo complete. */
-        const value = this.lead?.[field] || ''
+      /* Recorrer las variables de la plantilla y detectar cuáles faltan resolver. */
+      this.active_variables.forEach(({ placeholder, field, label, ai_suggestable }) => {
+        /* Si tiene field y el lead trae el dato, se resuelve sola: no se pide nada al admin. */
+        const value = field ? (this.lead?.[field] || '') : ''
         if (!value) {
-          this.empty_variables.push({ placeholder, label, value: '' })
+          this.empty_variables.push({
+            placeholder,
+            label,
+            value: '',
+            /* Habilita el botón "Sugerir con IA" cuando el backend lo marca. */
+            ai_suggestable: !!ai_suggestable,
+            /* Estado local del botón de IA para esta variable puntual. */
+            loading: false,
+            /* Mensaje de error discreto si la sugerencia de IA falla. */
+            error: '',
+          })
         }
       })
+    },
+
+    /**
+     * Pide a la IA (endpoint del prompt 390) una redacción sugerida del motivo
+     * de la demora y la vuelca en el input de la variable, que el admin puede
+     * seguir editando a mano antes de enviar.
+     *
+     * @param {Object} v entrada de `empty_variables` con `ai_suggestable: true`
+     */
+    on_suggest_motivo(v) {
+      v.loading = true
+      v.error = ''
+
+      api.post('/lead/' + this.lead.id + '/suggest-recovery-reason')
+        .then((res) => {
+          v.value = res.data?.motivo || ''
+        })
+        .catch(() => {
+          /* No romper el flujo ni cerrar el modal: dejar el input libre para completar a mano. */
+          v.error = 'No se pudo sugerir el motivo, escribilo a mano'
+        })
+        .finally(() => {
+          v.loading = false
+        })
     },
 
     /**
@@ -467,5 +662,13 @@ export default {
 }
 .template-item:hover {
   background-color: var(--bs-gray-100);
+}
+
+/* Cabecera de grupo plegable: discreta, sin bordes, cursor de interacción */
+.group-header {
+  cursor: pointer;
+}
+.group-header:hover small.fw-semibold {
+  color: var(--bs-primary);
 }
 </style>
