@@ -130,6 +130,16 @@
           <ul class="wa-applied-actions-list mb-0">
             <li v-for="(accion, idx) in applied_actions_summary" :key="idx">{{ accion }}</li>
           </ul>
+          <!--
+            Prompt 338 (par de 337): el respaldo automático puede haber enviado este mensaje sin
+            que nadie lo revise (Caso B del 337), suprimiendo de antemano las acciones con efecto
+            externo (Mail 1, agendamiento). Se lo marcamos a Martín acá para que sepa qué quedó
+            pendiente de hacer a mano.
+          -->
+          <div v-if="show_auto_send_no_review_note" class="wa-auto-send-no-review-note text-muted small mt-1">
+            <i class="bi bi-robot me-1" aria-hidden="true" />
+            {{ auto_send_no_review_note_text }}
+          </div>
         </div>
         <div
           v-if="segment.is_last && admin_notifications_parsed.length > 0"
@@ -370,6 +380,19 @@
               <span>Cancelar envío</span>
             </button>
           </div>
+        </div>
+        <!--
+          Prompt 338 (par de 337): mensajes que agendan/cancelan una demo nunca se auto-envían
+          (el respaldo automático los corta, Caso A del 337) y no traen ai_auto_send_at. Mostrarles
+          el countdown de "se envía solo" sería mentir, así que en su lugar se avisa que esperan
+          aprobación humana sí o sí. Tono informativo (bi-shield-check), no de alarma.
+        -->
+        <div
+          v-else-if="segment.is_last && show_demo_gated_notice"
+          class="wa-demo-gated-notice text-muted small mt-1 d-flex align-items-center gap-1"
+        >
+          <i class="bi bi-shield-check" aria-hidden="true" />
+          <span>{{ demo_gated_notice_text }}</span>
         </div>
         <div
           v-else-if="segment.is_last && show_pending_confirmation_label"
@@ -953,6 +976,72 @@ export default {
       return []
     },
     /**
+     * Prompt 338: entradas de actions_override_log donde Claude sugirió una acción y el paquete
+     * final la dejó en false/null (el respaldo automático las apaga a propósito - Caso B del
+     * prompt 337, ver LeadSuggestionSendService::send_suggestion). Mismo shape que usa el diff de
+     * admin-edición (prompt 320): no hay un campo que distinga "lo apagó el sistema" de "lo apagó
+     * el admin", así que esto es una aproximación por contenido, acotada además a mensajes
+     * enviados con applied_actions_summary (ver show_auto_send_no_review_note).
+     * @returns {Array<string>} Slugs de los campos suprimidos (ej. 'enviar_mail_demo').
+     */
+    suppressed_actions_from_override_log() {
+      var log = this.message.actions_override_log
+      if (!Array.isArray(log)) {
+        return []
+      }
+      var suppressed = []
+      log.forEach(function (entry) {
+        if (!entry) {
+          return
+        }
+        var suggested_by_claude = Boolean(entry.sugerido_por_claude)
+        var chosen_by_final_package = Boolean(entry.elegido_por_admin)
+        /* Claude lo pedía (truthy) y en el paquete final quedó apagado (falsy): suprimido. */
+        if (suggested_by_claude && !chosen_by_final_package) {
+          suppressed.push(entry.campo)
+        }
+      })
+      return suppressed
+    },
+    /**
+     * Prompt 338: true para mensajes que el respaldo automático mandó solo, sin revisión humana
+     * (Caso B del prompt 337) y que suprimieron alguna acción con efecto externo al hacerlo.
+     * @returns {boolean}
+     */
+    show_auto_send_no_review_note() {
+      if (this.message.status !== 'enviado') {
+        return false
+      }
+      if (this.applied_actions_summary.length === 0) {
+        return false
+      }
+      return this.suppressed_actions_from_override_log.length > 0
+    },
+    /**
+     * Etiquetas legibles de las acciones suprimidas, para el aviso "Enviado automáticamente sin
+     * revisión — ...". Cae al slug crudo si aparece algún campo nuevo sin mapear.
+     * @returns {string}
+     */
+    auto_send_no_review_note_text() {
+      /* Nombres legibles de los campos que puede suprimir el respaldo automático (Caso B, 337). */
+      var READABLE_LABELS = {
+        agendar_demo: 'agendamiento',
+        cancelar_demo: 'cancelación de demo',
+        enviar_mail_demo: 'Mail 1',
+        guardar_nombre: 'guardar nombre',
+        guardar_email: 'guardar email',
+        forzar_slot: 'forzar horario',
+      }
+      var readable = []
+      this.suppressed_actions_from_override_log.forEach(function (campo) {
+        readable.push(READABLE_LABELS[campo] || campo)
+      })
+      if (readable.length === 0) {
+        return 'Enviado automáticamente sin revisión.'
+      }
+      return 'Enviado automáticamente sin revisión — ' + readable.join(' y ') + ' no se ejecutaron.'
+    },
+    /**
      * Acciones Enviar / Editar para sugerencias de Claude aún no enviadas por WhatsApp.
      * @returns {boolean}
      */
@@ -1015,9 +1104,65 @@ export default {
       if (!this.show_pending_suggestion_actions) {
         return false
       }
+      /* Prompt 338: los mensajes que agendan/cancelan una demo esperan aprobación humana sí o sí
+         (nunca se auto-envían, ver show_demo_gated_notice) - no corresponde mostrarles un countdown,
+         ni siquiera el estimado por fallback (created_at + auto_send_delay_seconds). */
+      if (this.show_demo_gated_notice) {
+        return false
+      }
       /* Nota: el corte por requiere_verificacion se quitó (prompt 278) - el bloque del timer
          se muestra siempre que haya un effective_auto_send_at_ms > 0, sea o no verificación. */
       return this.effective_auto_send_at_ms > 0
+    },
+    /**
+     * Objeto pending_actions del mensaje, tal como lo persistió el backend (prompt 337): el
+     * paquete crudo que devolvió Claude cuando el mensaje quedó retenido para revisión humana.
+     * @returns {Object}
+     */
+    pending_actions_parsed() {
+      var pa = this.message.pending_actions
+      if (pa && typeof pa === 'object') {
+        return pa
+      }
+      return {}
+    },
+    /**
+     * true si el paquete pendiente incluye agendar o cancelar una demo (acciones con efecto
+     * externo que el respaldo automático nunca ejecuta solo, prompt 337).
+     * @returns {boolean}
+     */
+    pending_actions_has_demo_action() {
+      return Boolean(this.pending_actions_parsed.agendar_demo) || Boolean(this.pending_actions_parsed.cancelar_demo)
+    },
+    /**
+     * Prompt 338: true cuando el mensaje agenda/cancela una demo y por lo tanto nunca se
+     * auto-envía (el backend no le setea ai_auto_send_at, prompt 337) - corresponde avisar que
+     * espera aprobación humana en lugar de mostrar un countdown que nunca se cumpliría.
+     * @returns {boolean}
+     */
+    show_demo_gated_notice() {
+      if (!this.show_pending_suggestion_actions) {
+        return false
+      }
+      if (!this.message.requiere_verificacion) {
+        return false
+      }
+      /* Gateado si no hay ai_auto_send_at real, o si el paquete pendiente trae agendar/cancelar
+         demo (defensivo: hoy el backend nunca setea ai_auto_send_at en ese caso, pero si algún
+         día lo hiciera igual corresponde el aviso, no el countdown). */
+      return this.auto_send_at_ms <= 0 || this.pending_actions_has_demo_action
+    },
+    /**
+     * Texto del aviso de aprobación humana, distinguiendo agendar vs cancelar demo para que
+     * quede claro qué acción está esperando revisión.
+     * @returns {string}
+     */
+    demo_gated_notice_text() {
+      var pa = this.pending_actions_parsed
+      if (pa.cancelar_demo && !pa.agendar_demo) {
+        return 'Este mensaje cancela una demo — no se envía sin tu aprobación.'
+      }
+      return 'Este mensaje agenda una demo — no se envía sin tu aprobación.'
     },
     show_auto_send_countdown() {
       if (!this.show_auto_send_timer_block) {
@@ -1865,6 +2010,17 @@ export default {
   font-style: italic;
   line-height: 1.25;
   clear: both;
+}
+/* Prompt 338: aviso "espera aprobación humana" para mensajes que agendan/cancelan una demo. */
+.wa-demo-gated-notice {
+  font-style: italic;
+  line-height: 1.25;
+  clear: both;
+}
+/* Prompt 338: nota de auto-envío sin revisión (Caso B del respaldo automático, prompt 337). */
+.wa-auto-send-no-review-note {
+  font-style: italic;
+  line-height: 1.25;
 }
 .wa-meta-sending {
   font-size: 0.6875rem;
