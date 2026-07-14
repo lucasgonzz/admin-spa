@@ -87,29 +87,13 @@
         </div>
       </div>
 
-      <!-- Panel de logs -->
-      <div v-if="installation.deployment_logs && installation.deployment_logs.length > 0" class="mt-3">
-        <h6 class="text-muted mb-2">Log de instalación</h6>
-        <div class="installation-log-panel border rounded bg-dark text-light small p-2">
-          <div
-            v-for="(log_line, log_index) in installation.deployment_logs"
-            :key="log_index"
-            class="installation-log-line"
-            :class="log_level_class(log_line.level)"
-          >
-            <span class="text-muted">[{{ log_line.step }}]</span>
-            {{ log_line.line }}
-          </div>
-        </div>
-      </div>
-
-      <!-- Mensaje de espera mientras se instala (sin logs aún) -->
-      <div
-        v-else-if="installation.status === 'instalando'"
-        class="text-muted small mt-3"
-      >
-        <div class="spinner-border spinner-border-sm text-primary me-1" role="status"></div>
-        Instalando… los logs aparecerán aquí en tiempo real.
+      <!--
+        Panel de operaciones: log en vivo + checklist de las 6 etapas del pipeline.
+        Visible siempre que la instalación ya haya arrancado (instalando/completada/fallida);
+        mientras está 'pendiente' sólo se ve el formulario de variables manuales de arriba.
+      -->
+      <div v-if="installation.status !== 'pendiente'" class="mt-3">
+        <operations-panel :installation="installation" />
       </div>
 
     </div>
@@ -118,6 +102,7 @@
 
 <script>
 import api from '@/utils/axios'
+import OperationsPanel from '@/components/installation/extra-props/OperationsPanel.vue'
 
 /**
  * Detalle y gestión completa de una ClientInstallation individual.
@@ -135,6 +120,8 @@ import api from '@/utils/axios'
  */
 export default {
   name: 'InstallationDetail',
+
+  components: { OperationsPanel },
 
   props: {
     /** La instalación a mostrar/gestionar. El padre es dueño del dato real. */
@@ -370,21 +357,6 @@ export default {
     },
 
     /**
-     * Clase de texto para una línea de log según su nivel.
-     *
-     * @param {string} level
-     * @returns {string}
-     */
-    log_level_class(level) {
-      const map = {
-        info:    'text-light',
-        success: 'text-success',
-        error:   'text-danger',
-      }
-      return map[level] || 'text-light'
-    },
-
-    /**
      * Formatea una fecha ISO para mostrarla en la UI.
      *
      * @param {string} datetime
@@ -407,16 +379,3 @@ export default {
 }
 </script>
 
-<style lang="sass">
-.installation-log-panel
-	max-height: 400px
-	overflow-y: auto
-	font-family: monospace
-	font-size: 0.78rem
-	line-height: 1.4
-
-.installation-log-line
-	white-space: pre-wrap
-	word-break: break-all
-	margin-bottom: 2px
-</style>
