@@ -566,12 +566,14 @@ export default {
       return classes.join(' ')
     },
     /**
-     * true si se muestra el nombre del emisor dentro de la burbuja (mensajes de sistema / IA).
+     * true si se muestra el nombre del emisor dentro de la burbuja.
+     * Mensajes salientes (IA/sistema y admin/setter) muestran cabecera con la
+     * atribución; los del lead no (el lado de la burbuja ya lo indica).
      *
      * @returns {boolean}
      */
     show_sender_name_in_bubble() {
-      return this.message.sender === 'sistema'
+      return this.message.sender === 'sistema' || this.message.sender === 'setter'
     },
     /**
      * true si la sugerencia de Claude quedó marcada como no enviada al lead.
@@ -607,26 +609,54 @@ export default {
       return Boolean(this.message.is_error)
     },
     /**
-     * Etiqueta legible del emisor.
+     * Etiqueta legible del emisor para la cabecera de la burbuja.
+     *
+     * - lead: sin cambios (indica si es audio).
+     * - setter: "Enviado por {admin}" si hay admin; "Enviado manualmente" si es
+     *   historial importado (sin admin asociado).
+     * - sistema (IA): si ya se envió, distingue auto-envío de la IA ("Enviado por
+     *   la IA") de aprobación humana ("Sugerido por la IA · aprobado por {admin}");
+     *   si sigue pendiente o fue rechazado, es una propuesta ("Sugerido por la IA").
+     *   Conserva el sufijo "(seguimiento)" para las sugerencias de seguimiento.
+     *
      * @returns {string}
      */
     sender_label() {
       const s = this.message.sender
+      const admin_name = (this.message.sent_by_admin_name || '').trim()
+
       if (s === 'lead') {
         if (this.is_audio_message) {
           return 'Lead · audio'
         }
         return 'Lead'
       }
+
+      // Mensaje escrito y enviado por un admin desde el panel.
       if (s === 'setter') {
-        return 'Setter'
-      }
-      if (s === 'sistema') {
-        if (this.is_followup_suggestion) {
-          return 'Sistema / IA (seguimiento)'
+        if (admin_name !== '') {
+          return 'Enviado por ' + admin_name
         }
-        return 'Sistema / IA'
+        // Sin admin: historial pegado desde WhatsApp (autoría desconocida).
+        return 'Enviado manualmente'
       }
+
+      // Mensaje de la IA / sistema.
+      if (s === 'sistema') {
+        const seguimiento_suffix = this.is_followup_suggestion ? ' (seguimiento)' : ''
+
+        // Ya salió al lead: distinguir auto-envío de la IA vs. aprobación humana.
+        if (this.message.status === 'enviado') {
+          if (admin_name !== '') {
+            return 'Sugerido por la IA · aprobado por ' + admin_name + seguimiento_suffix
+          }
+          return 'Enviado por la IA' + seguimiento_suffix
+        }
+
+        // Pendiente o rechazado: todavía es una propuesta de la IA.
+        return 'Sugerido por la IA' + seguimiento_suffix
+      }
+
       return s || '—'
     },
     /**
