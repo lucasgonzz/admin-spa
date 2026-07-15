@@ -4,8 +4,10 @@
       Cuando un lead nuevo escribe por WhatsApp, el sistema envía primero el mensaje automático (respuesta
       inmediata) y, tras la demora configurada, el mensaje de bienvenida con la presentación de ComercioCity.
       Tras la segunda respuesta del lead, la sugerencia de Claude se pide tras la demora de sugerencia IA
-      (cada mensaje nuevo reinicia el contador; 0 = consulta inmediata). Si el setter no pulsa Enviar,
-      el mensaje sugerido se manda por WhatsApp tras la demora de confirmación automática (0 = envío inmediato).
+      (cada mensaje nuevo reinicia el contador; 0 = consulta inmediata). Esa sugerencia se envía por WhatsApp
+      automáticamente y al instante, salvo que el mensaje requiera verificación (porque el lead está en el
+      tramo de agenda o porque le activaste la verificación de mensajes desde la conversación), en cuyo caso
+      espera tu aprobación y usa como respaldo la demora de auto-envío de abajo.
       Usá <code>{{ placeholder_nombre }}</code> en las variantes «con nombre» para personalizar el saludo.
     </p>
 
@@ -57,29 +59,8 @@
       </div>
 
       <div class="mb-3">
-        <label class="form-label small fw-semibold" for="lead_ai_auto_send_delay">Demora antes de enviar sugerencia sin confirmar (segundos)</label>
-        <input
-          id="lead_ai_auto_send_delay"
-          v-model.number="form.ai_suggestion_auto_send_delay_seconds"
-          type="number"
-          class="form-control form-control-sm"
-          style="max-width: 8rem"
-          :min="auto_send_delay_min"
-          :max="auto_send_delay_max"
-          :disabled="saving"
-          @input="on_input_change"
-        />
-        <p class="form-text small text-muted mb-0">
-          Tras generar la sugerencia de Claude: si el setter no envía manualmente, se manda por WhatsApp al vencer este tiempo.
-          Entre {{ auto_send_delay_min }} y {{ auto_send_delay_max }} segundos (por defecto 120).
-          0 = envío automático inmediato sin espera del setter.
-          No aplica a sugerencias que requieren verificación ni a seguimientos automáticos.
-        </p>
-      </div>
-
-      <div class="mb-3">
         <label class="form-label small fw-semibold" for="lead_verificacion_agendamiento_auto_send_delay">
-          Demora antes de auto-enviar en el tramo de agendamiento (minutos)
+          Demora de auto-envío para mensajes que requieren verificación (minutos)
         </label>
         <input
           id="lead_verificacion_agendamiento_auto_send_delay"
@@ -92,11 +73,15 @@
           @input="on_input_change"
         />
         <p class="form-text small text-muted mb-0">
-          Desde que un lead entra a coordinar la agenda de la demo (solicita disponibilidad, demo agendada, ingresando a
-          demo, demo en curso, demo pendiente de terminar) hasta closer activo, todo mensaje de Claude requiere
-          verificación de Martín antes de salir. Si nadie lo revisa, se manda igual al vencer este tiempo — para no
-          dejar a un lead esperando horas. Mínimo {{ verificacion_agendamiento_auto_send_delay_min }} minutos
-          (por defecto 30). Sin límite superior.
+          Es el único control de demora del sistema. Cuando un mensaje que arma Claude requiere verificación
+          —porque el lead está en el tramo de agenda o porque le activaste la verificación de mensajes desde
+          la conversación— queda esperando tu aprobación en el panel. Si nadie lo aprueba dentro de estos
+          minutos, se envía solo, como red de seguridad para que el lead no se enfríe. Los mensajes que NO
+          requieren verificación se envían al instante, sin esperar. Excepciones que nunca se auto-envían
+          (esperan tu OK sí o sí): los mensajes que agendan o cancelan una demo, y los de leads derivados a
+          intervención humana. Poné un valor alto (por ejemplo varias horas) si querés que, en la práctica,
+          ningún mensaje de verificación salga sin que lo revises. Mínimo
+          {{ verificacion_agendamiento_auto_send_delay_min }} minutos (por defecto 30). Sin límite superior.
         </p>
       </div>
 
@@ -173,12 +158,6 @@ const AI_SUGGESTION_DELAY_MIN_SECONDS = 0
 /** Demora máxima antes de pedir sugerencia IA (debe coincidir con admin-api). */
 const AI_SUGGESTION_DELAY_MAX_SECONDS = 3600
 
-/** Auto-envío: 0 = envío inmediato (debe coincidir con admin-api). */
-const AUTO_SEND_DELAY_MIN_SECONDS = 0
-
-/** Auto-envío máximo en segundos (debe coincidir con admin-api). */
-const AUTO_SEND_DELAY_MAX_SECONDS = 3600
-
 /** Mínimo para auto-envío en tramo de agendamiento, en minutos: 0 = inmediato (debe coincidir con admin-api). */
 const VERIFICACION_AGENDAMIENTO_AUTO_SEND_DELAY_MIN_MINUTES = 0
 
@@ -197,8 +176,6 @@ export default {
       /** Límites de demora antes de pedir sugerencia IA (sincronizados con backend). */
       ai_suggestion_delay_min: AI_SUGGESTION_DELAY_MIN_SECONDS,
       ai_suggestion_delay_max: AI_SUGGESTION_DELAY_MAX_SECONDS,
-      auto_send_delay_min: AUTO_SEND_DELAY_MIN_SECONDS,
-      auto_send_delay_max: AUTO_SEND_DELAY_MAX_SECONDS,
       /** Mínimo de demora en tramo de agendamiento (sin tope superior; sincronizado con backend). */
       verificacion_agendamiento_auto_send_delay_min: VERIFICACION_AGENDAMIENTO_AUTO_SEND_DELAY_MIN_MINUTES,
       /** Valores editables del formulario. */
@@ -209,7 +186,6 @@ export default {
         welcome_message_without_name: '',
         welcome_delay_seconds: 60,
         ai_suggestion_delay_seconds: 60,
-        ai_suggestion_auto_send_delay_seconds: 120,
         verificacion_agendamiento_auto_send_delay_minutes: 30,
       },
       /** Snapshot persistido para detectar cambios. */
@@ -236,7 +212,6 @@ export default {
       }
       const welcome_delay = parseInt(this.form.welcome_delay_seconds, 10)
       const ai_delay = parseInt(this.form.ai_suggestion_delay_seconds, 10)
-      const auto_send_delay = parseInt(this.form.ai_suggestion_auto_send_delay_seconds, 10)
       const verif_agendamiento_delay = parseInt(this.form.verificacion_agendamiento_auto_send_delay_minutes, 10)
       if (
         isNaN(welcome_delay) ||
@@ -245,9 +220,6 @@ export default {
         isNaN(ai_delay) ||
         ai_delay < this.ai_suggestion_delay_min ||
         ai_delay > this.ai_suggestion_delay_max ||
-        isNaN(auto_send_delay) ||
-        auto_send_delay < this.auto_send_delay_min ||
-        auto_send_delay > this.auto_send_delay_max ||
         isNaN(verif_agendamiento_delay) ||
         verif_agendamiento_delay < this.verificacion_agendamiento_auto_send_delay_min
       ) {
@@ -306,10 +278,6 @@ export default {
         ai_suggestion_delay_seconds: self.parse_delay_seconds(
           data && data.ai_suggestion_delay_seconds,
           60
-        ),
-        ai_suggestion_auto_send_delay_seconds: self.parse_delay_seconds(
-          data && data.ai_suggestion_auto_send_delay_seconds,
-          120
         ),
         verificacion_agendamiento_auto_send_delay_minutes: self.parse_delay_seconds(
           data && data.verificacion_agendamiento_auto_send_delay_minutes,
@@ -387,21 +355,6 @@ export default {
         return
       }
 
-      const auto_send_delay = parseInt(self.form.ai_suggestion_auto_send_delay_seconds, 10)
-      if (
-        isNaN(auto_send_delay) ||
-        auto_send_delay < self.auto_send_delay_min ||
-        auto_send_delay > self.auto_send_delay_max
-      ) {
-        self.error_message =
-          'La demora de envío automático debe estar entre ' +
-          self.auto_send_delay_min +
-          ' y ' +
-          self.auto_send_delay_max +
-          ' segundos (0 = envío inmediato).'
-        return
-      }
-
       const verif_agendamiento_delay = parseInt(self.form.verificacion_agendamiento_auto_send_delay_minutes, 10)
       if (
         isNaN(verif_agendamiento_delay) ||
@@ -436,7 +389,6 @@ export default {
           welcome_message_without_name: self.form.welcome_message_without_name,
           welcome_delay_seconds: welcome_delay,
           ai_suggestion_delay_seconds: ai_delay,
-          ai_suggestion_auto_send_delay_seconds: auto_send_delay,
           verificacion_agendamiento_auto_send_delay_minutes: verif_agendamiento_delay,
         })
         .then(function (res) {
