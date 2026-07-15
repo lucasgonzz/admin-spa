@@ -147,6 +147,29 @@
           <i v-else class="bi bi-stars" aria-hidden="true" />
         </button>
 
+        <!-- Toggle verificación humana de mensajes por lead -->
+        <button
+          type="button"
+          class="icon-btn"
+          :class="requiere_verificacion_mensajes_enabled ? 'text-warning' : 'text-muted'"
+          :title="requiere_verificacion_mensajes_enabled
+            ? 'Los mensajes de este lead requieren tu verificación antes de enviarse. Clic para desactivar.'
+            : 'Verificación desactivada: los mensajes pueden enviarse automáticamente. Clic para activar.'"
+          :aria-label="requiere_verificacion_mensajes_enabled
+            ? 'Desactivar verificación de mensajes'
+            : 'Activar verificación de mensajes'"
+          :disabled="toggling_requiere_verificacion_mensajes"
+          @click="on_toggle_requiere_verificacion_mensajes"
+        >
+          <span
+            v-if="toggling_requiere_verificacion_mensajes"
+            class="spinner-border spinner-border-sm"
+            role="status"
+            aria-hidden="true"
+          />
+          <i v-else class="bi bi-shield-check" aria-hidden="true" />
+        </button>
+
       </div>
     </div>
 
@@ -518,6 +541,9 @@ export default {
       /** Evita doble POST al activar/desactivar Claude por lead. */
       toggling_claude_auto_reply: false,
 
+      /** Evita doble POST al activar/desactivar la verificación de mensajes por lead. */
+      toggling_requiere_verificacion_mensajes: false,
+
       /** Intervalo que actualiza now_tick para los countdown visibles. */
       now_tick_interval_id: null,
 
@@ -688,6 +714,20 @@ export default {
         return true
       }
       return Boolean(rec.claude_auto_reply)
+    },
+
+    /**
+     * ¿Está activa la verificación de mensajes para el lead abierto? Default false
+     * (si el campo no vino, se asume apagada — al revés que claude_auto_reply).
+     *
+     * @returns {boolean}
+     */
+    requiere_verificacion_mensajes_enabled() {
+      const rec = this.effective_record
+      if (!rec) {
+        return false
+      }
+      return Boolean(rec.requiere_verificacion_mensajes)
     },
 
     /**
@@ -1756,6 +1796,29 @@ export default {
         })
         .catch(function () {
           self.toggling_claude_auto_reply = false
+        })
+    },
+
+    /**
+     * Activa o desactiva la verificación humana de mensajes para este lead.
+     *
+     * @returns {void}
+     */
+    on_toggle_requiere_verificacion_mensajes() {
+      const self = this
+      const rec = this.effective_record
+      if (!rec || !rec.id || this.toggling_requiere_verificacion_mensajes) {
+        return
+      }
+      this.toggling_requiere_verificacion_mensajes = true
+      this.$store
+        .dispatch('lead/toggle_requiere_verificacion_mensajes', rec.id)
+        .then(function (model) {
+          self.toggling_requiere_verificacion_mensajes = false
+          self.on_record_updated(model)
+        })
+        .catch(function () {
+          self.toggling_requiere_verificacion_mensajes = false
         })
     },
 

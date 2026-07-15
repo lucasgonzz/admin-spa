@@ -769,6 +769,23 @@ export default __base_store({
       })
     },
     /**
+     * Prende o apaga la verificación de mensajes del lead abierto. Cuando está activa, todo
+     * mensaje que arme Claude para este lead queda esperando aprobación humana antes de salir.
+     *
+     * @param {Object} context
+     * @param {number} lead_id id del lead
+     * @returns {Promise<Object>} modelo lead actualizado
+     */
+    toggle_requiere_verificacion_mensajes(context, lead_id) {
+      const commit = context.commit
+      return api.post('/lead/' + lead_id + '/toggle-requiere-verificacion-mensajes').then((res) => {
+        const model = res.data.model
+        commit('update_lead_en_conversacion', model)
+        context.dispatch('upsert_model_in_lists', model)
+        return model
+      })
+    },
+    /**
      * Activa o desactiva el flag de intervención humana requerida para el lead abierto.
      *
      * @param {Object} context
