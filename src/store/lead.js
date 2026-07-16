@@ -105,10 +105,11 @@ function apply_viewing_unread_override(state, model) {
     return model
   }
   return Object.assign({}, model, {
+    /* Badge gris (per-admin) de la columna "Sin leer": se limpia al abrir la conversación.
+       pending_verification_count y failed_send_count NO se tocan acá: son globales y bajan
+       cuando el mensaje se verifica o el error se resuelve, no por mirar la conversación. */
     unread_count: 0,
     unread_messages_count: 0,
-    // También limpia el badge gris al abrir la conversación.
-    unseen_count: 0,
   })
 }
 
@@ -975,7 +976,7 @@ export default __base_store({
           const model = res.data.model
           commit('set_mark_read_in_flight', null)
           commit('update_lead_en_conversacion', model)
-          // Refresca la fila en la tabla con el unread_count y followup_count actualizados.
+          // Refresca la fila en la tabla con el unread_count actualizado.
           dispatch('upsert_model_in_lists', model)
           return dispatch('fetch_unread_badges').then(function () {
             return model

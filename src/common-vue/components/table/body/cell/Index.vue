@@ -3,57 +3,42 @@
     v-if="prop.type === 'checkbox'"
     :class="raw ? 'text-success' : 'text-muted'"
   >{{ raw ? 'Sí' : 'No' }}</span>
-  <span v-else-if="prop.type === 'alert_badge'">
-    <span
-      v-if="raw"
-      class="badge lead-badge bg-warning text-dark"
-      :title="'Seguimientos sin revisar' + (followup_count > 0 ? ': ' + followup_count + ' enviados' : '')"
-    >
-      <i class="bi bi-clock-history me-1" aria-hidden="true" />
-      Seg. <template v-if="followup_count > 0">({{ followup_count }})</template>
-    </span>
-    <span
-      v-else-if="followup_count > 0"
-      class="badge lead-badge bg-secondary"
-      :title="followup_count + ' seguimiento(s) enviado(s), ya revisados'"
-    >
-      <i class="bi bi-clock-history me-1" aria-hidden="true" />
-      {{ followup_count }}
-    </span>
-    <span v-else class="text-muted"></span>
-  </span>
-  <!-- Triple badge per-usuario: rojo = mensajes del lead sin leer; gris = actividad total no vista;
-       punto = marca manual "no leído" estilo WhatsApp (solo si no hay actividad real pendiente) -->
+  <!-- Triple badge de la columna "Sin leer":
+       - Gris: mensajes del lead sin leer por el admin logueado (per-admin, baja al abrir la conversación).
+       - Rojo: mensajes por verificar (global; requiere_verificacion + sugerido). Mismo criterio que la fila amarilla.
+       - Amarillo: mensajes con error de envío al lead sin resolver (global).
+       - Punto: marca manual "no leído" estilo WhatsApp, solo si no hay nada real pendiente. -->
   <span v-else-if="prop.type === 'unread_badge'" class="d-flex gap-1 align-items-center">
-    <!-- Badge rojo: solo mensajes recibidos del lead sin leer por el admin -->
+    <!-- Badge gris: mensajes recibidos del lead sin leer por este admin -->
     <span
       v-if="raw_unread_count > 0"
-      class="badge lead-badge bg-danger"
+      class="badge lead-badge bg-secondary"
       style="font-size: 0.75em;"
       :title="'Mensajes del lead sin leer: ' + raw_unread_count"
     >{{ raw_unread_count }}</span>
-    <!-- Badge violeta: seguimientos por aprobar (pendientes de verificación del setter) -->
+    <!-- Badge rojo: mensajes por verificar (global, mismo criterio que la fila amarilla) -->
     <span
-      v-if="raw_pending_followups_count > 0"
-      class="badge lead-badge"
-      style="font-size: 0.75em; background-color: #7c3aed; color: #fff;"
-      :title="'Seguimientos por aprobar: ' + raw_pending_followups_count"
-    >{{ raw_pending_followups_count }}</span>
-    <!-- Badge gris: actividad total no vista (cualquier emisor) que supera los del lead -->
-    <span
-      v-if="raw_unseen_count > raw_unread_count"
-      class="badge lead-badge bg-secondary"
+      v-if="raw_pending_verification_count > 0"
+      class="badge lead-badge bg-danger"
       style="font-size: 0.75em;"
-      :title="'Actividad no vista (total): ' + raw_unseen_count"
-    >{{ raw_unseen_count }}</span>
+      :title="'Mensajes por verificar: ' + raw_pending_verification_count"
+    >{{ raw_pending_verification_count }}</span>
+    <!-- Badge amarillo: mensajes con error de envío al lead sin resolver (global) -->
+    <span
+      v-if="raw_failed_send_count > 0"
+      class="badge lead-badge bg-warning text-dark"
+      style="font-size: 0.75em;"
+      :title="'Mensajes no enviados por error (sin resolver): ' + raw_failed_send_count"
+    >
+      <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true" />{{ raw_failed_send_count }}</span>
     <!-- Punto rojo sin número: marcado manualmente como no leído, sin actividad real pendiente -->
     <span
-      v-if="raw_unread_count === 0 && raw_unseen_count === 0 && raw_manually_unread"
+      v-if="raw_unread_count === 0 && raw_pending_verification_count === 0 && raw_failed_send_count === 0 && raw_manually_unread"
       class="unread-dot-badge"
       title="Marcado manualmente como no leído"
     ></span>
-    <!-- Sin actividad pendiente ni marca manual -->
-    <span v-if="raw_unread_count === 0 && raw_unseen_count === 0 && !raw_manually_unread" class="text-muted"></span>
+    <!-- Sin nada pendiente ni marca manual -->
+    <span v-if="raw_unread_count === 0 && raw_pending_verification_count === 0 && raw_failed_send_count === 0 && !raw_manually_unread" class="text-muted"></span>
   </span>
   <span v-else-if="prop.type === 'pipeline_status'">
     <span
@@ -116,21 +101,10 @@ export default {
       return isNaN(n) ? 0 : n
     },
     /**
-     * Cantidad de mensajes de cualquier emisor sin "seen" por el admin logueado.
-     * Alimenta el badge gris de actividad total no vista.
-     * Retorna 0 si la prop no define unseen_count_key o el valor no es numérico.
-     *
-     * @returns {number}
-     */
-    raw_unseen_count() {
-      if (!this.prop.unseen_count_key) return 0
-      const n = parseInt(this.row[this.prop.unseen_count_key], 10)
-      return isNaN(n) ? 0 : n
-    },
-    /**
      * true si el admin actual marcó manualmente este lead como "no leído" (estilo WhatsApp).
      * Solo se refleja en la UI como punto sin número cuando no hay actividad real pendiente
-     * (raw_unread_count y raw_unseen_count en 0) — ver template de prop.type === 'unread_badge'.
+     * (raw_unread_count, raw_pending_verification_count y raw_failed_send_count en 0) — ver
+     * template de prop.type === 'unread_badge'.
      * Retorna false si la prop no define manually_unread_key.
      *
      * @returns {boolean}
@@ -140,25 +114,25 @@ export default {
       return Boolean(this.row[this.prop.manually_unread_key])
     },
     /**
-     * Cantidad de seguimientos enviados para el badge de alerta.
-     * Lee la clave declarada en `prop.badge_count_key` del row; 0 si no aplica o no es numérico.
+     * Cantidad de mensajes por verificar (global): alimenta el badge ROJO de la columna "Sin leer".
+     * Mismo criterio que la fila amarilla (requiere_verificacion + sugerido). 0 si la prop no define la clave.
      *
      * @returns {number}
      */
-    followup_count() {
-      if (!this.prop.badge_count_key) return 0
-      const n = parseInt(this.row[this.prop.badge_count_key], 10)
+    raw_pending_verification_count() {
+      if (!this.prop.pending_verification_count_key) return 0
+      const n = parseInt(this.row[this.prop.pending_verification_count_key], 10)
       return isNaN(n) ? 0 : n
     },
     /**
-     * Cantidad de seguimientos por aprobar (pendientes de verificación del setter).
-     * Alimenta el badge violeta en la columna "Sin leer". 0 si la prop no define la clave.
+     * Cantidad de mensajes con error de envío al lead sin resolver (global): alimenta el badge
+     * AMARILLO de la columna "Sin leer". 0 si la prop no define la clave.
      *
      * @returns {number}
      */
-    raw_pending_followups_count() {
-      if (!this.prop.pending_followups_count_key) return 0
-      const n = parseInt(this.row[this.prop.pending_followups_count_key], 10)
+    raw_failed_send_count() {
+      if (!this.prop.failed_send_count_key) return 0
+      const n = parseInt(this.row[this.prop.failed_send_count_key], 10)
       return isNaN(n) ? 0 : n
     },
     link_text() {

@@ -948,8 +948,9 @@ export default {
      * Marca o desmarca manualmente un lead como "no leído" para el admin logueado (estilo WhatsApp).
      *
      * Es per-admin: no afecta lo que ven los demás admins. Se muestra en la columna "Sin leer" como
-     * un punto rojo sin número, solo mientras no haya actividad real pendiente (unread_count y
-     * unseen_count en 0 — ver CellRenderer). Se limpia sola la próxima vez que se abra la conversación.
+     * un punto rojo sin número, solo mientras no haya nada real pendiente (unread_count,
+     * pending_verification_count y failed_send_count en 0 — ver CellRenderer). Se limpia sola la
+     * próxima vez que se abra la conversación.
      *
      * @param {Object} lead Lead de la fila clickeada.
      * @returns {void}
