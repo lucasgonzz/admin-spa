@@ -411,11 +411,15 @@
         <div v-if="segment.is_last && show_whatsapp_delivery_error" class="wa-delivery-error text-danger small mt-1">
           <div class="wa-delivery-error-title">
             <i class="bi bi-exclamation-circle me-1" aria-hidden="true" />
-            No enviado por WhatsApp
+            {{ delivery_error_title }}
           </div>
-          <!-- Motivo real del fallo, si el backend lo capturó (prompt 336); si no, solo se ve el título de arriba. -->
+          <!-- Motivo real del fallo, si el backend lo capturó; si no, solo se ve el título de arriba. -->
           <div v-if="whatsapp_send_error_text" class="wa-delivery-error-detail">
             {{ whatsapp_send_error_text }}
+          </div>
+          <!-- Momento del fallo (solo para entrega fallida confirmada por Kapso). -->
+          <div v-if="delivery_error_time" class="wa-delivery-error-detail">
+            {{ delivery_error_time }}
           </div>
         </div>
         <div v-if="segment.is_last && status_badge_text" class="wa-extra mt-1">
@@ -870,8 +874,10 @@ export default {
       return 'enviado'
     },
     /**
-     * Mensaje saliente marcado enviado pero sin id de Meta/Kapso.
-     * Los eventos de cambio de estado nunca muestran este banner aunque no tengan whatsapp_message_id.
+     * true si hay que mostrar el banner de error de entrega bajo la burbuja. Dos casos:
+     *   (a) mensaje saliente marcado enviado pero sin id de Meta/Kapso (nunca se despachó);
+     *   (b) mensaje despachado cuya entrega Kapso reportó como fallida (whatsapp_delivery_status = 'fallido').
+     * Los eventos de cambio de estado (is_status_event) nunca muestran este banner.
      * @returns {boolean}
      */
     show_whatsapp_delivery_error() {
@@ -882,7 +888,8 @@ export default {
       if (this.message.status !== 'enviado') {
         return false
       }
-      return !this.message.whatsapp_message_id
+      /* (a) nunca se despachó (sin wamid) o (b) despachado pero la entrega falló. */
+      return !this.message.whatsapp_message_id || this.message.whatsapp_delivery_status === 'fallido'
     },
     /**
      * Motivo legible del fallo de envío por WhatsApp, si el backend lo capturó (prompt 336).
@@ -892,6 +899,34 @@ export default {
      */
     whatsapp_send_error_text() {
       return ((this.message.whatsapp_send_error || '') + '').trim()
+    },
+    /**
+     * Título del banner de error de entrega, según el caso.
+     *   - Entrega fallida confirmada por Kapso: "Falló la entrega por WhatsApp".
+     *   - Nunca despachado (sin wamid): "No enviado por WhatsApp".
+     * @returns {string}
+     */
+    delivery_error_title() {
+      if (this.message.whatsapp_delivery_status === 'fallido') {
+        return 'Falló la entrega por WhatsApp'
+      }
+      return 'No enviado por WhatsApp'
+    },
+    /**
+     * Momento del fallo de entrega, legible. Solo para el caso 'fallido' (el evento failed del
+     * webhook es el último update del mensaje, así que updated_at marca el momento del fallo).
+     * Cadena vacía para el otro caso (sin wamid), que no tiene un instante de fallo asociado.
+     * @returns {string}
+     */
+    delivery_error_time() {
+      if (this.message.whatsapp_delivery_status !== 'fallido') {
+        return ''
+      }
+      var formatted = this.format_delivery_timestamp(this.message.updated_at)
+      if (!formatted) {
+        return ''
+      }
+      return 'Falló ' + formatted
     },
     /**
      * true si el lead reaccionó a este mensaje con un emoji de WhatsApp.
