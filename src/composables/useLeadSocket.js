@@ -260,7 +260,13 @@ export function useLeadSocket(options) {
       }
     }
 
-    if (viewing_this_lead && lead_id != null) {
+    // Solo re-marcar leído si el evento trae un mensaje puntual nuevo (lead_message_id real).
+    // Sin esto, el propio POST mark-whatsapp-messages-read (que no pasa lead_message_id al
+    // emitir su broadcast) hace eco al mismo admin que lo disparó, y schedule_mark_read_if_viewing
+    // vuelve a llamarlo -> nuevo broadcast -> bucle infinito cada ~250ms hasta 429 Too Many
+    // Attempts (bug reportado por Lucas, 17/7/2026). mark-whatsapp-messages-read ya marca leído
+    // TODO el hilo de una sola vez, así que no hace falta re-dispararlo por su propio eco.
+    if (viewing_this_lead && lead_id != null && lead_message_id != null) {
       /** El operador ya ve el hilo: marcar leído en backend en lugar de sumar badges locales. */
       schedule_mark_read_if_viewing(lead_id)
     } else if (event_data.unread_total != null) {
