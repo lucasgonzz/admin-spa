@@ -265,6 +265,25 @@
         </button>
       </div>
 
+      <!-- Adjunto pendiente de envío: nombre + editar (solo imagen) + quitar -->
+      <div v-if="pending_attachment" class="lead-attachment-preview">
+        <span class="lead-attachment-icon">{{ attachment_is_image ? '🖼' : '📎' }}</span>
+        <span class="lead-attachment-name text-truncate">{{ pending_attachment.name }}</span>
+        <button
+          v-if="attachment_is_image"
+          type="button"
+          class="btn btn-sm btn-link lead-attachment-edit"
+          title="Volver a marcar la imagen"
+          @click="open_image_editor(pending_attachment)"
+        >Editar</button>
+        <button
+          type="button"
+          class="btn btn-sm btn-link lead-attachment-remove"
+          title="Quitar adjunto"
+          @click="remove_attachment"
+        >✕</button>
+      </div>
+
       <!-- Área de redacción tipo WhatsApp -->
       <div class="d-flex align-items-end gap-2">
 
@@ -294,6 +313,25 @@
           <i class="bi bi-chevron-up" aria-hidden="true" />
         </button>
 
+        <!-- Adjuntar imagen o documento para enviar al lead -->
+        <button
+          type="button"
+          class="icon-btn flex-shrink-0 text-muted"
+          title="Adjuntar imagen o documento"
+          aria-label="Adjuntar imagen o documento"
+          :disabled="enviando_adjunto || !whatsapp_window_open"
+          @click="open_file_input"
+        >
+          <i class="bi bi-paperclip" aria-hidden="true" />
+        </button>
+        <input
+          ref="attachment_file_input"
+          class="d-none"
+          type="file"
+          accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,.zip,.rar"
+          @change="on_file_change"
+        />
+
         <textarea
           ref="message_input_ref"
           v-model="mensaje_directo"
@@ -305,11 +343,12 @@
           :disabled="enviando_directo || !whatsapp_window_open"
           @input="on_input_resize"
           @keydown.enter="on_message_input_keydown"
+          @paste="on_paste"
         />
 
-        <!-- Botón mic cuando no hay texto: grabación de audio -->
+        <!-- Botón mic cuando no hay texto ni adjunto pendiente: grabación de audio -->
         <button
-          v-if="!has_mensaje_directo"
+          v-if="!has_mensaje_directo && !pending_attachment"
           type="button"
           class="icon-btn flex-shrink-0"
           :class="recording_audio ? 'text-danger audio-recording-pulse' : 'text-muted'"
@@ -326,18 +365,18 @@
           <i v-else class="bi" :class="recording_audio ? 'bi-stop-circle-fill' : 'bi-mic'" aria-hidden="true" />
         </button>
 
-        <!-- Botón enviar cuando hay texto -->
+        <!-- Botón enviar cuando hay texto o adjunto pendiente -->
         <button
           v-else
           type="button"
           class="icon-btn flex-shrink-0 text-primary"
-          :disabled="enviando_directo || !whatsapp_window_open"
+          :disabled="enviando_directo || enviando_adjunto || !whatsapp_window_open"
           title="Enviar mensaje"
           aria-label="Enviar mensaje"
-          @click="on_enviar_directo"
+          @click="on_send_click"
         >
           <span
-            v-if="enviando_directo"
+            v-if="enviando_directo || enviando_adjunto"
             class="spinner-border spinner-border-sm"
             role="status"
             aria-hidden="true"
@@ -431,12 +470,22 @@
     :lead="effective_record"
   />
 
+  <!-- Editor de anotaciones sobre imagen (pegada o adjunta) antes de enviarla al lead -->
+  <image-annotation-editor
+    :show="image_editor_visible"
+    :source_file="image_editor_source_file"
+    @update:show="image_editor_visible = $event"
+    @confirm="on_image_annotation_confirm"
+    @cancel="on_image_annotation_cancel"
+  />
+
 </template>
 
 <script>
 import MessageBubble from '@/components/lead/conversation/MessageBubble.vue'
 import LeadResumenTab from '@/components/lead/resumen/Index.vue'
 import TemplatePickerModal from '@/components/lead/conversation/TemplatePickerModal.vue'
+import ImageAnnotationEditor from '@/components/common/ImageAnnotationEditor.vue'
 import api from '@/utils/axios'
 import { OggOpusRecorder } from '@/utils/oggOpusRecorder'
 import { copy_lead_conversation_to_clipboard } from '@/utils/lead_conversation_clipboard'
@@ -464,6 +513,7 @@ export default {
     MessageBubble,
     LeadResumenTab,
     TemplatePickerModal,
+    ImageAnnotationEditor,
   },
   mixins: [lead_conversation_date_dividers, conversation_scroll_behavior],
 
@@ -588,6 +638,15 @@ export default {
 
       /** Píxeles de overflow del badge (alimenta --badge-scroll-px en la animación). */
       demo_badge_scroll_px: 0,
+
+      /* Archivo pendiente de envío al lead (imagen anotada o documento). */
+      pending_attachment: null,
+      /* true mientras se sube el adjunto al backend. */
+      enviando_adjunto: false,
+      /* Modal de anotación sobre imagen visible. */
+      image_editor_visible: false,
+      /* Imagen en edición antes de confirmar el adjunto. */
+      image_editor_source_file: null,
     }
   },
 
@@ -793,6 +852,14 @@ export default {
      */
     has_mensaje_simulado() {
       return (this.mensaje_simulado || '').trim() !== ''
+    },
+
+    /**
+     * true si el adjunto pendiente es una imagen.
+     * @returns {boolean}
+     */
+    attachment_is_image() {
+      return !!(this.pending_attachment && this.pending_attachment.type.indexOf('image') === 0)
     },
 
     /**
@@ -1517,6 +1584,168 @@ export default {
         })
         .catch(function () {
           self.enviando_directo = false
+        })
+    },
+
+    /**
+     * Captura una imagen pegada con Ctrl+V y abre el editor de anotaciones.
+     *
+     * @param {ClipboardEvent} event
+     * @returns {void}
+     */
+    on_paste(event) {
+      const items = event.clipboardData ? event.clipboardData.items : []
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i]
+        if (item.kind === 'file' && item.type.indexOf('image/') === 0) {
+          const file = item.getAsFile()
+          if (file) {
+            this.open_image_editor(file)
+          }
+          return
+        }
+      }
+    },
+
+    /**
+     * Abre el modal para dibujar sobre la imagen antes de adjuntarla.
+     *
+     * @param {File} file Imagen a editar (pegada o elegida del selector).
+     * @returns {void}
+     */
+    open_image_editor(file) {
+      if (!file || file.type.indexOf('image/') !== 0) {
+        return
+      }
+      this.image_editor_source_file = file
+      this.image_editor_visible = true
+    },
+
+    /**
+     * Recibe la imagen anotada exportada desde el editor y la deja como adjunto pendiente.
+     *
+     * @param {File} annotated_file Imagen final con las marcas dibujadas por el admin.
+     * @returns {void}
+     */
+    on_image_annotation_confirm(annotated_file) {
+      this.pending_attachment = annotated_file
+      this.image_editor_source_file = null
+    },
+
+    /**
+     * Cierra el editor de anotaciones sin adjuntar nada.
+     *
+     * @returns {void}
+     */
+    on_image_annotation_cancel() {
+      this.image_editor_source_file = null
+    },
+
+    /**
+     * Abre el selector de archivos nativo del navegador.
+     *
+     * @returns {void}
+     */
+    open_file_input() {
+      this.$refs.attachment_file_input.click()
+    },
+
+    /**
+     * Archivo elegido desde el selector: las imágenes pasan por el editor de anotaciones;
+     * el resto (documentos) queda directo como adjunto pendiente.
+     *
+     * @param {Event} event Evento `change` del input file.
+     * @returns {void}
+     */
+    on_file_change(event) {
+      const files = event.target.files || []
+      if (files.length) {
+        const file = files[0]
+        if (file.type.indexOf('image/') === 0) {
+          this.open_image_editor(file)
+        } else {
+          this.pending_attachment = file
+        }
+      }
+      event.target.value = ''
+    },
+
+    /**
+     * Quita el adjunto pendiente de envío.
+     *
+     * @returns {void}
+     */
+    remove_attachment() {
+      this.pending_attachment = null
+      if (this.$refs.attachment_file_input) {
+        this.$refs.attachment_file_input.value = ''
+      }
+    },
+
+    /**
+     * Acción del botón enviar: si hay adjunto pendiente lo manda, si no manda el texto.
+     *
+     * @returns {void}
+     */
+    on_send_click() {
+      if (this.pending_attachment) {
+        this.send_pending_attachment()
+        return
+      }
+      this.on_enviar_directo()
+    },
+
+    /**
+     * Envía el adjunto pendiente (imagen o documento) al lead. Las imágenes van al endpoint
+     * de imagen y el resto al de documento; el texto escrito en el input viaja como caption.
+     * Al terminar refresca la conversación igual que el resto de los envíos directos.
+     *
+     * @returns {void}
+     */
+    send_pending_attachment() {
+      const self = this
+      if (!this.whatsapp_window_open) {
+        return
+      }
+      const rec = this.effective_record
+      const file = this.pending_attachment
+      if (!file || !rec || !rec.id || this.enviando_adjunto) {
+        return
+      }
+      /* Distingue imagen de documento por el mime type del archivo pendiente. */
+      const is_image = file.type.indexOf('image/') === 0
+      const caption = (this.mensaje_directo || '').trim()
+      const form = new FormData()
+      form.append(is_image ? 'image' : 'document', file, file.name)
+      if (caption !== '') {
+        form.append('caption', caption)
+      }
+      const endpoint = is_image
+        ? '/lead/' + rec.id + '/send-direct-image'
+        : '/lead/' + rec.id + '/send-direct-document'
+      this.enviando_adjunto = true
+      api
+        .post(endpoint, form, { headers: { 'Content-Type': 'multipart/form-data' } })
+        .then(function (res) {
+          self.enviando_adjunto = false
+          self.pending_attachment = null
+          self.mensaje_directo = ''
+          if (self.$refs.attachment_file_input) {
+            self.$refs.attachment_file_input.value = ''
+          }
+          /* Volver al alto de una línea tras vaciar el textarea (mismo comportamiento que on_enviar_directo). */
+          self.$nextTick(function () {
+            self.sync_message_input_height()
+          })
+          self.on_record_updated(res.data.model)
+          self.schedule_scroll_to_bottom()
+        })
+        .catch(function (err) {
+          self.enviando_adjunto = false
+          const msg =
+            (err.response && err.response.data && err.response.data.message) ||
+            'No se pudo enviar el adjunto.'
+          alert(msg)
         })
     },
 
@@ -2376,6 +2605,45 @@ export default {
 
 .demo-date-badge-inner--scrolling {
   animation: demo_badge_marquee 8s ease-in-out infinite;
+}
+
+/* Fila compacta que muestra el adjunto (imagen o documento) pendiente de envío */
+.lead-attachment-preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  margin-bottom: 6px;
+  background: #f0f4ff;
+  border: 1px solid #c3d0f5;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #3a3a5c;
+  max-width: 100%;
+}
+.lead-attachment-icon {
+  flex-shrink: 0;
+}
+.lead-attachment-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lead-attachment-edit,
+.lead-attachment-remove {
+  flex-shrink: 0;
+  padding: 0 4px;
+  font-size: 12px;
+  line-height: 1;
+  text-decoration: none;
+}
+.lead-attachment-remove {
+  color: #888;
+}
+.lead-attachment-remove:hover {
+  color: #c53030;
 }
 </style>
 
