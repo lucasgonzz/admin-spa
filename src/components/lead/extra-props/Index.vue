@@ -136,14 +136,6 @@
           >
             {{ loading_action === 'demo_mail' ? 'Enviando...' : 'Enviar mail 1 - DEMO' }}
           </button>
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-primary"
-            :disabled="loading_action !== ''"
-            @click="send_followup_mail"
-          >
-            {{ loading_action === 'followup' ? 'Enviando...' : 'Enviar Mail 2 - Propuesta' }}
-          </button>
           <!-- Promover a cliente: crea el Client en admin-api y genera las tareas del equipo -->
           <button
             v-if="!record.promoted_client_id"
@@ -154,14 +146,6 @@
           >
             <i class="bi bi-person-check-fill me-1" />
             {{ loading_action === 'fetching_subdomain' ? 'Sugiriendo...' : 'Promover a cliente' }}
-          </button>
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-success"
-            :disabled="loading_action !== '' || !can_run_user_setup"
-            @click="run_user_setup"
-          >
-            {{ loading_action === 'user_setup' ? 'Ejecutando...' : 'Correr user setup' }}
           </button>
         </div>
 
@@ -202,27 +186,6 @@
             </div>
             <div v-if="mail_status.last_error" class="small text-danger mt-1">
               <strong>Último error:</strong> {{ mail_status.last_error }}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Estado del setup remoto: demo setup y user setup -->
-    <div class="card border-secondary border-opacity-25 mb-3">
-      <div class="card-header bg-light py-2">
-        <span class="small fw-semibold">Setup remoto</span>
-      </div>
-      <div class="card-body py-2">
-        <div class="row g-2">
-          <div v-for="setup_row in setup_status_cards" :key="setup_row.key" class="col-md-6">
-            <small class="text-muted d-block">{{ setup_row.title }}</small>
-            <span class="badge" :class="setup_row.badge_class">{{ setup_row.status_text }}</span>
-            <div class="small mt-1">
-              <strong>{{ setup_row.time_label }}:</strong> {{ setup_row.last_sent_at_text }}
-            </div>
-            <div v-if="setup_row.last_error" class="small text-danger mt-1">
-              <strong>Último error:</strong> {{ setup_row.last_error }}
             </div>
           </div>
         </div>
@@ -339,7 +302,7 @@ export default {
   },
   computed: {
     /**
-     * Devuelve las 8 etapas del pipeline con estado dinámico calculado a partir del record.
+     * Devuelve las 13 etapas del pipeline con estado dinámico calculado a partir del record.
      * Cada etapa incluye: id, label, status, timestamp, detail, action y action_label.
      * @returns {Array<Object>}
      */
@@ -535,6 +498,34 @@ export default {
           action_label_repeat: null,
           allow_repeat: false,
         },
+        {
+          id: 12,
+          label: 'Evento de calendario del closer creado',
+          /* Completado cuando el lead tiene google_event_id asignado. */
+          status: r.google_event_id ? 'completed' : 'pending',
+          detail: null,
+          action: 'force_calendar_event',
+          action_label: 'Forzar creación',
+          action_label_repeat: 'Volver a forzar',
+          allow_repeat: true,
+          execution_at: null,
+          execution_source: null,
+        },
+        {
+          id: 13,
+          label: 'Link de Meet seteado',
+          /* Completado cuando el lead tiene meet_url asignado. Nota: en Google Calendar el */
+          /* Meet se obtiene AL crear el evento -- por eso esta acción es la misma que la de */
+          /* la etapa 12; se muestran separadas porque son dos datos distintos para Lucas. */
+          status: r.meet_url ? 'completed' : 'pending',
+          detail: null,
+          action: 'force_calendar_event',
+          action_label: 'Forzar Meet',
+          action_label_repeat: 'Volver a forzar',
+          allow_repeat: true,
+          execution_at: null,
+          execution_source: null,
+        },
       ]
     },
     /**
@@ -595,20 +586,6 @@ export default {
       return !this.record.promoted_client_id
     },
     /**
-     * Habilita user setup cuando el lead está cerrado ganado, tiene Client vinculado
-     * y ese Client tiene API URL cargada en su perfil.
-     * @returns {boolean}
-     */
-    can_run_user_setup() {
-      if (!this.record || this.record.status !== 'cerrado_ganado') {
-        return false
-      }
-      if (!this.record.promoted_client_id) {
-        return false
-      }
-      return this.client_production_api_url.length > 0
-    },
-    /**
      * Habilita "Iniciar implementación" cuando el lead tiene Client promovido sin implementación activa.
      * @returns {boolean}
      */
@@ -660,36 +637,6 @@ export default {
         )
       )
       return cards
-    },
-    /**
-     * Tarjetas de trazabilidad de demo-setup y user-setup (estado, última corrida, error).
-     * @returns {Array<Object>}
-     */
-    setup_status_cards() {
-      if (!this.record) {
-        return []
-      }
-      /* Filas de UI alineadas al formato de mail_status_cards. */
-      var rows = []
-      rows.push(
-        this.build_setup_status_card(
-          'demo_setup_remote',
-          'Demo setup (ERP demo)',
-          this.record.demo_setup_status,
-          this.record.demo_setup_last_run_at,
-          this.record.demo_setup_last_error
-        )
-      )
-      rows.push(
-        this.build_setup_status_card(
-          'user_setup_remote',
-          'User setup (ERP productiva)',
-          this.record.user_setup_status,
-          this.record.user_setup_last_run_at,
-          this.record.user_setup_last_error
-        )
-      )
-      return rows
     },
   },
   watch: {
@@ -917,50 +864,6 @@ export default {
       return card
     },
     /**
-     * Construye tarjeta de estado para una corrida remota (demo setup / user setup).
-     * @param {string} key clave única para v-for.
-     * @param {string} title título visible.
-     * @param {string|null} status valor persistido (pendiente, ejecutandose, exitoso, fallido).
-     * @param {string|null} last_run_at fecha/hora de último intento registrado en servidor.
-     * @param {string|null} last_error mensaje de fallo si existe.
-     * @returns {Object}
-     */
-    build_setup_status_card(key, title, status, last_run_at, last_error) {
-      /* Estado normalizado en minúsculas para comparar con valores del backend. */
-      var normalized_status = (status || 'pendiente').toString().toLowerCase()
-      /* Objeto de presentación homogéneo con mail_status_cards. */
-      var card = {
-        key: key,
-        title: title,
-        status_text: 'Pendiente',
-        badge_class: 'bg-secondary',
-        last_sent_at_text: this.format_datetime(last_run_at),
-        last_error: last_error || '',
-        time_label: 'Última corrida',
-      }
-      if (card.last_error) {
-        card.status_text = 'Fallido'
-        card.badge_class = 'bg-danger'
-        return card
-      }
-      if (normalized_status === 'ejecutandose') {
-        card.status_text = 'En ejecución'
-        card.badge_class = 'bg-warning text-dark'
-        return card
-      }
-      if (normalized_status === 'exitoso') {
-        card.status_text = 'Exitoso'
-        card.badge_class = 'bg-success'
-        return card
-      }
-      if (normalized_status === 'fallido') {
-        card.status_text = 'Fallido'
-        card.badge_class = 'bg-danger'
-        return card
-      }
-      return card
-    },
-    /**
      * Actualiza store y padre con el modelo devuelto por el backend.
      * @param {Object} model lead actualizado.
      * @returns {void}
@@ -1015,20 +918,6 @@ export default {
           return self.$store.dispatch('lead/send_demo_mail', self.record.id)
         },
         'Mail 1 - DEMO enviado correctamente.'
-      )
-    },
-    /**
-     * Envía el mail de seguimiento del lead.
-     * @returns {void}
-     */
-    send_followup_mail() {
-      var self = this
-      self.run_action(
-        'followup',
-        function () {
-          return self.$store.dispatch('lead/send_followup_mail', self.record.id)
-        },
-        'Mail de seguimiento enviado.'
       )
     },
     /**
@@ -1101,28 +990,6 @@ export default {
     cancel_subdomain_confirm() {
       this.showing_subdomain_confirm = false
       this.subdomain_preview = ''
-    },
-    /**
-     * Ejecuta el user setup del sistema real.
-     * @returns {void}
-     */
-    run_user_setup() {
-      var self = this
-      if (!self.can_run_user_setup) {
-        if (!self.record.promoted_client_id) {
-          self.open_feedback('Primero promové el lead a cliente.')
-          return
-        }
-        self.open_feedback('Cargá la API URL en el perfil del cliente (Clientes) antes de ejecutar user setup.')
-        return
-      }
-      self.run_action(
-        'user_setup',
-        function () {
-          return self.$store.dispatch('lead/run_user_setup', self.record.id)
-        },
-        'User setup ejecutado.'
-      )
     },
     /**
      * Inicia la implementación del cliente promovido y dispara la plantilla de bienvenida por WhatsApp.

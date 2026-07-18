@@ -599,6 +599,19 @@ export default __base_store({
       })
     },
     /**
+     * Fuerza la creación del evento de calendario del closer (con Meet) manualmente,
+     * sin duplicar si ya existe. Usada por las etapas 12 y 13 del pipeline (mismo backend,
+     * dos botones/checks visuales distintos: evento creado y link de Meet seteado).
+     * @param {Object} context contexto del módulo Vuex.
+     * @param {number} lead_id identificador del lead.
+     * @returns {Promise<Object>} modelo actualizado devuelto por el backend.
+     */
+    force_calendar_event(context, lead_id) {
+      return api.post('/lead/' + lead_id + '/force-calendar-event').then((res) => {
+        return res.data.model
+      })
+    },
+    /**
      * Fuerza el seguimiento que corresponde al lead ahora mismo (testing manual),
      * sin esperar horas_espera ni estar bloqueado por sugerencia pendiente.
      *
