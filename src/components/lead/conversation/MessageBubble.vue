@@ -51,27 +51,37 @@
             :src="attachment_open_url(message.attachments[0])"
             :is_outgoing="bubble_side === 'out'"
           />
-          <a
+          <!-- Imagen: click abre el visor a pantalla completa en la misma página -->
+          <button
             v-else-if="is_image_message"
-            :href="attachment_open_url(message.attachments[0])"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="wa-attachment-image-link"
-            title="Abrir imagen en nueva pestaña">
+            type="button"
+            class="wa-attachment-image-btn"
+            title="Ver imagen en grande"
+            @click="open_image_preview(attachment_open_url(message.attachments[0]))">
             <img
               :src="attachment_open_url(message.attachments[0])"
               class="wa-attachment-image"
               :alt="attachment_display_name(message.attachments[0])" />
-          </a>
+          </button>
+          <!-- Video: reproductor inline con controles -->
+          <video
+            v-else-if="is_video_message"
+            controls
+            preload="metadata"
+            class="wa-attachment-video"
+            :src="attachment_open_url(message.attachments[0])">
+            Tu navegador no soporta la reproducción de video.
+          </video>
+          <!-- Otros archivos (PDF, Excel, Word, etc.): descarga real con el nombre original -->
           <a
             v-else
-            :href="attachment_open_url(message.attachments[0])"
-            target="_blank"
-            rel="noopener noreferrer"
+            :href="attachment_download_url(message.attachments[0])"
+            :download="attachment_display_name(message.attachments[0])"
             class="wa-file-attachment"
-            :title="'Abrir ' + attachment_display_name(message.attachments[0])">
+            :title="'Descargar ' + attachment_display_name(message.attachments[0])">
             <i class="bi wa-file-attachment-icon" :class="attachment_icon_class(message.attachments[0])" aria-hidden="true" />
             <span class="wa-file-attachment-name">{{ attachment_display_name(message.attachments[0]) }}</span>
+            <i class="bi bi-download wa-file-attachment-download" aria-hidden="true" />
           </a>
         </template>
         <!-- Modo lectura: una burbuja por cada parte del mensaje (o una sola si no hay separador) -->
@@ -490,18 +500,26 @@
     </div>
     </div>
   </div>
+
+  <!-- Visor de imagen a pantalla completa (prompt 468, comparte el lightbox del prompt 467). Nodo raíz aparte: usa teleport, así que su ubicación no afecta el layout de la burbuja. -->
+  <image-lightbox
+    :show="image_preview_visible"
+    :image_url="image_preview_url"
+    @update:show="image_preview_visible = $event"
+    @close="image_preview_visible = false" />
 </template>
 
 <script>
 import AudioPlayer from '@/components/lead/conversation/AudioPlayer.vue'
 import VerificationActionsPanel from '@/components/lead/conversation/verification-panel/Index.vue'
+import ImageLightbox from '@/components/common/ImageLightbox.vue'
 
 /**
  * Burbuja de mensaje de la conversación WhatsApp (lead, setter, sistema / IA).
  */
 export default {
   name: 'LeadMessageBubble',
-  components: { AudioPlayer, VerificationActionsPanel },
+  components: { AudioPlayer, VerificationActionsPanel, ImageLightbox },
   emits: [
     'enviar',
     'guardar_y_enviar',
@@ -534,6 +552,10 @@ export default {
       edited_text: '',
       /** Último paquete de acciones armado por el panel de verificación (prompt 323). */
       panel_final_actions: null,
+      /** Visor de imagen a pantalla completa (en la misma página). */
+      image_preview_visible: false,
+      /** URL de la imagen que se está viendo ampliada. */
+      image_preview_url: '',
     }
   },
   computed: {
@@ -1368,6 +1390,21 @@ export default {
       return false
     },
     /**
+     * true si el mensaje es un video con adjunto local.
+     * @returns {boolean}
+     */
+    is_video_message() {
+      const kind = ((this.message.kind || '') + '').toLowerCase()
+      if (kind === 'video') {
+        return true
+      }
+      const att = this.message.attachments && this.message.attachments[0]
+      if (att && att.mime && String(att.mime).indexOf('video/') === 0) {
+        return true
+      }
+      return false
+    },
+    /**
      * true si el contenido es el placeholder legado de Kapso (Document attached… URL: …).
      * @returns {boolean}
      */
@@ -1651,6 +1688,35 @@ export default {
       this.$emit('toggle_deleted_from_context')
     },
     /**
+     * Abre el visor de imagen a pantalla completa con la URL dada.
+     *
+     * @param {string} url URL de la imagen a mostrar ampliada.
+     * @returns {void}
+     */
+    open_image_preview(url) {
+      const clean = (url || '') + ''
+      if (clean.trim() === '') {
+        return
+      }
+      this.image_preview_url = clean
+      this.image_preview_visible = true
+    },
+    /**
+     * URL de descarga forzada (Content-Disposition: attachment) del adjunto.
+     * Prioriza el download_url firmado que arma admin-api (prompt 464); si no está
+     * disponible (adjuntos viejos sin ese campo), cae a la URL de apertura normal.
+     *
+     * @param {Object} attachment Fila lead_message_attachments.
+     * @returns {string}
+     */
+    attachment_download_url(attachment) {
+      const download = ((attachment && attachment.download_url) || '') + ''
+      if (download.trim() !== '') {
+        return download.trim()
+      }
+      return this.attachment_open_url(attachment)
+    },
+    /**
      * URL para abrir el adjunto: prioriza public_url firmada de la API.
      *
      * @param {Object} attachment Fila lead_message_attachments.
@@ -1906,10 +1972,14 @@ export default {
   white-space: nowrap;
   user-select: none;
 }
-.wa-attachment-image-link {
+.wa-attachment-image-btn {
   display: inline-block;
   margin-bottom: 0.25rem;
   max-width: min(100%, 320px);
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
 }
 .wa-attachment-image {
   display: block;
@@ -1917,6 +1987,14 @@ export default {
   max-height: 180px;
   border-radius: 6px;
   object-fit: cover;
+}
+.wa-attachment-video {
+  display: block;
+  max-width: min(100%, 320px);
+  max-height: 240px;
+  margin-bottom: 0.25rem;
+  border-radius: 6px;
+  background: #000;
 }
 .wa-file-attachment {
   display: inline-flex;
@@ -1943,6 +2021,11 @@ export default {
   font-size: 0.85rem;
   line-height: 1.25;
   word-break: break-word;
+}
+.wa-file-attachment-download {
+  font-size: 1rem;
+  flex-shrink: 0;
+  opacity: 0.65;
 }
 .wa-edit-textarea {
   font-size: 0.9375rem;
