@@ -153,7 +153,7 @@
 </template>
 
 <script>
-import ImageLightbox from '@/components/support/ImageLightbox.vue'
+import ImageLightbox from '@/components/common/ImageLightbox.vue'
 import BorderProgressWrap from '@/components/support/BorderProgressWrap.vue'
 
 export default {

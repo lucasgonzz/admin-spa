@@ -125,7 +125,7 @@
 </template>
 
 <script>
-import ImageAnnotationEditor from '@/components/support/ImageAnnotationEditor.vue'
+import ImageAnnotationEditor from '@/components/common/ImageAnnotationEditor.vue'
 import BorderProgressWrap from '@/components/support/BorderProgressWrap.vue'
 import api from '@/utils/axios'
 import { OggOpusRecorder } from '@/utils/oggOpusRecorder'

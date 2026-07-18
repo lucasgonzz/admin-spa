@@ -32,7 +32,7 @@ import { register_modal_escape } from '@/utils/modal_escape'
  * Visor de imagen a pantalla completa dentro de la misma página (sin nueva pestaña).
  */
 export default {
-  name: 'SupportImageLightbox',
+  name: 'ImageLightbox',
   props: {
     /** Controla si el visor está visible. */
     show: {
