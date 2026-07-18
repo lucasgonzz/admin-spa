@@ -63,6 +63,7 @@
           v-else-if="question.type === 'tabla_descuentos'"
           :question="question"
           :value="form_data[question.key] || []"
+          :payment_method_options="payment_method_options"
           @update:value="on_update(question.key, $event)"
         />
 
@@ -137,6 +138,15 @@ export default {
     on_field_change: {
       type: Function,
       default: null,
+    },
+
+    /**
+     * Opciones de métodos de pago { key, label } que baja a FieldTablaDescuentos
+     * para reemplazar el input de texto libre por un select.
+     */
+    payment_method_options: {
+      type: Array,
+      default: function () { return [] },
     },
   },
 

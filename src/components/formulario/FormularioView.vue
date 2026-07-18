@@ -43,6 +43,7 @@
             :section="active_section"
             :form_data="form_data"
             :on_field_change="on_field_change"
+            :payment_method_options="payment_method_options"
           />
         </div>
       </div>
@@ -145,6 +146,13 @@ export default {
        * Definición de secciones importada de questions.js.
        */
       sections: SECTIONS,
+
+      /**
+       * Opciones de métodos de pago { key, label } para alimentar el select
+       * de FieldTablaDescuentos. Vienen desde el backend en el show() del
+       * formulario (sembradas por owner en empresa-api).
+       */
+      payment_method_options: [],
     }
   },
 
@@ -233,6 +241,8 @@ export default {
             }
             self.client_name = res.data.client_name || ''
             self.form_data   = saved_data
+            /* Opciones de método de pago para el select de descuentos/recargos */
+            self.payment_method_options = res.data.payment_method_options || []
 
             /* Restaurar la sección donde el usuario se quedó (si fue guardada) */
             if (

@@ -15,13 +15,21 @@
         <tbody>
           <tr v-for="(row, index) in rows" :key="index" class="field-tabla__row">
             <td>
-              <input
+              <!-- Select de método de pago: reemplaza el texto libre por las opciones
+                   sembradas en el backend (payment_method_options), para poder enganchar
+                   el descuento con el método real al procesar ventas -->
+              <select
                 v-model="row.method"
-                type="text"
-                class="form-control form-control-sm field-tabla__input"
-                placeholder="Ej: Efectivo, Tarjeta..."
-                @input="on_change"
-              />
+                class="form-select form-select-sm field-tabla__input"
+                @change="on_change"
+              >
+                <option value="">Elegí un método</option>
+                <option
+                  v-for="opt in payment_method_options"
+                  :key="opt.key"
+                  :value="opt.key"
+                >{{ opt.label }}</option>
+              </select>
             </td>
             <td>
               <!-- Select: Descuento o Recargo -->
@@ -80,13 +88,19 @@
             <i class="bi bi-trash"></i>
           </button>
         </div>
-        <input
+        <!-- Select de método de pago (versión mobile), mismas opciones que el desktop -->
+        <select
           v-model="row.method"
-          type="text"
-          class="form-control form-control-sm mb-2"
-          placeholder="Método de pago"
-          @input="on_change"
-        />
+          class="form-select form-select-sm mb-2"
+          @change="on_change"
+        >
+          <option value="">Elegí un método</option>
+          <option
+            v-for="opt in payment_method_options"
+            :key="opt.key"
+            :value="opt.key"
+          >{{ opt.label }}</option>
+        </select>
         <select
           v-model="row.type"
           class="form-select form-select-sm mb-2"
@@ -122,10 +136,12 @@
 <script>
 /**
  * Tabla dinámica de descuentos o recargos por método de pago.
- * Columnas: método, tipo (descuento/recargo), porcentaje.
+ * Columnas: método (select sobre payment_method_options), tipo (descuento/recargo), porcentaje.
  *
  * @prop {object} question - Definición de la pregunta.
- * @prop {Array} value - Array de objetos { method, type, percentage }.
+ * @prop {Array} value - Array de objetos { method, type, percentage }. `method` guarda el
+ *                        `key` del método de pago elegido (ej. 'efectivo'), no texto libre.
+ * @prop {Array} payment_method_options - Opciones { key, label } para el select de método.
  * @emits update:value - Emite el array actualizado al padre.
  */
 export default {
@@ -145,6 +161,15 @@ export default {
      * Cada elemento: { method: string, type: 'descuento'|'recargo', percentage: number }
      */
     value: {
+      type: Array,
+      default: function () { return [] },
+    },
+
+    /**
+     * Opciones de métodos de pago { key, label } para poblar el select
+     * de la columna "Método de pago" (reemplaza el input de texto libre).
+     */
+    payment_method_options: {
       type: Array,
       default: function () { return [] },
     },
