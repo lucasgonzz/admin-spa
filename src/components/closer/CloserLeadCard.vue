@@ -61,16 +61,6 @@
         {{ demo_summary_preview }}
       </div>
 
-      <!-- Escenario y próximo paso en seguimiento -->
-      <div v-if="section === 'seguimiento' && call_summary_parsed" class="mb-2">
-        <span class="badge me-2" :class="escenario_badge_class">
-          {{ escenario_label }}
-        </span>
-        <span v-if="call_summary_parsed.proximo_paso" class="small text-secondary">
-          {{ call_summary_parsed.proximo_paso }}
-        </span>
-      </div>
-
       <!-- Socios pendientes de confirmación (colapsable) -->
       <div v-if="pending_partners.length" class="mb-2">
         <button
@@ -95,23 +85,25 @@
         </div>
       </div>
 
-      <!-- Resumen de llamada colapsable (solo seguimiento) -->
-      <div v-if="section === 'seguimiento' && call_summary_parsed" class="mb-2">
+      <!-- Llamadas del lead en seguimiento: una fila por llamada -->
+      <div v-if="section === 'seguimiento'" class="mb-2">
+        <CloserCallRow
+          v-for="call in lead.calls || []"
+          :key="'call-' + call.id"
+          :call="call"
+          :lead_id="lead.id"
+          @partner-click="on_partner_click"
+        />
         <button
           type="button"
-          class="btn btn-link btn-sm p-0 text-decoration-none"
-          @click="summary_expanded = !summary_expanded"
+          class="btn btn-sm btn-outline-primary"
+          :disabled="creating_call"
+          @click="on_new_call"
         >
-          <i
-            class="bi me-1"
-            :class="summary_expanded ? 'bi-chevron-down' : 'bi-chevron-right'"
-            aria-hidden="true"
-          />
-          Resumen de llamada
+          <span v-if="creating_call" class="spinner-border spinner-border-sm me-1" aria-hidden="true" />
+          <i v-else class="bi bi-plus-circle me-1" aria-hidden="true" />
+          Nueva reunión
         </button>
-        <div v-show="summary_expanded" class="mt-2">
-          <CallSummaryPanel :call_summary="lead.call_summary" />
-        </div>
       </div>
 
       <!-- Acciones principales -->
@@ -120,11 +112,12 @@
           v-if="section === 'en_curso'"
           type="button"
           class="btn btn-sm btn-primary"
-          :disabled="!lead.meet_url"
-          :title="lead.meet_url ? 'Unirse a la llamada y enviar bot de grabación' : 'Sin link de Meet disponible'"
+          :disabled="joining_meet"
+          title="Unirse a la llamada (crea el Meet si todavía no existe) y enviar bot de grabación"
           @click="join_meet"
         >
-          <i class="bi bi-camera-video me-1" aria-hidden="true" />
+          <span v-if="joining_meet" class="spinner-border spinner-border-sm me-1" aria-hidden="true" />
+          <i v-else class="bi bi-camera-video me-1" aria-hidden="true" />
           Unirse a Meet
         </button>
 
@@ -154,8 +147,8 @@
 </template>
 
 <script>
-import CallSummaryPanel from '@/components/lead/resumen/CallSummaryPanel.vue'
 import CloserPartnerRow from './CloserPartnerRow.vue'
+import CloserCallRow from './CloserCallRow.vue'
 
 /** Etiquetas legibles de estados frecuentes en el panel del closer. */
 const STATUS_LABELS = {
@@ -189,8 +182,8 @@ export default {
   name: 'CloserLeadCard',
 
   components: {
-    CallSummaryPanel,
     CloserPartnerRow,
+    CloserCallRow,
   },
 
   emits: ['open-conversation'],
@@ -215,8 +208,10 @@ export default {
     return {
       /** Controla visibilidad de socios pendientes. */
       partners_expanded: false,
-      /** Controla visibilidad del CallSummaryPanel en seguimiento. */
-      summary_expanded: false,
+      /** true mientras se pide/crea la llamada al hacer clic en "Unirse a Meet". */
+      joining_meet: false,
+      /** true mientras se crea una reunión ad-hoc nueva desde "Nueva reunión". */
+      creating_call: false,
     }
   },
 
@@ -310,58 +305,6 @@ export default {
       return lines.join('\n')
     },
     /**
-     * call_summary parseado como objeto JS.
-     *
-     * @returns {Object|null}
-     */
-    call_summary_parsed() {
-      const raw = this.lead.call_summary
-      if (!raw) {
-        return null
-      }
-      if (typeof raw === 'object') {
-        return raw
-      }
-      if (typeof raw === 'string') {
-        try {
-          return JSON.parse(raw)
-        } catch (e) {
-          return null
-        }
-      }
-      return null
-    },
-    /**
-     * Clase del badge de escenario de cierre (A/B/C/D).
-     *
-     * @returns {string}
-     */
-    escenario_badge_class() {
-      const escenario = this.call_summary_parsed ? this.call_summary_parsed.escenario_cierre : null
-      const map = {
-        A: 'bg-success',
-        B: 'bg-warning text-dark',
-        C: 'bg-info text-dark',
-        D: 'bg-danger',
-      }
-      return map[escenario] || 'bg-secondary'
-    },
-    /**
-     * Etiqueta del escenario de cierre.
-     *
-     * @returns {string}
-     */
-    escenario_label() {
-      const escenario = this.call_summary_parsed ? this.call_summary_parsed.escenario_cierre : null
-      const labels = {
-        A: 'Cerró',
-        B: 'Reunión con Lucas',
-        C: 'Seguimiento',
-        D: 'No avanza',
-      }
-      return labels[escenario] || 'Sin determinar'
-    },
-    /**
      * Socios ya confirmados por el closer.
      *
      * @returns {Array<Object>}
@@ -411,21 +354,46 @@ export default {
       this.$emit('open-conversation', this.lead)
     },
     /**
-     * Abre Google Meet en nueva pestaña y dispara el bot Recall.ai en background.
-     * Fire-and-forget: el Meet se abre de inmediato; el bot se envía sin bloquear.
+     * Pide al store la llamada pendiente del lead (la crea si hace falta) y recién con
+     * la respuesta abre el Meet en una pestaña nueva. El bot se manda automáticamente
+     * desde el backend como parte de la misma acción.
      *
      * @returns {void}
      */
     join_meet: function () {
-      if (!this.lead.meet_url) {
-        return
-      }
-
-      /* Abrir Meet inmediatamente sin esperar al bot. */
-      window.open(this.lead.meet_url, '_blank', 'noopener,noreferrer')
-
-      /* Disparar el bot en background — no await, no spinner. */
-      this.$store.dispatch('closer/send_recall_bot', this.lead.id)
+      const self = this
+      self.joining_meet = true
+      self.$store
+        .dispatch('closer/join_call', self.lead.id)
+        .then(function (call) {
+          if (call && call.meet_url) {
+            window.open(call.meet_url, '_blank', 'noopener,noreferrer')
+          } else {
+            window.alert('No se pudo obtener el link de Meet. Revisá que el closer tenga Google Calendar conectado.')
+          }
+        })
+        .catch(function () {
+          window.alert('No se pudo unir a la llamada. Intentá de nuevo.')
+        })
+        .finally(function () {
+          self.joining_meet = false
+        })
+    },
+    /**
+     * Crea una llamada ad-hoc nueva para este lead (evento "ahora + duración configurada").
+     * @returns {void}
+     */
+    on_new_call: function () {
+      const self = this
+      self.creating_call = true
+      self.$store
+        .dispatch('closer/create_new_call', self.lead.id)
+        .catch(function () {
+          window.alert('No se pudo crear la nueva reunión. Intentá de nuevo.')
+        })
+        .finally(function () {
+          self.creating_call = false
+        })
     },
     /**
      * Al clic en socio confirmado: abre WhatsApp si hay teléfono, sino alerta con datos.
