@@ -42,19 +42,34 @@ export const SECTIONS = [
       {
         key: 'price_lists',
         label: 'Listas de precios',
-        hint: 'El margen de ganancia por defecto se aplica cuando creás un artículo sin especificar uno. No es obligatorio - podés dejarlo en 0 y cargarlo manualmente.',
+        hint: 'Podés ponerle a cada lista un margen de ganancia por defecto (es opcional). Ese margen se usa cuando creás un artículo y no le cargás un margen propio para esa lista: el sistema toma este por defecto. Si lo dejás vacío, cargás el margen a mano en cada artículo.',
         type: 'tabla_listas',
         required: false,
         show_if: { key: 'price_mode', value: 'lists' },
       },
       {
-        key: 'dollar_prices',
-        label: '¿Manejás precios en dólares?',
+        // ¿Comprás mercadería en dólares?
+        key: 'costos_en_dolares',
+        label: '¿Comprás mercadería en dólares?',
+        hint: 'Si activás esto, vas a poder marcar en cada artículo si su costo es en dólares. El sistema toma ese costo en dólares y lo cotiza para calcular el precio de venta.',
         type: 'opcion',
         required: true,
         options: [
-          { value: 'no',  label: 'No, solo en pesos' },
-          { value: 'yes', label: 'Sí, algunos productos tienen precio en dólares' },
+          { value: 'no', label: 'No, siempre compro en pesos' },
+          { value: 'yes', label: 'Sí, compro parte o toda la mercadería en dólares' },
+        ],
+      },
+      {
+        // Condicionada a costos_en_dolares = yes
+        key: 'cotizar_precios_en_dolares',
+        label: 'Para los productos con costo en dólares, ¿cómo querés el precio de venta?',
+        hint: 'Cotizado a pesos deja el precio final en pesos, calculado con la cotización del día. En dólares deja el precio final en dólares y se cotiza recién al momento de vender.',
+        type: 'opcion',
+        required: true,
+        show_if: { key: 'costos_en_dolares', value: 'yes' },
+        options: [
+          { value: 'yes', label: 'Cotizado a pesos (el precio final queda en pesos)' },
+          { value: 'no', label: 'En dólares (el precio final queda en dólares)' },
         ],
       },
     ],
@@ -87,6 +102,18 @@ export const SECTIONS = [
     id: 'ventas',
     title: 'Ventas',
     questions: [
+      {
+        // ¿Hacés ventas en dólares?
+        key: 'ventas_en_dolares',
+        label: '¿Hacés ventas en dólares?',
+        hint: 'Si activás esto, al cargar una venta vas a poder elegir la moneda. Si un producto tiene precio en pesos y vendés en dólares, el sistema divide el precio por la cotización; si tiene precio en dólares y vendés en pesos, lo cotiza a pesos.',
+        type: 'opcion',
+        required: true,
+        options: [
+          { value: 'no', label: 'No, siempre vendo en pesos' },
+          { value: 'yes', label: 'Sí, a veces vendo en dólares' },
+        ],
+      },
       {
         key: 'payment_discounts',
         label: '¿Aplicás descuentos o recargos según el método de pago?',
@@ -141,6 +168,22 @@ export const SECTIONS = [
         required: true,
       },
       {
+        // Número de documento o CUIT para login
+        key: 'doc_number',
+        label: 'Número de documento / CUIT',
+        hint: 'Es el número que vas a usar para ingresar al sistema.',
+        type: 'texto',
+        required: true,
+      },
+      {
+        // Email de contacto, se precarga desde el backend
+        key: 'email',
+        label: 'Email',
+        hint: 'Acá te va a llegar la información de acceso. Por defecto es el mismo que usaste para agendar la demo; podés cambiarlo si querés.',
+        type: 'texto',
+        required: true,
+      },
+      {
         key: 'address_company',
         label: 'Dirección',
         hint: 'Dirección fiscal o del local principal.',
@@ -148,10 +191,19 @@ export const SECTIONS = [
         required: false,
       },
       {
-        key: 'social_networks',
-        label: 'Redes sociales',
-        hint: 'Instagram, Facebook u otras. Podés poner más de una, una por línea. Se usarán en la tienda online si la activás.',
-        type: 'texto_largo',
+        // Link de Facebook para tienda online
+        key: 'facebook',
+        label: 'Facebook',
+        hint: 'Link de tu página de Facebook. Se usa en tu tienda online si la activás.',
+        type: 'texto',
+        required: false,
+      },
+      {
+        // Link de Instagram para tienda online
+        key: 'instagram',
+        label: 'Instagram',
+        hint: 'Link de tu perfil de Instagram. Se usa en tu tienda online si la activás.',
+        type: 'texto',
         required: false,
       },
     ],
