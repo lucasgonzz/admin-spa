@@ -1,52 +1,21 @@
 <template>
   <!--
-    Barra de acciones manuales de la implementación (prompt 345).
+    Modal de acción manual de la implementación.
 
-    Un botón por acción del backend (ImplementationActionService::ACTIONS). Cada click
-    abre un preview editable en un modal; nada se envía sin que Martín confirme ahí.
-    Diseño sobrio: la acción sugerida para la etapa actual va destacada (btn-primary),
-    el resto queda disponible pero secundaria (btn-outline-secondary).
+    Prompt 345: un modal de preview/edición/envío por acción del backend
+    (ImplementationActionService::ACTIONS). Prompt 479: este componente deja de pintar
+    la fila de botones (ahora la pinta el padre, repartida dentro de cada etapa) y
+    queda como único dueño del modal, que el padre abre por ref con open(action, stage).
   -->
-  <div class="impl-action-bar mb-4">
-    <h6 class="impl-section-title">Acciones</h6>
-
-    <!-- Fila de botones, uno por acción -->
-    <div class="impl-action-bar__buttons d-flex flex-wrap gap-2">
-      <div
-        v-for="action in actions"
-        :key="action.key"
-        class="impl-action-bar__item"
-      >
-        <button
-          type="button"
-          class="btn btn-sm w-100"
-          :class="action.available ? 'btn-primary' : 'btn-outline-secondary'"
-          :disabled="loading_state"
-          @click="open_action(action)"
-        >
-          {{ action.label }}
-        </button>
-
-        <!-- Destinatario y último envío, en texto chico y gris debajo del botón -->
-        <div class="impl-action-bar__meta small text-muted">
-          <span>{{ recipient_hint(action) }}</span>
-          <span v-if="action.last_executed_at">
-            · enviado el {{ format_date(action.last_executed_at) }}
-          </span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Modal de preview/edición/envío de la acción seleccionada -->
-    <base-modal
-      :show="show_modal"
-      :title="current_action ? current_action.label : ''"
-      size="lg"
-      @close="close_modal"
-    >
-      <template v-if="preview">
-        <!-- Línea de destinatario: a quién le va a llegar y su teléfono -->
-        <p v-if="current_action && current_action.key !== 'user_setup'" class="mb-2">
+  <base-modal
+    :show="show_modal"
+    :title="current_action ? current_action.label : ''"
+    size="lg"
+    @close="close_modal"
+  >
+    <template v-if="preview">
+        <!-- Línea de destinatario: a quién le va a llegar y su teléfono (no aplica a side_effect) -->
+        <p v-if="current_action && current_action.kind !== 'side_effect'" class="mb-2">
           Le va a llegar a <strong>{{ preview.recipient_label }}</strong>
           <span v-if="preview.recipient_phone"> ({{ preview.recipient_phone }})</span>.
         </p>
@@ -85,10 +54,22 @@
           </select>
         </div>
 
-        <!-- 'user_setup': el body es el payload real, no es texto editable -->
-        <pre v-if="current_action && current_action.key === 'user_setup'" class="impl-action-bar__payload p-2 border rounded small mb-0">{{ preview.body }}</pre>
+        <!--
+          Aviso de re-aplicación: solo 'user_setup' con is_reapply (ya se aplicó antes).
+          No alarmista, solo deja claro que se va a re-enviar toda la config al cliente.
+        -->
+        <div
+          v-if="current_action && current_action.key === 'user_setup' && is_reapply"
+          class="alert alert-secondary py-2 small mb-3"
+        >
+          Este UserSetup ya se aplicó. Volver a aplicarlo re-envía toda la configuración
+          del formulario a la empresa-api del cliente.
+        </div>
 
-        <!-- Resto de acciones: texto editable (o solo lectura si va por plantilla) -->
+        <!-- Acciones 'side_effect' ('user_setup' y 'crear_instalacion'): el body es descriptivo, no editable -->
+        <pre v-if="current_action && current_action.kind === 'side_effect'" class="impl-action-bar__payload p-2 border rounded small mb-0">{{ preview.body }}</pre>
+
+        <!-- Resto de acciones ('message'): texto editable (o solo lectura si va por plantilla) -->
         <textarea
           v-else
           v-model="edited_body"
@@ -113,6 +94,22 @@
         <button type="button" class="btn btn-secondary" :disabled="sending" @click="close_modal">
           Cancelar
         </button>
+
+        <!--
+          Copiar: solo acciones de tipo 'message'. Únicamente portapapeles, no llama al
+          backend ni marca la acción como enviada — por eso está disponible aunque la
+          ventana de 24 h esté cerrada (a diferencia de "Enviar").
+        -->
+        <button
+          v-if="current_action && current_action.kind === 'message'"
+          type="button"
+          class="btn btn-outline-secondary"
+          :disabled="!preview"
+          @click="copy_body"
+        >
+          {{ copied ? 'Copiado ✓' : 'Copiar' }}
+        </button>
+
         <button
           type="button"
           class="btn btn-primary"
@@ -123,7 +120,6 @@
         </button>
       </template>
     </base-modal>
-  </div>
 </template>
 
 <script>
@@ -147,13 +143,7 @@ export default {
 
   data() {
     return {
-      /** Estado de acciones devuelto por GET /implementation/{id}/actions. */
-      actions: [],
-
-      /** Indicador de carga del estado de acciones (deshabilita los botones). */
-      loading_state: false,
-
-      /** Acción actualmente abierta en el modal (item de `actions`), o null. */
+      /** Acción actualmente abierta en el modal (item de `actions` con key, kind, blocked, can_force, etc.), o null. */
       current_action: null,
 
       /**
@@ -179,6 +169,16 @@ export default {
 
       /** Visibilidad del modal de preview/envío. */
       show_modal: false,
+
+      /**
+       * true cuando el modal abierto es un re-aplicar de 'user_setup' (ya se había
+       * aplicado antes, action.can_force === true al abrir). Determina el aviso y
+       * la etiqueta "Aplicar de nuevo", y viaja como `force` en el POST.
+       */
+      is_reapply: false,
+
+      /** Feedback visual de "Copiado ✓" tras copy_body(), se resetea solo a los 2s. */
+      copied: false,
     }
   },
 
@@ -207,19 +207,27 @@ export default {
     },
 
     /**
-     * Etiqueta del botón de envío según la acción abierta.
+     * Etiqueta del botón de envío según la acción abierta: distingue 'user_setup'
+     * (Aplicar / Aplicar de nuevo si es_reaply), 'crear_instalacion' (Crear instalación)
+     * y el resto de acciones de mensaje (Enviar).
      *
      * @returns {string}
      */
     submit_label() {
-      if (this.sending) {
-        return this.current_action && this.current_action.key === 'user_setup'
-          ? 'Aplicando...'
-          : 'Enviando...'
+      const key = this.current_action ? this.current_action.key : null
+
+      if (key === 'user_setup') {
+        if (this.sending) {
+          return 'Aplicando...'
+        }
+        return this.is_reapply ? 'Aplicar de nuevo' : 'Aplicar configuración'
       }
-      return this.current_action && this.current_action.key === 'user_setup'
-        ? 'Aplicar configuración'
-        : 'Enviar'
+
+      if (key === 'crear_instalacion') {
+        return this.sending ? 'Creando...' : 'Crear instalación'
+      }
+
+      return this.sending ? 'Enviando...' : 'Enviar'
     },
 
     /**
@@ -236,79 +244,30 @@ export default {
     },
   },
 
-  watch: {
-    /**
-     * Recarga el estado de acciones cuando cambia la implementación seleccionada
-     * o su etapa actual (la acción sugerida como 'available' depende de eso).
-     *
-     * @param {Object|null} new_val
-     * @param {Object|null} old_val
-     */
-    'implementation.id': {
-      immediate: true,
-      handler() {
-        this.load_actions_state()
-      },
-    },
-    'implementation.current_stage'() {
-      this.load_actions_state()
-    },
-  },
-
   methods: {
     /**
-     * Carga el estado de las 6 acciones (destinatario, ventana, última ejecución)
-     * desde GET /implementation/{id}/actions.
+     * Abre el modal para una acción (invocado por el padre vía $refs.action_modal.open(...)).
      *
+     * Recibe el item completo de `actions` (key, kind, blocked, can_force, label, etc., tal
+     * como lo arma el padre desde GET /implementation/{id}/actions) y la etapa actual de la
+     * implementación, y deja todo listo para pedir el preview: resetea edición/error/copiado,
+     * fija la etapa por defecto del selector de 'progreso', y calcula si es un re-aplicar de
+     * 'user_setup' (ya se había aplicado antes).
+     *
+     * @param {Object} action Item de `actions` a abrir.
+     * @param {number} [stage] Etapa actual de la implementación (default para 'progreso').
      * @returns {void}
      */
-    load_actions_state() {
-      if (!this.implementation || !this.implementation.id) {
-        this.actions = []
-        return
-      }
-
-      const self = this
-      this.loading_state = true
-
-      api
-        .get('/implementation/' + this.implementation.id + '/actions')
-        .then(function (res) {
-          self.actions = res.data.actions || []
-        })
-        .catch(function () {
-          /* El interceptor global de axios ya muestra el toast de error. */
-          self.actions = []
-        })
-        .then(function () {
-          self.loading_state = false
-        })
-    },
-
-    /**
-     * Texto de destinatario debajo del botón de cada acción.
-     *
-     * @param {Object} action Item de `actions`.
-     * @returns {string}
-     */
-    recipient_hint(action) {
-      if (!action || !action.recipient_label || action.recipient_label === '—') {
-        return ''
-      }
-      return 'a ' + action.recipient_label.toLowerCase()
-    },
-
-    /**
-     * Abre el modal para una acción: fija la etapa por defecto (si aplica) y pide el preview.
-     *
-     * @param {Object} action Item de `actions` clickeado.
-     * @returns {void}
-     */
-    open_action(action) {
+    open(action, stage) {
       this.current_action = action
       this.preview = null
       this.error_message = ''
-      this.preview_stage = this.implementation ? this.implementation.current_stage : 1
+      this.copied = false
+      this.preview_stage = stage != null ? stage : (this.implementation ? this.implementation.current_stage : 1)
+
+      /* 'user_setup' ya aplicado (can_force true): esta apertura es un re-aplicar. */
+      this.is_reapply = action && action.key === 'user_setup' && action.can_force === true
+
       this.show_modal = true
       this.load_preview()
     },
@@ -348,11 +307,35 @@ export default {
     },
 
     /**
+     * Copia al portapapeles el texto del mensaje (solo acciones de tipo 'message').
+     *
+     * No envía nada ni registra la acción: es un atajo para mandarlo a mano fuera de
+     * la ventana de 24 h. Por eso no depende del estado de la ventana ni del backend.
+     *
+     * @returns {void}
+     */
+    copy_body() {
+      const self = this
+
+      if (!navigator.clipboard) {
+        // Sin API de portapapeles disponible: no rompemos, simplemente no confirmamos copiado.
+        return
+      }
+
+      navigator.clipboard.writeText(self.edited_body).then(function () {
+        self.copied = true
+        setTimeout(function () { self.copied = false }, 2000)
+      }).catch(function () {
+        self.copied = false
+      })
+    },
+
+    /**
      * Ejecuta la acción abierta: POST /implementation/{id}/actions/{action}.
      *
-     * Con éxito cierra el modal, emite `updated` con el modelo fresco y recarga
-     * el estado de acciones. Con 422 muestra el motivo dentro del modal sin cerrarlo,
-     * preservando el texto editado por el admin.
+     * Con éxito cierra el modal y emite `updated` con el modelo fresco (el padre recarga
+     * el estado de acciones desde ese handler). Con 422 muestra el motivo dentro del modal
+     * sin cerrarlo, preservando el texto editado por el admin.
      *
      * @returns {void}
      */
@@ -363,17 +346,34 @@ export default {
 
       const self = this
       const action_key = this.current_action.key
+      const kind = this.current_action.kind
 
-      /** Payload: 'user_setup' no manda `content` (no es un mensaje editable). */
+      /**
+       * Payload por tipo de acción:
+       * - 'message' (presentacion, form_link, progreso, pedir_archivos, entrega): manda `content` editado.
+       * - 'user_setup' (side_effect): no manda `content`, manda `force` (re-aplicar el lock).
+       * - 'crear_instalacion' (side_effect): no manda `content` ni `force`.
+       */
       const payload = { stage: this.preview_stage }
-      if (action_key !== 'user_setup') {
+      if (kind === 'message') {
         payload.content = this.edited_body
+      }
+      if (action_key === 'user_setup') {
+        payload.force = this.is_reapply
       }
 
       this.sending = true
       this.error_message = ''
 
-      this.$store.commit('auth/setMessage', action_key === 'user_setup' ? 'Aplicando configuración' : 'Enviando mensaje')
+      /** Mensaje del indicador global de carga según la acción. */
+      let loading_message = 'Enviando mensaje'
+      if (action_key === 'user_setup') {
+        loading_message = 'Aplicando configuración'
+      } else if (action_key === 'crear_instalacion') {
+        loading_message = 'Creando instalación'
+      }
+
+      this.$store.commit('auth/setMessage', loading_message)
       this.$store.commit('auth/setLoading', true)
 
       api
@@ -383,7 +383,6 @@ export default {
           self.preview = null
           self.current_action = null
           self.$emit('updated', res.data.model)
-          self.load_actions_state()
         })
         .catch(function (error) {
           /*
@@ -416,6 +415,8 @@ export default {
       this.current_action = null
       this.edited_body = ''
       this.error_message = ''
+      this.copied = false
+      this.is_reapply = false
     },
 
     /**
@@ -448,29 +449,7 @@ export default {
 </script>
 
 <style scoped>
-/* Título de sección: mismo estilo que el resto del panel de detalle */
-.impl-section-title {
-  text-transform: uppercase;
-  font-size: 0.7rem;
-  letter-spacing: 0.05em;
-  color: #6c757d;
-  margin-bottom: 8px;
-}
-
-/* Cada botón de acción con su meta debajo, ancho acotado para que no estire toda la fila */
-.impl-action-bar__item {
-  min-width: 170px;
-  max-width: 220px;
-  flex: 1 1 170px;
-}
-
-/* Texto de destinatario / último envío debajo del botón */
-.impl-action-bar__meta {
-  margin-top: 2px;
-  line-height: 1.3;
-}
-
-/* Payload de 'user_setup': monoespaciado con scroll propio, no crece sin límite */
+/* Payload de acciones 'side_effect' (user_setup, crear_instalacion): monoespaciado con scroll propio */
 .impl-action-bar__payload {
   max-height: 320px;
   overflow: auto;

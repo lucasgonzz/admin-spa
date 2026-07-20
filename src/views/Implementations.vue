@@ -151,14 +151,34 @@
           <!-- Resumen: etapas y datos recolectados -->
 
           <!--
-            Barra de acciones manuales (prompt 345): todo a un clic, nada sin aprobación.
-            Va arriba de "Etapas" para que sea lo primero que Martín ve al abrir la implementación.
+            Modal de acciones manuales (prompt 345, reorganizado en el 479): este componente
+            ya no pinta ninguna fila de botones, solo es dueño del modal de preview/edición/
+            envío. El padre lo abre por ref desde open_action() (Progreso arriba, o el botón
+            de cada etapa).
           -->
           <implementation-action-bar
             v-if="selected_implementation"
+            ref="action_modal"
             :implementation="selected_implementation"
             @updated="on_implementation_updated"
           />
+
+          <!--
+            Progreso: acción sin etapa fija (typical_stage null), siempre disponible
+            arriba de todo, antes de "Etapas".
+          -->
+          <div v-if="progreso_action" class="mb-3">
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-secondary"
+              @click="open_action(progreso_action)"
+            >
+              {{ progreso_action.label }}
+            </button>
+            <span v-if="progreso_action.last_executed_at" class="small text-muted ms-2">
+              · enviado el {{ format_date(progreso_action.last_executed_at) }}
+            </span>
+          </div>
 
           <!-- Sección: progreso visual de las 8 etapas -->
           <h6 class="impl-section-title">Etapas</h6>
@@ -212,6 +232,31 @@
                   >
                     {{ substep.done ? '✅' : '⬜' }} {{ substep.label }}
                     <span v-if="substep.note" class="text-muted ms-1">({{ substep.note }})</span>
+                  </div>
+                </div>
+
+                <!-- Acciones de esta etapa: cada botón abre el modal para su acción -->
+                <div
+                  v-if="stage_actions(stage.stage_number).length > 0"
+                  class="impl-stage-actions d-flex flex-wrap gap-2 mt-2"
+                >
+                  <div v-for="action in stage_actions(stage.stage_number)" :key="action.key">
+                    <button
+                      type="button"
+                      class="btn btn-sm"
+                      :class="action_button_class(action, stage)"
+                      :disabled="action_button_disabled(action)"
+                      @click="open_action(action)"
+                    >
+                      {{ action_button_label(action) }}
+                    </button>
+
+                    <!-- Motivo de bloqueo o último envío, en texto chico y gris -->
+                    <div class="impl-stage-actions__meta small text-muted">
+                      <span v-if="action.blocked && action.blocked_reason">{{ action.blocked_reason }}</span>
+                      <span v-else-if="action.last_executed_at">· hecho el {{ format_date(action.last_executed_at) }}</span>
+                      <span v-else-if="action.kind === 'message'">→ {{ action.recipient_label }}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -472,6 +517,14 @@ export default {
         { key: 'clients', label: 'Clientes', files_key: 'clients_files' },
         { key: 'suppliers', label: 'Proveedores', files_key: 'suppliers_files' },
       ],
+
+      /**
+       * Estado de las acciones manuales de la implementación abierta, devuelto por
+       * GET /implementation/{id}/actions (prompt 479: antes lo cargaba y pintaba
+       * ImplementationActionBar por su cuenta; ahora lo carga el padre para repartir
+       * los botones dentro de cada etapa y dejar Progreso arriba de todo).
+       */
+      action_state: null,
     }
   },
 
@@ -548,6 +601,36 @@ export default {
       return this.stage_4_stage !== null
     },
 
+    /**
+     * Acción "Progreso": no tiene etapa fija (`typical_stage === null`), se muestra
+     * siempre arriba de todo, encima de la sección "Etapas".
+     *
+     * @returns {Object|null}
+     */
+    progreso_action() {
+      const actions = (this.action_state && this.action_state.actions) || []
+
+      return actions.find(function (action) {
+        return action.typical_stage === null
+      }) || null
+    },
+
+  },
+
+  watch: {
+    /**
+     * Recarga el estado de acciones cuando cambia la implementación seleccionada o
+     * su etapa actual: el gate/lock de 'user_setup' y la acción sugerida ('available')
+     * dependen de ambos.
+     */
+    'selected_implementation.id': {
+      handler() {
+        this.load_action_state()
+      },
+    },
+    'selected_implementation.current_stage'() {
+      this.load_action_state()
+    },
   },
 
   created() {
@@ -1522,6 +1605,108 @@ export default {
       if (index !== -1) {
         this.implementations.splice(index, 1, updated)
       }
+
+      /*
+       * Recargar el estado de acciones: el gate/lock del UserSetup, el "hecho el…" y
+       * los botones habilitados/deshabilitados cambian recién después de ejecutar.
+       */
+      this.load_action_state()
+    },
+
+    /**
+     * Carga el estado de las acciones manuales de la implementación abierta desde
+     * GET /implementation/{id}/actions (destinatario, ventana, última ejecución,
+     * gate/lock de 'user_setup', typical_stage y kind por acción).
+     *
+     * @returns {void}
+     */
+    load_action_state() {
+      if (!this.selected_implementation || !this.selected_implementation.id) {
+        this.action_state = null
+        return
+      }
+
+      const self = this
+      const impl_id = this.selected_implementation.id
+
+      api
+        .get('/implementation/' + impl_id + '/actions')
+        .then(function (res) {
+          self.action_state = res.data
+        })
+        .catch(function () {
+          /* El interceptor global de axios ya muestra el toast de error. */
+          self.action_state = null
+        })
+    },
+
+    /**
+     * Acciones cuya `typical_stage` corresponde a la etapa indicada, para pintar
+     * la botonera dentro de la tarjeta de esa etapa.
+     *
+     * @param {number} stage_number Número de etapa (stage.stage_number).
+     * @returns {Array<Object>}
+     */
+    stage_actions(stage_number) {
+      const actions = (this.action_state && this.action_state.actions) || []
+
+      return actions.filter(function (action) {
+        return action.typical_stage === stage_number
+      })
+    },
+
+    /**
+     * Abre el modal de la acción indicada (Progreso o una acción de etapa).
+     * El modal (ImplementationActionBar) es dueño del preview/edición/envío.
+     *
+     * @param {Object} action Item de acción a abrir.
+     * @returns {void}
+     */
+    open_action(action) {
+      if (!this.selected_implementation) return
+      this.$refs.action_modal.open(action, this.selected_implementation.current_stage)
+    },
+
+    /**
+     * Deshabilita el botón de una acción: solo cuando el backend la marca `blocked`
+     * y además no admite forzarla (`can_force`). El caso "ya aplicado pero se puede
+     * forzar" (user_setup con can_force true) deja el botón habilitado a propósito.
+     *
+     * @param {Object} action
+     * @returns {boolean}
+     */
+    action_button_disabled(action) {
+      return action.blocked === true && action.can_force !== true
+    },
+
+    /**
+     * Clase del botón de una acción: destacado (btn-primary) cuando es la acción
+     * sugerida para la etapa actual, secundario (btn-outline-secondary) en el resto.
+     * Sin cajas de colores adicionales, diseño sobrio.
+     *
+     * @param {Object} action
+     * @param {Object} stage
+     * @returns {string}
+     */
+    action_button_class(action, stage) {
+      return action.available === true && stage.status === 'in_progress'
+        ? 'btn-primary'
+        : 'btn-outline-secondary'
+    },
+
+    /**
+     * Etiqueta del botón de una acción: por defecto `action.label`; 'user_setup' ya
+     * aplicado (can_force true) muestra "Re-aplicar configuración" para dejar claro
+     * que ya se corrió antes.
+     *
+     * @param {Object} action
+     * @returns {string}
+     */
+    action_button_label(action) {
+      if (action.key === 'user_setup' && action.can_force === true) {
+        return 'Re-aplicar configuración'
+      }
+      return action.label
     },
   },
 }
@@ -1707,6 +1892,18 @@ export default {
 /* Ítem individual de subetapa con pequeño espaciado vertical */
 .impl-stage-substep {
   line-height: 1.5;
+}
+
+/* Botonera de acciones dentro de una etapa (prompt 479) */
+.impl-stage-actions {
+  padding-left: 1.2rem;
+}
+
+/* Motivo de bloqueo o último envío debajo de cada botón de acción de etapa */
+.impl-stage-actions__meta {
+  margin-top: 2px;
+  line-height: 1.3;
+  max-width: 220px;
 }
 
 /* Marcador cero altura al final del hilo; scrollIntoView alinea al último mensaje */
