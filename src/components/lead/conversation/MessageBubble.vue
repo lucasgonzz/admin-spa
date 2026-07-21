@@ -1417,6 +1417,8 @@ export default {
     },
     /**
      * true si el contenido es el placeholder genérico del webhook ([DOCUMENT recibido…]).
+     * Oculta placeholders de medios salientes (audio e imagen) cuando ya hay adjunto local,
+     * y placeholders de medios entrantes desde WhatsApp.
      * @returns {boolean}
      */
     is_generic_media_placeholder() {
@@ -1426,6 +1428,10 @@ export default {
       }
       /* Placeholder de audio saliente desde admin (setter). */
       if (text === '[Audio enviado]') {
+        return true
+      }
+      /* Placeholder de imagen saliente desde admin (setter). */
+      if (text === '[Imagen enviada]') {
         return true
       }
       return /^\[[A-Z_ ]+ recibido por WhatsApp\]$/i.test(text)
