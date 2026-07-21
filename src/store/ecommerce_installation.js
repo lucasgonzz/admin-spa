@@ -15,6 +15,17 @@ export default {
 
   actions: {
     /**
+     * Lista todas las corridas de instalación/actualización de ecommerce (todos los clientes),
+     * para el listado del submódulo "Actualizaciones del ecommerce" (prompt 587).
+     *
+     * @param {object} context Contexto Vuex (no usa commit: sin estado propio).
+     * @returns {Promise} Resuelve con { models: ClientEcommerceInstallation[] } (res.data).
+     */
+    fetch_all(context) {
+      return api.get('/ecommerce-installations')
+    },
+
+    /**
      * Dispara una instalación desde cero de la tienda de un cliente.
      *
      * @param {object} context Contexto Vuex (no usa commit: sin estado propio).

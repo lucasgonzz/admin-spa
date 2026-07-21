@@ -84,12 +84,33 @@ const routes_def = [
     meta: { requiresAuth: true, nav: false },
   },
   {
+    // Ítem padre con submenú: Actualizaciones / Empresa y Ecommerce (prompt 587).
+    // Redirige a Empresa por compatibilidad con el link directo a "/actualizaciones"
+    // que ya existe en version/extra-props/Index.vue.
     path: '/actualizaciones',
     name: 'updates',
     text: 'Actualizaciones',
-    model_name: 'update',
-    component: () => import('@/views/Updates.vue'),
+    redirect: '/actualizaciones/empresa',
     meta: { requiresAuth: true, nav: true, icon: 'arrow-up-circle' },
+    children: [
+      {
+        path: '/actualizaciones/empresa',
+        name: 'updates_empresa',
+        text: 'Empresa',
+        model_name: 'update',
+        component: () => import('@/views/Updates.vue'),
+        meta: { requiresAuth: true, nav: false },
+      },
+      {
+        /** Submódulo de gestión de actualizaciones del ecommerce (prompt 587): crear
+         * actualización eligiendo cliente, sin selector de versión (siempre master). */
+        path: '/actualizaciones/ecommerce',
+        name: 'updates_ecommerce',
+        text: 'Ecommerce',
+        component: () => import('@/views/EcommerceUpdates.vue'),
+        meta: { requiresAuth: true, nav: false },
+      },
+    ],
   },
   {
     path: '/actualizaciones-demo',
