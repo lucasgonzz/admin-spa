@@ -198,9 +198,9 @@
         <span class="visually-hidden">Cargando conversación…</span>
       </div>
 
-      <!-- Sin mensajes en el hilo -->
+      <!-- Sin mensajes en el hilo (y sin ningún mensaje pendiente de envío tapado por el cartel) -->
       <div
-        v-else-if="!sorted_messages.length"
+        v-else-if="!sorted_messages.length && !outgoing_pending_messages.length"
         class="conversation-placeholder conversation-placeholder--empty"
       >
         <div class="conversation-placeholder__card">
@@ -235,6 +235,15 @@
             @toggle_deleted_from_context="on_toggle_deleted_from_context(msg.id)"
           />
         </div>
+        <!-- Mensajes salientes todavía no confirmados por el backend (envío optimista) -->
+        <pending-outgoing-bubble
+          v-for="pending_msg in outgoing_pending_messages"
+          :key="pending_msg.client_id"
+          :content="pending_msg.content"
+          :status="pending_msg.status"
+          @retry="retry_pending_outgoing_message(pending_msg.client_id)"
+          @discard="discard_pending_outgoing_message(pending_msg.client_id)"
+        />
         <!-- Ancla al final del hilo para scrollIntoView tras renderizar mensajes -->
         <div ref="conversation_scroll_end_anchor" class="conversation-scroll-end-anchor" aria-hidden="true" />
       </div>
@@ -340,7 +349,7 @@
           :placeholder="whatsapp_window_open
             ? 'Mensaje.'
             : 'Ventana de 24hs cerrada — usá una plantilla'"
-          :disabled="enviando_directo || !whatsapp_window_open"
+          :disabled="!whatsapp_window_open"
           @input="on_input_resize"
           @keydown.enter="on_message_input_keydown"
           @paste="on_paste"
@@ -370,13 +379,13 @@
           v-else
           type="button"
           class="icon-btn flex-shrink-0 text-primary"
-          :disabled="enviando_directo || enviando_adjunto || !whatsapp_window_open"
+          :disabled="enviando_adjunto || !whatsapp_window_open"
           title="Enviar mensaje"
           aria-label="Enviar mensaje"
           @click="on_send_click"
         >
           <span
-            v-if="enviando_directo || enviando_adjunto"
+            v-if="enviando_adjunto"
             class="spinner-border spinner-border-sm"
             role="status"
             aria-hidden="true"
@@ -483,6 +492,7 @@
 
 <script>
 import MessageBubble from '@/components/lead/conversation/MessageBubble.vue'
+import PendingOutgoingBubble from '@/components/lead/conversation/PendingOutgoingBubble.vue'
 import LeadResumenTab from '@/components/lead/resumen/Index.vue'
 import TemplatePickerModal from '@/components/lead/conversation/TemplatePickerModal.vue'
 import ImageAnnotationEditor from '@/components/common/ImageAnnotationEditor.vue'
@@ -511,6 +521,7 @@ export default {
   name: 'LeadConversationView',
   components: {
     MessageBubble,
+    PendingOutgoingBubble,
     LeadResumenTab,
     TemplatePickerModal,
     ImageAnnotationEditor,
@@ -543,8 +554,14 @@ export default {
       /** Texto del mensaje directo a enviar al lead por WhatsApp. */
       mensaje_directo: '',
 
-      /** true mientras se envía el mensaje directo (evita doble envío). */
-      enviando_directo: false,
+      /**
+       * Mensajes de texto enviados manualmente que todavía no confirmó el backend (envío
+       * optimista, estilo WhatsApp). Cada entrada: { client_id, content, status } con
+       * status 'sending' | 'error'. Se vacía al cambiar de lead. No vive en el store: es
+       * estado puramente local de esta vista, el mensaje real llega mezclado en
+       * sorted_messages una vez que el POST confirma.
+       */
+      outgoing_pending_messages: [],
 
       /** Texto del mensaje simulado del lead (testing, no pasa por WhatsApp). */
       mensaje_simulado: '',
@@ -1210,6 +1227,8 @@ export default {
       if (old_val && old_val.id === new_val.id) {
         return
       }
+      /* Un "Enviando..." de la conversación anterior no debe verse en la del lead nuevo. */
+      this.outgoing_pending_messages = []
       const self = this
       const lead_id = new_val.id
       this.$store.commit('lead/set_lead_conversation_visible_id', lead_id)
@@ -1554,37 +1573,131 @@ export default {
       this.on_enviar_directo()
     },
     /**
-     * Envía un mensaje directo al lead por WhatsApp sin pasar por Claude.
+     * Envía un mensaje directo al lead por WhatsApp sin pasar por Claude. Envío optimista:
+     * limpia el input y libera el textarea de inmediato (no espera la respuesta del
+     * backend), agrega el mensaje a outgoing_pending_messages con spinner, y lo saca de
+     * ahí cuando el POST confirma (el mensaje real ya llega mezclado en sorted_messages).
      *
      * @returns {void}
      */
     on_enviar_directo() {
-      const self = this
       /* Defensa: Meta rechaza texto libre fuera de la ventana de 24hs. */
       if (!this.whatsapp_window_open) {
         return
       }
       const rec = this.effective_record
       const text = (this.mensaje_directo || '').trim()
-      if (!text || !rec || !rec.id || this.enviando_directo) {
+      if (!text || !rec || !rec.id) {
         return
       }
-      this.enviando_directo = true
+      /* Limpia y libera el input de inmediato: no espera al backend para seguir escribiendo. */
+      this.mensaje_directo = ''
+      const self = this
+      this.$nextTick(function () {
+        self.sync_message_input_height()
+      })
+      this.send_pending_outgoing_message(rec.id, text)
+    },
+
+    /**
+     * Agrega un mensaje nuevo a la lista de pendientes y dispara su envío.
+     *
+     * @param {number} lead_id
+     * @param {string} text
+     * @returns {void}
+     */
+    send_pending_outgoing_message(lead_id, text) {
+      const client_id = 'pending-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8)
+      this.outgoing_pending_messages.push({
+        client_id: client_id,
+        content: text,
+        status: 'sending',
+      })
+      this.schedule_scroll_to_bottom()
+      this.dispatch_pending_outgoing_message(client_id, lead_id, text)
+    },
+
+    /**
+     * POST real del mensaje pendiente (usado tanto en el primer intento como en el reintento).
+     * Al confirmar, saca la entrada de outgoing_pending_messages (el mensaje real ya llegó
+     * mezclado en sorted_messages vía on_record_updated). Al fallar, la deja en estado
+     * 'error' conservando el texto para poder reintentar o descartar.
+     *
+     * @param {string} client_id
+     * @param {number} lead_id
+     * @param {string} text
+     * @returns {void}
+     */
+    dispatch_pending_outgoing_message(client_id, lead_id, text) {
+      const self = this
       this.$store
-        .dispatch('lead/send_direct_message', { lead_id: rec.id, content: text })
+        .dispatch('lead/send_direct_message', { lead_id: lead_id, content: text })
         .then(function (model) {
-          self.enviando_directo = false
-          self.mensaje_directo = ''
-          /* Volver al alto de una línea tras vaciar el textarea. */
-          self.$nextTick(function () {
-            self.sync_message_input_height()
-          })
+          self.remove_pending_outgoing_message(client_id)
           self.on_record_updated(model)
           self.schedule_scroll_to_bottom()
         })
         .catch(function () {
-          self.enviando_directo = false
+          self.mark_pending_outgoing_message_failed(client_id)
         })
+    },
+
+    /**
+     * Reintenta el envío de un mensaje pendiente que había fallado, con el mismo texto.
+     *
+     * @param {string} client_id
+     * @returns {void}
+     */
+    retry_pending_outgoing_message(client_id) {
+      const rec = this.effective_record
+      const entry = this.outgoing_pending_messages.find(function (m) {
+        return m.client_id === client_id
+      })
+      if (!entry || !rec || !rec.id) {
+        return
+      }
+      entry.status = 'sending'
+      this.dispatch_pending_outgoing_message(client_id, rec.id, entry.content)
+    },
+
+    /**
+     * Descarta un mensaje pendiente fallido sin reintentar (no se manda nunca).
+     *
+     * @param {string} client_id
+     * @returns {void}
+     */
+    discard_pending_outgoing_message(client_id) {
+      this.remove_pending_outgoing_message(client_id)
+    },
+
+    /**
+     * Saca una entrada de outgoing_pending_messages por su client_id, si todavía está.
+     *
+     * @param {string} client_id
+     * @returns {void}
+     */
+    remove_pending_outgoing_message(client_id) {
+      const idx = this.outgoing_pending_messages.findIndex(function (m) {
+        return m.client_id === client_id
+      })
+      if (idx !== -1) {
+        this.outgoing_pending_messages.splice(idx, 1)
+      }
+    },
+
+    /**
+     * Marca una entrada de outgoing_pending_messages como fallida (conserva el texto).
+     *
+     * @param {string} client_id
+     * @returns {void}
+     */
+    mark_pending_outgoing_message_failed(client_id) {
+      const entry = this.outgoing_pending_messages.find(function (m) {
+        return m.client_id === client_id
+      })
+      if (entry) {
+        entry.status = 'error'
+      }
     },
 
     /**
