@@ -328,6 +328,23 @@
               <i class="bi bi-pencil" aria-hidden="true" />
               <span>Editar</span>
             </button>
+            <!--
+              Prompt 563: "Cancelar envío" se mueve acá (misma fila que Enviar/Editar) para que
+              conviva con el resto de las acciones de la sugerencia en lugar de quedar en una fila
+              aparte debajo del countdown. Mismos atributos/handler que tenía en wa-auto-send-timer.
+            -->
+            <button
+              v-if="show_auto_send_timer_block"
+              type="button"
+              class="btn btn-danger btn-sm wa-btn-tight d-inline-flex align-items-center justify-content-center gap-1"
+              :disabled="busy"
+              title="Cancelar el envío automático por WhatsApp"
+              aria-label="Cancelar el envío automático por WhatsApp"
+              @click="on_cancelar_envio_automatico"
+            >
+              <i class="bi bi-stop-circle" aria-hidden="true" />
+              <span>Cancelar envío</span>
+            </button>
           </template>
           <template v-else>
             <button
@@ -357,10 +374,32 @@
               <i class="bi bi-x-lg" aria-hidden="true" />
               <span>Cancelar</span>
             </button>
+            <!--
+              Prompt 563: también en modo edición, para poder frenar el auto-envío de respaldo
+              aunque se esté editando la sugerencia.
+            -->
+            <button
+              v-if="show_auto_send_timer_block"
+              type="button"
+              class="btn btn-danger btn-sm wa-btn-tight d-inline-flex align-items-center justify-content-center gap-1"
+              :disabled="busy"
+              title="Cancelar el envío automático por WhatsApp"
+              aria-label="Cancelar el envío automático por WhatsApp"
+              @click="on_cancelar_envio_automatico"
+            >
+              <i class="bi bi-stop-circle" aria-hidden="true" />
+              <span>Cancelar envío</span>
+            </button>
           </template>
         </div>
+        <!--
+          Prompt 563: el botón "Cancelar envío" se movió a wa-actions (misma fila que
+          Enviar/Editar); este bloque se mantiene en su lugar (no se borra ni se mueve) para no
+          romper la cadena v-if/v-else-if con wa-demo-gated-notice / wa-pending-confirmation.
+          Ahora solo muestra el texto del countdown / "Enviando automáticamente…".
+        -->
         <div v-if="segment.is_last && show_auto_send_timer_block" class="wa-auto-send-timer mt-1">
-          <div class="wa-auto-send-timer-row d-flex flex-wrap align-items-center justify-content-between gap-2">
+          <div class="wa-auto-send-timer-row d-flex align-items-center">
             <span class="wa-auto-send-timer-label text-muted small">
               <template v-if="show_auto_send_countdown">
                 <!-- Mensajes de verificación: aviso de que se envía solo si no se aprueba antes -->
@@ -373,22 +412,6 @@
               </template>
               <template v-else-if="show_auto_send_dispatching">Enviando automáticamente…</template>
             </span>
-            <!--
-              Prompt 348: antes era un botón de solo ícono (bi-stop-circle) y no se entendía qué hacía.
-              Ahora sigue el mismo criterio del prompt 324 (ícono + label) que ya usan Enviar / Editar,
-              en rojo porque es la acción destructiva de la burbuja: frena el envío automático.
-            -->
-            <button
-              type="button"
-              class="btn btn-danger btn-sm wa-btn-tight d-inline-flex align-items-center justify-content-center gap-1"
-              :disabled="busy"
-              title="Cancelar el envío automático por WhatsApp"
-              aria-label="Cancelar el envío automático por WhatsApp"
-              @click="on_cancelar_envio_automatico"
-            >
-              <i class="bi bi-stop-circle" aria-hidden="true" />
-              <span>Cancelar envío</span>
-            </button>
           </div>
         </div>
         <!--
