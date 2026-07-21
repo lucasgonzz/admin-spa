@@ -819,6 +819,10 @@ export default {
     var current_version = this.$store.state.lead.leads_reload_version
     if (current_version !== this._last_leads_reload_version) {
       this.reload_module_from_nav()
+      /* Fix keep-alive: si venimos de una navegación con ?lead_id (ej. desde el panel
+         del closer), activated() también tiene que revisar el query param, igual que
+         mounted() — antes solo se revisaba acá si era el primer montaje del componente. */
+      this.open_lead_from_query_param()
       return
     }
     /* Venimos de otro módulo o de la conversación: la grilla no se actualizó en
@@ -831,6 +835,8 @@ export default {
     }
     this.$store.dispatch('lead/fetch_unread_badges')
     this.restore_scroll_position()
+    /* Fix keep-alive: revisar ?lead_id también en esta rama (ver comentario arriba). */
+    this.open_lead_from_query_param()
   },
 
   /**

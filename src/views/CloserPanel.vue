@@ -94,6 +94,7 @@
             :lead="lead"
             :section="tab.key"
             @open-conversation="on_open_conversation"
+            @open-lead-modal="on_open_lead_modal"
           />
         </div>
       </section>
@@ -346,6 +347,20 @@ export default {
      */
     on_sidebar_record_updated() {
       this.$store.dispatch('closer/refresh_panel').catch(function () { return null })
+    },
+    /**
+     * Navega al módulo de Leads con el query param lead_id: Leads.vue detecta el
+     * parámetro (en mounted() o activated(), ver fix de keep-alive en Leads.vue)
+     * y abre el modal de detalle completo del lead, igual que desde el módulo de Leads.
+     *
+     * @param {Object} lead
+     * @returns {void}
+     */
+    on_open_lead_modal(lead) {
+      if (!lead || !lead.id) {
+        return
+      }
+      this.$router.push({ name: 'leads', query: { lead_id: lead.id } })
     },
   },
 }

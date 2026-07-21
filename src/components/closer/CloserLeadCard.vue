@@ -5,7 +5,13 @@
       <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
         <div class="min-w-0">
           <div class="d-flex align-items-center gap-2 flex-wrap">
-            <span class="fw-semibold">{{ lead_display_name }}</span>
+            <button
+              type="button"
+              class="btn btn-link p-0 fw-semibold closer-lead-name-link"
+              @click="on_name_click"
+            >
+              {{ lead_display_name }}
+            </button>
             <!-- Pulso verde cuando la demo está en horario activo (sección en_curso) -->
             <span
               v-if="section === 'en_curso' && demo_is_live"
@@ -186,7 +192,7 @@ export default {
     CloserCallRow,
   },
 
-  emits: ['open-conversation'],
+  emits: ['open-conversation', 'open-lead-modal'],
 
   props: {
     /** Lead completo devuelto por GET /closer/panel. */
@@ -352,6 +358,15 @@ export default {
      */
     go_to_conversation() {
       this.$emit('open-conversation', this.lead)
+    },
+    /**
+     * Emite hacia el panel el pedido de abrir el modal de detalle completo del lead
+     * (el mismo modal del módulo de Leads), delegando la navegación al padre.
+     *
+     * @returns {void}
+     */
+    on_name_click() {
+      this.$emit('open-lead-modal', this.lead)
     },
     /**
      * Pide al store la llamada pendiente del lead (la crea si hace falta) y recién con
@@ -544,6 +559,13 @@ export default {
 	transition: box-shadow 0.15s ease
 	&:hover
 		box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.08) !important
+
+.closer-lead-name-link
+	color: inherit
+	text-decoration: none
+	&:hover
+		color: #0d6efd
+		text-decoration: underline
 
 .closer-summary-preview
 	display: -webkit-box
