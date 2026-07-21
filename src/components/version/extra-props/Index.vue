@@ -37,7 +37,7 @@
               <th>Cuerpo</th>
               <th class="text-center" style="width: 72px">Activa</th>
               <th style="width: 100px">Alcance</th>
-              <th style="width: 160px">Clientes</th>
+              <th style="width: 220px">Clientes</th>
               <th style="width: 100px"></th>
             </tr>
           </thead>
@@ -57,14 +57,7 @@
               </td>
               <td><span class="small">{{ scope_label(row) }}</span></td>
               <td>
-                <select
-                  v-model="row.client_ids"
-                  class="form-select form-select-sm"
-                  multiple
-                  size="3"
-                >
-                  <option v-for="c in clients_options" :key="c.id" :value="c.id">{{ client_option_label(c) }}</option>
-                </select>
+                <VersionClientSelector v-model:client_ids="row.client_ids" :options="clients_options" />
               </td>
               <td class="text-nowrap">
                 <button type="button" class="btn btn-sm btn-outline-danger" @click="remove_at('notifications', idx)">
@@ -90,7 +83,7 @@
               <!-- Indica si el seeder se ejecuta una vez por base de datos o una vez por usuario/tenant -->
               <th style="width: 130px" title="por_base_de_datos: se corre una vez por DB · por_usuario: se corre una vez por cada tenant">Scope ejecución</th>
               <th style="width: 100px">Alcance</th>
-              <th style="width: 160px">Clientes</th>
+              <th style="width: 220px">Clientes</th>
               <th style="width: 120px"></th>
             </tr>
           </thead>
@@ -122,9 +115,7 @@
               </td>
               <td><span class="small">{{ scope_label(row) }}</span></td>
               <td>
-                <select v-model="row.client_ids" class="form-select form-select-sm" multiple size="3">
-                  <option v-for="c in clients_options" :key="c.id" :value="c.id">{{ client_option_label(c) }}</option>
-                </select>
+                <VersionClientSelector v-model:client_ids="row.client_ids" :options="clients_options" />
               </td>
               <td class="text-nowrap">
                 <button type="button" class="btn btn-sm btn-outline-danger" @click="remove_at('seeders', idx)">×</button>
@@ -150,7 +141,7 @@
               <!-- Indica si el comando se ejecuta una vez por base de datos o una vez por usuario/tenant -->
               <th style="width: 130px" title="por_base_de_datos: se corre una vez por DB · por_usuario: se corre una vez por cada tenant">Scope ejecución</th>
               <th style="width: 100px">Alcance</th>
-              <th style="width: 160px">Clientes</th>
+              <th style="width: 220px">Clientes</th>
               <th style="width: 120px"></th>
             </tr>
           </thead>
@@ -185,9 +176,7 @@
               </td>
               <td><span class="small">{{ scope_label(row) }}</span></td>
               <td>
-                <select v-model="row.client_ids" class="form-select form-select-sm" multiple size="3">
-                  <option v-for="c in clients_options" :key="c.id" :value="c.id">{{ client_option_label(c) }}</option>
-                </select>
+                <VersionClientSelector v-model:client_ids="row.client_ids" :options="clients_options" />
               </td>
               <td class="text-nowrap">
                 <button type="button" class="btn btn-sm btn-outline-danger" @click="remove_at('commands', idx)">×</button>
@@ -209,7 +198,7 @@
               <th>Descripción</th>
               <th class="text-center" style="width: 88px">Requerida</th>
               <th style="width: 100px">Alcance</th>
-              <th style="width: 160px">Clientes</th>
+              <th style="width: 220px">Clientes</th>
               <th style="width: 100px"></th>
             </tr>
           </thead>
@@ -229,9 +218,7 @@
               </td>
               <td><span class="small">{{ scope_label(row) }}</span></td>
               <td>
-                <select v-model="row.client_ids" class="form-select form-select-sm" multiple size="3">
-                  <option v-for="c in clients_options" :key="c.id" :value="c.id">{{ client_option_label(c) }}</option>
-                </select>
+                <VersionClientSelector v-model:client_ids="row.client_ids" :options="clients_options" />
               </td>
               <td class="text-nowrap">
                 <button type="button" class="btn btn-sm btn-outline-danger" @click="remove_at('manual_tasks', idx)">×</button>
@@ -281,6 +268,8 @@
 
 <script>
 import api from '@/utils/axios'
+/* Selector amigable de clientes (buscador + chips + restablecer) para las 4 tablas de esta pestaña */
+import VersionClientSelector from '@/components/version/client-selector/Index.vue'
 
 /**
  * Props extra del recurso `version` (fuera de common-vue). Se inyecta vía slot `model-extra` en ResourceView.
@@ -288,6 +277,7 @@ import api from '@/utils/axios'
  */
 export default {
   name: 'VersionExtraProps',
+  components: { VersionClientSelector },
   props: {
     /** Borrador del modal; se mutan notifications, seeders, commands, manual_tasks y client_ids por fila. */
     draft: { type: Object, default: null },
