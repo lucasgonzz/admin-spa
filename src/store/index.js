@@ -19,6 +19,8 @@ import task_template from './task_template'
 import implementation from './implementation'
 // Conteo de implementaciones de ecommerce listas para avanzar (badge Nav).
 import ecommerce_implementation from './ecommerce_implementation'
+// Pipeline técnico de instalación/actualización del ecommerce (log en vivo + checklist).
+import ecommerce_installation from './ecommerce_installation'
 // Actualizaciones de demo: pipeline SPA + API sobre demos en hosting.
 import demo_update from './demo_update'
 // Panel operativo del closer (tres secciones de leads).
@@ -52,6 +54,8 @@ export default createStore({
     implementation,
     // Estado global de implementaciones de ecommerce (badge en el Nav).
     ecommerce_implementation,
+    // Pipeline técnico de instalación/actualización del ecommerce.
+    ecommerce_installation,
     // Actualizaciones de demo (pipeline SPA + API).
     demo_update,
     // Panel del closer: en curso, agendadas y seguimiento.
