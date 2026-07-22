@@ -89,9 +89,9 @@
           <div class="d-flex align-items-start justify-content-between gap-2">
             <div>
               <!-- Nombre del cliente en grande -->
-              <h5 class="mb-1">{{ client_display_name(selected_implementation) }}</h5>
+              <h5 class="impl-client-name mb-2">{{ client_display_name(selected_implementation) }}</h5>
               <!-- Badge de estado general de la implementación -->
-              <span class="badge" :class="status_badge_class(selected_implementation.status)">
+              <span class="badge impl-badge" :class="status_badge_class(selected_implementation.status)">
                 {{ status_label(selected_implementation.status) }}
               </span>
               <!--
@@ -101,7 +101,7 @@
               -->
               <span
                 v-if="selected_implementation.automation_mode === 'auto'"
-                class="badge bg-warning text-dark ms-2"
+                class="badge impl-badge bg-warning text-dark ms-2"
                 title="Esta implementación responde y avanza sola"
               >
                 Automática
@@ -180,22 +180,29 @@
             </span>
           </div>
 
-          <!-- Sección: progreso visual de las 8 etapas -->
+          <!-- Sección: progreso visual de las 8 etapas, como stepper vertical -->
           <h6 class="impl-section-title">Etapas</h6>
-          <div class="impl-stages mb-4">
+          <div class="impl-card impl-card--stages mb-4">
             <div
               v-for="stage in selected_implementation.stages"
               :key="stage.id"
-              class="impl-stage-row d-flex align-items-start gap-2"
+              class="impl-stage-row d-flex align-items-start gap-3"
+              :class="'impl-stage-row--' + stage.status"
             >
-              <!-- Ícono emoji según estado de la etapa -->
-              <span class="impl-stage-icon flex-shrink-0">{{ stage_icon(stage.status) }}</span>
+              <!--
+                Columna del stepper: ícono de estado + línea conectora hacia la
+                siguiente etapa. La línea se dibuja con ::after en CSS y se oculta
+                en la última fila mediante :last-child.
+              -->
+              <div class="impl-stage-marker flex-shrink-0">
+                <span class="impl-stage-icon">{{ stage_icon(stage.status) }}</span>
+              </div>
 
-                <div class="flex-grow-1">
+              <div class="impl-stage-content flex-grow-1">
                 <!-- Número y nombre de la etapa desde config -->
-                <span class="fw-semibold small">
+                <span class="impl-stage-name">
                   Etapa {{ stage.stage_number }}
-                  <span v-if="stage.config" class="text-muted fw-normal">— {{ stage.config.name }}</span>
+                  <span v-if="stage.config" class="impl-stage-name__label">— {{ stage.config.name }}</span>
                 </span>
 
                 <!--
@@ -263,25 +270,28 @@
             </div>
           </div>
 
-          <!-- Sección: datos recolectados en el formulario de la etapa 1 -->
+          <!-- Sección: datos recolectados en el formulario de la etapa 1 (solo lectura; la edición inline llega en el prompt 03) -->
           <template v-if="form_summary_sections.length > 0">
             <h6 class="impl-section-title">Datos recolectados (Etapa 1)</h6>
 
-            <div class="card impl-card mb-3">
-              <div class="card-body">
-                <div
-                  v-for="section in form_summary_sections"
-                  :key="section.name"
-                  class="mb-3"
-                >
-                  <div class="text-muted small text-uppercase mb-2">{{ section.name }}</div>
-                  <dl class="row mb-0">
-                    <template v-for="(item, index) in section.items" :key="section.name + index">
-                      <dt class="col-sm-5 fw-normal text-muted">{{ item.label }}</dt>
-                      <dd class="col-sm-7">{{ item.value }}</dd>
-                    </template>
-                  </dl>
-                </div>
+            <div class="impl-card impl-card--form mb-3">
+              <div
+                v-for="section in form_summary_sections"
+                :key="section.name"
+                class="impl-form-section"
+              >
+                <!-- Encabezado de sección: nombre del grupo dentro del formulario -->
+                <div class="impl-form-section__title">{{ section.name }}</div>
+
+                <!-- Tabla label/valor de la sección, con divisores finos entre filas -->
+                <table class="impl-form-table">
+                  <tbody>
+                    <tr v-for="(item, index) in section.items" :key="section.name + index">
+                      <td class="impl-form-table__label">{{ item.label }}</td>
+                      <td class="impl-form-table__value">{{ item.value }}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </template>
@@ -289,9 +299,11 @@
           <!-- Formulario todavía sin enviar -->
           <template v-else-if="selected_implementation">
             <h6 class="impl-section-title">Datos recolectados (Etapa 1)</h6>
-            <p class="text-muted small">
-              El cliente todavía no envió el formulario.
-            </p>
+            <div class="impl-card mb-3">
+              <p class="text-muted small mb-0">
+                El cliente todavía no envió el formulario.
+              </p>
+            </div>
           </template>
 
           <!-- Sección: archivos recibidos en etapa 4 (si la etapa ya comenzó) -->
@@ -308,8 +320,8 @@
                 ⏳ Esperando archivos
               </span>
             </div>
-            <div class="card mb-4">
-              <div class="card-body small">
+            <div class="impl-card impl-card--stage4 mb-4">
+              <div class="small">
                 <details
                   v-for="category in stage_4_categories"
                   :key="category.key"
@@ -1784,10 +1796,24 @@ export default {
   flex: 1 1 0;
 }
 
-/* Header del panel derecho */
+/* Header del panel derecho: sobre blanco, separado del cuerpo con un borde sutil */
 .impl-right-top {
-  padding: 12px 16px;
+  padding: 18px 20px;
+  background-color: #fff;
   border-bottom: 1px solid #e9ecef;
+}
+
+/* Nombre del cliente: un poco más de aire respecto de los badges */
+.impl-client-name {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Badges del header: esquinas más suaves y algo de padding extra para que respiren */
+.impl-badge {
+  padding: 0.35em 0.7em;
+  border-radius: 6px;
+  font-weight: 500;
 }
 
 /*
@@ -1852,41 +1878,122 @@ export default {
   background-color: #0b5ed7;
 }
 
-/* Cuerpo scrolleable del panel derecho */
+/*
+  Cuerpo scrolleable del panel derecho: fondo gris neutro tipo Apple (#f5f5f7)
+  para dar contraste contra las tarjetas blancas que cuelgan de cada sección.
+*/
 .impl-right-body {
-  padding: 16px;
+  padding: 20px;
+  background-color: #f5f5f7;
 }
 
 /* Modo conversación: sin padding para que el componente ocupe todo el espacio */
 .impl-right-body--no-padding {
   padding: 0;
+  background-color: #fff;
 }
 
-/* Título de sección dentro del panel derecho */
+/*
+  Título de sección: se mantiene como guía visual pero en sentence case y con
+  algo más de peso que antes, sin mayúsculas agresivas (criterio Apple).
+*/
 .impl-section-title {
-  text-transform: uppercase;
-  font-size: 0.7rem;
-  letter-spacing: 0.05em;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   color: #6c757d;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
-/* Fila individual de etapa en el progreso */
+/*
+  Tarjeta blanca genérica: envoltorio de cada bloque de contenido (etapas,
+  datos recolectados, archivos). Esquinas redondeadas y sombra muy suave.
+*/
+.impl-card {
+  background-color: #fff;
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  padding: 16px 18px;
+}
+
+/* Tarjeta del stepper de etapas: el padding vertical lo maneja cada fila */
+.impl-card--stages {
+  padding: 8px 18px;
+}
+
+/* Fila individual de etapa dentro del stepper vertical */
 .impl-stage-row {
-  padding: 4px 0;
-  margin-bottom: 4px;
+  position: relative;
+  padding: 10px 0;
 }
 
-/* Espacio fijo del ícono de estado de etapa */
+/* Última fila: sin margen extra debajo */
+.impl-stage-row:last-child {
+  padding-bottom: 12px;
+}
+
+/*
+  Columna del marcador: ícono de estado + línea conectora vertical hacia la
+  fila siguiente. La línea se dibuja con ::after y se oculta en la última fila.
+*/
+.impl-stage-marker {
+  position: relative;
+  width: 1.6rem;
+  display: flex;
+  justify-content: center;
+}
+
+.impl-stage-row:not(:last-child) .impl-stage-marker::after {
+  content: '';
+  position: absolute;
+  top: 1.6rem;
+  bottom: -10px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background-color: #e5e5ea;
+}
+
+/* Ícono de estado de la etapa, centrado sobre la línea conectora */
 .impl-stage-icon {
   font-size: 1rem;
-  width: 1.4rem;
+  line-height: 1.5rem;
   text-align: center;
+}
+
+/* Nombre de la etapa: peso normal por defecto, se destaca en la etapa en curso */
+.impl-stage-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1d1d1f;
+}
+
+.impl-stage-name__label {
+  color: #6c757d;
+  font-weight: 400;
+}
+
+/* Etapa en curso: es la que mira el admin, se destaca con acento azul */
+.impl-stage-row--in_progress .impl-stage-name {
+  color: #0d6efd;
+}
+
+/* Etapa completada: nombre en gris, ya no requiere atención */
+.impl-stage-row--completed .impl-stage-name {
+  color: #6c757d;
+  font-weight: 500;
+}
+
+/* Etapa pendiente o saltada: atenuada */
+.impl-stage-row--pending .impl-stage-name,
+.impl-stage-row--skipped .impl-stage-name {
+  color: #aeaeb2;
+  font-weight: 500;
 }
 
 /* Contenedor de subetapas de cualquier etapa, indentado bajo el nombre de la etapa */
 .impl-stage-substeps {
-  padding-left: 1.2rem;
+  padding-left: 0.1rem;
 }
 
 /* Ítem individual de subetapa con pequeño espaciado vertical */
@@ -1896,7 +2003,7 @@ export default {
 
 /* Botonera de acciones dentro de una etapa (prompt 479) */
 .impl-stage-actions {
-  padding-left: 1.2rem;
+  padding-left: 0.1rem;
 }
 
 /* Motivo de bloqueo o último envío debajo de cada botón de acción de etapa */
@@ -1985,6 +2092,71 @@ export default {
   margin-top: 3px;
   opacity: 0.7;
   text-align: right;
+}
+
+/* Tarjeta del bloque "Datos recolectados": cada sección va separada por su título */
+.impl-card--form {
+  padding: 6px 0;
+}
+
+/* Sección individual dentro de la tarjeta de datos recolectados */
+.impl-form-section {
+  padding: 12px 18px;
+}
+
+.impl-form-section:not(:last-child) {
+  border-bottom: 1px solid #f1f1f3;
+}
+
+/* Encabezado de sección: nombre del grupo de campos del formulario */
+.impl-form-section__title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #86868b;
+  margin-bottom: 6px;
+}
+
+/*
+  Tabla label/valor: dos columnas, label suave a la izquierda y valor legible
+  a la derecha, con zebra suave y divisores finos entre filas para escanear
+  rápido. Se deja el markup ordenado para que el modo edición (prompt 03)
+  pueda insertarse en la celda de valor sin pelear con el layout.
+*/
+.impl-form-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.impl-form-table tr:nth-child(even) {
+  background-color: #fafafa;
+}
+
+.impl-form-table tr:not(:last-child) td {
+  border-bottom: 1px solid #f1f1f3;
+}
+
+.impl-form-table td {
+  padding: 7px 8px;
+  font-size: 0.875rem;
+  vertical-align: top;
+}
+
+.impl-form-table__label {
+  color: #6c757d;
+  width: 42%;
+  white-space: normal;
+}
+
+.impl-form-table__value {
+  color: #1d1d1f;
+  word-break: break-word;
+}
+
+/* Tarjeta del panel de archivos de Etapa 4 */
+.impl-card--stage4 {
+  padding: 16px 18px;
 }
 
 /* Bloque de categoría en panel Etapa 4 */
