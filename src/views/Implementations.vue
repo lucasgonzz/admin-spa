@@ -10,8 +10,17 @@
     <div class="impl-left d-flex flex-column min-h-0">
 
       <!-- Encabezado del panel izquierdo -->
-      <div class="impl-left-top flex-shrink-0">
+      <div class="impl-left-top flex-shrink-0 d-flex align-items-center justify-content-between">
         <h6 class="mb-0 fw-semibold">Implementaciones</h6>
+
+        <!-- Botón para dar de alta una nueva implementación eligiendo el cliente (Prompt 178-05) -->
+        <button
+          type="button"
+          class="btn btn-sm impl-new-btn"
+          @click="show_create_modal = true"
+        >
+          + Nueva implementación
+        </button>
       </div>
 
       <!-- Lista con scroll propio -->
@@ -512,6 +521,14 @@
     @close="on_sidebar_close"
     @record-updated="on_sidebar_record_updated"
   />
+
+  <!-- Modal de alta de una nueva implementación eligiendo el cliente (Prompt 178-05) -->
+  <create-implementation-modal
+    :show="show_create_modal"
+    :existing_client_ids="existing_implementation_client_ids"
+    @update:show="show_create_modal = $event"
+    @created="on_implementation_created"
+  />
 </template>
 
 <script>
@@ -523,6 +540,8 @@ import { SECTIONS } from '@/components/formulario/questions'
 import FormularioSection from '@/components/formulario/FormularioSection.vue'
 /* Sidebar lateral de conversación WhatsApp embebida (Prompt 178-04, espeja LeadConversationSidebar) */
 import ImplementationConversationSidebar from '@/components/implementation/ImplementationConversationSidebar.vue'
+/* Modal de alta de una nueva implementación con selector de cliente (Prompt 178-05) */
+import CreateImplementationModal from '@/components/implementation/CreateImplementationModal.vue'
 
 /**
  * Etiquetas en español de propiedades de sistema (mismo mapa que ImplementationImportService).
@@ -543,7 +562,7 @@ const STAGE_4_PROPERTY_LABELS = {
 export default {
   name: 'ViewImplementations',
 
-  components: { ImplementationActionBar, FormularioSection, ImplementationConversationSidebar },
+  components: { ImplementationActionBar, FormularioSection, ImplementationConversationSidebar, CreateImplementationModal },
 
   data() {
     return {
@@ -628,6 +647,11 @@ export default {
        * (solo desktop). null = sidebar cerrado. Ver go_to_conversation (Prompt 178-04).
        */
       sidebar_implementation: null,
+
+      /**
+       * Visibilidad del modal de alta de una nueva implementación (Prompt 178-05).
+       */
+      show_create_modal: false,
     }
   },
 
@@ -738,6 +762,25 @@ export default {
       return (this.selected_implementation && this.selected_implementation.payment_method_options) || []
     },
 
+    /**
+     * IDs de clientes que ya tienen una implementación (cualquier estado), a excluir
+     * del buscador del modal de alta (Prompt 178-05).
+     *
+     * @returns {Array<number|string>}
+     */
+    existing_implementation_client_ids() {
+      /** Lista de client_id a devolver, uno por implementación existente. */
+      const ids = []
+
+      this.implementations.forEach(function (impl) {
+        if (impl.client_id != null) {
+          ids.push(impl.client_id)
+        }
+      })
+
+      return ids
+    },
+
   },
 
   watch: {
@@ -776,9 +819,12 @@ export default {
      * Carga la lista de implementaciones desde GET /implementation.
      * Ordena y presenta en el panel izquierdo.
      *
+     * @param {Function|null} on_loaded Callback opcional invocado al terminar (éxito o error),
+     *   usado por on_implementation_created (Prompt 178-05) para seleccionar la implementación
+     *   recién creada una vez que el listado ya se recargó.
      * @returns {void}
      */
-    load_list() {
+    load_list(on_loaded) {
       const self = this
       this.list_loading = true
       set_global_loading_store(self.$store, true, 'Cargando implementaciones…')
@@ -805,7 +851,33 @@ export default {
         .then(function () {
           self.list_loading = false
           set_global_loading_store(self.$store, false)
+
+          if (typeof on_loaded === 'function') {
+            on_loaded()
+          }
         })
+    },
+
+    /**
+     * Maneja el evento `created` del modal de alta (Prompt 178-05): cierra el modal,
+     * refresca el listado del panel izquierdo y, una vez recargado, deja seleccionada
+     * la implementación recién creada en el panel derecho.
+     *
+     * @param {Object|null} model Implementación recién creada, devuelta por el backend.
+     * @returns {void}
+     */
+    on_implementation_created(model) {
+      this.show_create_modal = false
+
+      const self = this
+      /** ID de la implementación recién creada, si el backend lo devolvió. */
+      const new_id = model && model.id
+
+      this.load_list(function () {
+        if (new_id) {
+          self.select_implementation(new_id)
+        }
+      })
     },
 
     /**
@@ -2011,6 +2083,26 @@ export default {
 .impl-left-top {
   padding: 10px 12px;
   border-bottom: 1px solid #e9ecef;
+}
+
+/*
+  Botón "+ Nueva implementación" del encabezado del panel izquierdo (Prompt 178-05):
+  sobrio, con el mismo acento azul del resto de acciones primarias de la vista.
+*/
+.impl-new-btn {
+  color: #0d6efd;
+  background-color: #e7f1ff;
+  border: none;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.impl-new-btn:hover {
+  background-color: #d7e8ff;
+  color: #0d6efd;
 }
 
 /* Fila individual del listado */
