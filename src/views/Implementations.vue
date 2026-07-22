@@ -505,6 +505,13 @@
 
     </div>
   </div>
+
+  <!-- Sidebar lateral de conversación WhatsApp (desktop), espeja LeadConversationSidebar -->
+  <implementation-conversation-sidebar
+    :implementation="sidebar_implementation"
+    @close="on_sidebar_close"
+    @record-updated="on_sidebar_record_updated"
+  />
 </template>
 
 <script>
@@ -514,6 +521,8 @@ import ImplementationActionBar from '@/components/implementation/ImplementationA
 /* Motor de campos del formulario público, reutilizado acá para editar form_responses (Prompt 178-03) */
 import { SECTIONS } from '@/components/formulario/questions'
 import FormularioSection from '@/components/formulario/FormularioSection.vue'
+/* Sidebar lateral de conversación WhatsApp embebida (Prompt 178-04, espeja LeadConversationSidebar) */
+import ImplementationConversationSidebar from '@/components/implementation/ImplementationConversationSidebar.vue'
 
 /**
  * Etiquetas en español de propiedades de sistema (mismo mapa que ImplementationImportService).
@@ -534,7 +543,7 @@ const STAGE_4_PROPERTY_LABELS = {
 export default {
   name: 'ViewImplementations',
 
-  components: { ImplementationActionBar, FormularioSection },
+  components: { ImplementationActionBar, FormularioSection, ImplementationConversationSidebar },
 
   data() {
     return {
@@ -613,6 +622,12 @@ export default {
        * Indicador de guardado en curso del PATCH de form-responses.
        */
       saving_form_data: false,
+
+      /**
+       * Implementación actualmente abierta en el sidebar de conversación WhatsApp
+       * (solo desktop). null = sidebar cerrado. Ver go_to_conversation (Prompt 178-04).
+       */
+      sidebar_implementation: null,
     }
   },
 
@@ -1683,17 +1698,70 @@ export default {
     },
 
     /**
-     * Navega a la vista fullscreen de conversación WhatsApp de una implementación.
-     * Equivalente al ícono de WhatsApp en el listado de leads.
+     * Abre la conversación WhatsApp de una implementación.
+     * En desktop (≥768px): abre el sidebar lateral sin navegar, igual que en leads.
+     * En mobile (<768px): navega a la ruta de pantalla completa (comportamiento anterior).
      *
-     * @param {number|string} impl_id ID de la implementación.
+     * @param {number|string} impl_id ID de la implementación (fila del listado o header del detalle).
      * @returns {void}
      */
     go_to_conversation(impl_id) {
+      if (window.innerWidth >= 768) {
+        /* Resolver el objeto completo: si es la seleccionada, reusar selected_implementation
+           (ya trae stages/messages/client); si no, buscarla en el listado. */
+        if (this.selected_implementation && this.selected_implementation.id == impl_id) {
+          this.sidebar_implementation = this.selected_implementation
+          return
+        }
+        const impl = this.implementations.find(function (i) {
+          return i.id == impl_id
+        })
+        this.sidebar_implementation = impl || null
+        return
+      }
+      /* Mobile: mantener el comportamiento anterior de pantalla completa. */
       this.$router.push({
         name: 'implementation_conversation',
         params: { implementation_id: impl_id },
       })
+    },
+
+    /**
+     * Cierra el sidebar lateral de conversación limpiando la implementación activa.
+     *
+     * @returns {void}
+     */
+    on_sidebar_close() {
+      this.sidebar_implementation = null
+    },
+
+    /**
+     * Propaga la actualización de implementación recibida desde el sidebar de conversación:
+     * refresca la fila del listado y, si corresponde, el detalle seleccionado (reutilizando
+     * on_implementation_updated) y la referencia local del sidebar.
+     *
+     * @param {Object} model Implementación actualizada.
+     * @returns {void}
+     */
+    on_sidebar_record_updated(model) {
+      if (!model || !model.id) {
+        return
+      }
+      /* Si el modelo actualizado es el que está seleccionado en el detalle, refrescarlo también. */
+      if (this.selected_implementation && this.selected_implementation.id === model.id) {
+        this.on_implementation_updated(model)
+      } else {
+        const index = this.implementations.findIndex(function (i) {
+          return i.id === model.id
+        })
+        if (index !== -1) {
+          this.implementations.splice(index, 1, model)
+        }
+      }
+      /* Actualizar la referencia del sidebar si el modelo coincide con la implementación activa. */
+      if (this.sidebar_implementation && this.sidebar_implementation.id === model.id) {
+        this.sidebar_implementation = model
+      }
     },
 
     /**

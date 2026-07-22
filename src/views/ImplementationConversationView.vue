@@ -1,20 +1,30 @@
 <template>
   <!--
-    Vista fullscreen de conversación WhatsApp de una implementación.
-    Accesible desde /implementaciones/:implementation_id/conversacion.
+    Vista de conversación WhatsApp de una implementación.
+    Modo ruta: fullscreen, accesible desde /implementaciones/:implementation_id/conversacion.
+    Modo prop (sidebar): recibe implementation_record_prop ya cargada; is_sidebar_mode
+    oculta el botón "atrás" porque el panel padre (ImplementationConversationSidebar)
+    ya tiene su propio botón cerrar.
     Replica el layout de LeadConversationView pero adaptado al modelo de implementaciones:
     header simplificado, burbujas inline (sin MessageBubble separado), separadores de etapa.
   -->
-  <div class="conversation-view">
+  <div
+    class="lead-module"
+    :class="{
+      'conversation-view': !is_sidebar_mode,
+      'conversation-view--embedded': is_sidebar_mode,
+    }"
+  >
 
     <!-- ====================================================
          HEADER FIJO: botón atrás | nombre del cliente | exportar
          ==================================================== -->
     <div class="conversation-header d-flex align-items-center justify-content-between px-3 py-2 border-bottom bg-white">
 
-      <!-- Izquierda: botón atrás + nombre del cliente -->
+      <!-- Izquierda: botón atrás (solo modo ruta) + nombre del cliente -->
       <div class="d-flex align-items-center gap-2 overflow-hidden">
         <button
+          v-if="!is_sidebar_mode"
           type="button"
           class="icon-btn"
           title="Volver a Implementaciones"
@@ -283,18 +293,41 @@ import '@/styles/conversation-placeholder-states.css'
 import '@/styles/whatsapp-date-divider.css'
 
 /**
- * Vista fullscreen de conversación WhatsApp de una implementación.
+ * Vista de conversación WhatsApp de una implementación.
  *
  * Equivalente a LeadConversationView pero para el módulo de implementaciones.
- * Carga la implementación desde la API al montar usando :implementation_id de la ruta.
+ *
+ * Modo ruta: fullscreen en /implementaciones/:implementation_id/conversacion; carga la
+ * implementación desde this.$route.params.implementation_id.
+ *
+ * Modo prop (sidebar): recibe implementation_record_prop con la implementación ya
+ * cargada por el padre (fila del listado o selected_implementation); no lee la ruta
+ * ni muestra el botón volver. El contenedor padre (ImplementationConversationSidebar)
+ * provee el layout fijo y su propio botón cerrar.
+ *
  * Las burbujas se renderizan inline (sin componente separado) porque el modelo
  * implementation_messages difiere de lead_messages.
- * Se suscribe al canal Pusher admin-implementations para recibir mensajes en tiempo real.
+ * Se suscribe al canal Pusher admin-implementations para recibir mensajes en tiempo real,
+ * en ambos modos.
  */
 export default {
   name: 'ImplementationConversationView',
 
   mixins: [lead_conversation_date_dividers, conversation_scroll_behavior],
+
+  props: {
+    /**
+     * Implementación precargada para modo embebido (sidebar). null = modo ruta habitual.
+     *
+     * @type {Object|null}
+     */
+    implementation_record_prop: {
+      type: Object,
+      default: null,
+    },
+  },
+
+  emits: ['record-updated'],
 
   data() {
     return {
@@ -358,6 +391,15 @@ export default {
   },
 
   computed: {
+    /**
+     * true cuando la vista recibe la implementación por prop (sidebar embebido), no por ruta.
+     *
+     * @returns {boolean}
+     */
+    is_sidebar_mode() {
+      return this.implementation_record_prop !== null && this.implementation_record_prop !== undefined
+    },
+
     /**
      * Nombre visible del cliente en el header.
      * Usa company_name si está disponible, cae a name como fallback.
@@ -464,28 +506,41 @@ export default {
     },
   },
 
+  watch: {
+    /**
+     * Recarga la conversación cuando el sidebar cambia de implementación
+     * (nuevo implementation_record_prop). Solo aplica en modo sidebar.
+     *
+     * @param {Object|null} new_val Implementación recién recibida por prop.
+     * @param {Object|null} old_val Implementación anterior en la prop.
+     * @returns {void}
+     */
+    implementation_record_prop(new_val, old_val) {
+      if (!this.is_sidebar_mode) {
+        return
+      }
+      if (!new_val || !new_val.id) {
+        return
+      }
+      if (old_val && old_val.id === new_val.id) {
+        return
+      }
+      this.load_implementation(new_val.id)
+    },
+  },
+
   mounted() {
-    const self = this
-
-    /* Cargar la implementación con mensajes usando el param de la ruta. */
-    const impl_id = this.$route.params.implementation_id
-    this.loading_conversation = true
-
-    api
-      .get('/implementation/' + impl_id)
-      .then(function (res) {
-        self.implementation = res.data.model || null
-        self.loading_conversation = false
-        self.$nextTick(function () {
-          self.schedule_scroll_to_bottom()
-        })
-      })
-      .catch(function () {
-        self.loading_conversation = false
-      })
-
-    /* Suscribirse al canal Pusher para recibir mensajes en tiempo real. */
+    /* Suscribirse al canal Pusher para recibir mensajes en tiempo real (ambos modos). */
     this.setup_pusher_subscription()
+
+    if (this.is_sidebar_mode) {
+      /* Modo sidebar: la implementación llega por prop, se recarga por id para traer mensajes completos. */
+      this.load_implementation(this.implementation_record_prop.id)
+      return
+    }
+
+    /* Modo ruta: cargar la implementación con mensajes usando el param de la ruta. */
+    this.load_implementation(this.$route.params.implementation_id)
   },
 
   beforeUnmount() {
@@ -510,6 +565,45 @@ export default {
   },
 
   methods: {
+    // -------------------------------------------------------------------------
+    // Carga de la implementación
+    // -------------------------------------------------------------------------
+
+    /**
+     * Carga la implementación (con relaciones client/stages/messages) desde
+     * GET /implementation/{id}. Usada tanto en modo ruta como en modo sidebar
+     * (al montar y cuando el sidebar cambia de implementación). Al terminar,
+     * emite record-updated para que el padre pueda refrescar su propia copia.
+     *
+     * @param {number|string} impl_id ID de la implementación a cargar.
+     * @returns {void}
+     */
+    load_implementation(impl_id) {
+      const self = this
+
+      if (!impl_id) {
+        return
+      }
+
+      this.loading_conversation = true
+
+      api
+        .get('/implementation/' + impl_id)
+        .then(function (res) {
+          self.implementation = res.data.model || null
+          self.loading_conversation = false
+          self.$nextTick(function () {
+            self.schedule_scroll_to_bottom()
+          })
+          if (self.implementation) {
+            self.$emit('record-updated', self.implementation)
+          }
+        })
+        .catch(function () {
+          self.loading_conversation = false
+        })
+    },
+
     // -------------------------------------------------------------------------
     // Redimensión del textarea (comportamiento tipo WhatsApp)
     // -------------------------------------------------------------------------
@@ -1175,6 +1269,18 @@ export default {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* Modo embebido (sidebar): ocupa el 100% del contenedor padre, sin position fixed. */
+.conversation-view--embedded {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bs-body-bg);
 }
 
 /* Header y footer no ceden espacio al área de mensajes. */
