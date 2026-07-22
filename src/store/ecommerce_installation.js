@@ -69,5 +69,17 @@ export default {
     fetch_logs(context, installation_id) {
       return api.get('/ecommerce-installations/' + installation_id + '/logs')
     },
+
+    /**
+     * Elimina una corrida de instalación/actualización del ecommerce (y sus logs asociados).
+     * El backend rechaza el borrado con 422 si la corrida sigue `instalando`.
+     *
+     * @param {object} context Contexto Vuex (no usa commit: sin estado propio).
+     * @param {number} installation_id Id de la ClientEcommerceInstallation a borrar.
+     * @returns {Promise} Resuelve con { deleted: true } (res.data).
+     */
+    delete_installation(context, installation_id) {
+      return api.delete('/ecommerce-installations/' + installation_id)
+    },
   },
 }

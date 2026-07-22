@@ -171,6 +171,26 @@
         </p>
         <ecommerce-operations-panel :installation="selected_installation" />
       </template>
+
+      <!--
+        Footer custom: agrega el botón "Eliminar" (deshabilitado mientras la corrida está
+        'instalando') además del "Cerrar" que trae base-modal por defecto. Al usar este slot se
+        pierde el comportamiento por defecto del footer (que llama al close() interno del modal),
+        por eso "Cerrar" invoca manualmente on_manage_modal_closed() para no perder la limpieza
+        del polling. La cruz del header sigue funcionando igual, no se toca.
+      -->
+      <template #footer>
+        <button
+          type="button"
+          class="btn btn-outline-danger btn-sm me-auto"
+          :disabled="!selected_installation || selected_installation.status === 'instalando' || deleting_installation"
+          :title="selected_installation && selected_installation.status === 'instalando' ? 'No se puede eliminar una corrida en curso' : 'Eliminar esta corrida'"
+          @click="delete_selected_installation"
+        >
+          <i class="bi bi-trash me-1" aria-hidden="true"></i>{{ deleting_installation ? 'Eliminando...' : 'Eliminar' }}
+        </button>
+        <button type="button" class="btn btn-secondary" @click="on_manage_modal_closed(); show_manage_modal = false">Cerrar</button>
+      </template>
     </base-modal>
 
   </div>
@@ -246,6 +266,9 @@ export default {
 
       /** Timer de polling de la corrida en curso dentro del modal de seguimiento. */
       polling_timer: null,
+
+      /** true mientras se dispara el borrado de la corrida seleccionada (DELETE). */
+      deleting_installation: false,
     }
   },
 
@@ -479,6 +502,42 @@ export default {
         })
         .catch(function () {
           /* Polling: silencia errores de red transitorios. */
+        })
+    },
+
+    /**
+     * Elimina la corrida seleccionada en el modal de seguimiento (previa confirmación del
+     * usuario) y la saca del listado. El backend responde 422 si la corrida sigue 'instalando'
+     * (el botón ya queda deshabilitado en ese caso, pero se valida igual del lado del store).
+     *
+     * @returns {void}
+     */
+    delete_selected_installation() {
+      const self = this
+      if (!self.selected_installation) {
+        return
+      }
+      if (!window.confirm('¿Eliminar esta corrida? Esta acción no se puede deshacer.')) {
+        return
+      }
+      // Se guarda el id antes de disparar el borrado porque selected_installation se limpia al terminar.
+      const deleted_id = self.selected_installation.id
+      self.deleting_installation = true
+      self.$store.dispatch('ecommerce_installation/delete_installation', deleted_id)
+        .then(function () {
+          self.stop_polling()
+          const index = self.installations.findIndex(function (i) { return i.id === deleted_id })
+          if (index !== -1) {
+            self.installations.splice(index, 1)
+          }
+          self.show_manage_modal = false
+          self.selected_installation = null
+        })
+        .catch(function () {
+          /* El interceptor de axios ya muestra el error (ej. 422 si está en curso). */
+        })
+        .finally(function () {
+          self.deleting_installation = false
         })
     },
 
