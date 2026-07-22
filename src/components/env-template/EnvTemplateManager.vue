@@ -1,7 +1,7 @@
 <template>
   <div class="container-fluid px-0 py-4">
     <div class="d-flex align-items-center mb-4 gap-3">
-      <h2 class="h4 mb-0">Plantilla base .env</h2>
+      <h2 class="h4 mb-0">{{ title }}</h2>
       <!-- Botón para desplegar el formulario de nueva variable -->
       <button
         type="button"
@@ -116,7 +116,11 @@
             />
           </div>
 
-          <!-- Checkboxes: is_common e is_manual_on_create -->
+          <!--
+            Checkboxes: is_common e is_manual_on_create.
+            "Manual al crear" solo aplica al scope empresa: en tienda ninguna variable
+            usa ese flujo de recordatorio (el seeder las siembra todas en false).
+          -->
           <div class="col-md-3 d-flex flex-column gap-2">
             <div class="form-check">
               <input
@@ -129,7 +133,7 @@
                 Común <span class="text-muted">(se contrasta al actualizar)</span>
               </label>
             </div>
-            <div class="form-check">
+            <div v-if="scope === 'empresa'" class="form-check">
               <input
                 v-model="new_var_form.is_manual_on_create"
                 type="checkbox"
@@ -204,7 +208,8 @@
                 <th style="width: 200px">Variable</th>
                 <th>Valor (template)</th>
                 <th style="width: 130px" class="text-center">Común</th>
-                <th style="width: 160px" class="text-center">Manual al crear</th>
+                <!-- Columna "Manual al crear": no aplica al scope tienda -->
+                <th v-if="scope === 'empresa'" style="width: 160px" class="text-center">Manual al crear</th>
                 <th>Notas</th>
               </tr>
             </thead>
@@ -218,13 +223,25 @@
                   <code class="small">{{ tpl.key }}</code>
                 </td>
 
-                <!-- Campo de texto para el valor del template -->
+                <!--
+                  Campo de texto para el valor del template.
+                  En scope tienda, si la variable no es común (is_common = false), la
+                  completa sola la instalación (a partir del dominio o del .env de
+                  empresa del cliente): se muestra un badge informativo y el placeholder
+                  pasa a ser la nota de la variable, sin deshabilitar el input.
+                -->
                 <td class="align-middle">
+                  <span
+                    v-if="scope === 'tienda' && !drafts[tpl.id].is_common"
+                    class="badge bg-secondary-subtle text-secondary-emphasis mb-1 d-inline-block"
+                  >
+                    La completa la instalación
+                  </span>
                   <input
                     v-model="drafts[tpl.id].value"
                     type="text"
                     class="form-control form-control-sm"
-                    :placeholder="tpl.key === 'APP_KEY' ? 'Se genera por sistema' : ''"
+                    :placeholder="value_placeholder(tpl)"
                   />
                 </td>
 
@@ -241,8 +258,8 @@
                   </div>
                 </td>
 
-                <!-- Checkbox: es manual al crear (recordatorio en alta de sistema) -->
-                <td class="align-middle text-center">
+                <!-- Checkbox: es manual al crear (recordatorio en alta de sistema); no aplica a tienda -->
+                <td v-if="scope === 'empresa'" class="align-middle text-center">
                   <div class="form-check d-flex justify-content-center mb-0">
                     <input
                       v-model="drafts[tpl.id].is_manual_on_create"
@@ -269,8 +286,8 @@
         </div>
       </div>
 
-      <!-- Sección colapsable: recordatorio para sistemas nuevos -->
-      <div class="card mt-4">
+      <!-- Sección colapsable: recordatorio para sistemas nuevos (solo scope empresa) -->
+      <div v-if="scope === 'empresa'" class="card mt-4">
         <div class="card-header">
           <button
             type="button"
@@ -316,15 +333,36 @@
 import api from '@/utils/axios'
 
 /**
- * Pantalla de gestión de la plantilla base .env del sistema.
+ * Componente reutilizable de gestión de la plantilla base .env de un sistema.
+ *
+ * Extraído de la ex vista única `views/EnvTemplate/Index.vue` (Grupo 190, Prompt 02)
+ * para soportar dos scopes: `empresa` (plantilla de empresa-api, comportamiento
+ * original sin cambios) y `tienda` (plantilla de tienda-api, con diferencias de UI:
+ * sin columna/checkbox "Manual al crear" ni sección de recordatorio, y con badge
+ * informativo en las variables que completa sola la instalación).
  *
  * Muestra las variables agrupadas por grupo funcional (app, db, mail, pusher, misc).
- * Permite editar el valor, marcado de is_common e is_manual_on_create, y notas de cada variable.
+ * Permite editar el valor, marcado de is_common (y is_manual_on_create en empresa), y notas.
  * El botón "Guardar" llama a POST /env-template/bulk-update con todos los drafts.
- * Al pie, sección colapsable con las variables marcadas como is_manual_on_create.
  */
 export default {
-  name: 'ViewEnvTemplate',
+  name: 'EnvTemplateManager',
+
+  props: {
+    /** Scope de la plantilla a gestionar: 'empresa' (sistema) o 'tienda' (ecommerce). */
+    scope: {
+      type: String,
+      required: true,
+      validator: function (value) {
+        return value === 'empresa' || value === 'tienda'
+      },
+    },
+    /** Título mostrado en el encabezado de la pantalla. */
+    title: {
+      type: String,
+      required: true,
+    },
+  },
 
   data() {
     return {
@@ -424,6 +462,7 @@ export default {
 
     /**
      * Variables marcadas como is_manual_on_create (usando el draft actualizado).
+     * Solo tiene sentido en scope empresa; en tienda no se usa (la sección está oculta).
      *
      * @returns {Array}
      */
@@ -442,7 +481,7 @@ export default {
 
   methods: {
     /**
-     * Carga la lista de variables del template desde el backend.
+     * Carga la lista de variables del template desde el backend, filtradas por scope.
      *
      * @returns {void}
      */
@@ -451,7 +490,7 @@ export default {
       self.loading = true
       self.load_error = null
 
-      api.get('/env-template').then(function (res) {
+      api.get('/env-template', { params: { scope: self.scope } }).then(function (res) {
         const templates = res.data.models || []
         self.templates = templates
         /* Inicializa drafts editables por ID para que Vue pueda rastrear los cambios. */
@@ -476,7 +515,7 @@ export default {
     },
 
     /**
-     * Envía todos los drafts al backend para actualización masiva.
+     * Envía todos los drafts al backend para actualización masiva, junto con el scope.
      *
      * @returns {void}
      */
@@ -487,7 +526,7 @@ export default {
       /* Construye el array de items a enviar desde los drafts. */
       const items = Object.values(self.drafts)
 
-      api.post('/env-template/bulk-update', { items: items }).then(function (res) {
+      api.post('/env-template/bulk-update', { items: items, scope: self.scope }).then(function (res) {
         const templates = res.data.models || []
         self.templates = templates
 
@@ -534,7 +573,28 @@ export default {
     },
 
     /**
-     * Envía el formulario de nueva variable al backend vía POST /env-template.
+     * Placeholder del input de valor de una variable.
+     *
+     * En scope empresa se conserva el caso especial de APP_KEY (se genera por sistema).
+     * En scope tienda, las variables no comunes (is_common = false) las completa sola
+     * la instalación: el placeholder pasa a ser la nota de la variable, para orientar
+     * al operador sobre qué se va a completar ahí.
+     *
+     * @param {Object} tpl Variable de template.
+     * @returns {string}
+     */
+    value_placeholder(tpl) {
+      if (this.scope === 'tienda' && !this.drafts[tpl.id].is_common) {
+        return this.drafts[tpl.id].notes || ''
+      }
+      if (tpl.key === 'APP_KEY') {
+        return 'Se genera por sistema'
+      }
+      return ''
+    },
+
+    /**
+     * Envía el formulario de nueva variable al backend vía POST /env-template, con el scope actual.
      *
      * En caso de éxito, recarga la lista completa de templates (el backend la devuelve),
      * reconstruye los drafts, cierra el formulario y muestra un toast de éxito.
@@ -547,7 +607,9 @@ export default {
       self.new_var_error = null
       self.new_var_saving = true
 
-      api.post('/env-template', self.new_var_form).then(function (res) {
+      const payload = Object.assign({}, self.new_var_form, { scope: self.scope })
+
+      api.post('/env-template', payload).then(function (res) {
         /* Actualiza la lista de templates con la respuesta del backend. */
         const templates = res.data.models || []
         self.templates = templates

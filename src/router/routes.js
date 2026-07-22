@@ -182,11 +182,32 @@ const routes_def = [
     ],
   },
   {
+    // Ítem padre con submenú: Sistema / Ecommerce (Grupo 190, Prompt 02), calcado del
+    // patrón de Implementaciones. Redirige a Sistema por compatibilidad con el link
+    // directo a "/env-template" que ya pueda existir. Se conserva el ícono actual.
     path: '/env-template',
     name: 'env_template',
     text: 'Plantilla .env',
-    component: () => import('@/views/EnvTemplate/Index.vue'),
+    redirect: '/env-template/sistema',
     meta: { requiresAuth: true, nav: true, icon: 'file-earmark-code' },
+    children: [
+      {
+        /** Plantilla base .env de empresa-api (ex ítem único "Plantilla .env"). */
+        path: '/env-template/sistema',
+        name: 'env_template_sistema',
+        text: 'Sistema',
+        component: () => import('@/views/EnvTemplate/Sistema.vue'),
+        meta: { requiresAuth: true, nav: false },
+      },
+      {
+        /** Plantilla base .env de tienda-api (ecommerce). */
+        path: '/env-template/ecommerce',
+        name: 'env_template_ecommerce',
+        text: 'Ecommerce',
+        component: () => import('@/views/EnvTemplate/Ecommerce.vue'),
+        meta: { requiresAuth: true, nav: false },
+      },
+    ],
   },
   {
     /** Gestión de usuarios admin del equipo interno (CRUD + Google Calendar para closers). */
