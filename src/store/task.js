@@ -25,6 +25,9 @@ export default __base_store({
      * Devuelve una función que cuenta tareas pendientes asignadas a un admin.
      * Se usa en la barra lateral para el badge del ítem «Tareas».
      *
+     * Semántica (corregida): una tarea sin asignar significa "la puede hacer
+     * cualquiera", no "es de todos" — por eso ya NO suma al contador personal.
+     *
      * @param {Object} state estado del módulo task.
      * @returns {function(number|string|null): number}
      */
@@ -33,26 +36,70 @@ export default __base_store({
         if (admin_id == null || admin_id === '') {
           return 0
         }
-        /** Id numérico normalizado para comparar con assigned_admin_id del API. */
+        /** Id numérico normalizado para comparar con los ids de assigned_admins. */
         const target_id = Number(admin_id)
         if (isNaN(target_id)) {
           return 0
         }
-        /** Contador de tareas no realizadas asignadas a ese admin o sin asignar. */
+        /** Contador de tareas no realizadas donde el admin está entre los asignados. */
         var count = 0
         state.models.forEach(function (t) {
           if (t.is_done) {
             return
           }
-          // Contar tareas asignadas a este admin O sin asignar (visibles para todos).
-          const is_mine       = t.assigned_admin_id != null && Number(t.assigned_admin_id) === target_id
-          const is_unassigned = t.assigned_admin_id == null
-          if (is_mine || is_unassigned) {
+          // Determinar si el admin está entre los asignados de la tarea.
+          var is_mine = false
+          if (Array.isArray(t.assigned_admins)) {
+            // Formato nuevo: array de admins { id, name, ... }.
+            is_mine = t.assigned_admins.some(function (a) { return Number(a.id) === target_id })
+          } else {
+            // Defensivo: respuesta vieja en caché sin assigned_admins, usar el legacy.
+            is_mine = t.assigned_admin_id != null && Number(t.assigned_admin_id) === target_id
+          }
+          if (is_mine) {
             count += 1
           }
         })
         return count
       }
+    },
+
+    /**
+     * Cantidad de tareas pendientes sin ningún admin asignado.
+     * Se usa en la barra de navegación para el ítem "Sin asignar" (prompt 09).
+     *
+     * @param {Object} state estado del módulo task.
+     * @returns {number}
+     */
+    pending_count_unassigned(state) {
+      var count = 0
+      state.models.forEach(function (t) {
+        if (t.is_done) {
+          return
+        }
+        // Determinar si la tarea no tiene ningún asignado, con fallback legacy.
+        var is_unassigned
+        if (Array.isArray(t.assigned_admins)) {
+          is_unassigned = t.assigned_admins.length === 0
+        } else {
+          is_unassigned = t.assigned_admin_id == null
+        }
+        if (is_unassigned) {
+          count += 1
+        }
+      })
+      return count
+    },
+
+    /**
+     * Cantidad total de tareas pendientes (sin filtrar por asignación).
+     * Se usa en la barra de navegación para el ítem "Todos" (prompt 09).
+     *
+     * @param {Object} state estado del módulo task.
+     * @returns {number}
+     */
+    pending_count_total(state) {
+      return state.models.filter(function (t) { return !t.is_done }).length
     },
   },
 

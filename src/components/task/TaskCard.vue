@@ -124,13 +124,25 @@
         </span>
       </div>
 
-      <!-- Footer: admins y timestamp -->
-      <div class="d-flex align-items-center justify-content-between ms-4 mt-1">
-        <!-- Admin asignado -->
-        <span v-if="task.assigned_admin" class="badge bg-secondary small">
-          <i class="bi bi-person-fill me-1" />{{ task.assigned_admin.name }}
-        </span>
-        <span v-else class="text-muted small">Sin asignar</span>
+      <!-- Footer: admins responsables y timestamp -->
+      <div class="d-flex align-items-center justify-content-between ms-4 mt-1 flex-wrap gap-1">
+        <!-- Responsables: un badge por cada admin asignado -->
+        <div class="d-flex flex-wrap gap-1">
+          <span
+            v-for="admin in assigned_admins_list"
+            :key="admin.id"
+            class="badge bg-secondary small"
+          >
+            <i class="bi bi-person-fill me-1" />{{ admin.name }}
+          </span>
+          <span
+            v-if="assigned_admins_list.length === 0"
+            class="text-muted small"
+            title="La puede tomar cualquiera"
+          >
+            Sin asignar
+          </span>
+        </div>
 
         <!-- Admin que creó la tarea -->
         <span v-if="task.created_by_admin" class="text-muted small">
@@ -200,6 +212,20 @@ export default {
     todos_progress_pct() {
       if (!this.has_todos) return 0
       return Math.round((this.todos_done_count / this.task.todos.length) * 100)
+    },
+
+    /**
+     * Lista de admins responsables de la tarea, para renderizar un badge por cada uno.
+     * Defensivo: si no viene `assigned_admins` (caché vieja), cae al legacy singular.
+     */
+    assigned_admins_list() {
+      if (Array.isArray(this.task.assigned_admins)) {
+        return this.task.assigned_admins
+      }
+      if (this.task.assigned_admin) {
+        return [this.task.assigned_admin]
+      }
+      return []
     },
   },
 

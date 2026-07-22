@@ -45,19 +45,28 @@
             />
           </div>
 
-          <!-- Admin asignado -->
+          <!-- Responsables: selección múltiple mediante checkboxes (mejor que <select multiple> en mobile) -->
           <div class="mb-3">
-            <label class="form-label fw-semibold">Asignado a</label>
-            <select v-model="form.assigned_admin_id" class="form-select">
-              <option :value="null">— Sin asignar —</option>
-              <option
-                v-for="admin in admins"
-                :key="admin.id"
-                :value="admin.id"
-              >
+            <label class="form-label fw-semibold">Responsables</label>
+            <div class="form-text mb-2">
+              Si no seleccionás a nadie, la tarea queda disponible para que la tome cualquiera.
+            </div>
+            <div
+              v-for="admin in admins"
+              :key="admin.id"
+              class="form-check"
+            >
+              <input
+                type="checkbox"
+                class="form-check-input"
+                :id="'task-form-admin-' + admin.id"
+                :checked="is_admin_selected(admin.id)"
+                @change="toggle_admin(admin.id)"
+              />
+              <label class="form-check-label" :for="'task-form-admin-' + admin.id">
                 {{ admin.name }}
-              </option>
-            </select>
+              </label>
+            </div>
           </div>
 
           <!-- Subtareas (todos) -->
@@ -167,7 +176,8 @@ export default {
       form: {
         title: '',
         content: '',
-        assigned_admin_id: null,
+        /** Array de ids (number) de admins responsables de la tarea. */
+        assigned_admin_ids: [],
         /** Array de subtareas { text, done }. */
         todos: [],
       },
@@ -221,14 +231,54 @@ export default {
         // Modo edición: clonar datos de la tarea para no mutar la prop.
         this.form.title = this.task.title || ''
         this.form.content = this.task.content || ''
-        this.form.assigned_admin_id = this.task.assigned_admin_id || null
+
+        // Inicializar responsables desde lo guardado, respetando exactamente lo que
+        // tiene la tarea (nunca aplicar la preselección por defecto al editar).
+        if (Array.isArray(this.task.assigned_admins)) {
+          this.form.assigned_admin_ids = this.task.assigned_admins.map(function (a) { return a.id })
+          // Si vino vacío pero existe el legacy singular, usarlo como fallback.
+          if (this.form.assigned_admin_ids.length === 0 && this.task.assigned_admin_id) {
+            this.form.assigned_admin_ids = [this.task.assigned_admin_id]
+          }
+        } else if (this.task.assigned_admin_id) {
+          // Defensivo: caché vieja sin assigned_admins, solo existe el campo legacy.
+          this.form.assigned_admin_ids = [this.task.assigned_admin_id]
+        } else {
+          this.form.assigned_admin_ids = []
+        }
+
         this.form.todos = Array.isArray(this.task.todos)
           ? this.task.todos.map(function (t) { return { text: t.text, done: !!t.done } })
           : []
       } else {
-        // Modo creación: preseleccionar el admin con is_default_task_assignee.
-        const default_admin = this.admins.find(function (a) { return a.is_default_task_assignee })
-        this.form.assigned_admin_id = default_admin ? default_admin.id : null
+        // Modo creación: preseleccionar los admins con is_default_task_assignee.
+        this.form.assigned_admin_ids = this.admins
+          .filter(function (a) { return a.is_default_task_assignee })
+          .map(function (a) { return a.id })
+      }
+    },
+
+    /**
+     * Indica si el admin está actualmente seleccionado como responsable.
+     *
+     * @param   {number} admin_id
+     * @returns {boolean}
+     */
+    is_admin_selected(admin_id) {
+      return this.form.assigned_admin_ids.indexOf(admin_id) !== -1
+    },
+
+    /**
+     * Agrega o quita un admin de la lista de responsables seleccionados.
+     *
+     * @param {number} admin_id
+     */
+    toggle_admin(admin_id) {
+      const idx = this.form.assigned_admin_ids.indexOf(admin_id)
+      if (idx === -1) {
+        this.form.assigned_admin_ids.push(admin_id)
+      } else {
+        this.form.assigned_admin_ids.splice(idx, 1)
       }
     },
 
@@ -278,7 +328,8 @@ export default {
       const payload = {
         title: this.form.title.trim(),
         content: this.form.content.trim() || null,
-        assigned_admin_id: this.form.assigned_admin_id || null,
+        // Array de ids de responsables (formato nuevo); reemplaza assigned_admin_id.
+        assigned_admin_ids: this.form.assigned_admin_ids.slice(),
         todos: todos_clean.length > 0 ? todos_clean : null,
       }
 
