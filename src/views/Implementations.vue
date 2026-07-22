@@ -270,11 +270,24 @@
             </div>
           </div>
 
-          <!-- Sección: datos recolectados en el formulario de la etapa 1 (solo lectura; la edición inline llega en el prompt 03) -->
+          <!-- Sección: datos recolectados en el formulario de la etapa 1 -->
           <template v-if="form_summary_sections.length > 0">
-            <h6 class="impl-section-title">Datos recolectados (Etapa 1)</h6>
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h6 class="impl-section-title mb-0">Datos recolectados (Etapa 1)</h6>
 
-            <div class="impl-card impl-card--form mb-3">
+              <!-- Botón que abre el modo edición; oculto mientras ya se está editando -->
+              <button
+                v-if="!editing_form_data"
+                type="button"
+                class="btn btn-link btn-sm impl-form-edit-btn"
+                @click="on_edit_form_data"
+              >
+                Editar
+              </button>
+            </div>
+
+            <!-- Modo lectura: tabla label/valor agrupada por sección (Prompt 02) -->
+            <div v-if="!editing_form_data" class="impl-card impl-card--form mb-3">
               <div
                 v-for="section in form_summary_sections"
                 :key="section.name"
@@ -292,6 +305,48 @@
                     </tr>
                   </tbody>
                 </table>
+              </div>
+            </div>
+
+            <!--
+              Modo edición: reutiliza el mismo motor de campos del formulario público
+              (FormularioSection + SECTIONS) sobre una copia de form_responses, no sobre
+              el form_summary derivado (que es solo texto plano y no es reversible).
+            -->
+            <div v-else class="impl-card impl-card--form-edit mb-3">
+              <!-- Aviso: guardar acá no re-empuja la configuración al ERP del cliente -->
+              <p class="impl-form-edit-warning small text-muted">
+                Estos cambios se guardan acá. Si la configuración del sistema ya se aplicó al cliente,
+                volvé a aplicarla con "Re-aplicar configuración" para que impacten en su cuenta.
+              </p>
+
+              <formulario-section
+                v-for="section in form_sections"
+                :key="section.id"
+                :section="section"
+                :form_data="form_data_draft"
+                :on_field_change="on_draft_field_change"
+                :payment_method_options="payment_method_options_local"
+              />
+
+              <!-- Acciones del modo edición -->
+              <div class="d-flex gap-2 mt-3 pt-3 impl-form-edit-actions">
+                <button
+                  type="button"
+                  class="btn btn-primary btn-sm"
+                  :disabled="saving_form_data"
+                  @click="on_save_form_data"
+                >
+                  {{ saving_form_data ? 'Guardando...' : 'Guardar' }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-outline-secondary btn-sm"
+                  :disabled="saving_form_data"
+                  @click="on_cancel_form_data_edit"
+                >
+                  Cancelar
+                </button>
               </div>
             </div>
           </template>
@@ -456,6 +511,9 @@
 import api from '@/utils/axios'
 import { set_global_loading_store } from '@/utils/global_loading'
 import ImplementationActionBar from '@/components/implementation/ImplementationActionBar.vue'
+/* Motor de campos del formulario público, reutilizado acá para editar form_responses (Prompt 178-03) */
+import { SECTIONS } from '@/components/formulario/questions'
+import FormularioSection from '@/components/formulario/FormularioSection.vue'
 
 /**
  * Etiquetas en español de propiedades de sistema (mismo mapa que ImplementationImportService).
@@ -476,7 +534,7 @@ const STAGE_4_PROPERTY_LABELS = {
 export default {
   name: 'ViewImplementations',
 
-  components: { ImplementationActionBar },
+  components: { ImplementationActionBar, FormularioSection },
 
   data() {
     return {
@@ -537,6 +595,24 @@ export default {
        * los botones dentro de cada etapa y dejar Progreso arriba de todo).
        */
       action_state: null,
+
+      /**
+       * True mientras el bloque "Datos recolectados" está en modo edición
+       * (se reemplaza la tabla de solo lectura por el formulario editable).
+       */
+      editing_form_data: false,
+
+      /**
+       * Copia editable e independiente de implementation.form_responses, armada
+       * al entrar en modo edición (clonado profundo, igual que build_fields_payload
+       * en FormularioView). Se descarta al Cancelar; se envía tal cual al Guardar.
+       */
+      form_data_draft: null,
+
+      /**
+       * Indicador de guardado en curso del PATCH de form-responses.
+       */
+      saving_form_data: false,
     }
   },
 
@@ -625,6 +701,26 @@ export default {
       return actions.find(function (action) {
         return action.typical_stage === null
       }) || null
+    },
+
+    /**
+     * Definición de secciones del formulario público (questions.js), expuesta para
+     * iterarla en el template del modo edición junto con FormularioSection.
+     *
+     * @returns {Array<Object>}
+     */
+    form_sections() {
+      return SECTIONS
+    },
+
+    /**
+     * Opciones de métodos de pago { key, label } para el select de descuentos/recargos
+     * de FieldTablaDescuentos, agregadas al show() de implementación en el Prompt 178-01.
+     *
+     * @returns {Array<Object>}
+     */
+    payment_method_options_local() {
+      return (this.selected_implementation && this.selected_implementation.payment_method_options) || []
     },
 
   },
@@ -1720,6 +1816,105 @@ export default {
       }
       return action.label
     },
+
+    // -------------------------------------------------------------------------
+    // Edición inline de "Datos recolectados" (Prompt 178-03)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Entra en modo edición del bloque "Datos recolectados": clona en profundidad
+     * implementation.form_responses (el objeto crudo del formulario, no el summary
+     * derivado) a form_data_draft para editarlo de forma independiente.
+     *
+     * @returns {void}
+     */
+    on_edit_form_data() {
+      if (!this.selected_implementation) {
+        return
+      }
+
+      /** Respuestas crudas guardadas en la implementación (puede venir null/vacío). */
+      const raw = this.selected_implementation.form_responses
+
+      /* Clonado profundo (mismo patrón que build_fields_payload en FormularioView) para
+         que editar el borrador no mute el objeto original hasta confirmar el guardado. */
+      this.form_data_draft = raw && typeof raw === 'object' && !Array.isArray(raw)
+        ? JSON.parse(JSON.stringify(raw))
+        : {}
+
+      this.editing_form_data = true
+    },
+
+    /**
+     * Callback pasado a FormularioSection ante cada cambio de campo del borrador.
+     * FormularioSection ya muta form_data_draft directamente (objeto reactivo
+     * compartido); acá no hace falta autoguardar como en el formulario público,
+     * el guardado en este panel es siempre explícito con el botón "Guardar".
+     *
+     * @param {string} key   Clave del campo modificado.
+     * @param {*} value      Nuevo valor del campo.
+     * @returns {void}
+     */
+    on_draft_field_change(key, value) {
+      /* Sin acción adicional: se deja el método por claridad del contrato con FormularioSection. */
+    },
+
+    /**
+     * Descarta el borrador y vuelve a la tabla de solo lectura sin guardar nada.
+     *
+     * @returns {void}
+     */
+    on_cancel_form_data_edit() {
+      this.editing_form_data = false
+      this.form_data_draft = null
+    },
+
+    /**
+     * Guarda el borrador contra PATCH /implementation/{id}/form-responses (Prompt 178-01).
+     * El backend reemplaza form_responses, re-corre ImplementationFormMapper::apply()
+     * (sin disparar el UserSetup remoto) y devuelve el modelo fresco con form_summary
+     * recalculado, que se usa para refrescar tanto el detalle como la fila del listado.
+     *
+     * @returns {void}
+     */
+    on_save_form_data() {
+      if (!this.selected_implementation || this.saving_form_data) {
+        return
+      }
+
+      const self = this
+
+      /** ID de la implementación cuyo formulario se está editando. */
+      const id = this.selected_implementation.id
+
+      this.saving_form_data = true
+      set_global_loading_store(self.$store, true, 'Guardando datos recolectados…')
+
+      api
+        .patch('/implementation/' + id + '/form-responses', { form_responses: this.form_data_draft })
+        .then(function (res) {
+          /** Modelo fresco devuelto por el backend (form_responses + form_summary recalculados). */
+          const updated = res.data.model
+
+          if (updated) {
+            /* Reutiliza el mismo flujo de refresco que las acciones manuales: actualiza
+               selected_implementation y la fila correspondiente en implementations. */
+            self.on_implementation_updated(updated)
+          }
+
+          /* Volver a la tabla de solo lectura, ya repintada con los datos nuevos. */
+          self.editing_form_data = false
+          self.form_data_draft = null
+        })
+        .catch(function () {
+          /* El interceptor global de axios ya muestra el toast de error.
+             Se deja el formulario en modo edición para no perder lo tipeado. */
+        })
+        .then(function () {
+          self.saving_form_data = false
+          set_global_loading_store(self.$store, false)
+        })
+    },
   },
 }
 </script>
@@ -2152,6 +2347,37 @@ export default {
 .impl-form-table__value {
   color: #1d1d1f;
   word-break: break-word;
+}
+
+/* Botón "Editar" del bloque de datos recolectados: discreto, sin caja */
+.impl-form-edit-btn {
+  padding: 0;
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+
+.impl-form-edit-btn:hover {
+  text-decoration: underline;
+}
+
+/* Tarjeta del modo edición: mismo look que impl-card--form pero con padding propio */
+.impl-card--form-edit {
+  padding: 16px 18px;
+}
+
+/* Aviso sobre re-aplicar la configuración tras editar los datos */
+.impl-form-edit-warning {
+  background-color: #fff8e6;
+  border: 1px solid #f5e3b3;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 16px;
+  line-height: 1.4;
+}
+
+/* Botonera Guardar/Cancelar del modo edición */
+.impl-form-edit-actions {
+  border-top: 1px solid #f1f1f3;
 }
 
 /* Tarjeta del panel de archivos de Etapa 4 */
