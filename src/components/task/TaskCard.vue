@@ -6,7 +6,7 @@
     Emite eventos para editar, eliminar y cambiar estado de realización.
   -->
   <div
-    class="task-card card shadow-sm mb-2"
+    class="task-card card shadow-sm"
     :class="{
       'task-card--done': task.is_done,
       'task-card--dragging': is_dragging,
@@ -19,7 +19,7 @@
     @drop.prevent="$emit('drop', $event)"
     @dragenter.prevent
   >
-    <div class="card-body p-3">
+    <div class="card-body task-card__body">
 
       <!-- Cabecera: checkbox de realizada + título + acciones -->
       <div class="d-flex align-items-start gap-2 mb-1">
@@ -34,12 +34,11 @@
           />
         </div>
 
-        <!-- Título de la tarea -->
+        <!-- Título de la tarea: ya no se tacha cuando está realizada (pedido de Lucas,
+             para que se pueda leer bien qué se hizo); el atenuado general lo da
+             la clase task-card--done en la tarjeta completa. -->
         <div class="flex-grow-1 min-w-0">
-          <p
-            class="mb-0 fw-semibold task-card__title"
-            :class="{ 'text-decoration-line-through text-muted': task.is_done }"
-          >
+          <p class="mb-0 fw-semibold task-card__title">
             {{ task.title }}
           </p>
 
@@ -51,6 +50,12 @@
           >
             <i class="bi bi-robot" />
             <span>Lead: {{ task.lead.contact_name || task.lead.company_name || 'Sin nombre' }}</span>
+          </div>
+
+          <!-- Badge de origen: solo para tareas creadas automáticamente por Claude -->
+          <div v-if="task.created_via === 'claude'" class="task-card__origin-badge">
+            <i class="bi bi-stars" />
+            <span>Creada por Claude</span>
           </div>
         </div>
 
@@ -80,7 +85,8 @@
         </button>
       </div>
 
-      <!-- Contenido descriptivo (si existe) -->
+      <!-- Contenido descriptivo (si existe): limitado a 3 líneas con line-clamp
+           para que la tarjeta compacta no se desborde. -->
       <p
         v-if="task.content"
         class="task-card__content text-secondary small mb-2 ms-4"
@@ -144,9 +150,20 @@
           </span>
         </div>
 
-        <!-- Admin que creó la tarea -->
-        <span v-if="task.created_by_admin" class="text-muted small">
-          Creado por {{ task.created_by_admin.name }}
+        <!-- Admin que creó la tarea + hace cuánto (tooltip con la fecha exacta) -->
+        <span
+          v-if="task.created_by_admin"
+          class="text-muted small"
+          :title="task.created_at"
+        >
+          Creado por {{ task.created_by_admin.name }}<template v-if="created_time_ago"> · {{ created_time_ago }}</template>
+        </span>
+      </div>
+
+      <!-- Trazabilidad de realizadas: quién la marcó y hace cuánto -->
+      <div v-if="task.is_done && done_line_text" class="ms-4 mt-1">
+        <span class="task-card__done-trace text-muted small" :title="task.done_at">
+          {{ done_line_text }}
         </span>
       </div>
 
@@ -155,6 +172,8 @@
 </template>
 
 <script>
+import { time_ago } from '@/utils/relative_time'
+
 /**
  * Tarjeta visual de una tarea individual.
  * Soporta drag & drop delegando los eventos al componente padre (TaskColumn).
@@ -227,6 +246,35 @@ export default {
       }
       return []
     },
+
+    /**
+     * Texto "hace cuánto" para la fecha de creación de la tarea.
+     * Vacío si `created_at` no viene o no es parseable (time_ago ya lo contempla).
+     */
+    created_time_ago() {
+      return time_ago(this.task.created_at)
+    },
+
+    /**
+     * Línea de trazabilidad para tareas realizadas: quién la marcó y hace cuánto.
+     * - Si hay `done_by_admin` y `done_at`: "Realizada por {nombre} · hace N".
+     * - Si `done_by_admin` es null pero hay `done_at` (tareas históricas migradas): "Realizada · hace N".
+     * - Si tampoco hay `done_at`: no se muestra nada (string vacío).
+     */
+    done_line_text() {
+      const ago = time_ago(this.task.done_at)
+
+      // Sin fecha de realización utilizable: no hay línea que mostrar.
+      if (!ago) {
+        return ''
+      }
+
+      if (this.task.done_by_admin && this.task.done_by_admin.name) {
+        return 'Realizada por ' + this.task.done_by_admin.name + ' · ' + ago
+      }
+
+      return 'Realizada · ' + ago
+    },
   },
 
   methods: {
@@ -297,16 +345,26 @@ export default {
   opacity: 1;
 }
 
+/* Cuerpo compacto: menos padding y fuente algo más chica para que entren
+   tres tarjetas por fila sin desbordar (rediseño de grilla). */
+.task-card__body {
+  padding: 0.65rem 0.75rem;
+  font-size: 0.9rem;
+}
+
 /* Título con truncado de texto largo. */
 .task-card__title {
   word-break: break-word;
 }
 
-/* Contenido descriptivo con máximo de líneas visible. */
+/* Contenido descriptivo: limitado a 3 líneas con elipsis (antes era max-height
+   fijo), para que la tarjeta compacta no se desborde con textos largos. */
 .task-card__content {
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 4.5rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
@@ -323,5 +381,27 @@ export default {
 
 .task-card__lead-alert i {
   font-size: 0.8rem;
+}
+
+/* Badge de origen "Creada por Claude": mismo criterio visual discreto que la
+   alerta de lead, en tono neutro para no competir con ella. */
+.task-card__origin-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: #6366f1;
+  margin-top: 4px;
+  opacity: 0.85;
+}
+
+.task-card__origin-badge i {
+  font-size: 0.8rem;
+}
+
+/* Línea de trazabilidad de tareas realizadas (quién y cuándo la completó). */
+.task-card__done-trace {
+  display: inline-block;
+  font-size: 0.75rem;
 }
 </style>

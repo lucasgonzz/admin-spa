@@ -1,25 +1,40 @@
 <template>
   <!--
-    Columna de tareas draggables.
-    Muestra un header con el título y cantidad, y la lista vertical de TaskCard.
+    Lista de tareas draggables (ocupa el ancho completo del contenedor padre).
+    Muestra un header con el título y cantidad, y una grilla de TaskCard (3 por
+    fila en desktop, 2 en tablet, 1 en mobile).
     Gestiona el drag & drop interno usando HTML5 nativo y emite 'reorder' con
     los IDs en el nuevo orden cuando el usuario suelta una tarjeta.
+    Si `collapsible` es true, el encabezado es clickeable y el contenido solo
+    se muestra cuando `collapsed` es false (estado controlado por el padre).
   -->
-  <div class="task-column d-flex flex-column h-100">
+  <div class="task-column">
 
-    <!-- Encabezado de columna -->
-    <div class="task-column__header d-flex align-items-center justify-content-between mb-3 px-1">
+    <!-- Encabezado: clickeable solo si la lista es colapsable -->
+    <div
+      class="task-column__header d-flex align-items-center justify-content-between mb-3 px-1"
+      :class="{ 'task-column__header--clickable': collapsible }"
+      @click="collapsible ? $emit('toggle') : null"
+    >
       <div class="d-flex align-items-center gap-2">
-        <!-- Punto de color identificador de la columna -->
+        <!-- Punto de color identificador de la lista -->
         <span class="task-column__dot" :class="header_dot_class" />
         <h6 class="mb-0 fw-semibold">{{ title }}</h6>
+        <!-- El contador queda visible incluso colapsada, para saber cuántas hay sin desplegar -->
         <span class="badge rounded-pill bg-secondary">{{ tasks.length }}</span>
       </div>
+      <!-- Chevron indicador de estado de colapso -->
+      <i
+        v-if="collapsible"
+        class="bi text-muted"
+        :class="collapsed ? 'bi-chevron-right' : 'bi-chevron-down'"
+      />
     </div>
 
-    <!-- Lista de tarjetas -->
+    <!-- Contenido: grilla de tarjetas. Solo se renderiza si no está colapsada. -->
     <div
-      class="task-column__list flex-grow-1 overflow-y-auto pe-1"
+      v-if="!collapsible || !collapsed"
+      class="task-column__grid"
       @dragover.prevent
     >
       <task-card
@@ -38,7 +53,7 @@
         @update-todos="$emit('update-todos', $event)"
       />
 
-      <!-- Mensaje cuando la columna está vacía -->
+      <!-- Mensaje cuando la lista está vacía -->
       <div v-if="tasks.length === 0" class="task-column__empty text-muted text-center py-4 small">
         {{ empty_message }}
       </div>
@@ -89,9 +104,25 @@ export default {
       type: String,
       default: 'No hay tareas.',
     },
+    /**
+     * Si es true, el encabezado se vuelve clickeable para desplegar/colapsar
+     * la lista (usado para la lista de "Realizadas").
+     */
+    collapsible: {
+      type: Boolean,
+      default: false,
+    },
+    /**
+     * Estado de colapso actual, controlado por el componente padre.
+     * Solo tiene efecto visual si `collapsible` es true.
+     */
+    collapsed: {
+      type: Boolean,
+      default: false,
+    },
   },
 
-  emits: ['edit', 'delete', 'toggle-done', 'update-todos', 'reorder'],
+  emits: ['edit', 'delete', 'toggle-done', 'update-todos', 'reorder', 'toggle'],
 
   data() {
     return {
@@ -178,11 +209,6 @@ export default {
 </script>
 
 <style scoped>
-/* Columna con scroll interno para listas largas. */
-.task-column {
-  min-height: 0;
-}
-
 /* Punto de color en el header. */
 .task-column__dot {
   display: inline-block;
@@ -197,13 +223,36 @@ export default {
   padding-bottom: 0.5rem;
 }
 
-/* Lista scrollable. */
-.task-column__list {
-  overflow-y: auto;
+/* Encabezado clickeable (lista colapsable, ej. "Realizadas"). */
+.task-column__header--clickable {
+  cursor: pointer;
+  user-select: none;
 }
 
-/* Mensaje vacío centrado. */
+/* Grilla de tarjetas: 3 columnas en desktop, con caída responsive. */
+.task-column__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+/* Tablet: 2 columnas. */
+@media (max-width: 1199px) {
+  .task-column__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Mobile: 1 columna. */
+@media (max-width: 767px) {
+  .task-column__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Mensaje vacío centrado, ocupando el ancho completo de la grilla. */
 .task-column__empty {
+  grid-column: 1 / -1;
   border: 2px dashed #dee2e6;
   border-radius: 0.5rem;
 }

@@ -1,9 +1,10 @@
 <template>
   <!--
     Vista de tareas internas del panel administrativo.
-    Muestra dos columnas: pendientes (no realizadas) y realizadas.
+    Muestra dos listas apiladas a lo ancho completo: pendientes (no realizadas,
+    siempre visible) y realizadas (colapsable, arranca cerrada).
     Permite crear, editar, eliminar y reordenar tareas por drag & drop.
-    Las tareas nuevas aparecen siempre al inicio de la columna de pendientes.
+    Las tareas nuevas aparecen siempre al inicio de la lista de pendientes.
   -->
   <div class="tasks-view">
 
@@ -21,38 +22,37 @@
       Cargando tareas…
     </div>
 
-    <!-- Layout de dos columnas -->
-    <div v-else class="tasks-view__columns row g-4">
+    <!-- Layout de listas apiladas a lo ancho completo (antes eran dos columnas de media pantalla) -->
+    <div v-else class="tasks-view__lists d-flex flex-column gap-4">
 
-      <!-- Columna: Pendientes -->
-      <div class="col-12 col-md-6">
-        <task-column
-          title="Pendientes"
-          header_dot_class="bg-primary"
-          empty_message="No hay tareas pendientes."
-          :tasks="pending_tasks"
-          @edit="open_edit_modal"
-          @delete="on_delete_task"
-          @toggle-done="on_toggle_done"
-          @update-todos="on_update_todos"
-          @reorder="on_reorder_pending"
-        />
-      </div>
+      <!-- Lista: Pendientes (siempre expandida, ocupa todo el ancho) -->
+      <task-column
+        title="Pendientes"
+        header_dot_class="bg-primary"
+        empty_message="No hay tareas pendientes."
+        :tasks="pending_tasks"
+        @edit="open_edit_modal"
+        @delete="on_delete_task"
+        @toggle-done="on_toggle_done"
+        @update-todos="on_update_todos"
+        @reorder="on_reorder_pending"
+      />
 
-      <!-- Columna: Realizadas -->
-      <div class="col-12 col-md-6">
-        <task-column
-          title="Realizadas"
-          header_dot_class="bg-success"
-          empty_message="No hay tareas realizadas aún."
-          :tasks="done_tasks"
-          @edit="open_edit_modal"
-          @delete="on_delete_task"
-          @toggle-done="on_toggle_done"
-          @update-todos="on_update_todos"
-          @reorder="on_reorder_done"
-        />
-      </div>
+      <!-- Lista: Realizadas (colapsable, arranca colapsada) -->
+      <task-column
+        title="Realizadas"
+        header_dot_class="bg-success"
+        empty_message="No hay tareas realizadas aún."
+        :tasks="done_tasks"
+        :collapsible="true"
+        :collapsed="!show_done"
+        @toggle="show_done = !show_done"
+        @edit="open_edit_modal"
+        @delete="on_delete_task"
+        @toggle-done="on_toggle_done"
+        @update-todos="on_update_todos"
+        @reorder="on_reorder_done"
+      />
 
     </div>
 
@@ -97,6 +97,11 @@ export default {
        * True mientras el modal está esperando respuesta del servidor.
        */
       modal_saving: false,
+      /**
+       * Controla si la lista de "Realizadas" está desplegada. Arranca colapsada
+       * en cada carga de la vista para no saturar la pantalla con tareas ya hechas.
+       */
+      show_done: false,
     }
   },
 
@@ -256,18 +261,11 @@ export default {
 </script>
 
 <style scoped>
-/* Altura mínima para que las columnas llenen el viewport disponible. */
+/* Altura mínima para que la vista llene el viewport disponible. */
 .tasks-view {
   min-height: 100%;
 }
 
-/* Fijar altura de las columnas para que el scroll interno funcione bien. */
-.tasks-view__columns {
-  min-height: calc(100dvh - 10rem);
-}
-
-.tasks-view__columns > .col-12 {
-  display: flex;
-  flex-direction: column;
-}
+/* Las listas ocupan todo el ancho y se apilan verticalmente; el scroll ahora
+   es el de la página (ya no hay altura fija ni scroll interno por columna). */
 </style>
