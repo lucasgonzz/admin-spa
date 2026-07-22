@@ -15,6 +15,8 @@ import support_ticket from './support_ticket'
 import support_message from './support_message'
 import task from './task'
 import task_template from './task_template'
+// Notificaciones in-app de tareas asignadas (pila persistente arriba a la derecha).
+import task_notification from './task_notification'
 // Conteo de implementaciones listas para avanzar (badge Nav).
 import implementation from './implementation'
 // Conteo de implementaciones de ecommerce listas para avanzar (badge Nav).
@@ -50,6 +52,8 @@ export default createStore({
     task,
     // Plantillas de tareas automáticas para procesos internos.
     task_template,
+    // Notificaciones in-app de tareas asignadas (bandeja de avisos pendientes).
+    task_notification,
     // Estado global de implementaciones (badge "listas para avanzar" en el Nav).
     implementation,
     // Estado global de implementaciones de ecommerce (badge en el Nav).

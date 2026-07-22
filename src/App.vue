@@ -135,6 +135,12 @@
         <button type="button" class="btn-close" aria-label="Close" @click="remove_toast(toast.id)"></button>
       </div>
     </div>
+
+    <!--
+      Pila global de notificaciones in-app de tareas asignadas (prompt 10, grupo 180).
+      Solo en el layout autenticado: nunca en login ni en rutas públicas (formulario cliente).
+    -->
+    <task-notification-stack v-if="show_task_notifications" />
   </div>
 </template>
 
@@ -142,6 +148,7 @@
 import AppNav from '@/components/app/Nav/Index.vue'
 import LogoLoading from '@/common-vue/components/LogoLoading.vue'
 import VirtualClockPanel from '@/components/debug/VirtualClockPanel.vue'
+import TaskNotificationStack from '@/components/task/TaskNotificationStack.vue'
 import routes from '@/router/routes'
 import api from '@/utils/axios'
 
@@ -152,7 +159,7 @@ import api from '@/utils/axios'
  */
 export default {
   name: 'App',
-  components: { AppNav, LogoLoading, VirtualClockPanel },
+  components: { AppNav, LogoLoading, VirtualClockPanel, TaskNotificationStack },
   data() {
     return {
       /** Cola de toasts visibles para errores globales de API. */
@@ -198,6 +205,24 @@ export default {
        * superior móvil para no tapar el header propio de la conversación.
        */
       if (this.$route.meta && this.$route.meta.hide_app_nav) {
+        return false
+      }
+      return true
+    },
+    /**
+     * true cuando corresponde mostrar la pila global de notificaciones in-app de tareas.
+     * Se excluye login y rutas públicas (formulario de cliente), igual que `show_nav`,
+     * pero a diferencia de `show_nav` SÍ se muestra en vistas fullscreen (hide_app_nav,
+     * ej. conversación WhatsApp), porque un aviso de tarea asignada tiene que verse
+     * igual ahí — el pedido de Lucas es que "no haya chance de que se le pase".
+     *
+     * @returns {boolean}
+     */
+    show_task_notifications() {
+      if (this.$route.name === 'login') {
+        return false
+      }
+      if (this.$route.meta && this.$route.meta.public) {
         return false
       }
       return true
