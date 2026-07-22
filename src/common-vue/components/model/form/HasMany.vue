@@ -1,12 +1,5 @@
 <template>
   <div>
-    <label class="form-label">{{ field_label }}</label>
-
-    <!-- Aviso cuando el padre aún no está persistido: los hijos se vinculan al guardar -->
-    <p v-if="uses_temporal_children && !parent_is_persisted" class="text-muted small mb-2">
-      Puede agregar {{ plural_child_label() }} ahora; se vincularán al guardar el registro principal.
-    </p>
-
     <!-- Modal hijo: componente resuelto (evita renderizar [object Promise] del import async) -->
     <component
       v-if="show_child_modal && child_modal_component"
@@ -25,66 +18,38 @@
       @deleted="on_child_deleted"
     />
 
-    <!-- Tabla compacta con botón contextual de ampliación -->
-    <div
-      class="has-many-table-container"
-      @mouseenter="set_table_hover_state(true)"
-      @mouseleave="set_table_hover_state(false)"
-    >
-      <button
-        v-if="show_expand_button && child_rows.length"
-        type="button"
-        class="btn btn-primary btn-sm has-many-expand-button"
-        @click="open_expand_modal"
-      >
-        <i class="bi bi-eye me-1" aria-hidden="true"></i>
-        Ampliar
-      </button>
+    <!-- Sección con superficie propia: agrupa título, tabla y acciones como un bloque separado del modal -->
+    <div class="has-many-section">
+      <label class="has-many-section__title">{{ field_label }}</label>
 
-      <resource-table
-        :rows="child_rows"
-        :table_properties="child_table_properties"
-        :model_name="child_model_name"
-        @row="on_row_click"
-      />
-    </div>
+      <!-- Aviso cuando el padre aún no está persistido: los hijos se vinculan al guardar -->
+      <p v-if="uses_temporal_children && !parent_is_persisted" class="text-muted small mb-2">
+        Puede agregar {{ plural_child_label() }} ahora; se vincularán al guardar el registro principal.
+      </p>
 
-    <div class="d-flex flex-wrap gap-2 mt-3">
-      <button
-        v-if="show_create_button"
-        type="button"
-        class="btn btn-primary btn-sm"
-        @click="on_create"
+      <!-- Tabla compacta con botón contextual de ampliación -->
+      <div
+        class="has-many-table-container"
+        @mouseenter="set_table_hover_state(true)"
+        @mouseleave="set_table_hover_state(false)"
       >
-        <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-        Agregar {{ singular_child_label() }}
-      </button>
-      <button
-        v-if="show_sync_from_empresa_button"
-        type="button"
-        class="btn btn-success btn-sm"
-        :disabled="sync_from_empresa_loading || !parent_is_persisted"
-        @click="on_sync_from_empresa"
-      >
-        <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>
-        {{ sync_from_empresa_button_text }}
-      </button>
-    </div>
+        <button
+          v-if="show_expand_button && child_rows.length"
+          type="button"
+          class="btn btn-primary btn-sm has-many-expand-button"
+          @click="open_expand_modal"
+        >
+          <i class="bi bi-eye me-1" aria-hidden="true"></i>
+          Ampliar
+        </button>
 
-    <!-- Modal ampliado con la misma tabla -->
-    <base-modal
-      :show="show_expand_modal"
-      :title="'Detalle de ' + plural_child_label()"
-      size="xl"
-      @update:show="(v) => (show_expand_modal = v)"
-      @close="show_expand_modal = false"
-    >
-      <resource-table
-        :rows="child_rows"
-        :table_properties="child_table_properties"
-        :model_name="child_model_name"
-        @row="on_row_click"
-      />
+        <resource-table
+          :rows="child_rows"
+          :table_properties="child_table_properties"
+          :model_name="child_model_name"
+          @row="on_row_click"
+        />
+      </div>
 
       <div class="d-flex flex-wrap gap-2 mt-3">
         <button
@@ -106,6 +71,46 @@
           <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>
           {{ sync_from_empresa_button_text }}
         </button>
+      </div>
+    </div>
+
+    <!-- Modal ampliado con la misma tabla: reusa la superficie de sección para verse consistente -->
+    <base-modal
+      :show="show_expand_modal"
+      :title="'Detalle de ' + plural_child_label()"
+      size="xl"
+      @update:show="(v) => (show_expand_modal = v)"
+      @close="show_expand_modal = false"
+    >
+      <div class="has-many-section has-many-section--modal">
+        <resource-table
+          :rows="child_rows"
+          :table_properties="child_table_properties"
+          :model_name="child_model_name"
+          @row="on_row_click"
+        />
+
+        <div class="d-flex flex-wrap gap-2 mt-3">
+          <button
+            v-if="show_create_button"
+            type="button"
+            class="btn btn-primary btn-sm"
+            @click="on_create"
+          >
+            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
+            Agregar {{ singular_child_label() }}
+          </button>
+          <button
+            v-if="show_sync_from_empresa_button"
+            type="button"
+            class="btn btn-success btn-sm"
+            :disabled="sync_from_empresa_loading || !parent_is_persisted"
+            @click="on_sync_from_empresa"
+          >
+            <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>
+            {{ sync_from_empresa_button_text }}
+          </button>
+        </div>
       </div>
     </base-modal>
   </div>
@@ -603,6 +608,34 @@ export default {
 </script>
 
 <style scoped>
+/* Sección con superficie propia: separa visualmente cada tabla has_many del blanco del modal */
+.has-many-section {
+  background-color: #f5f5f7;
+  border: 1px solid #e5e5ea;
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Última sección del formulario: sin margen extra debajo, lo maneja la grilla del modal */
+.has-many-section:last-child {
+  margin-bottom: 0;
+}
+
+/* Variante dentro del modal "Ampliar": no repite el título (ya lo muestra el header del modal) */
+.has-many-section--modal {
+  margin-bottom: 0;
+}
+
+/* Encabezado de sección: reemplaza el label gris de input por un título legible del bloque */
+.has-many-section__title {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--bs-body-color, #212529);
+  margin-bottom: 0.75rem;
+}
+
 .has-many-table-container {
   position: relative;
 }
@@ -613,5 +646,33 @@ export default {
   top: 50%;
   transform: translate(-50%, -50%);
   z-index: 1000;
+}
+
+/* Tabla embebida: fondo blanco propio para recortarse contra la superficie gris de la sección */
+.has-many-section :deep(.table-responsive) {
+  background-color: #fff;
+  border: 1px solid #e5e5ea;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+/* Más aire en celdas y encabezados: table-sm las deja demasiado apretadas para leer cómodo */
+.has-many-section :deep(.table td),
+.has-many-section :deep(.table th) {
+  padding: 0.65rem 0.85rem;
+}
+
+/* Encabezado apenas más marcado que el cuerpo, con texto en semi-bold */
+.has-many-section :deep(.table thead th) {
+  background-color: #f5f5f7;
+  font-weight: 600;
+  border-bottom-width: 1px;
+}
+
+/* Bordes internos más suaves: table-bordered no debe generar ruido de grilla fuerte */
+.has-many-section :deep(.table-bordered),
+.has-many-section :deep(.table-bordered td),
+.has-many-section :deep(.table-bordered th) {
+  border-color: #e5e5ea;
 }
 </style>
