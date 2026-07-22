@@ -1,13 +1,13 @@
 <template>
-  <div class="ecommerce-updates-view container-fluid px-0 py-4">
+  <div class="ecommerce-installations-view container-fluid px-0 py-4">
 
     <!-- Encabezado del submódulo -->
     <div class="d-flex align-items-center flex-wrap gap-2 mb-4">
       <div>
-        <h4 class="mb-0">Actualizaciones del ecommerce</h4>
+        <h4 class="mb-0">Instalaciones del ecommerce</h4>
         <p class="text-muted small mb-0 mt-1">
-          Actualiza la tienda (tienda-spa + tienda-api) de un cliente ya configurado, usando
-          siempre la última versión de <code>master</code>.
+          Instala desde cero la tienda (tienda-spa + tienda-api) de un cliente con el ecommerce ya
+          configurado, usando siempre la última versión de <code>master</code>.
         </p>
       </div>
       <!-- Botón que abre el modal de creación: elegís el cliente y listo, sin versión. -->
@@ -16,7 +16,7 @@
         class="btn btn-primary ms-auto"
         @click="open_create_modal"
       >
-        + Nueva actualización
+        + Nueva instalación
       </button>
     </div>
 
@@ -28,8 +28,8 @@
 
     <!-- Sin corridas registradas todavía -->
     <div v-else-if="installations.length === 0" class="alert alert-secondary">
-      Todavía no se corrió ninguna actualización del ecommerce. Creá una con el botón
-      "+ Nueva actualización".
+      Todavía no se corrió ninguna instalación del ecommerce. Creá una con el botón
+      "+ Nueva instalación".
     </div>
 
     <!-- Tabla de corridas -->
@@ -89,7 +89,7 @@
     <!-- Modal de creación: solo pide el cliente, sin selector de versión (siempre master) -->
     <base-modal
       :show="show_create_modal"
-      title="Nueva actualización del ecommerce"
+      title="Nueva instalación del ecommerce"
       @update:show="show_create_modal = $event"
       @close="on_create_modal_closed"
     >
@@ -99,9 +99,10 @@
 
       <form v-else @submit.prevent>
         <p class="text-muted small">
-          Se va a disparar una actualización de la tienda del cliente elegido, usando siempre la
-          última versión publicada en <code>master</code> de tienda-spa y tienda-api. No hace
-          falta elegir versión.
+          Se va a disparar una instalación desde cero de la tienda del cliente elegido, usando
+          siempre la última versión publicada en <code>master</code> de tienda-spa y tienda-api.
+          El cliente ya tiene que tener el ecommerce configurado (con su <code>ClientEcommerce</code>
+          creado) — no hace falta elegir versión.
         </p>
 
         <!-- Filtro de texto sobre la razón social, para no scrollear un select largo -->
@@ -119,7 +120,7 @@
         <div class="mb-3">
           <label class="form-label small">Cliente</label>
           <select
-            v-model="new_update.client_id"
+            v-model="new_install.client_id"
             class="form-select form-select-sm"
             size="8"
           >
@@ -146,10 +147,10 @@
         <button
           type="button"
           class="btn btn-primary"
-          :disabled="!new_update.client_id || creating"
-          @click="create_update"
+          :disabled="!new_install.client_id || creating"
+          @click="create_install"
         >
-          {{ creating ? 'Creando…' : 'Crear actualización' }}
+          {{ creating ? 'Creando…' : 'Crear instalación' }}
         </button>
       </template>
     </base-modal>
@@ -157,7 +158,7 @@
     <!-- Modal de gestión: log en vivo + checklist de la corrida seleccionada -->
     <base-modal
       :show="show_manage_modal"
-      title="Seguimiento de la actualización"
+      title="Seguimiento de la instalación"
       size="lg"
       @update:show="show_manage_modal = $event"
       @close="on_manage_modal_closed"
@@ -182,25 +183,26 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 import EcommerceOperationsPanel from '@/components/ecommerce-installation/extra-props/EcommerceOperationsPanel.vue'
 
 /**
- * Submódulo "Actualizaciones del ecommerce" (prompt 587), dentro del módulo de Actualizaciones
- * (junto a la de empresa, ver routes.js). A diferencia de la actualización de empresa, acá NO se
- * elige versión: siempre se dispara la última de `master` (mode 'update'), reutilizando la acción
- * `start_update` del store `ecommerce_installation` (prompt 586) y el mismo panel de log en
- * vivo + checklist (EcommerceOperationsPanel) que ya usa el detalle embebido en el cliente.
+ * Submódulo "Instalaciones del ecommerce", dentro del módulo de Instalaciones (junto a la de
+ * sistema, ver routes.js: grupo `installations` con hijos `installations_sistema` /
+ * `installations_ecommerce`).
  *
- * Listado (index_json, prompt 585) trae cada corrida con su `client_ecommerce` y `logs`
- * eager-cargados, pero no el `client` dueño de la tienda: para mostrar la razón social se
- * carga por separado GET /client (igual que hace Installations.vue) y se cruza por
+ * Hermano de `EcommerceUpdates.vue` (Actualizaciones > Ecommerce): comparten el mismo endpoint de
+ * listado (GET /ecommerce-installations, trae TODAS las corridas) y el mismo panel de seguimiento
+ * (EcommerceOperationsPanel), pero cada vista filtra a su `mode` y dispara una acción de creación
+ * distinta del store `ecommerce_installation`:
+ * - Acá: `mode === 'install'`, creación vía `start_install_for_client` (POST
+ *   /ecommerce-installations/start-install con { client_id }, el backend resuelve el
+ *   ClientEcommerce del cliente).
+ * - Actualizaciones > Ecommerce: `mode === 'update'`, creación vía `start_update`.
+ *
+ * Listado (index_json) trae cada corrida con su `client_ecommerce` y `logs` eager-cargados, pero
+ * no el `client` dueño de la tienda: para mostrar la razón social se carga por separado
+ * GET /client (igual que Installations.vue / EcommerceUpdates.vue) y se cruza por
  * client_ecommerce.client_id.
- *
- * El endpoint devuelve TODAS las corridas (instalaciones y actualizaciones); acá se filtran
- * a solo `mode === 'update'`. Las instalaciones desde cero tienen su propio submódulo global,
- * `EcommerceInstallations.vue` (Instalaciones > Ecommerce), que reutiliza el mismo panel de
- * seguimiento (EcommerceOperationsPanel) pero dispara `start_install_for_client` en vez de
- * `start_update`.
  */
 export default {
-  name: 'ViewEcommerceUpdates',
+  name: 'ViewEcommerceInstallations',
 
   components: {
     BaseModal,
@@ -209,7 +211,7 @@ export default {
 
   data() {
     return {
-      /** Todas las corridas de instalación/actualización del ecommerce (todos los clientes). */
+      /** Corridas de instalación del ecommerce (todos los clientes), ya filtradas por mode. */
       installations: [],
 
       /** true mientras se carga el listado inicial. */
@@ -231,11 +233,11 @@ export default {
       client_filter_text: '',
 
       /** Formulario del modal de creación: único campo que pide este submódulo. */
-      new_update: {
+      new_install: {
         client_id: null,
       },
 
-      /** true mientras se dispara la actualización (POST start-update). */
+      /** true mientras se dispara la instalación (POST start-install). */
       creating: false,
 
       /** Controla la visibilidad del modal de seguimiento (log + checklist). */
@@ -293,7 +295,8 @@ export default {
 
   methods: {
     /**
-     * Carga el listado global de corridas del ecommerce desde el store (GET /ecommerce-installations).
+     * Carga el listado global de corridas del ecommerce desde el store (GET /ecommerce-installations)
+     * y se queda solo con las de instalación — las actualizaciones viven en Actualizaciones > Ecommerce.
      *
      * @returns {void}
      */
@@ -302,11 +305,9 @@ export default {
       self.loading = true
       self.$store.dispatch('ecommerce_installation/fetch_all')
         .then(function (res) {
-          // El endpoint trae todas las corridas (instalaciones y actualizaciones); acá solo se
-          // muestran las actualizaciones — las instalaciones viven en Instalaciones > Ecommerce.
           const models = (res.data && res.data.models) || []
           self.installations = models.filter(function (installation) {
-            return installation.mode === 'update'
+            return installation.mode !== 'update'
           })
         })
         .catch(function () {
@@ -348,7 +349,7 @@ export default {
      * @returns {void}
      */
     open_create_modal() {
-      this.new_update = { client_id: null }
+      this.new_install = { client_id: null }
       this.client_filter_text = ''
       this.show_create_modal = true
       if (!this.clients_loaded) {
@@ -364,20 +365,20 @@ export default {
     on_create_modal_closed() {},
 
     /**
-     * Dispara la actualización del ecommerce del cliente elegido (siempre última de master, sin
-     * versión) reutilizando `start_update` del store `ecommerce_installation` (prompt 586). Si
-     * el cliente elegido no tiene ecommerce configurado, el backend responde 422 y el interceptor
-     * de axios ya muestra el mensaje de error correspondiente.
+     * Dispara la instalación desde cero del ecommerce del cliente elegido (siempre última de
+     * master, sin versión) reutilizando `start_install_for_client` del store
+     * `ecommerce_installation`. Si el cliente elegido no tiene ecommerce configurado, el backend
+     * responde 422 y el interceptor de axios ya muestra el mensaje de error correspondiente.
      *
      * @returns {void}
      */
-    create_update() {
+    create_install() {
       const self = this
-      if (!self.new_update.client_id) {
+      if (!self.new_install.client_id) {
         return
       }
       self.creating = true
-      self.$store.dispatch('ecommerce_installation/start_update', self.new_update.client_id)
+      self.$store.dispatch('ecommerce_installation/start_install_for_client', self.new_install.client_id)
         .then(function (res) {
           const created = res.data.model
           self.installations.unshift(created)

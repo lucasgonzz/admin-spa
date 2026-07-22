@@ -48,6 +48,18 @@ export default {
     },
 
     /**
+     * Dispara una instalación desde cero eligiendo solo el cliente (el backend resuelve el
+     * `ClientEcommerce`), para el submódulo global "Instalaciones > Ecommerce".
+     *
+     * @param {object} context Contexto Vuex (no usa commit: sin estado propio).
+     * @param {number} client_id Id del cliente (no del client_ecommerce: el backend lo resuelve).
+     * @returns {Promise} Resuelve con la ClientEcommerceInstallation creada (res.data.model).
+     */
+    start_install_for_client(context, client_id) {
+      return api.post('/ecommerce-installations/start-install', { client_id: client_id })
+    },
+
+    /**
      * Consulta las líneas de log (y el status actual) de una corrida, para el polling del panel.
      *
      * @param {object} context Contexto Vuex (no usa commit: sin estado propio).

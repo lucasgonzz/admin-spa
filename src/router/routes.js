@@ -69,12 +69,31 @@ const routes_def = [
     meta: { requiresAuth: true, nav: true, icon: 'people' },
   },
   {
-    /** Listado global de instalaciones iniciales (menú lateral). */
+    // Ítem padre con submenú: Sistema / Ecommerce. Redirige a Sistema por compatibilidad
+    // con el link directo a "/instalaciones" que ya pueda existir.
     path: '/instalaciones',
     name: 'installations',
     text: 'Instalaciones',
-    component: () => import('@/views/Installations.vue'),
+    redirect: '/instalaciones/sistema',
     meta: { requiresAuth: true, nav: true, icon: 'cloud-download' },
+    children: [
+      {
+        /** Listado global de instalaciones iniciales del sistema (ex ítem único "Instalaciones"). */
+        path: '/instalaciones/sistema',
+        name: 'installations_sistema',
+        text: 'Sistema',
+        component: () => import('@/views/Installations.vue'),
+        meta: { requiresAuth: true, nav: false },
+      },
+      {
+        /** Instalaciones desde cero del ecommerce (tienda-spa + tienda-api) de un cliente. */
+        path: '/instalaciones/ecommerce',
+        name: 'installations_ecommerce',
+        text: 'Ecommerce',
+        component: () => import('@/views/EcommerceInstallations.vue'),
+        meta: { requiresAuth: true, nav: false },
+      },
+    ],
   },
   {
     /** Gestión de instalaciones de un cliente específico (sin ítem en el menú). */
@@ -84,19 +103,21 @@ const routes_def = [
     meta: { requiresAuth: true, nav: false },
   },
   {
-    // Ítem padre con submenú: Actualizaciones / Empresa y Ecommerce (prompt 587).
-    // Redirige a Empresa por compatibilidad con el link directo a "/actualizaciones"
+    // Ítem padre con submenú: Actualizaciones / Sistema, Ecommerce y Demo (prompt 587;
+    // Demo sumado como submódulo por pedido de Lucas, ver contexto_master.md).
+    // Redirige a Sistema por compatibilidad con el link directo a "/actualizaciones"
     // que ya existe en version/extra-props/Index.vue.
     path: '/actualizaciones',
     name: 'updates',
     text: 'Actualizaciones',
-    redirect: '/actualizaciones/empresa',
+    redirect: '/actualizaciones/sistema',
     meta: { requiresAuth: true, nav: true, icon: 'arrow-up-circle' },
     children: [
       {
-        path: '/actualizaciones/empresa',
-        name: 'updates_empresa',
-        text: 'Empresa',
+        /** Ex "Empresa": renombrado a "Sistema" para alinear con Implementaciones. */
+        path: '/actualizaciones/sistema',
+        name: 'updates_sistema',
+        text: 'Sistema',
         model_name: 'update',
         component: () => import('@/views/Updates.vue'),
         meta: { requiresAuth: true, nav: false },
@@ -110,15 +131,16 @@ const routes_def = [
         component: () => import('@/views/EcommerceUpdates.vue'),
         meta: { requiresAuth: true, nav: false },
       },
+      {
+        /** Ex ítem único de nivel superior "Actualizaciones Demo", movido a submódulo. */
+        path: '/actualizaciones/demo',
+        name: 'updates_demo',
+        text: 'Demo',
+        model_name: 'demo_update',
+        component: () => import('@/views/DemoUpdates.vue'),
+        meta: { requiresAuth: true, nav: false },
+      },
     ],
-  },
-  {
-    path: '/actualizaciones-demo',
-    name: 'demo_updates',
-    text: 'Actualizaciones Demo',
-    model_name: 'demo_update',
-    component: () => import('@/views/DemoUpdates.vue'),
-    meta: { requiresAuth: true, nav: true, icon: 'play-circle' },
   },
   {
     path: '/reglas-seguimiento',
