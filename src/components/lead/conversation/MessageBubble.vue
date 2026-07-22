@@ -13,6 +13,19 @@
   </div>
 
   <!--
+    Nota de respuesta a un WhatsApp Flow (grupo 186, prompt 03): evento centrado del hilo,
+    igual patrón visual que wa-status-event pero con ícono e ítem propio. El content ya es
+    la nota corta legible que arma el backend; el bloque largo de instrucciones para la IA
+    se reconstruye aparte, solo para el prompt de Claude (LeadAiService::build_user_content).
+    Nunca es una burbuja: sin cola, sin lado, sin avatar ni acciones de mensaje.
+  -->
+  <div v-else-if="is_flow_note" class="wa-flow-event">
+    <i class="bi bi-ui-checks wa-flow-event-icon" aria-hidden="true" />
+    <span class="wa-flow-event-text">{{ message.content }}</span>
+    <span v-if="formatted_time_short" class="wa-flow-event-time">{{ formatted_time_short }}</span>
+  </div>
+
+  <!--
     Varios WhatsApp en un mismo registro (separador \n---\n) se muestran como burbujas
     independientes; metadatos y acciones quedan solo en la última burbuja del grupo.
   -->
@@ -455,6 +468,28 @@
             {{ delivery_error_time }}
           </div>
         </div>
+        <!--
+          Distintivo de envío parcial (grupo 186, prompt 03): la sugerencia salió, pero solo
+          algunas de sus partes llegaron al lead. Badge ámbar (no rojo, para no confundirlo
+          con "No enviado") + botón para copiar el texto de lo que falta y mandarlo a mano.
+        -->
+        <div v-if="segment.is_last && is_partial_send" class="wa-extra wa-partial-send mt-1">
+          <span class="badge bg-warning text-dark wa-badge-tight" :title="partial_send_label">
+            <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true" />{{ partial_send_label }}
+          </span>
+          <button
+            v-if="has_partial_pending_text"
+            type="button"
+            class="btn btn-sm btn-outline-warning wa-btn-tight d-inline-flex align-items-center justify-content-center gap-1"
+            :disabled="busy"
+            title="Copiar el texto de lo que no llegó al lead"
+            aria-label="Copiar el texto de lo que no llegó al lead"
+            @click="on_copy_partial_pending"
+          >
+            <i class="bi" :class="partial_copy_feedback ? 'bi-check-lg' : 'bi-clipboard'" aria-hidden="true" />
+            <span>{{ partial_copy_feedback ? 'Copiado' : 'Copiar lo que falta enviar' }}</span>
+          </button>
+        </div>
         <div v-if="segment.is_last && status_badge_text" class="wa-extra mt-1">
           <span class="badge wa-badge-tight" :class="status_badge_class">{{ status_badge_text }}</span>
         </div>
@@ -536,6 +571,9 @@
 import AudioPlayer from '@/components/lead/conversation/AudioPlayer.vue'
 import VerificationActionsPanel from '@/components/lead/conversation/verification-panel/Index.vue'
 import ImageLightbox from '@/components/common/ImageLightbox.vue'
+/* Utilidad ya existente para copiar texto al portapapeles (grupo 186, prompt 03): la
+   reutilizamos para el botón "Copiar lo que falta enviar" del badge de envío parcial. */
+import { copy_text_to_clipboard } from '@/utils/version_notification_clipboard'
 
 /**
  * Burbuja de mensaje de la conversación WhatsApp (lead, setter, sistema / IA).
@@ -579,6 +617,10 @@ export default {
       image_preview_visible: false,
       /** URL de la imagen que se está viendo ampliada. */
       image_preview_url: '',
+      /** Confirmación visual (ícono check) tras copiar el texto pendiente de un envío parcial. */
+      partial_copy_feedback: false,
+      /** Timer que apaga partial_copy_feedback a los 2s, igual patrón que el resto del proyecto. */
+      partial_copy_feedback_timer: null,
     }
   },
   computed: {
@@ -626,11 +668,17 @@ export default {
     },
     /**
      * true si la sugerencia de Claude quedó marcada como no enviada al lead.
+     * Excluye los envíos parciales (is_partial_send): esos tienen su propio distintivo
+     * ámbar y son mutuamente excluyentes con "No enviado" (grupo 186, prompt 03) — mostrar
+     * ambos a la vez es justamente el bug que este cambio corrige.
      *
      * @returns {boolean}
      */
     is_not_sent_suggestion() {
       if (this.message.sender !== 'sistema') {
+        return false
+      }
+      if (this.is_partial_send) {
         return false
       }
       return this.message.status === 'rechazado'
@@ -656,6 +704,48 @@ export default {
      */
     is_error() {
       return Boolean(this.message.is_error)
+    },
+    /**
+     * true si el mensaje es la nota de respuesta a un WhatsApp Flow (grupo 186, prompt 03).
+     * El backend ya guarda una nota corta y legible en content (el bloque largo de
+     * instrucciones para la IA se reconstruye aparte, solo para el prompt de Claude). Se
+     * muestra como evento centrado del hilo, no como burbuja: es algo que "pasó", no algo
+     * que el lead "dijo".
+     * @returns {boolean}
+     */
+    is_flow_note() {
+      return String(this.message.kind || '') === 'flow'
+    },
+    /**
+     * true cuando una sugerencia salió parcialmente: algunas partes llegaron al lead y
+     * otras no (grupo 186, prompt 03). Se basa en los contadores sent_parts_count /
+     * total_parts_count, no en partial_send_pending (que podría venir vacío igual).
+     * @returns {boolean}
+     */
+    is_partial_send() {
+      var sent = this.message.sent_parts_count
+      var total = this.message.total_parts_count
+      if (typeof sent !== 'number' || typeof total !== 'number') {
+        return false
+      }
+      return sent > 0 && sent < total
+    },
+    /**
+     * Etiqueta legible del distintivo de envío parcial (badge ámbar).
+     * @returns {string}
+     */
+    partial_send_label() {
+      if (!this.is_partial_send) {
+        return ''
+      }
+      return 'Enviado parcialmente · llegaron ' + this.message.sent_parts_count + ' de ' + this.message.total_parts_count + ' mensajes'
+    },
+    /**
+     * true si hay texto de partes pendientes para ofrecer el botón de copiar.
+     * @returns {boolean}
+     */
+    has_partial_pending_text() {
+      return typeof this.message.partial_send_pending === 'string' && this.message.partial_send_pending.trim() !== ''
     },
     /**
      * Etiqueta legible del emisor para la cabecera de la burbuja.
@@ -1037,9 +1127,14 @@ export default {
     },
     /**
      * Badge solo para estados excepcionales (p. ej. rechazado).
+     * Envíos parciales (is_partial_send) usan su propio badge ámbar aparte y nunca
+     * caen acá — son mutuamente excluyentes con "No enviado" (grupo 186, prompt 03).
      * @returns {string}
      */
     status_badge_text() {
+      if (this.is_partial_send) {
+        return ''
+      }
       const st = this.message.status
       if (st === 'rechazado' && this.message.sender === 'sistema') {
         return 'No enviado'
@@ -1561,6 +1656,17 @@ export default {
       return lines.join('\n')
     },
   },
+  /**
+   * Limpia el timer de confirmación visual del copiado si el componente se desmonta
+   * antes de que termine (ej: el setter cambia de lead con el badge recién copiado).
+   * @returns {void}
+   */
+  unmounted() {
+    if (this.partial_copy_feedback_timer) {
+      clearTimeout(this.partial_copy_feedback_timer)
+      this.partial_copy_feedback_timer = null
+    }
+  },
   watch: {
     /**
      * Al cambiar el mensaje (refresh desde API), salir del modo edición.
@@ -1717,6 +1823,33 @@ export default {
       this.$emit('toggle_deleted_from_context')
     },
     /**
+     * Copia al portapapeles el texto de las partes de la sugerencia que no llegaron al
+     * lead (envío parcial, grupo 186 prompt 03), para que el setter lo pegue a mano en el
+     * composer de WhatsApp. Muestra una confirmación visual breve (ícono check, 2s).
+     * @returns {void}
+     */
+    on_copy_partial_pending() {
+      const self = this
+      const text = ((this.message.partial_send_pending || '') + '').trim()
+      if (!text) {
+        return
+      }
+      copy_text_to_clipboard(text)
+        .then(function () {
+          self.partial_copy_feedback = true
+          if (self.partial_copy_feedback_timer) {
+            clearTimeout(self.partial_copy_feedback_timer)
+          }
+          self.partial_copy_feedback_timer = setTimeout(function () {
+            self.partial_copy_feedback = false
+            self.partial_copy_feedback_timer = null
+          }, 2000)
+        })
+        .catch(function () {
+          /* Silencioso: si falla el copiado, el setter puede seleccionar el texto a mano. */
+        })
+    },
+    /**
      * Abre el visor de imagen a pantalla completa con la URL dada.
      *
      * @param {string} url URL de la imagen a mostrar ampliada.
@@ -1855,6 +1988,40 @@ export default {
   white-space: nowrap;
   user-select: none;
   font-style: italic;
+}
+/*
+  Nota centrada de respuesta a un WhatsApp Flow (grupo 186, prompt 03): mismo patrón visual
+  que wa-status-event (evento del hilo, no burbuja) pero informativa en vez de un separador
+  temporal - se mantiene visible como el resto de los mensajes. Deliberadamente más discreta
+  que wa-error-event: acá no hay ningún problema, es solo un dato de lo que pasó.
+*/
+.wa-flow-event {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  margin: 0.2rem auto;
+  max-width: 92%;
+  padding: 0.3rem 0.6rem;
+  color: rgba(17, 27, 33, 0.55);
+  font-size: 0.75rem;
+  align-self: center;
+  text-align: center;
+}
+.wa-flow-event-icon {
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+.wa-flow-event-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.wa-flow-event-time {
+  flex: 0 0 auto;
+  font-size: 0.65rem;
+  color: rgba(17, 27, 33, 0.35);
+  white-space: nowrap;
 }
 /* Bloque rojo centrado para registros de error de sistema (fallo de envío o generación). */
 .wa-error-event {
@@ -2171,6 +2338,18 @@ export default {
   min-width: 1.4rem;
   text-align: center;
   font-variant-numeric: tabular-nums;
+}
+/*
+  Distintivo de envío parcial (grupo 186, prompt 03): badge ámbar (bg-warning, misma
+  paleta que "Requiere verificación" más arriba) + botón chico para copiar lo pendiente.
+  En columna, alineado al lado de la burbuja (out).
+*/
+.wa-partial-send {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  clear: both;
 }
 .wa-bubble--not-sent {
   opacity: 0.78;
