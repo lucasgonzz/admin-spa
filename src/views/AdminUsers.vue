@@ -35,6 +35,7 @@
             <th>Email</th>
             <th>Teléfono</th>
             <th>Es closer</th>
+            <th>Es setter</th>
             <th style="width: 100px">Acciones</th>
           </tr>
         </thead>
@@ -52,6 +53,15 @@
                 :class="admin.is_closer ? 'bg-success' : 'bg-light text-muted'"
               >
                 {{ admin.is_closer ? 'Sí' : 'No' }}
+              </span>
+            </td>
+            <td>
+              <!-- Indicador visual del flag es_setter -->
+              <span
+                class="badge"
+                :class="admin.es_setter ? 'bg-success' : 'bg-light text-muted'"
+              >
+                {{ admin.es_setter ? 'Sí' : 'No' }}
               </span>
             </td>
             <td>
@@ -74,7 +84,7 @@
             </td>
           </tr>
           <tr v-if="!admins.length">
-            <td colspan="6" class="text-muted text-center py-4">No hay usuarios registrados.</td>
+            <td colspan="7" class="text-muted text-center py-4">No hay usuarios registrados.</td>
           </tr>
         </tbody>
       </table>
@@ -166,6 +176,38 @@
               </label>
               <div class="form-text text-muted">
                 Los closers pueden conectar su Google Calendar para bloquear disponibilidad de demos.
+              </div>
+            </div>
+
+            <!-- Campo: Es setter -->
+            <div class="mb-3 form-check">
+              <input
+                v-model="form.es_setter"
+                type="checkbox"
+                class="form-check-input"
+                id="es_setter_check"
+              />
+              <label class="form-check-label" for="es_setter_check">
+                Es setter
+              </label>
+              <div class="form-text text-muted">
+                Los setters reciben automáticamente todas las tareas que nacen de conversaciones de leads: cuando el agente detecta que una conversación necesita que intervenga una persona, la tarea se le asigna a todos los admins marcados como setter, y a cada uno le aparece el aviso en pantalla hasta que lo cierra. Si no hay ningún setter marcado, esas tareas quedan sin asignar y las puede tomar cualquiera.
+              </div>
+            </div>
+
+            <!-- Campo: Asignado por defecto en tareas nuevas -->
+            <div class="mb-3 form-check">
+              <input
+                v-model="form.is_default_task_assignee"
+                type="checkbox"
+                class="form-check-input"
+                id="is_default_task_assignee_check"
+              />
+              <label class="form-check-label" for="is_default_task_assignee_check">
+                Asignado por defecto en tareas nuevas
+              </label>
+              <div class="form-text text-muted">
+                Cuando creás una tarea a mano desde el panel, los admins con esta opción activa vienen preseleccionados como responsables. Es sólo una preselección: podés cambiarla antes de guardar. No tiene relación con las tareas que genera el agente desde conversaciones de leads — para eso está "Es setter".
               </div>
             </div>
 
@@ -309,6 +351,10 @@ export default {
         email: '',
         password: '',
         is_closer: false,
+        /* Flag que indica si el admin es setter: recibe automáticamente tareas de leads. */
+        es_setter: false,
+        /* Flag que indica si el admin debe preseleccionarse por defecto al crear tareas manuales. */
+        is_default_task_assignee: false,
         /* Teléfono en formato E.164; requerido para notificar al closer por WhatsApp. */
         phone_number: '',
         /* Flag para recibir WhatsApp cuando el agente escala una conversación de lead. */
@@ -364,12 +410,14 @@ export default {
      */
     open_create_modal() {
       this.editing_admin = null
-      /* Resetear form completo incluyendo phone_number y flags de notificación. */
+      /* Resetear form completo incluyendo phone_number, flags de rol y flags de notificación. */
       this.form = {
         name: '',
         email: '',
         password: '',
         is_closer: false,
+        es_setter: false,
+        is_default_task_assignee: false,
         phone_number: '',
         notify_lead_escalation_whatsapp: false,
         notify_demo_scheduled_whatsapp: false,
@@ -394,6 +442,9 @@ export default {
         email:        admin.email,
         password:     '',
         is_closer:    !!admin.is_closer,
+        /* Cargar flags de rol: es_setter e is_default_task_assignee. */
+        es_setter:    !!admin.es_setter,
+        is_default_task_assignee: !!admin.is_default_task_assignee,
         /* Cargar teléfono existente para que el setter pueda editarlo. */
         phone_number: admin.phone_number || '',
         /* Cargar flags de notificación WhatsApp existentes. */
@@ -432,6 +483,9 @@ export default {
       var payload = {
         name:         self.form.name,
         is_closer:    self.form.is_closer,
+        /* Flags de rol: es_setter e is_default_task_assignee; se envían siempre. */
+        es_setter:    self.form.es_setter,
+        is_default_task_assignee: self.form.is_default_task_assignee,
         /* Teléfono del admin; se envía siempre (puede estar vacío para borrarlo). */
         phone_number: self.form.phone_number,
         /* Flags de notificación WhatsApp; se envían siempre para permitir desactivarlos. */
