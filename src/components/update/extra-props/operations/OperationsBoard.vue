@@ -388,6 +388,28 @@
                   >
                     <i class="bi bi-gear me-1"></i>Configurar sistema (cambio de URL)
                   </button>
+
+                  <!-- Resultado real de la sincronización con empresa (independiente del ícono de "completed" de arriba) -->
+                  <div
+                    v-if="update.default_version_sync_status === 'success'"
+                    class="alert alert-success py-2 mt-2 mb-0 small"
+                  >
+                    <i class="bi bi-check-circle me-1"></i>
+                    empresa confirmó el cambio de versión: se actualizó ahí y en el admin.
+                  </div>
+                  <div
+                    v-else-if="update.default_version_sync_status === 'manual_required'"
+                    class="alert alert-warning py-2 mt-2 mb-0 small"
+                  >
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    <strong>La versión de empresa de este cliente todavía no tiene esta funcionalidad</strong>
+                    (versión vieja) — no se pudo cambiar el link de la versión estable ahí. La versión activa
+                    <strong>sí</strong> se actualizó en el admin. Falta que lo hagas manualmente en el servidor del
+                    cliente.
+                    <div v-if="update.default_version_sync_message" class="mt-1 text-muted">
+                      {{ update.default_version_sync_message }}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -423,7 +445,13 @@ export default {
   name: 'OperationsBoard',
   components: { SubTaskItem },
   props: {
-    /** Modelo completo del upgrade (con seeders, comandos y timestamps de pasos). */
+    /**
+     * Modelo completo del upgrade (con seeders, comandos y timestamps de pasos).
+     * Incluye también `default_version_sync_status` ('success'/'manual_required'/null)
+     * y `default_version_sync_message` (detalle cuando empresa no tiene el endpoint
+     * de configuración por ser una versión vieja), usados para mostrar el resultado
+     * real de "Sistema configurado" además del ícono de estado existente.
+     */
     update: { type: Object, required: true },
     /** Líneas de log del deployment en curso o último ejecutado. */
     deployment_logs: { type: Array, default: () => [] },
