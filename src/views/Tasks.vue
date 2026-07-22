@@ -25,12 +25,23 @@
     <!-- Layout de listas apiladas a lo ancho completo (antes eran dos columnas de media pantalla) -->
     <div v-else class="tasks-view__lists d-flex flex-column gap-4">
 
+      <!-- Barra de navegación por responsable: filtra ambas listas de abajo.
+           Arranca siempre en "Todos" (dato local, no persiste entre entradas a la vista). -->
+      <task-assignee-nav
+        :admins="admins"
+        :selected="selected_assignee"
+        :counts="assignee_counts"
+        @select="on_select_assignee"
+      />
+
       <!-- Lista: Pendientes (siempre expandida, ocupa todo el ancho) -->
       <task-column
         title="Pendientes"
         header_dot_class="bg-primary"
         empty_message="No hay tareas pendientes."
         :tasks="pending_tasks"
+        :draggable_enabled="draggable_enabled"
+        disabled_hint='Para reordenar, volvé a "Todos"'
         @edit="open_edit_modal"
         @delete="on_delete_task"
         @toggle-done="on_toggle_done"
@@ -46,6 +57,7 @@
         :tasks="done_tasks"
         :collapsible="true"
         :collapsed="!show_done"
+        :draggable_enabled="draggable_enabled"
         @toggle="show_done = !show_done"
         @edit="open_edit_modal"
         @delete="on_delete_task"
@@ -72,6 +84,7 @@
 <script>
 import TaskColumn from '@/components/task/TaskColumn.vue'
 import TaskFormModal from '@/components/task/TaskFormModal.vue'
+import TaskAssigneeNav from '@/components/task/TaskAssigneeNav.vue'
 
 /**
  * Vista principal del módulo de tareas.
@@ -81,7 +94,7 @@ import TaskFormModal from '@/components/task/TaskFormModal.vue'
 export default {
   name: 'ViewTasks',
 
-  components: { TaskColumn, TaskFormModal },
+  components: { TaskColumn, TaskFormModal, TaskAssigneeNav },
 
   data() {
     return {
@@ -102,6 +115,12 @@ export default {
        * en cada carga de la vista para no saturar la pantalla con tareas ya hechas.
        */
       show_done: false,
+      /**
+       * Filtro activo de la barra de responsables: 'all', 'unassigned' o el id
+       * de un admin. Arranca siempre en 'all' en cada entrada a la vista — no se
+       * persiste entre sesiones ni en localStorage (pedido explícito de Lucas).
+       */
+      selected_assignee: 'all',
     }
   },
 
@@ -121,24 +140,86 @@ export default {
     },
 
     /**
-     * Tareas no realizadas, respetando el orden de prioridad (sort_order).
+     * Tareas filtradas según el responsable seleccionado en la barra de navegación.
+     * Con 'all' devuelve todas; con 'unassigned' solo las que no tienen ningún
+     * admin asignado; con un id de admin, las que lo tienen entre sus asignados.
+     * Ambas listas de abajo (pendientes y realizadas) derivan de acá, para que
+     * el filtro les aplique a las dos por igual.
+     */
+    filtered_tasks() {
+      if (this.selected_assignee === 'all') {
+        return this.all_tasks
+      }
+
+      if (this.selected_assignee === 'unassigned') {
+        return this.all_tasks.filter(function (t) {
+          if (Array.isArray(t.assigned_admins)) {
+            return t.assigned_admins.length === 0
+          }
+          // Defensivo: caché vieja sin assigned_admins, usar el legacy singular.
+          return t.assigned_admin_id == null
+        })
+      }
+
+      // Filtro por admin puntual: normalizar a número para comparar sin problemas de tipo.
+      const target_id = Number(this.selected_assignee)
+      return this.all_tasks.filter(function (t) {
+        if (Array.isArray(t.assigned_admins)) {
+          return t.assigned_admins.some(function (a) { return Number(a.id) === target_id })
+        }
+        return t.assigned_admin_id != null && Number(t.assigned_admin_id) === target_id
+      })
+    },
+
+    /**
+     * Tareas no realizadas, respetando el orden de prioridad (sort_order),
+     * ya con el filtro de responsable aplicado.
      */
     pending_tasks() {
-      return this.all_tasks.filter(function (t) { return !t.is_done })
+      return this.filtered_tasks.filter(function (t) { return !t.is_done })
     },
 
     /**
-     * Tareas realizadas, respetando el orden de sort_order.
+     * Tareas realizadas, respetando el orden de sort_order,
+     * ya con el filtro de responsable aplicado.
      */
     done_tasks() {
-      return this.all_tasks.filter(function (t) { return t.is_done })
+      return this.filtered_tasks.filter(function (t) { return t.is_done })
     },
 
     /**
-     * Lista de admins para el selector del modal de formulario.
+     * Lista de admins para el selector del modal de formulario y para la barra
+     * de navegación por responsable.
      */
     admins() {
       return this.$store.state.task.admins
+    },
+
+    /**
+     * Contadores de la barra de navegación: siempre se calculan sobre el total
+     * de tareas (sin aplicar el filtro activo), usando los getters agregados
+     * en el prompt 07 para no duplicar la lógica de conteo acá.
+     */
+    assignee_counts() {
+      const self = this
+      const by_admin = {}
+      this.admins.forEach(function (admin) {
+        by_admin[admin.id] = self.$store.getters['task/pending_assigned_count_for_admin'](admin.id)
+      })
+      return {
+        all: this.$store.getters['task/pending_count_total'],
+        unassigned: this.$store.getters['task/pending_count_unassigned'],
+        by_admin: by_admin,
+      }
+    },
+
+    /**
+     * El drag & drop solo tiene sentido cuando se ve el universo completo de
+     * tareas ('all'): con un filtro activo la vista solo conoce un subconjunto,
+     * y reordenar ese subconjunto corrompería el orden global al persistirlo.
+     */
+    draggable_enabled() {
+      return this.selected_assignee === 'all'
     },
   },
 
@@ -197,6 +278,15 @@ export default {
         .catch(function () {
           self.modal_saving = false
         })
+    },
+
+    /**
+     * Actualiza el filtro activo de la barra de responsables.
+     *
+     * @param {string|number} value  'all', 'unassigned' o el id del admin elegido.
+     */
+    on_select_assignee(value) {
+      this.selected_assignee = value
     },
 
     /**

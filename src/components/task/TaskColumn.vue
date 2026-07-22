@@ -22,6 +22,13 @@
         <h6 class="mb-0 fw-semibold">{{ title }}</h6>
         <!-- El contador queda visible incluso colapsada, para saber cuántas hay sin desplegar -->
         <span class="badge rounded-pill bg-secondary">{{ tasks.length }}</span>
+        <!-- Leyenda discreta cuando el drag & drop está deshabilitado por un filtro activo -->
+        <span
+          v-if="!draggable_enabled && disabled_hint"
+          class="text-muted small fst-italic"
+        >
+          {{ disabled_hint }}
+        </span>
       </div>
       <!-- Chevron indicador de estado de colapso -->
       <i
@@ -43,6 +50,7 @@
         :task="task"
         :is_dragging="dragging_id === task.id"
         :is_drag_over="drag_over_id === task.id"
+        :draggable_enabled="draggable_enabled"
         @dragstart="on_drag_start(task, $event)"
         @dragend="on_drag_end"
         @dragover="on_drag_over(task, $event)"
@@ -120,6 +128,24 @@ export default {
       type: Boolean,
       default: false,
     },
+    /**
+     * Si es false, deshabilita el drag & drop en esta columna (usado cuando hay
+     * un filtro de responsable activo, para no corromper el orden global de las
+     * tareas que quedan fuera del subconjunto filtrado).
+     */
+    draggable_enabled: {
+      type: Boolean,
+      default: true,
+    },
+    /**
+     * Leyenda discreta a mostrar en el header cuando `draggable_enabled` es false
+     * (ej. "Para reordenar, volvé a 'Todos'"). Se pasa solo desde la columna de
+     * Pendientes; si viene vacío, no se muestra nada.
+     */
+    disabled_hint: {
+      type: String,
+      default: '',
+    },
   },
 
   emits: ['edit', 'delete', 'toggle-done', 'update-todos', 'reorder', 'toggle'],
@@ -146,6 +172,10 @@ export default {
      * @param {DragEvent} event
      */
     on_drag_start(task, event) {
+      // Con un filtro activo el drag & drop está deshabilitado: ignorar el inicio.
+      if (!this.draggable_enabled) {
+        return
+      }
       this.dragging_id = task.id
       event.dataTransfer.effectAllowed = 'move'
       event.dataTransfer.setData('text/plain', String(task.id))
@@ -166,6 +196,9 @@ export default {
      * @param {DragEvent} event
      */
     on_drag_over(over_task, event) {
+      if (!this.draggable_enabled) {
+        return
+      }
       event.preventDefault()
       if (this.dragging_id !== over_task.id) {
         this.drag_over_id = over_task.id
@@ -180,6 +213,10 @@ export default {
      * @param {Object} target_task  Tarea donde se soltó la arrastrada.
      */
     on_drop(target_task) {
+      // Con un filtro activo el drag & drop está deshabilitado: no procesar el drop.
+      if (!this.draggable_enabled) {
+        return
+      }
       const source_id = this.dragging_id
       this.dragging_id = null
       this.drag_over_id = null

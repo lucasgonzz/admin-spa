@@ -11,12 +11,13 @@
       'task-card--done': task.is_done,
       'task-card--dragging': is_dragging,
       'task-card--drag-over': is_drag_over,
+      'task-card--not-draggable': !draggable_enabled,
     }"
-    draggable="true"
-    @dragstart="$emit('dragstart', $event)"
-    @dragend="$emit('dragend', $event)"
-    @dragover.prevent="$emit('dragover', $event)"
-    @drop.prevent="$emit('drop', $event)"
+    :draggable="draggable_enabled"
+    @dragstart="draggable_enabled ? $emit('dragstart', $event) : null"
+    @dragend="draggable_enabled ? $emit('dragend', $event) : null"
+    @dragover.prevent="draggable_enabled ? $emit('dragover', $event) : null"
+    @drop.prevent="draggable_enabled ? $emit('drop', $event) : null"
     @dragenter.prevent
   >
     <div class="card-body task-card__body">
@@ -59,8 +60,13 @@
           </div>
         </div>
 
-        <!-- Indicador de arrastre -->
-        <div class="flex-shrink-0 task-card__drag-handle text-muted" title="Arrastrar para reordenar">
+        <!-- Indicador de arrastre: oculto cuando el drag & drop está deshabilitado
+             por un filtro de responsable activo. -->
+        <div
+          v-if="draggable_enabled"
+          class="flex-shrink-0 task-card__drag-handle text-muted"
+          title="Arrastrar para reordenar"
+        >
           <i class="bi bi-grip-vertical" />
         </div>
 
@@ -205,6 +211,14 @@ export default {
       type: Boolean,
       default: false,
     },
+    /**
+     * Si es false, la tarjeta no es arrastrable (filtro de responsable activo
+     * en la vista): se oculta el ícono de agarre y el cursor pasa a 'default'.
+     */
+    draggable_enabled: {
+      type: Boolean,
+      default: true,
+    },
   },
 
   emits: ['edit', 'delete', 'toggle-done', 'update-todos', 'dragstart', 'dragend', 'dragover', 'drop'],
@@ -308,6 +322,12 @@ export default {
 .task-card--dragging {
   opacity: 0.45;
   cursor: grabbing;
+}
+
+/* Tarjeta no arrastrable (filtro de responsable activo): cursor normal, sin
+   indicar que se puede agarrar. */
+.task-card--not-draggable {
+  cursor: default;
 }
 
 /* Indicador visual cuando otra tarjeta pasa por encima. */
