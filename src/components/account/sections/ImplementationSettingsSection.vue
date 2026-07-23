@@ -181,6 +181,39 @@
       <!-- Mensajes de estado para el delay de contacto -->
       <p v-if="saved_form_contact_delay_message" class="text-success small mt-2 mb-0">{{ saved_form_contact_delay_message }}</p>
       <p v-else-if="error_form_contact_delay_message" class="text-danger small mt-2 mb-0">{{ error_form_contact_delay_message }}</p>
+
+      <!-- Campo: cuota de Google por defecto para nuevos usuarios reales -->
+      <div class="row g-2 align-items-end mt-3 mb-3">
+        <div class="col-sm-6">
+          <label class="form-label small" for="impl_google_cuota_default">
+            Cuota de Google por defecto para nuevos usuarios (users.google_cuota)
+          </label>
+          <!-- Input numérico; se aplica al crear el User real en el user-setup -->
+          <input
+            id="impl_google_cuota_default"
+            v-model.number="local_google_cuota_default"
+            type="number"
+            class="form-control form-control-sm"
+            min="0"
+            :disabled="loading_google_cuota_default || saving_google_cuota_default"
+          />
+        </div>
+
+        <div class="col-auto">
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            :disabled="loading_google_cuota_default || saving_google_cuota_default || !can_save_google_cuota_default"
+            @click="on_save_google_cuota_default"
+          >
+            {{ saving_google_cuota_default ? 'Guardando…' : 'Guardar' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Mensajes de estado para la cuota de Google -->
+      <p v-if="saved_google_cuota_default_message" class="text-success small mt-2 mb-0">{{ saved_google_cuota_default_message }}</p>
+      <p v-else-if="error_google_cuota_default_message" class="text-danger small mt-2 mb-0">{{ error_google_cuota_default_message }}</p>
     </template>
   </div>
 </template>
@@ -195,6 +228,7 @@ import api from '@/utils/axios'
  * - Admin asignado por defecto: GET/PUT /settings/implementation-assigned-admin
  * - Segundos de espera antes de procesar archivos (Etapa 4): GET/PUT /settings/implementation-file-wait
  * - Segundos de espera antes de confirmar lista de empleados (Etapa 1): GET/PUT /settings/implementation-employees-wait
+ * - Cuota de Google por defecto: GET/PUT /settings/implementation-google-cuota-default
  */
 export default {
   name: 'ImplementationSettingsSection',
@@ -365,6 +399,37 @@ export default {
        * Mensaje de error para el campo de delay de contacto.
        */
       error_form_contact_delay_message: '',
+
+      /**
+       * Cuota de Google configurada localmente para nuevos usuarios reales (valor editable).
+       * Se aplica a users.google_cuota al ejecutar el user-setup real en empresa-api.
+       */
+      local_google_cuota_default: 100,
+
+      /**
+       * Valor guardado en el servidor para detectar cambios sin guardar (cuota de Google).
+       */
+      stored_google_cuota_default: 100,
+
+      /**
+       * Indicador de carga del setting de cuota de Google.
+       */
+      loading_google_cuota_default: true,
+
+      /**
+       * Indica que hay un PUT de la cuota de Google en curso.
+       */
+      saving_google_cuota_default: false,
+
+      /**
+       * Mensaje de éxito tras guardar la cuota de Google.
+       */
+      saved_google_cuota_default_message: '',
+
+      /**
+       * Mensaje de error para el campo de cuota de Google.
+       */
+      error_google_cuota_default_message: '',
     }
   },
 
@@ -413,6 +478,15 @@ export default {
     can_save_form_contact_delay() {
       return this.local_form_contact_delay_minutes !== this.stored_form_contact_delay_minutes
     },
+
+    /**
+     * Habilita el botón Guardar de la cuota de Google solo si el valor cambió.
+     *
+     * @returns {boolean}
+     */
+    can_save_google_cuota_default() {
+      return this.local_google_cuota_default !== this.stored_google_cuota_default
+    },
   },
 
   mounted() {
@@ -423,6 +497,7 @@ export default {
     this.load_employees_wait_setting()
     this.load_form_url_setting()
     this.load_form_contact_delay_setting()
+    this.load_google_cuota_default_setting()
   },
 
   methods: {
@@ -776,6 +851,72 @@ export default {
         })
         .then(function () {
           self.saving_form_contact_delay = false
+        })
+    },
+
+    /**
+     * Carga la cuota de Google configurada desde GET /settings/implementation-google-cuota-default.
+     *
+     * @returns {void}
+     */
+    load_google_cuota_default_setting() {
+      const self = this
+      self.loading_google_cuota_default = true
+      self.error_google_cuota_default_message = ''
+
+      api
+        .get('/settings/implementation-google-cuota-default')
+        .then(function (res) {
+          /** Cuota retornada por el servidor; fallback a 100. */
+          const cuota = res.data && res.data.cuota != null ? res.data.cuota : 100
+          self.local_google_cuota_default  = cuota
+          self.stored_google_cuota_default = cuota
+        })
+        .catch(function () {
+          self.error_google_cuota_default_message = 'No se pudo cargar la cuota de Google.'
+        })
+        .then(function () {
+          self.loading_google_cuota_default = false
+        })
+    },
+
+    /**
+     * Guarda la cuota de Google via PUT /settings/implementation-google-cuota-default.
+     *
+     * Valida localmente que el valor sea un entero mayor o igual a 0.
+     *
+     * @returns {void}
+     */
+    on_save_google_cuota_default() {
+      const self = this
+
+      const cuota = parseInt(self.local_google_cuota_default, 10)
+
+      if (isNaN(cuota) || cuota < 0) {
+        self.error_google_cuota_default_message = 'El valor debe ser 0 o más.'
+        return
+      }
+
+      self.saving_google_cuota_default        = true
+      self.saved_google_cuota_default_message = ''
+      self.error_google_cuota_default_message = ''
+
+      api
+        .put('/settings/implementation-google-cuota-default', { cuota: cuota })
+        .then(function (res) {
+          const saved_cuota = res.data && res.data.cuota != null ? res.data.cuota : cuota
+          self.local_google_cuota_default  = saved_cuota
+          self.stored_google_cuota_default = saved_cuota
+          self.saved_google_cuota_default_message = 'Configuración guardada.'
+        })
+        .catch(function (err) {
+          const msg =
+            (err.response && err.response.data && err.response.data.message) ||
+            'No se pudo guardar.'
+          self.error_google_cuota_default_message = msg
+        })
+        .then(function () {
+          self.saving_google_cuota_default = false
         })
     },
   },
