@@ -182,11 +182,49 @@
       <p v-if="saved_form_contact_delay_message" class="text-success small mt-2 mb-0">{{ saved_form_contact_delay_message }}</p>
       <p v-else-if="error_form_contact_delay_message" class="text-danger small mt-2 mb-0">{{ error_form_contact_delay_message }}</p>
 
+      <!-- Google (búsqueda de imágenes): API key y cuota, para clientes reales y para demos -->
+      <h6 class="mt-3 mb-2">Google (búsqueda de imágenes)</h6>
+
+      <!-- Campo: API key de Google para clientes nuevos (reales) -->
+      <div class="row g-2 align-items-end mb-1">
+        <div class="col-sm-8">
+          <label class="form-label small" for="impl_google_api_key_default">
+            API key de Google para clientes nuevos (users.google_custom_search_api_key)
+          </label>
+          <!-- Input de texto (no password): panel interno, Lucas necesita ver la key cargada -->
+          <input
+            id="impl_google_api_key_default"
+            v-model="local_google_api_key_default"
+            type="text"
+            class="form-control form-control-sm"
+            :disabled="loading_google_api_key_default || saving_google_api_key_default"
+          />
+          <small class="text-muted d-block">
+            Si queda vacío se usa la key que empresa-api tiene hardcodeada como respaldo. El valor se aplica solo a los setups nuevos: los clientes ya creados conservan la key que recibieron.
+          </small>
+        </div>
+
+        <div class="col-auto">
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            :disabled="loading_google_api_key_default || saving_google_api_key_default || !can_save_google_api_key_default"
+            @click="on_save_google_api_key_default"
+          >
+            {{ saving_google_api_key_default ? 'Guardando…' : 'Guardar' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Mensajes de estado para la API key de clientes -->
+      <p v-if="saved_google_api_key_default_message" class="text-success small mt-2 mb-0">{{ saved_google_api_key_default_message }}</p>
+      <p v-else-if="error_google_api_key_default_message" class="text-danger small mt-2 mb-0">{{ error_google_api_key_default_message }}</p>
+
       <!-- Campo: cuota de Google por defecto para nuevos usuarios reales -->
       <div class="row g-2 align-items-end mt-3 mb-3">
         <div class="col-sm-6">
           <label class="form-label small" for="impl_google_cuota_default">
-            Cuota de Google por defecto para nuevos usuarios (users.google_cuota)
+            Búsquedas de Google por día por defecto para nuevos usuarios (users.google_cuota)
           </label>
           <!-- Input numérico; se aplica al crear el User real en el user-setup -->
           <input
@@ -211,9 +249,82 @@
         </div>
       </div>
 
-      <!-- Mensajes de estado para la cuota de Google -->
+      <!-- Mensajes de estado para la cuota de Google (clientes) -->
       <p v-if="saved_google_cuota_default_message" class="text-success small mt-2 mb-0">{{ saved_google_cuota_default_message }}</p>
       <p v-else-if="error_google_cuota_default_message" class="text-danger small mt-2 mb-0">{{ error_google_cuota_default_message }}</p>
+
+      <!-- Nota: por qué API key y cuota de demos están separadas de las de clientes reales -->
+      <small class="text-muted d-block mt-2">
+        La cuota diaria de búsquedas de Google es por API key: si demos y clientes comparten la misma key, las demos se comen la cuota de los clientes que pagan. Por eso hay una key y una cuota independientes para las demos.
+      </small>
+
+      <!-- Campo: API key de Google para demos -->
+      <div class="row g-2 align-items-end mt-3 mb-1">
+        <div class="col-sm-8">
+          <label class="form-label small" for="impl_google_api_key_demo">
+            API key de Google para demos
+          </label>
+          <!-- Input de texto (no password): panel interno, Lucas necesita ver la key cargada -->
+          <input
+            id="impl_google_api_key_demo"
+            v-model="local_google_api_key_demo"
+            type="text"
+            class="form-control form-control-sm"
+            :disabled="loading_google_api_key_demo || saving_google_api_key_demo"
+          />
+          <small class="text-muted d-block">
+            Si queda vacío se usa la key que empresa-api tiene hardcodeada como respaldo. El valor se aplica solo a los setups nuevos: los clientes ya creados conservan la key que recibieron.
+          </small>
+        </div>
+
+        <div class="col-auto">
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            :disabled="loading_google_api_key_demo || saving_google_api_key_demo || !can_save_google_api_key_demo"
+            @click="on_save_google_api_key_demo"
+          >
+            {{ saving_google_api_key_demo ? 'Guardando…' : 'Guardar' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Mensajes de estado para la API key de demos -->
+      <p v-if="saved_google_api_key_demo_message" class="text-success small mt-2 mb-0">{{ saved_google_api_key_demo_message }}</p>
+      <p v-else-if="error_google_api_key_demo_message" class="text-danger small mt-2 mb-0">{{ error_google_api_key_demo_message }}</p>
+
+      <!-- Campo: cuota de Google por día para demos -->
+      <div class="row g-2 align-items-end mt-3 mb-3">
+        <div class="col-sm-6">
+          <label class="form-label small" for="impl_google_cuota_demo">
+            Búsquedas de Google por día para demos (users.google_cuota)
+          </label>
+          <!-- Input numérico; se aplica al crear el User de demo -->
+          <input
+            id="impl_google_cuota_demo"
+            v-model.number="local_google_cuota_demo"
+            type="number"
+            class="form-control form-control-sm"
+            min="0"
+            :disabled="loading_google_cuota_demo || saving_google_cuota_demo"
+          />
+        </div>
+
+        <div class="col-auto">
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            :disabled="loading_google_cuota_demo || saving_google_cuota_demo || !can_save_google_cuota_demo"
+            @click="on_save_google_cuota_demo"
+          >
+            {{ saving_google_cuota_demo ? 'Guardando…' : 'Guardar' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Mensajes de estado para la cuota de Google (demos) -->
+      <p v-if="saved_google_cuota_demo_message" class="text-success small mt-2 mb-0">{{ saved_google_cuota_demo_message }}</p>
+      <p v-else-if="error_google_cuota_demo_message" class="text-danger small mt-2 mb-0">{{ error_google_cuota_demo_message }}</p>
     </template>
   </div>
 </template>
@@ -228,7 +339,10 @@ import api from '@/utils/axios'
  * - Admin asignado por defecto: GET/PUT /settings/implementation-assigned-admin
  * - Segundos de espera antes de procesar archivos (Etapa 4): GET/PUT /settings/implementation-file-wait
  * - Segundos de espera antes de confirmar lista de empleados (Etapa 1): GET/PUT /settings/implementation-employees-wait
- * - Cuota de Google por defecto: GET/PUT /settings/implementation-google-cuota-default
+ * - Cuota de Google por defecto (clientes reales): GET/PUT /settings/implementation-google-cuota-default
+ * - API key de Google para clientes nuevos: GET/PUT /settings/implementation-google-api-key-default
+ * - API key de Google para demos: GET/PUT /settings/implementation-google-api-key-demo
+ * - Cuota de Google por día para demos: GET/PUT /settings/implementation-google-cuota-demo
  */
 export default {
   name: 'ImplementationSettingsSection',
@@ -430,6 +544,99 @@ export default {
        * Mensaje de error para el campo de cuota de Google.
        */
       error_google_cuota_default_message: '',
+
+      /**
+       * API key de Google configurada localmente para nuevos usuarios reales (valor editable).
+       * Si queda vacía, empresa-api usa una key hardcodeada de respaldo. Se aplica solo a setups nuevos.
+       */
+      local_google_api_key_default: '',
+
+      /**
+       * Valor guardado en el servidor para detectar cambios sin guardar (API key de clientes).
+       */
+      stored_google_api_key_default: '',
+
+      /**
+       * Indicador de carga del setting de API key de clientes.
+       */
+      loading_google_api_key_default: true,
+
+      /**
+       * Indica que hay un PUT de la API key de clientes en curso.
+       */
+      saving_google_api_key_default: false,
+
+      /**
+       * Mensaje de éxito tras guardar la API key de clientes.
+       */
+      saved_google_api_key_default_message: '',
+
+      /**
+       * Mensaje de error para el campo de API key de clientes (incluye el error de formato local).
+       */
+      error_google_api_key_default_message: '',
+
+      /**
+       * API key de Google configurada localmente para las demos (valor editable).
+       * Separada de la de clientes reales para que las demos no consuman la cuota de los que pagan.
+       */
+      local_google_api_key_demo: '',
+
+      /**
+       * Valor guardado en el servidor para detectar cambios sin guardar (API key de demos).
+       */
+      stored_google_api_key_demo: '',
+
+      /**
+       * Indicador de carga del setting de API key de demos.
+       */
+      loading_google_api_key_demo: true,
+
+      /**
+       * Indica que hay un PUT de la API key de demos en curso.
+       */
+      saving_google_api_key_demo: false,
+
+      /**
+       * Mensaje de éxito tras guardar la API key de demos.
+       */
+      saved_google_api_key_demo_message: '',
+
+      /**
+       * Mensaje de error para el campo de API key de demos (incluye el error de formato local).
+       */
+      error_google_api_key_demo_message: '',
+
+      /**
+       * Cuota de Google configurada localmente para nuevos usuarios de demo (valor editable).
+       * Hoy hardcodeada en 100 en empresa-api; con esto queda configurable.
+       */
+      local_google_cuota_demo: 100,
+
+      /**
+       * Valor guardado en el servidor para detectar cambios sin guardar (cuota de demos).
+       */
+      stored_google_cuota_demo: 100,
+
+      /**
+       * Indicador de carga del setting de cuota de demos.
+       */
+      loading_google_cuota_demo: true,
+
+      /**
+       * Indica que hay un PUT de la cuota de demos en curso.
+       */
+      saving_google_cuota_demo: false,
+
+      /**
+       * Mensaje de éxito tras guardar la cuota de demos.
+       */
+      saved_google_cuota_demo_message: '',
+
+      /**
+       * Mensaje de error para el campo de cuota de demos.
+       */
+      error_google_cuota_demo_message: '',
     }
   },
 
@@ -487,6 +694,33 @@ export default {
     can_save_google_cuota_default() {
       return this.local_google_cuota_default !== this.stored_google_cuota_default
     },
+
+    /**
+     * Habilita el botón Guardar de la API key de clientes solo si el valor cambió.
+     *
+     * @returns {boolean}
+     */
+    can_save_google_api_key_default() {
+      return this.local_google_api_key_default !== this.stored_google_api_key_default
+    },
+
+    /**
+     * Habilita el botón Guardar de la API key de demos solo si el valor cambió.
+     *
+     * @returns {boolean}
+     */
+    can_save_google_api_key_demo() {
+      return this.local_google_api_key_demo !== this.stored_google_api_key_demo
+    },
+
+    /**
+     * Habilita el botón Guardar de la cuota de demos solo si el valor cambió.
+     *
+     * @returns {boolean}
+     */
+    can_save_google_cuota_demo() {
+      return this.local_google_cuota_demo !== this.stored_google_cuota_demo
+    },
   },
 
   mounted() {
@@ -498,6 +732,9 @@ export default {
     this.load_form_url_setting()
     this.load_form_contact_delay_setting()
     this.load_google_cuota_default_setting()
+    this.load_google_api_key_default_setting()
+    this.load_google_api_key_demo_setting()
+    this.load_google_cuota_demo_setting()
   },
 
   methods: {
@@ -917,6 +1154,218 @@ export default {
         })
         .then(function () {
           self.saving_google_cuota_default = false
+        })
+    },
+
+    /**
+     * Valida localmente que un valor de API key de Google tenga el formato esperado
+     * (`AIza` + 35 caracteres alfanuméricos/`-`/`_`). Un valor vacío es válido (se usa el
+     * respaldo hardcodeado de empresa-api).
+     *
+     * @param {string} value Valor a validar.
+     * @returns {boolean} true si el formato es válido o el valor está vacío.
+     */
+    is_valid_google_api_key_format(value) {
+      if (!value) {
+        return true
+      }
+
+      return /^AIza[0-9A-Za-z\-_]{35}$/.test(value)
+    },
+
+    /**
+     * Carga la API key de Google para clientes reales desde GET /settings/implementation-google-api-key-default.
+     *
+     * @returns {void}
+     */
+    load_google_api_key_default_setting() {
+      const self = this
+      self.loading_google_api_key_default = true
+      self.error_google_api_key_default_message = ''
+
+      api
+        .get('/settings/implementation-google-api-key-default')
+        .then(function (res) {
+          /** API key retornada por el servidor; fallback a cadena vacía. */
+          const api_key = res.data && res.data.api_key != null ? res.data.api_key : ''
+          self.local_google_api_key_default  = api_key
+          self.stored_google_api_key_default = api_key
+        })
+        .catch(function () {
+          self.error_google_api_key_default_message = 'No se pudo cargar la API key de clientes.'
+        })
+        .then(function () {
+          self.loading_google_api_key_default = false
+        })
+    },
+
+    /**
+     * Guarda la API key de Google de clientes reales via PUT /settings/implementation-google-api-key-default.
+     * Valida el formato localmente antes de enviar el request.
+     *
+     * @returns {void}
+     */
+    on_save_google_api_key_default() {
+      const self = this
+
+      if (!self.is_valid_google_api_key_format(self.local_google_api_key_default)) {
+        self.error_google_api_key_default_message =
+          'La key no tiene el formato de una API key de Google (empieza con AIza y tiene 39 caracteres). Fijate que no se haya cortado al copiarla.'
+        return
+      }
+
+      self.saving_google_api_key_default        = true
+      self.saved_google_api_key_default_message = ''
+      self.error_google_api_key_default_message = ''
+
+      api
+        .put('/settings/implementation-google-api-key-default', { api_key: self.local_google_api_key_default })
+        .then(function (res) {
+          /** API key confirmada por el servidor. */
+          const saved_api_key = res.data && res.data.api_key != null ? res.data.api_key : self.local_google_api_key_default
+          self.local_google_api_key_default  = saved_api_key
+          self.stored_google_api_key_default = saved_api_key
+          self.saved_google_api_key_default_message = 'Configuración guardada.'
+        })
+        .catch(function (err) {
+          const msg =
+            (err.response && err.response.data && err.response.data.message) ||
+            'No se pudo guardar.'
+          self.error_google_api_key_default_message = msg
+        })
+        .then(function () {
+          self.saving_google_api_key_default = false
+        })
+    },
+
+    /**
+     * Carga la API key de Google para demos desde GET /settings/implementation-google-api-key-demo.
+     *
+     * @returns {void}
+     */
+    load_google_api_key_demo_setting() {
+      const self = this
+      self.loading_google_api_key_demo = true
+      self.error_google_api_key_demo_message = ''
+
+      api
+        .get('/settings/implementation-google-api-key-demo')
+        .then(function (res) {
+          /** API key retornada por el servidor; fallback a cadena vacía. */
+          const api_key = res.data && res.data.api_key != null ? res.data.api_key : ''
+          self.local_google_api_key_demo  = api_key
+          self.stored_google_api_key_demo = api_key
+        })
+        .catch(function () {
+          self.error_google_api_key_demo_message = 'No se pudo cargar la API key de demos.'
+        })
+        .then(function () {
+          self.loading_google_api_key_demo = false
+        })
+    },
+
+    /**
+     * Guarda la API key de Google de demos via PUT /settings/implementation-google-api-key-demo.
+     * Valida el formato localmente antes de enviar el request.
+     *
+     * @returns {void}
+     */
+    on_save_google_api_key_demo() {
+      const self = this
+
+      if (!self.is_valid_google_api_key_format(self.local_google_api_key_demo)) {
+        self.error_google_api_key_demo_message =
+          'La key no tiene el formato de una API key de Google (empieza con AIza y tiene 39 caracteres). Fijate que no se haya cortado al copiarla.'
+        return
+      }
+
+      self.saving_google_api_key_demo        = true
+      self.saved_google_api_key_demo_message = ''
+      self.error_google_api_key_demo_message = ''
+
+      api
+        .put('/settings/implementation-google-api-key-demo', { api_key: self.local_google_api_key_demo })
+        .then(function (res) {
+          /** API key confirmada por el servidor. */
+          const saved_api_key = res.data && res.data.api_key != null ? res.data.api_key : self.local_google_api_key_demo
+          self.local_google_api_key_demo  = saved_api_key
+          self.stored_google_api_key_demo = saved_api_key
+          self.saved_google_api_key_demo_message = 'Configuración guardada.'
+        })
+        .catch(function (err) {
+          const msg =
+            (err.response && err.response.data && err.response.data.message) ||
+            'No se pudo guardar.'
+          self.error_google_api_key_demo_message = msg
+        })
+        .then(function () {
+          self.saving_google_api_key_demo = false
+        })
+    },
+
+    /**
+     * Carga la cuota de Google para demos desde GET /settings/implementation-google-cuota-demo.
+     *
+     * @returns {void}
+     */
+    load_google_cuota_demo_setting() {
+      const self = this
+      self.loading_google_cuota_demo = true
+      self.error_google_cuota_demo_message = ''
+
+      api
+        .get('/settings/implementation-google-cuota-demo')
+        .then(function (res) {
+          /** Cuota retornada por el servidor; fallback a 100. */
+          const cuota = res.data && res.data.cuota != null ? res.data.cuota : 100
+          self.local_google_cuota_demo  = cuota
+          self.stored_google_cuota_demo = cuota
+        })
+        .catch(function () {
+          self.error_google_cuota_demo_message = 'No se pudo cargar la cuota de demos.'
+        })
+        .then(function () {
+          self.loading_google_cuota_demo = false
+        })
+    },
+
+    /**
+     * Guarda la cuota de Google de demos via PUT /settings/implementation-google-cuota-demo.
+     *
+     * Valida localmente que el valor sea un entero mayor o igual a 0.
+     *
+     * @returns {void}
+     */
+    on_save_google_cuota_demo() {
+      const self = this
+
+      const cuota = parseInt(self.local_google_cuota_demo, 10)
+
+      if (isNaN(cuota) || cuota < 0) {
+        self.error_google_cuota_demo_message = 'El valor debe ser 0 o más.'
+        return
+      }
+
+      self.saving_google_cuota_demo        = true
+      self.saved_google_cuota_demo_message = ''
+      self.error_google_cuota_demo_message = ''
+
+      api
+        .put('/settings/implementation-google-cuota-demo', { cuota: cuota })
+        .then(function (res) {
+          const saved_cuota = res.data && res.data.cuota != null ? res.data.cuota : cuota
+          self.local_google_cuota_demo  = saved_cuota
+          self.stored_google_cuota_demo = saved_cuota
+          self.saved_google_cuota_demo_message = 'Configuración guardada.'
+        })
+        .catch(function (err) {
+          const msg =
+            (err.response && err.response.data && err.response.data.message) ||
+            'No se pudo guardar.'
+          self.error_google_cuota_demo_message = msg
+        })
+        .then(function () {
+          self.saving_google_cuota_demo = false
         })
     },
   },
