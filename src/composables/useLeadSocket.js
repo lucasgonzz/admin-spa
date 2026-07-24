@@ -213,10 +213,17 @@ export function useLeadSocket(options) {
     const message = event_data.message || null
     const lead_id = event_data.lead_id || (lead && lead.id) || null
 
-    /* Solo cambió whatsapp_delivery_status: refrescar hilo abierto, sin badges ni fila de grilla. */
+    /*
+     * Solo cambió whatsapp_delivery_status: refrescar hilo abierto, sin badges ni fila de grilla,
+     * EXCEPTO cuando la entrega falló ('fallido'): ese caso además refresca la fila del lead en
+     * la grilla (si está abierta) para que se pinte de rojo sin esperar a que recarguen la página.
+     */
     if (event_data.is_status_update) {
       if (lead_id != null) {
         schedule_conversation_refetch(lead_id)
+        if (event_data.delivery_status === 'fallido' && is_admin_viewing_leads_grid()) {
+          schedule_list_row_refetch(lead_id)
+        }
       }
       return
     }
