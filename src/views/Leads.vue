@@ -748,7 +748,10 @@ export default {
     },
 
     /**
-     * Ids de los leads visibles marcados como pendientes de revisión (pendiente_revision_at seteado).
+     * Ids de los leads visibles que deben pintarse en rojo.
+     * Incluye leads pendientes de revisión manual (pendiente_revision_at seteado)
+     * y leads con al menos un mensaje saliente con error de envío sin resolver (failed_send_count > 0).
+     * El rojo tiene precedencia sobre el amarillo (sugerencia de IA) por diseño en row_highlight_classes.
      * Se pasan a la grilla para pintar esas filas en rojo (mismo mecanismo que highlighted_row_id).
      * @returns {Array<number>}
      */
@@ -757,8 +760,9 @@ export default {
         ? (this.$store.state.lead.filtered || [])
         : (this.$store.state.lead.models || [])
       var ids = []
+      var self = this
       rows.forEach(function (row) {
-        if (row && row.pendiente_revision_at) {
+        if (row && (row.pendiente_revision_at || self.failed_send_count_of(row) > 0)) {
           ids.push(row.id)
         }
       })
@@ -848,6 +852,19 @@ export default {
     /* Sin acción al salir: el scroll ya fue guardado en on_open_conversation si aplica. */
   },
   methods: {
+    /**
+     * Parsea y devuelve el contador de mensajes con error de envío sin resolver.
+     * Si el valor no es un número válido (o viene como string), parsea con parseInt.
+     * Si el resultado es NaN, retorna 0.
+     *
+     * @param {Object} row - Fila del lead
+     * @returns {number} Cantidad de mensajes con error de envío sin resolver (0 si sin errores)
+     */
+    failed_send_count_of(row) {
+      var count = parseInt(row.failed_send_count, 10)
+      return isNaN(count) ? 0 : count
+    },
+
     /**
      * Recarga Leads como primera entrada: resetea filtros/UI local y remonta ResourceView.
      * Invocado desde activated() (keep-alive) o desde el watcher de leads_reload_version.
