@@ -377,7 +377,7 @@
                     :status="sistema_configurado_locked ? 'pending' : sistema_configurado_status"
                   />
                   <p v-if="can_configure_system" class="small text-muted mt-2 mb-2">
-                    Aplicá el cambio de URL y versión por defecto en el cliente cuando seeders y comandos hayan finalizado.
+                    {{ configure_system_help_text }}
                   </p>
                   <button
                     v-if="can_configure_system"
@@ -402,12 +402,35 @@
                     class="alert alert-warning py-2 mt-2 mb-0 small"
                   >
                     <i class="bi bi-exclamation-triangle me-1"></i>
-                    <strong>La versión de empresa de este cliente todavía no tiene esta funcionalidad</strong>
-                    (versión vieja) — no se pudo cambiar el link de la versión estable ahí. La versión activa
-                    <strong>sí</strong> se actualizó en el admin. Falta que lo hagas manualmente en el servidor del
-                    cliente.
-                    <div v-if="update.default_version_sync_message" class="mt-1 text-muted">
+                    <strong>No se pudo configurar el sistema en el cliente — hay que hacerlo a mano</strong>.
+                    La versión activa <strong>sí</strong> se actualizó en el admin.
+                    <div v-if="update.default_version_sync_message" class="mt-1">
                       {{ update.default_version_sync_message }}
+                    </div>
+                    <!-- Acciones para marcar paso como hecho a mano o desmarcarlo -->
+                    <div class="mt-2 d-flex gap-2">
+                      <button
+                        v-if="!update.sistema_configurado_at"
+                        type="button"
+                        class="btn btn-outline-success btn-sm"
+                        :disabled="loading || deploy_loading"
+                        @click="$emit('mark-step', { step: 'sistema_configurado_at', unmark: false })"
+                      >
+                        Marcar como configurado a mano
+                      </button>
+                      <div v-if="update.sistema_configurado_at" class="d-flex gap-2 align-items-center">
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary btn-sm"
+                          :disabled="loading || deploy_loading"
+                          @click="$emit('mark-step', { step: 'sistema_configurado_at', unmark: true })"
+                        >
+                          Desmarcar
+                        </button>
+                        <span class="small text-success">
+                          <i class="bi bi-check me-1"></i>Marcado el {{ format_date(update.sistema_configurado_at) }}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -674,11 +697,24 @@ export default {
     },
     /**
      * Mostrar botón para configurar URL/versión por defecto.
+     * También permite reintentar desde estado 'failed' (el backend lo acepta tras el prompt 02).
      *
      * @returns {boolean}
      */
     can_configure_system() {
-      return this.deployment_status === 'paused_post_tasks'
+      return this.deployment_status === 'paused_post_tasks' || this.deployment_status === 'failed'
+    },
+    /**
+     * Texto de ayuda dinámico según el estado del deployment.
+     * Cambia entre "aplicar cambio" y "reintentar después del fallo".
+     *
+     * @returns {string}
+     */
+    configure_system_help_text() {
+      if (this.deployment_status === 'failed') {
+        return 'El intento anterior falló. Podés reintentar la configuración de URL y versión por defecto en el cliente.'
+      }
+      return 'Aplicá el cambio de URL y versión por defecto en el cliente cuando seeders y comandos hayan finalizado.'
     },
     /**
      * Estado del bloque "Seeders ejecutados" (derivado de run_seeders o de los registros individuales).
