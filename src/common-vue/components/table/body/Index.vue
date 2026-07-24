@@ -135,4 +135,23 @@ export default {
 .clickable {
   cursor: pointer;
 }
+
+/* Amarillo de fila que necesita atencion, mas saturado que el pastel de Bootstrap.
+   Hay que pisar las tres variantes (base, striped y hover) porque en Bootstrap 5.3
+   las filas impares usan --bs-table-striped-bg y el hover usa --bs-table-hover-bg:
+   pisando solo --bs-table-bg el color viejo seguiria apareciendo en la mitad de las filas. */
+tr.table-warning {
+  --bs-table-bg: #ffe08a;
+  --bs-table-striped-bg: #f7d67f;
+  --bs-table-hover-bg: #f5cf6d;
+  --bs-table-border-color: #f0cf6a;
+}
+
+/* Rojo de fila que pide accion (pendiente de revision, o mensaje que no se pudo enviar). */
+tr.table-danger {
+  --bs-table-bg: #f7b0b6;
+  --bs-table-striped-bg: #efa7ad;
+  --bs-table-hover-bg: #eb9aa1;
+  --bs-table-border-color: #e79ba1;
+}
 </style>
