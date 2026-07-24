@@ -35,6 +35,8 @@ export default {
       guardar_email: '',
       /** true si el paquete debe cancelar/reagendar una demo ya existente. */
       cancelar_demo: false,
+      /** true si se debe reenviar el Mail 1 a un lead que ya tiene demo agendada (no intenta nueva agenda). */
+      reenviar_mail_demo: false,
       /** true si el lead necesita intervención humana antes de seguir. */
       requiere_intervencion_humana: false,
       /** Motivo de la intervención humana (texto libre). */
@@ -86,6 +88,7 @@ export default {
           : null,
         forzar_slot: Boolean(this.forzar_slot),
         enviar_mail_demo: Boolean(this.enviar_mail_demo),
+        reenviar_mail_demo: Boolean(this.reenviar_mail_demo),
         guardar_nombre: (this.guardar_nombre || '').trim() || null,
         guardar_email: (this.guardar_email || '').trim() || null,
         cancelar_demo: Boolean(this.cancelar_demo),
@@ -163,6 +166,8 @@ export default {
       this.enviar_mail_demo = pending.enviar_mail_demo !== undefined
         ? Boolean(pending.enviar_mail_demo)
         : true
+      /* Default OFF: solo se prende si Claude explícitamente lo sugirió (Mail 1 para demo existente). */
+      this.reenviar_mail_demo = Boolean(pending.reenviar_mail_demo)
       this.guardar_nombre = pending.guardar_nombre || ''
       this.guardar_email = pending.guardar_email || ''
       this.cancelar_demo = Boolean(pending.cancelar_demo)

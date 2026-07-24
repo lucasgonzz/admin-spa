@@ -1233,6 +1233,7 @@ export default {
         agendar_demo: 'agendamiento',
         cancelar_demo: 'cancelación de demo',
         enviar_mail_demo: 'Mail 1',
+        reenviar_mail_demo: 'reenvío del Mail 1',
         guardar_nombre: 'guardar nombre',
         guardar_email: 'guardar email',
         forzar_slot: 'forzar horario',

@@ -89,6 +89,22 @@
           Cancelar / reagendar demo existente
         </label>
       </div>
+
+      <!-- Reenviar Mail 1: para leads con demo ya agendada que no recibieron el acceso. -->
+      <div class="form-check form-switch vp-mail-toggle">
+        <input
+          id="vp_reenviar_mail_demo"
+          class="form-check-input"
+          type="checkbox"
+          role="switch"
+          :checked="reenviar_mail_demo"
+          :disabled="disabled"
+          @change="$emit('update:reenviar_mail_demo', $event.target.checked)"
+        />
+        <label class="form-check-label vp-label" for="vp_reenviar_mail_demo">
+          Reenviar Mail 1 (el lead dice que no le llegó)
+        </label>
+      </div>
     </template>
   </div>
 </template>
@@ -115,12 +131,14 @@ export default {
     forzar_slot: { type: Boolean, default: false },
     /** true si se debe enviar el Mail 1 (acceso a la demo) al aprobar. */
     enviar_mail_demo: { type: Boolean, default: true },
+    /** true si se debe reenviar el Mail 1 a un lead que ya tiene demo agendada. */
+    reenviar_mail_demo: { type: Boolean, default: false },
     /** true si el paquete debe cancelar/reagendar una demo ya existente. */
     cancelar_demo: { type: Boolean, default: false },
     /** true mientras se envía el mensaje (bloquea todos los controles). */
     disabled: { type: Boolean, default: false },
   },
-  emits: ['update:value', 'update:forzar_slot', 'update:enviar_mail_demo', 'update:cancelar_demo'],
+  emits: ['update:value', 'update:forzar_slot', 'update:enviar_mail_demo', 'update:reenviar_mail_demo', 'update:cancelar_demo'],
   computed: {
     /** Id de demo actualmente elegido (string para <select>, '' si ninguno). */
     demo_id() {

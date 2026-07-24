@@ -17,6 +17,7 @@
       v-model:value="agendar_demo"
       v-model:forzar_slot="forzar_slot"
       v-model:enviar_mail_demo="enviar_mail_demo"
+      v-model:reenviar_mail_demo="reenviar_mail_demo"
       v-model:cancelar_demo="cancelar_demo"
       :demos="demos"
       :slots="slots"
