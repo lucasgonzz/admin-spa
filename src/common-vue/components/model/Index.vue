@@ -161,6 +161,15 @@ export default {
       fetched_record: null,
       /** true mientras se descarga el detalle completo antes de armar el borrador. */
       fetching_record: false,
+      /**
+       * Momento (ISO-8601) en que se cargaron los datos de la versión al abrir el editor.
+       * Se manda como `loaded_at` en el PUT de guardado para que admin-api pueda distinguir,
+       * en `VersionNestedJsonSync`, entre borrar un ítem automático a propósito (ya existía
+       * cuando se abrió el modal) o perderlo por una carrera con el loop (se cargó después).
+       * Solo aplica al modelo `version`; se resetea en cada apertura/cierre del modal para que
+       * no quede pisado por otro registro. Ver grupo 255, prompt 03.
+       */
+      draft_loaded_at: null,
     }
   },
   computed: {
@@ -394,6 +403,8 @@ export default {
           this.fetched_record = null
           this.fetching_record = false
           this.draft = null
+          /* Se cierra el modal: limpiar el momento de carga para que no se filtre a la próxima apertura. */
+          this.draft_loaded_at = null
         }
       },
     },
@@ -585,17 +596,24 @@ export default {
         self.fetching_record = true
         self.fetched_record = null
         self.draft = null
+        /* Se resetea acá (por-apertura) para no arrastrar el timestamp de un registro anterior
+           mientras se descarga el nuevo. Se vuelve a fijar recién cuando el draft ya está armado. */
+        self.draft_loaded_at = null
         self.$store
           .dispatch('version/fetch_full_model', self.record.id)
           .then(function (model) {
             self.fetched_record = model || self.record
             self.build_draft()
             self.ensure_active_tab()
+            /* Momento en que el editor efectivamente quedó con los datos cargados en memoria:
+               referencia para el guard de carrera de VersionNestedJsonSync. */
+            self.draft_loaded_at = new Date().toISOString()
           })
           .catch(function () {
             self.fetched_record = self.record
             self.build_draft()
             self.ensure_active_tab()
+            self.draft_loaded_at = new Date().toISOString()
           })
           .then(function () {
             self.fetching_record = false
@@ -962,6 +980,13 @@ export default {
       const path = '/' + this.resource_http_segment
       // Objeto plano para el JSON: evita rarezas al serializar proxies de Vue 3 en axios.
       const payload = JSON.parse(JSON.stringify(this.draft))
+      /* Guard de carrera (grupo 255, prompt 03): en el editor de versión, mandar el momento en
+         que se cargaron los datos para que admin-api pueda preservar ítems automáticos que
+         llegaron después de abrir el modal. Solo aplica a `version` y solo tiene sentido en
+         edición (id existente); en alta no hay ítems previos que proteger. */
+      if (this.model_name === 'version' && this.draft && this.draft.id && this.draft_loaded_at) {
+        payload.loaded_at = this.draft_loaded_at
+      }
       if (this.draft && this.draft.id) {
         api
           .put(path + '/' + this.draft.id, payload)

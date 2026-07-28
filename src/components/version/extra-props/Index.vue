@@ -37,6 +37,8 @@
               <th>Cuerpo</th>
               <th class="text-center" style="width: 72px">Activa</th>
               <th style="width: 100px">Alcance</th>
+              <!-- Origen: distingue ítems cargados por un proceso automático (source_group_id) de los manuales -->
+              <th style="width: 72px" title="auto: lo cargó un grupo de prompts automático">Origen</th>
               <th style="width: 220px">Clientes</th>
               <th style="width: 100px"></th>
             </tr>
@@ -56,6 +58,10 @@
                 <input v-model="row.is_active" type="checkbox" class="form-check-input" />
               </td>
               <td><span class="small">{{ scope_label(row) }}</span></td>
+              <td>
+                <span v-if="row.source_group_id" class="badge text-bg-light small" :title="row.source_group_id">auto</span>
+                <span v-else class="text-muted small">—</span>
+              </td>
               <td>
                 <VersionClientSelector v-model:client_ids="row.client_ids" :options="clients_options" />
               </td>
@@ -83,6 +89,8 @@
               <!-- Indica si el seeder se ejecuta una vez por base de datos o una vez por usuario/tenant -->
               <th style="width: 130px" title="por_base_de_datos: se corre una vez por DB · por_usuario: se corre una vez por cada tenant">Scope ejecución</th>
               <th style="width: 100px">Alcance</th>
+              <!-- Origen: distingue ítems cargados por un proceso automático (source_group_id) de los manuales -->
+              <th style="width: 72px" title="auto: lo cargó un grupo de prompts automático">Origen</th>
               <th style="width: 220px">Clientes</th>
               <th style="width: 120px"></th>
             </tr>
@@ -115,6 +123,10 @@
               </td>
               <td><span class="small">{{ scope_label(row) }}</span></td>
               <td>
+                <span v-if="row.source_group_id" class="badge text-bg-light small" :title="row.source_group_id">auto</span>
+                <span v-else class="text-muted small">—</span>
+              </td>
+              <td>
                 <VersionClientSelector v-model:client_ids="row.client_ids" :options="clients_options" />
               </td>
               <td class="text-nowrap">
@@ -141,6 +153,8 @@
               <!-- Indica si el comando se ejecuta una vez por base de datos o una vez por usuario/tenant -->
               <th style="width: 130px" title="por_base_de_datos: se corre una vez por DB · por_usuario: se corre una vez por cada tenant">Scope ejecución</th>
               <th style="width: 100px">Alcance</th>
+              <!-- Origen: distingue ítems cargados por un proceso automático (source_group_id) de los manuales -->
+              <th style="width: 72px" title="auto: lo cargó un grupo de prompts automático">Origen</th>
               <th style="width: 220px">Clientes</th>
               <th style="width: 120px"></th>
             </tr>
@@ -176,6 +190,10 @@
               </td>
               <td><span class="small">{{ scope_label(row) }}</span></td>
               <td>
+                <span v-if="row.source_group_id" class="badge text-bg-light small" :title="row.source_group_id">auto</span>
+                <span v-else class="text-muted small">—</span>
+              </td>
+              <td>
                 <VersionClientSelector v-model:client_ids="row.client_ids" :options="clients_options" />
               </td>
               <td class="text-nowrap">
@@ -198,6 +216,8 @@
               <th>Descripción</th>
               <th class="text-center" style="width: 88px">Requerida</th>
               <th style="width: 100px">Alcance</th>
+              <!-- Origen: distingue ítems cargados por un proceso automático (source_group_id) de los manuales -->
+              <th style="width: 72px" title="auto: lo cargó un grupo de prompts automático">Origen</th>
               <th style="width: 220px">Clientes</th>
               <th style="width: 100px"></th>
             </tr>
@@ -217,6 +237,10 @@
                 <input v-model="row.is_required" type="checkbox" class="form-check-input" />
               </td>
               <td><span class="small">{{ scope_label(row) }}</span></td>
+              <td>
+                <span v-if="row.source_group_id" class="badge text-bg-light small" :title="row.source_group_id">auto</span>
+                <span v-else class="text-muted small">—</span>
+              </td>
               <td>
                 <VersionClientSelector v-model:client_ids="row.client_ids" :options="clients_options" />
               </td>
