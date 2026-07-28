@@ -29,6 +29,16 @@
         </button>
       </div>
 
+      <!-- Acceso a la demo: link directo, reemitir y revocar (grupo 233, prompt 06).
+           Se muestra junto a la información de la demo agendada, antes del cuerpo de la
+           conversación, y solo si el lead tiene demo asignada (un lead sin demo no debe
+           ver un bloque de acceso vacío). -->
+      <demo-acceso-control
+        v-if="lead && lead.demo_id"
+        :lead="lead"
+        @record-updated="on_record_updated"
+      />
+
       <!-- Cuerpo: contiene la vista de conversación embebida -->
       <div class="lead-sidebar__body">
         <!-- LeadConversationView en modo embebido (lead_record_prop activa is_sidebar_mode) -->
@@ -44,6 +54,7 @@
 
 <script>
 import LeadConversationView from '@/views/LeadConversationView.vue'
+import DemoAccesoControl from '@/components/lead/DemoAccesoControl.vue'
 
 /**
  * Panel lateral deslizable que muestra la conversación WhatsApp de un lead
@@ -62,7 +73,7 @@ import LeadConversationView from '@/views/LeadConversationView.vue'
 export default {
   name: 'LeadConversationSidebar',
 
-  components: { LeadConversationView },
+  components: { LeadConversationView, DemoAccesoControl },
 
   props: {
     /**

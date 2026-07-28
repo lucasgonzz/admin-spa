@@ -599,6 +599,39 @@ export default __base_store({
       })
     },
     /**
+     * Reemite el token de ingreso directo a la demo del lead (grupo 233, prompt 05/06).
+     * Invalida el token anterior y genera uno nuevo; el backend devuelve el lead ya
+     * actualizado con el nuevo `demo_ingreso_token` y su nueva expiración.
+     * @param {Object} context contexto del módulo Vuex.
+     * @param {number} lead_id identificador del lead.
+     * @returns {Promise<Object>} modelo de lead actualizado devuelto por el backend.
+     */
+    reemitir_demo_token(context, lead_id) {
+      const commit = context.commit
+      return api.post('/lead/' + lead_id + '/demo-token/reemitir').then((res) => {
+        const model = res.data.model
+        commit('update_lead_en_conversacion', model)
+        context.dispatch('upsert_model_in_lists', model)
+        return model
+      })
+    },
+    /**
+     * Revoca el token de ingreso directo a la demo del lead (grupo 233, prompt 05/06).
+     * Corta el acceso de inmediato, incluso si el lead está en ese momento dentro de la demo.
+     * @param {Object} context contexto del módulo Vuex.
+     * @param {number} lead_id identificador del lead.
+     * @returns {Promise<Object>} modelo de lead actualizado devuelto por el backend.
+     */
+    revocar_demo_token(context, lead_id) {
+      const commit = context.commit
+      return api.post('/lead/' + lead_id + '/demo-token/revocar').then((res) => {
+        const model = res.data.model
+        commit('update_lead_en_conversacion', model)
+        context.dispatch('upsert_model_in_lists', model)
+        return model
+      })
+    },
+    /**
      * Fuerza la creación del evento de calendario del closer (con Meet) manualmente,
      * sin duplicar si ya existe. Usada por las etapas 12 y 13 del pipeline (mismo backend,
      * dos botones/checks visuales distintos: evento creado y link de Meet seteado).
