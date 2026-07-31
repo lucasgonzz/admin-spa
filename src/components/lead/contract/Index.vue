@@ -152,6 +152,20 @@
       <button type="button" class="btn btn-sm btn-outline-primary" @click="add_clausula">
         Agregar cláusula
       </button>
+      <select
+        v-model="clausula_template_key"
+        class="form-select form-select-sm d-inline-block w-auto ms-2"
+        @change="add_clausula_from_template"
+      >
+        <option value="">Agregar desde biblioteca...</option>
+        <option
+          v-for="template in clause_templates"
+          :key="template.key"
+          :value="template.key"
+        >
+          {{ template.label }}
+        </option>
+      </select>
     </div>
 
     <div class="d-flex flex-wrap gap-2">
@@ -179,6 +193,7 @@
 
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
+import clause_templates from '@/utils/contract_clause_templates'
 
 export default {
   name: 'LeadContractTab',
@@ -195,6 +210,8 @@ export default {
       loading_save: false,
       /** Spinner del POST de generación de PDF. */
       loading_pdf: false,
+      /** Clave del template elegido en el selector; se resetea a '' tras agregar la clausula. */
+      clausula_template_key: '',
     }
   },
   computed: {
@@ -213,6 +230,13 @@ export default {
     clausulas_rows() {
       this.ensure_clausulas_on_record()
       return this.record.contract_clausulas_particulares
+    },
+    /**
+     * Array de clausulas modelo disponibles para precarga rapida.
+     * @returns {Array<{key: string, label: string, titulo: string, texto: string}>}
+     */
+    clause_templates() {
+      return clause_templates
     },
   },
   watch: {
@@ -337,6 +361,33 @@ export default {
     remove_clausula(clausula_index) {
       this.ensure_clausulas_on_record()
       this.record.contract_clausulas_particulares.splice(clausula_index, 1)
+    },
+    /**
+     * Agrega una clausula precargada desde la biblioteca y resetea el selector.
+     * @returns {void}
+     */
+    add_clausula_from_template() {
+      const self = this
+      if (!self.clausula_template_key) {
+        return
+      }
+      self.ensure_clausulas_on_record()
+      /** Template elegido en el selector. */
+      let elegido = null
+      self.clause_templates.forEach(function (template) {
+        if (template.key === self.clausula_template_key) {
+          elegido = template
+        }
+      })
+      if (elegido) {
+        // Copia por valor: si se empujara el objeto del template, editar la clausula en pantalla
+        // mutaria la biblioteca y el proximo contrato arrancaria con el texto ya modificado.
+        self.record.contract_clausulas_particulares.push({
+          titulo: elegido.titulo,
+          texto: elegido.texto,
+        })
+      }
+      self.clausula_template_key = ''
     },
     /**
      * Normaliza fechas `YYYY-MM-DD` para inputs type="date".
