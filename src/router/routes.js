@@ -264,6 +264,18 @@ const routes_def = [
     component: () => import('@/views/ImplementationFormView.vue'),
     meta: { public: true, nav: false },
   },
+  {
+    /**
+     * Página inmersiva de demo (Grupo 300, prompt 04). Ruta pública: sin login,
+     * sin sidebar ni ningún elemento de la interfaz del admin (mismo patrón que
+     * /configuracion/:token de arriba). El :uuid identifica el turno/lead y se
+     * usa para cargar el payload de GET /demo-experiencia/{uuid} (admin-api).
+     */
+    path: '/experiencia/:uuid',
+    name: 'demo_experiencia',
+    component: () => import('@/views/demo/ExperienciaDemo.vue'),
+    meta: { public: true, nav: false },
+  },
 ]
 
 export default routes_def

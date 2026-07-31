@@ -1,0 +1,229 @@
+// Identidad visual y sistema de marcos/placeholder de la página inmersiva de demo
+// (Grupo 300 · pagina-inmersiva-demo, prompt 04). Ver contexto/demo_experiencia.md
+// §3.16-§3.18 y marca/identidad.md (repo claude-comerciocity).
+//
+// Acotado a esta página: solo se importa desde src/views/demo/ExperienciaDemo.vue,
+// que es un chunk lazy de la ruta /experiencia/:uuid. No se importa desde main.js
+// ni desde ningún otro punto del admin, para que ninguna hoja de estilos nueva se
+// filtre al resto de la interfaz (criterio de éxito 7 del prompt). Toda regla vive
+// bajo el selector raíz .demo-experiencia-page o clases prefijadas "demo-" para
+// no colisionar por accidente con nada del resto del admin aunque el chunk quede
+// cacheado en memoria tras navegar a otra pantalla.
+
+// Geist se carga acá (no en index.html): solo entra en el chunk de esta ruta.
+// Una sola familia para toda la página (titulares y texto), pedido explícito de
+// marca/identidad.md — no mezclar con Inter, que es la que usa el resto del admin.
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap');
+
+.demo-experiencia-page {
+	// Azul ancla de marca (medido del logo actual de ComercioCity).
+	--demo-color-azul: #2a8cfe;
+	// Violeta de pasaje para los degradés (azul -> violeta), regla de marca vigente.
+	--demo-color-violeta: #7b5cfa;
+	// Naranja: acento puntual único. Regla explícita de marca: nunca en serie/repetido
+	// -- apenas se repite deja de leerse como acento. Este color no debe reutilizarse
+	// para nada que se repita (íconos en lista, bullets, etc.).
+	--demo-color-naranja: #ff6a3d;
+	// Fondo y texto base: claro y calmo, coherente con el resto de páginas públicas
+	// del admin (mismo criterio que /configuracion/:token).
+	--demo-color-fondo: #f8f9fc;
+	--demo-color-texto: #1c2333;
+	--demo-color-texto-suave: #566078;
+	// Degradé de marca reusado en titulares de cierre, placeholders de media y
+	// cualquier acento visual mayor de la página.
+	--demo-gradient-marca: linear-gradient(135deg, var(--demo-color-azul) 0%, var(--demo-color-violeta) 100%);
+	// Tipografía única de toda la página (titulares y texto), con fallback de sistema
+	// por si Google Fonts no llega a cargar a tiempo.
+	--demo-font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+	font-family: var(--demo-font-family);
+	color: var(--demo-color-texto);
+	background: var(--demo-color-fondo);
+	min-height: 100vh;
+	width: 100%;
+	overflow-x: hidden;
+	box-sizing: border-box;
+
+	*,
+	*::before,
+	*::after {
+		box-sizing: inherit;
+	}
+}
+
+// Animación de entrada de cada bloque del scroll: fade + desplazamiento corto,
+// nada de parallax ni contadores (contexto/demo_experiencia.md §3.18, prompt §5).
+@keyframes demo-bloque-entrada {
+	from {
+		opacity: 0;
+		transform: translateY(24px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.demo-experiencia-page {
+	// Oculto por default: el bloque solo aparece cuando entra en viewport (ver
+	// IntersectionObserver en ScrollDolor.vue), salvo la apertura (ver abajo).
+	.demo-bloque {
+		opacity: 0;
+	}
+
+	.demo-bloque--visible {
+		animation: demo-bloque-entrada 0.6s ease-out forwards;
+	}
+
+	// La apertura entra en frío: sin animación, el texto ya está cuando el lead
+	// llega a la página (decisión explícita del prompt, no es un olvido).
+	.demo-bloque--apertura {
+		opacity: 1;
+		animation: none;
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Marco de dispositivo: proporciones reales, responsive sin recorte ni rotación.
+// ---------------------------------------------------------------------------
+
+.demo-marco {
+	position: relative;
+	width: 100%;
+}
+
+// Pantalla de computadora: proporción 16:9 fija, con "base" del monitor como
+// detalle visual (evita que se lea como un rectángulo suelto).
+.demo-marco__pantalla-compu {
+	position: relative;
+	width: 100%;
+	aspect-ratio: 16 / 9;
+	background: #10131c;
+	border-radius: 12px;
+	padding: 10px 10px 22px;
+	box-shadow: 0 24px 60px -20px rgba(42, 140, 254, 0.35);
+}
+
+.demo-marco__pantalla-compu::after {
+	content: '';
+	position: absolute;
+	bottom: 8px;
+	left: 50%;
+	transform: translateX(-50%);
+	width: 28%;
+	height: 4px;
+	border-radius: 4px;
+	background: #2a2f3d;
+}
+
+.demo-marco__pantalla-compu-inner {
+	width: 100%;
+	height: 100%;
+	border-radius: 6px;
+	overflow: hidden;
+	background: #fff;
+}
+
+// Pantalla de teléfono: proporción real de dispositivo móvil (9:19.5), con
+// notch simulado arriba.
+.demo-marco__pantalla-telefono {
+	position: relative;
+	width: 100%;
+	max-width: 220px;
+	aspect-ratio: 9 / 19.5;
+	margin: 0 auto;
+	background: #10131c;
+	border-radius: 26px;
+	padding: 14px 8px 10px;
+	box-shadow: 0 24px 60px -20px rgba(123, 92, 250, 0.35);
+}
+
+.demo-marco__pantalla-telefono::before {
+	content: '';
+	position: absolute;
+	top: 6px;
+	left: 50%;
+	transform: translateX(-50%);
+	width: 34%;
+	height: 6px;
+	border-radius: 4px;
+	background: #2a2f3d;
+}
+
+.demo-marco__pantalla-telefono-inner {
+	width: 100%;
+	height: 100%;
+	border-radius: 16px;
+	overflow: hidden;
+	background: #fff;
+}
+
+// Composición computadora + teléfono (única combinación, pieza scroll.2): los
+// dos dispositivos conviven superpuestos, nunca apilados uno arriba del otro.
+.demo-marco--computadora-telefono {
+	.demo-marco__compu-wrap {
+		position: relative;
+		width: 100%;
+	}
+
+	.demo-marco__pantalla-telefono {
+		position: absolute;
+		right: -6%;
+		bottom: -16%;
+		width: 34%;
+		max-width: 170px;
+		z-index: 2;
+		margin: 0;
+	}
+}
+
+// Móvil: el marco se achica pero nunca se recorta (criterio de éxito 6). La
+// composición combo reduce el solape del teléfono para que no tape de más.
+@media (max-width: 575.98px) {
+	.demo-marco--computadora-telefono .demo-marco__pantalla-telefono {
+		right: -3%;
+		bottom: -10%;
+		width: 28%;
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Pieza multimedia: contenido real y placeholder de marca.
+// ---------------------------------------------------------------------------
+
+.demo-pieza-media {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
+// Placeholder de marca (§3.18): mismo tamaño y proporciones que la pieza real
+// -- vive dentro del mismo .demo-marco__pantalla-*-inner -- para poder juzgar
+// el diseño completo incluso con las seis piezas vacías.
+.demo-pieza-placeholder {
+	width: 100%;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 12px;
+	text-align: center;
+	background: var(--demo-gradient-marca);
+	color: #fff;
+}
+
+.demo-pieza-placeholder__titulo {
+	font-weight: 600;
+	font-size: 0.9rem;
+	line-height: 1.3;
+}
+
+.demo-pieza-placeholder__badge {
+	font-size: 0.65rem;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	opacity: 0.75;
+}
