@@ -72,7 +72,7 @@
       </template>
 
       <template #toolbar-right>
-        <!-- Selector de orden: último mensaje (WhatsApp) vs leads más nuevos por created_at -->
+        <!-- Selector de orden: último mensaje (WhatsApp) vs leads más nuevos por created_at vs leads que necesitan atención -->
         <div class="btn-group btn-sm">
           <button
             type="button"
@@ -93,6 +93,16 @@
             @click="on_sort_change('created_at')"
           >
             <i class="bi bi-sort-down" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm"
+            :class="lead_sort_by === 'atencion' ? 'btn-secondary' : 'btn-outline-secondary'"
+            title="Ordenar por leads que necesitan atención (mensajes por confirmar o con error de envío)"
+            aria-label="Ordenar por leads que necesitan atención (mensajes por confirmar o con error de envío)"
+            @click="on_sort_change('atencion')"
+          >
+            <i class="bi bi-exclamation-triangle" aria-hidden="true" />
           </button>
         </div>
         <!-- Botón toggle para el panel de demos agendadas (próximas y realizadas) -->
@@ -659,7 +669,7 @@ export default {
   computed: {
     /**
      * Criterio de orden activo en el store de leads.
-     * @returns {'last_message'|'created_at'}
+     * @returns {'last_message'|'created_at'|'atencion'}
      */
     lead_sort_by() {
       return this.$store.state.lead.sort_by
@@ -1125,7 +1135,7 @@ export default {
     },
     /**
      * Cambia el orden del listado base y recarga desde la API.
-     * @param {'last_message'|'created_at'} sort_by
+     * @param {'last_message'|'created_at'|'atencion'} sort_by
      * @returns {void}
      */
     on_sort_change(sort_by) {

@@ -142,7 +142,11 @@ export default __base_store({
     _conversation_fetch_in_flight: null,
     /** Id del lead cuyo mark-whatsapp-messages-read está en vuelo (null si ninguno). */
     _mark_read_in_flight: null,
-    /** Criterio de ordenamiento activo: 'last_message' | 'created_at'. Por defecto último mensaje. */
+    /**
+     * Criterio de ordenamiento activo: 'last_message' | 'created_at' | 'atencion'.
+     * Por defecto último mensaje. 'atencion' prioriza leads que necesitan que alguien
+     * haga algo (mensajes por confirmar o con error de envío) por encima de los fijados.
+     */
     sort_by: 'last_message',
     /** Posición vertical de scroll guardada al salir hacia la conversación WhatsApp (restaurar al volver). */
     scroll_y: 0,
@@ -262,10 +266,12 @@ export default __base_store({
     },
     /**
      * @param {Object} state
-     * @param {'last_message'|'created_at'} value
+     * @param {'last_message'|'created_at'|'atencion'} value
      */
     set_sort_by(state, value) {
-      state.sort_by = value === 'created_at' ? 'created_at' : 'last_message'
+      /** Lista de criterios de orden aceptados por el backend. */
+      var valid_sort_by_values = ['last_message', 'created_at', 'atencion']
+      state.sort_by = valid_sort_by_values.indexOf(value) !== -1 ? value : 'last_message'
     },
     /**
      * Guarda o limpia la posición de scroll de la bandeja de leads.
@@ -368,7 +374,7 @@ export default __base_store({
      * Cambia el criterio de orden y recarga el listado base (sin filtros de columna).
      *
      * @param {Object} context
-     * @param {'last_message'|'created_at'} sort_by
+     * @param {'last_message'|'created_at'|'atencion'} sort_by
      * @returns {Promise<void>}
      */
     change_sort_by(context, sort_by) {
