@@ -5,6 +5,31 @@
 
     <!-- Formulario: visible una vez cargado -->
     <template v-else>
+      <!-- Campo: dinámica de demo por defecto para leads nuevos (grupo 293, prompt 04).
+           Va primero de toda la pantalla: es la decisión más gruesa, se lee antes que
+           los parámetros finos de tiempos y horarios. Solo afecta a leads que se creen
+           de acá en adelante; no modifica leads existentes (eso se resuelve por lead,
+           con el control del panel de conversación). -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-7">
+          <label class="form-label small" for="demo_experiencia_default">Dinámica de demo para leads nuevos</label>
+          <select
+            id="demo_experiencia_default"
+            v-model="local.experiencia_default"
+            class="form-select form-select-sm"
+            :disabled="saving"
+          >
+            <option value="actual">Dinámica actual (mail con credenciales y videos)</option>
+            <option value="nueva">Dinámica nueva (página inmersiva, formulario y tour)</option>
+          </select>
+          <p class="text-muted small mb-0 mt-1">
+            Aplica solo a los leads que se creen de acá en adelante. Los leads que ya existen
+            conservan la dinámica con la que nacieron; para cambiar uno puntual, usá el control
+            del panel de su conversación.
+          </p>
+        </div>
+      </div>
+
       <!-- Campo: duración de la demo -->
       <div class="row g-2 align-items-end mb-3">
         <div class="col-sm-5">
@@ -386,9 +411,12 @@ import api from '@/utils/axios'
 /**
  * Sección en Cuenta: configuración de demos.
  *
- * Gestiona los 8 parámetros que controlan duración, márgenes de setup/gracia,
+ * Gestiona los parámetros que controlan duración, márgenes de setup/gracia,
  * tiempos de automatizaciones (recordatorio, check de ingreso, resumen del lead)
  * y la duración de la llamada del closer para el bloqueo global de disponibilidad.
+ * Incluye también, primero de toda la pantalla, el selector de qué dinámica de demo
+ * (`experiencia_default`) reciben los leads que se creen de acá en adelante (grupo 293,
+ * prompt 04) — no afecta a los leads ya existentes.
  */
 export default {
   name: 'LeadDemoSettingsSection',
@@ -396,6 +424,8 @@ export default {
     return {
       /** Valores editables en el formulario. */
       local: {
+        /** Dinámica con la que nacen los leads nuevos: 'actual' | 'nueva'. No afecta leads existentes. */
+        experiencia_default: 'actual',
         duracion_minutos: 60,
         setup_minutos_antes: 15,
         gracia_minutos_post: 10,
@@ -434,6 +464,8 @@ export default {
       },
       /** Valores persistidos en servidor (para detectar cambios). */
       stored: {
+        /** Espejo del servidor: dinámica por defecto para leads nuevos. */
+        experiencia_default: 'actual',
         duracion_minutos: 60,
         setup_minutos_antes: 15,
         gracia_minutos_post: 10,
@@ -578,7 +610,7 @@ export default {
           var data = res.data || {}
           var fields = Object.keys(self.local)
           /* Campos que se tratan como string (no entero). */
-          var string_fields = ['recordatorio_manana_hora']
+          var string_fields = ['recordatorio_manana_hora', 'experiencia_default']
           /* Campos que se tratan como booleano. */
           var bool_fields = ['llamada_debe_terminar_en_horario']
           /* Campos que maneja apply_closer_horario_from_api — saltear en el forEach general. */
@@ -631,6 +663,7 @@ export default {
       self.error_message = ''
       api
         .put('/settings/lead-demo', {
+          experiencia_default:                 self.local.experiencia_default,
           duracion_minutos:                    self.local.duracion_minutos,
           setup_minutos_antes:                 self.local.setup_minutos_antes,
           gracia_minutos_post:                 self.local.gracia_minutos_post,
@@ -655,7 +688,7 @@ export default {
           var data = res.data || {}
           var fields = Object.keys(self.local)
           /* Campos que se tratan como string (no entero). */
-          var string_fields = ['recordatorio_manana_hora']
+          var string_fields = ['recordatorio_manana_hora', 'experiencia_default']
           /* Campos que se tratan como booleano. */
           var bool_fields = ['llamada_debe_terminar_en_horario']
           /* Campos que maneja apply_closer_horario_from_api — saltear en el forEach general. */

@@ -39,6 +39,15 @@
         @record-updated="on_record_updated"
       />
 
+      <!-- Dinámica de demo del lead (grupo 293, prompt 04): a diferencia del control de
+           arriba, este SÍ se muestra sin demo asignada — la dinámica se decide antes de
+           agendar, así que los leads sin demo son justamente los candidatos a piloto. -->
+      <demo-experiencia-control
+        v-if="lead"
+        :lead="lead"
+        @record-updated="on_record_updated"
+      />
+
       <!-- Cuerpo: contiene la vista de conversación embebida -->
       <div class="lead-sidebar__body">
         <!-- LeadConversationView en modo embebido (lead_record_prop activa is_sidebar_mode) -->
@@ -55,6 +64,7 @@
 <script>
 import LeadConversationView from '@/views/LeadConversationView.vue'
 import DemoAccesoControl from '@/components/lead/DemoAccesoControl.vue'
+import DemoExperienciaControl from '@/components/lead/DemoExperienciaControl.vue'
 
 /**
  * Panel lateral deslizable que muestra la conversación WhatsApp de un lead
@@ -73,7 +83,7 @@ import DemoAccesoControl from '@/components/lead/DemoAccesoControl.vue'
 export default {
   name: 'LeadConversationSidebar',
 
-  components: { LeadConversationView, DemoAccesoControl },
+  components: { LeadConversationView, DemoAccesoControl, DemoExperienciaControl },
 
   props: {
     /**

@@ -638,6 +638,26 @@ export default __base_store({
       })
     },
     /**
+     * Cambia la dinámica de demo asignada a este lead puntual ('actual' | 'nueva'), grupo 293
+     * prompt 04. Distinto del setting global `experiencia_default` (que solo afecta a leads
+     * nuevos): esta acción es la que permite pilotear la dinámica nueva con leads elegidos a
+     * mano. El backend devuelve el lead ya actualizado y deja el mensaje de sistema en el hilo.
+     * @param {Object} context contexto del módulo Vuex.
+     * @param {{ lead_id: number, demo_experiencia: string }} payload id del lead y dinámica elegida.
+     * @returns {Promise<Object>} modelo de lead actualizado devuelto por el backend.
+     */
+    set_demo_experiencia(context, payload) {
+      const commit = context.commit
+      return api.post('/lead/' + payload.lead_id + '/demo-experiencia', {
+        demo_experiencia: payload.demo_experiencia,
+      }).then((res) => {
+        const model = res.data.model
+        commit('update_lead_en_conversacion', model)
+        context.dispatch('upsert_model_in_lists', model)
+        return model
+      })
+    },
+    /**
      * Fuerza la creación del evento de calendario del closer (con Meet) manualmente,
      * sin duplicar si ya existe. Usada por las etapas 12 y 13 del pipeline (mismo backend,
      * dos botones/checks visuales distintos: evento creado y link de Meet seteado).
