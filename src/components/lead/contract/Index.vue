@@ -121,6 +121,39 @@
       </div>
     </div>
 
+    <h6 class="text-primary mb-2">Cláusulas particulares</h6>
+    <div class="alert alert-light border mb-3">
+      <p class="small text-muted">
+        Salen en el contrato como sección 8, numeradas, y aclarando que prevalecen sobre las
+        condiciones generales. Si no cargás ninguna, el contrato sale igual que siempre.
+      </p>
+      <div
+        v-for="(clausula, clausula_index) in clausulas_rows"
+        :key="'clausula-' + clausula_index"
+        class="row g-2 align-items-start mb-3"
+      >
+        <div class="col-md-11">
+          <label class="form-label">Título (opcional)</label>
+          <input v-model="clausula.titulo" type="text" class="form-control mb-2" />
+          <label class="form-label">Texto de la cláusula</label>
+          <textarea v-model="clausula.texto" rows="6" class="form-control"></textarea>
+        </div>
+        <div class="col-md-1 d-flex">
+          <button
+            type="button"
+            class="btn btn-outline-danger btn-sm w-100"
+            title="Eliminar cláusula"
+            @click="remove_clausula(clausula_index)"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+      <button type="button" class="btn btn-sm btn-outline-primary" @click="add_clausula">
+        Agregar cláusula
+      </button>
+    </div>
+
     <div class="d-flex flex-wrap gap-2">
       <button
         type="button"
@@ -172,6 +205,14 @@ export default {
     financiacion_rows() {
       this.ensure_financiacion_on_record()
       return this.record.contract_financiacion
+    },
+    /**
+     * Referencia al array de clausulas particulares enlazado a `contract_clausulas_particulares`.
+     * @returns {Array<{titulo: string, texto: string}>}
+     */
+    clausulas_rows() {
+      this.ensure_clausulas_on_record()
+      return this.record.contract_clausulas_particulares
     },
   },
   watch: {
@@ -249,6 +290,7 @@ export default {
         this.record.contract_perfiles_ecommerce = 0
       }
       this.ensure_financiacion_on_record()
+      this.ensure_clausulas_on_record()
     },
     /**
      * Agrega una cuota vacía al plan de financiación.
@@ -266,6 +308,35 @@ export default {
     remove_cuota(cuota_index) {
       this.ensure_financiacion_on_record()
       this.record.contract_financiacion.splice(cuota_index, 1)
+    },
+    /**
+     * Asegura que `contract_clausulas_particulares` sea un array mutable en el record.
+     * @returns {void}
+     */
+    ensure_clausulas_on_record() {
+      if (!this.record) {
+        return
+      }
+      if (!this.record.contract_clausulas_particulares || !Array.isArray(this.record.contract_clausulas_particulares)) {
+        this.record.contract_clausulas_particulares = []
+      }
+    },
+    /**
+     * Agrega una clausula vacia.
+     * @returns {void}
+     */
+    add_clausula() {
+      this.ensure_clausulas_on_record()
+      this.record.contract_clausulas_particulares.push({ titulo: '', texto: '' })
+    },
+    /**
+     * Elimina una clausula por indice.
+     * @param {number} clausula_index
+     * @returns {void}
+     */
+    remove_clausula(clausula_index) {
+      this.ensure_clausulas_on_record()
+      this.record.contract_clausulas_particulares.splice(clausula_index, 1)
     },
     /**
      * Normaliza fechas `YYYY-MM-DD` para inputs type="date".
@@ -297,6 +368,7 @@ export default {
         contract_fecha_emision: this.to_date_only_for_payload(this.record.contract_fecha_emision),
         contract_fecha_primer_pago_unico: this.to_date_only_for_payload(this.record.contract_fecha_primer_pago_unico),
         contract_financiacion: this.record.contract_financiacion || [],
+        contract_clausulas_particulares: this.record.contract_clausulas_particulares || [],
         contract_mensualidad_moneda: this.record.contract_mensualidad_moneda || null,
         contract_mensualidad_base: this.record.contract_mensualidad_base || null,
         contract_usuarios_incluidos: this.record.contract_usuarios_incluidos,
