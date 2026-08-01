@@ -226,6 +226,18 @@ const routes_def = [
     meta: { requiresAuth: true, nav: true, icon: 'receipt' },
   },
   {
+    /**
+     * Pantalla admin de multimedia de la demo (grupo 300 · pagina-inmersiva-demo, prompt 06 --
+     * contexto/demo_experiencia.md §3.18): carga/edita la URL de cada slot del catálogo
+     * sincronizado desde GitHub, consumiendo GET/PUT /demo-media (DemoMediaController).
+     */
+    path: '/multimedia-demo',
+    name: 'demo_media_config',
+    text: 'Multimedia demo',
+    component: () => import('@/views/config/DemoMediaConfig.vue'),
+    meta: { requiresAuth: true, nav: true, icon: 'camera-reels' },
+  },
+  {
     path: '/cuenta',
     name: 'account',
     text: 'Cuenta',

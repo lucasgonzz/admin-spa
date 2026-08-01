@@ -31,6 +31,8 @@ import closer from './closer'
 import agente from './agente'
 // Grupos de BD compartida entre clientes (asignación desde panel de cliente).
 import shared_database_group from './shared_database_group'
+// Multimedia editable de la demo: slots del catálogo (GitHub) + URLs cargadas (grupo 300, prompt 06).
+import demo_media from './demo_media'
 
 export default createStore({
   modules: {
@@ -68,5 +70,7 @@ export default createStore({
     agente,
     // Grupos de BD compartida (endpoints JSON dedicados).
     shared_database_group,
+    // Multimedia editable de la demo (pantalla admin de grupo 300, prompt 06).
+    demo_media,
   },
 })
