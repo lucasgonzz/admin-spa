@@ -1,13 +1,16 @@
 <template>
   <!-- Con URL cargada: video corto en loop silencioso (se ve como GIF, sin controles
-       ni sonido) o imagen estática, según la extensión -->
+       ni sonido) por default, o -- cuando `controles` es true (ej. el video de
+       introducción, prompt 05) -- video completo con controles y sonido, sin
+       autoplay ni loop -- o imagen estática, según la extensión -->
   <video
     v-if="url && es_video"
     class="demo-pieza-media"
     :src="url"
-    autoplay
-    muted
-    loop
+    :autoplay="!controles"
+    :muted="!controles"
+    :loop="!controles"
+    :controls="controles"
     playsinline
   />
   <img
@@ -60,6 +63,17 @@ export default {
       default: function () {
         return {}
       },
+    },
+    /**
+     * false (default, compatible con los seis clips del scroll de dolor): video
+     * en loop silencioso sin controles, autoplay, se ve como un GIF.
+     * true (usado por el video de introducción, prompt 05): video completo con
+     * controles y sonido, sin autoplay ni loop -- es de varios minutos y el
+     * lead lo mira, no lo ojea (contexto/demo_experiencia.md, prompt 05 §2).
+     */
+    controles: {
+      type: Boolean,
+      default: false,
     },
   },
 

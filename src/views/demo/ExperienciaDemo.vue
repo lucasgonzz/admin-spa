@@ -16,15 +16,47 @@
       <p>Puede que haya vencido o esté mal escrito. Escribinos y te pasamos uno nuevo.</p>
     </div>
 
-    <!-- Estado: payload cargado -- arma el scroll de dolor. El formulario, el
-         video de introducción y el botón de acceso los agrega el prompt 05,
-         en este mismo contenedor. -->
+    <!-- Estado: payload cargado -- arma la secuencia completa definida en
+         contexto/demo_experiencia.md §3.16 A: scroll -> formulario -> video de
+         introducción -> botón de acceso. Una sola carga de payload al abrir
+         (cargar_experiencia) y un refresco después de enviar el formulario
+         (enviar_formulario) o al vencer la cuenta regresiva (BotonAcceso). -->
     <template v-else>
       <scroll-dolor
         :perfil="lead.perfil"
         :media="media"
         :emitir_evento="emitir_evento"
       />
+
+      <!-- Formulario de configuración: preseleccionado con las respuestas del
+           payload. El envío real (POST + refresco de todo el payload) lo hace
+           este contenedor vía enviar_formulario, inyectado por prop. -->
+      <formulario-configuracion
+        :respuestas="formulario"
+        :enviar_formulario="enviar_formulario"
+      />
+
+      <!-- Video de introducción: pieza "intro" del catálogo. A diferencia de
+           los clips del scroll, va con controles y sonido, sin autoplay (son
+           5 minutos y el lead lo mira, no lo ojea). Sin URL cargada todavía
+           (se graba post-merge), PiezaMultimedia muestra el placeholder de
+           marca con las proporciones reales dentro del mismo marco. -->
+      <section class="demo-experiencia-page__video-intro">
+        <marco-dispositivo tipo="computadora">
+          <pieza-multimedia
+            slot_id="intro"
+            titulo="Video de introducción (Lucas a cámara, 5:15)"
+            :media="media"
+            :controles="true"
+          />
+        </marco-dispositivo>
+      </section>
+
+      <!-- Botón de acceso: el estado (sin_turno/antes/activo/vencido) lo
+           decide siempre el backend (turno.estado); este componente solo
+           agrega la cuenta regresiva visual y pide refrescar el payload
+           (cargar_experiencia) cuando esa cuenta llega a cero. -->
+      <boton-acceso :turno="turno" :refrescar="cargar_experiencia" />
     </template>
   </div>
 </template>
@@ -32,6 +64,10 @@
 <script>
 import api_public from '@/utils/axios_public'
 import ScrollDolor from '@/components/demo/ScrollDolor.vue'
+import FormularioConfiguracion from '@/components/demo/FormularioConfiguracion.vue'
+import BotonAcceso from '@/components/demo/BotonAcceso.vue'
+import MarcoDispositivo from '@/components/demo/MarcoDispositivo.vue'
+import PiezaMultimedia from '@/components/demo/PiezaMultimedia.vue'
 // Hoja de estilos acotada a esta página (variables de marca, marcos de
 // dispositivo, placeholder, animación de scroll). Al importarse solo acá,
 // queda dentro del chunk lazy de la ruta /experiencia/:uuid y nunca se
@@ -39,23 +75,27 @@ import ScrollDolor from '@/components/demo/ScrollDolor.vue'
 import '@/assets/scss/demo-experiencia.scss'
 
 /**
- * Página inmersiva de demo (Grupo 300 · pagina-inmersiva-demo, prompt 04).
- * Contenedor de la ruta pública /experiencia/:uuid: carga el payload del
- * endpoint público (prompt 03 de este mismo grupo) y arma el armazón de la
- * experiencia en el orden invertido definido en
- * contexto/demo_experiencia.md §3.16 A:
+ * Página inmersiva de demo (Grupo 300 · pagina-inmersiva-demo, prompts 04 y
+ * 05). Contenedor de la ruta pública /experiencia/:uuid: carga el payload del
+ * endpoint público (prompt 03 de este mismo grupo) y arma el armazón completo
+ * de la experiencia en el orden definido en contexto/demo_experiencia.md
+ * §3.16 A:
  *
  *   scroll de dolor -> formulario -> video de introducción -> botón de acceso
  *
- * Este prompt construye la ruta, el contenedor y el scroll. El formulario y
- * el botón de acceso se agregan en el prompt 05, dentro de este mismo
- * componente (no hace falta tocar la ruta ni el fetch del payload de nuevo).
+ * El prompt 04 construyó la ruta, el contenedor y el scroll. Este prompt (05)
+ * agrega el formulario, el video de introducción y el botón de acceso, sin
+ * tocar la ruta ni el fetch inicial del payload.
  */
 export default {
   name: 'ExperienciaDemo',
 
   components: {
     ScrollDolor,
+    FormularioConfiguracion,
+    BotonAcceso,
+    MarcoDispositivo,
+    PiezaMultimedia,
   },
 
   data() {
@@ -68,7 +108,7 @@ export default {
       lead: {},
       /** { fecha, hora_inicio, hora_fin, estado, ingreso } del turno agendado. */
       turno: {},
-      /** Respuestas del formulario de configuración + flag `completado` (lo consume el prompt 05). */
+      /** Respuestas del formulario de configuración + flag `completado`, tal como llega del payload. */
       formulario: {},
       /** Mapa { slot_id: url } de todas las piezas multimedia configuradas para este turno. */
       media: {},
@@ -126,11 +166,50 @@ export default {
     emitir_evento(nombre, payload) {
       console.debug('[demo-experiencia]', nombre, payload)
     },
+
+    /**
+     * Envía las respuestas del formulario de configuración
+     * (POST /demo-experiencia/{uuid}/formulario, api_public) y refresca todo
+     * el estado de la página con el payload que devuelve el backend -- mismo
+     * formato que el GET inicial. Inyectada como prop en
+     * FormularioConfiguracion (mismo patrón que emitir_evento en
+     * ScrollDolor), para que ese componente no necesite conocer el uuid ni
+     * el cliente HTTP público.
+     *
+     * No hace catch acá a propósito: FormularioConfiguracion necesita que el
+     * rechazo le llegue para mostrar su propio mensaje de error sobrio y
+     * dejar las respuestas tal como estaban, sin perder lo que el lead marcó.
+     *
+     * @param {object} respuestas Las nueve respuestas del formulario.
+     * @returns {Promise<object>} El payload refrescado.
+     */
+    enviar_formulario(respuestas) {
+      const self = this
+      const uuid = self.$route.params.uuid
+
+      return api_public.post('/demo-experiencia/' + uuid + '/formulario', respuestas).then(function (response) {
+        const data = response.data || {}
+        self.lead = data.lead || {}
+        self.turno = data.turno || {}
+        self.formulario = data.formulario || {}
+        self.media = data.media || {}
+        return data
+      })
+    },
   },
 }
 </script>
 
 <style scoped>
+/* Video de introducción: mismo contenedor centrado y acotado que el resto de
+   la página (coherente con .demo-scroll-dolor), con aire antes del botón de
+   acceso que va justo debajo. */
+.demo-experiencia-page__video-intro {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 20px 64px;
+}
+
 .demo-experiencia-page__loading,
 .demo-experiencia-page__invalido {
   min-height: 100vh;
