@@ -17,17 +17,21 @@
     </div>
 
     <!-- b) Durante el turno: botón activo con la hora hasta la que está reservada.
-         Texto de demo_pagina.md §4 b). El link real de ingreso (demo_ingreso_token,
-         grupo 233) no lo expone este endpoint público -- se cablea en otro prompt --
-         así que por ahora queda deshabilitado con el aviso de "preparando tu acceso". -->
+         Texto de demo_pagina.md §4 b). El clic dispara el ingreso real (prompt 01
+         de este grupo, grupo 233 del lado de empresa-api/empresa-spa). -->
     <div v-else-if="estado === 'activo'" class="demo-boton-acceso__bloque">
-      <button type="button" class="demo-boton-acceso__boton" disabled>
-        Entrar a mi demo
+      <button
+        type="button"
+        class="demo-boton-acceso__boton"
+        :disabled="cargando"
+        @click="on_click"
+      >
+        {{ cargando ? 'Entrando…' : 'Entrar a mi demo' }}
       </button>
       <p class="demo-boton-acceso__nota">
         <em>Reservada hasta las {{ turno.hora_fin }}.</em>
       </p>
-      <p class="demo-boton-acceso__aviso">Preparando tu acceso.</p>
+      <p v-if="mensaje_error" class="demo-boton-acceso__error">{{ mensaje_error }}</p>
     </div>
 
     <!-- c) Vencido, con la demo ya hecha (turno.ingreso === true). Tono amable,
@@ -87,6 +91,20 @@ export default {
       type: Function,
       default: function () {},
     },
+    /**
+     * Función inyectada por el contenedor (ExperienciaDemo.vue) que hace el
+     * POST real de ingreso (prompt 01 de este grupo). Firma: ingresar() ->
+     * Promise. Se resuelve con `{ url }` en éxito; se rechaza (error de
+     * axios) si el turno no está activo, el token no es válido, o falla la
+     * red -- este componente lee `error.response.data.motivo` para elegir
+     * qué hacer en cada caso.
+     */
+    ingresar: {
+      type: Function,
+      default: function () {
+        return Promise.resolve({})
+      },
+    },
   },
 
   data() {
@@ -101,6 +119,10 @@ export default {
        * estado. Se resetea cada vez que cambia el prop `turno` (ver watch).
        */
       ya_refresco: false,
+      /** true mientras el POST de ingreso está en vuelo: evita doble clic. */
+      cargando: false,
+      /** Mensaje sobrio de error del último intento de ingreso; vacío si no hay error. */
+      mensaje_error: '',
     }
   },
 
@@ -179,6 +201,12 @@ export default {
       deep: true,
       handler: function () {
         this.ya_refresco = false
+        // El payload se refrescó de punta a punta (llegada a cero de la cuenta
+        // regresiva, envío del formulario, o un ingreso que pidió refrescar
+        // porque el estado en pantalla había quedado viejo): se limpia
+        // cualquier estado de carga/error del intento anterior.
+        this.cargando = false
+        this.mensaje_error = ''
       },
     },
   },
@@ -224,6 +252,65 @@ export default {
         this.ya_refresco = true
         this.refrescar()
       }
+    },
+
+    /**
+     * Maneja el clic en "Entrar a mi demo": dispara el ingreso real vía la
+     * función `ingresar` inyectada por el contenedor y redirige en la MISMA
+     * pestaña (nunca `window.open`: los bloqueadores de popups matan la
+     * apertura en pestaña nueva cuando pasa medio segundo entre el clic y la
+     * llamada). El estado del turno lo sigue decidiendo el backend -- este
+     * método nunca lo recalcula, solo reacciona al `motivo` que devuelve.
+     *
+     * @returns {void}
+     */
+    on_click: function () {
+      const self = this
+
+      // Guarda contra doble clic rápido: mientras hay un POST en vuelo, un
+      // segundo clic no dispara ni una segunda llamada ni una segunda
+      // redirección (criterio de éxito 6).
+      if (self.cargando) {
+        return
+      }
+
+      self.cargando = true
+      self.mensaje_error = ''
+
+      self
+        .ingresar()
+        .then(function (data) {
+          window.location.href = data.url
+        })
+        .catch(function (error) {
+          const motivo =
+            error && error.response && error.response.data && error.response.data.motivo
+
+          if (motivo === 'preparando') {
+            self.mensaje_error = 'Estamos terminando de preparar tu demo. Probá de nuevo en un minuto.'
+            self.cargando = false
+            return
+          }
+
+          if (motivo === 'antes' || motivo === 'vencido' || motivo === 'sin_turno') {
+            // El estado que tiene esta pantalla quedó viejo (pestaña abierta
+            // desde hace rato): se pide el payload real al backend en vez de
+            // reintroducir el reloj del navegador. El watch de `turno` limpia
+            // `cargando` cuando el refresco llega.
+            self.refrescar()
+            return
+          }
+
+          if (motivo === 'token_invalido') {
+            self.mensaje_error = 'Este acceso ya no está disponible. Escribinos por WhatsApp y te lo reactivamos.'
+            self.cargando = false
+            return
+          }
+
+          // sin_instancia, error de red, o 500: mensaje genérico sin detalles técnicos.
+          self.mensaje_error = 'No pudimos abrir la demo. Probá de nuevo.'
+          self.cargando = false
+        })
     },
   },
 }
@@ -276,15 +363,16 @@ export default {
   font-family: inherit;
   font-size: 1.1rem;
   font-weight: 700;
-  cursor: not-allowed;
+  cursor: pointer;
 }
 
 .demo-boton-acceso__boton:disabled {
   opacity: 0.7;
+  cursor: not-allowed;
 }
 
-.demo-boton-acceso__aviso {
-  color: var(--demo-color-texto-suave);
+.demo-boton-acceso__error {
+  color: #b3261e;
   font-size: 0.85rem;
   margin: 0;
 }

@@ -54,9 +54,11 @@
 
       <!-- Botón de acceso: el estado (sin_turno/antes/activo/vencido) lo
            decide siempre el backend (turno.estado); este componente solo
-           agrega la cuenta regresiva visual y pide refrescar el payload
-           (cargar_experiencia) cuando esa cuenta llega a cero. -->
-      <boton-acceso :turno="turno" :refrescar="cargar_experiencia" />
+           agrega la cuenta regresiva visual, dispara el ingreso real
+           (prompt 01 de este grupo) y pide refrescar el payload
+           (cargar_experiencia) cuando esa cuenta llega a cero o el estado
+           quedó viejo. -->
+      <boton-acceso :turno="turno" :refrescar="cargar_experiencia" :ingresar="ingresar" />
     </template>
   </div>
 </template>
@@ -194,6 +196,24 @@ export default {
         self.formulario = data.formulario || {}
         self.media = data.media || {}
         return data
+      })
+    },
+
+    /**
+     * Dispara el ingreso a la demo (POST /demo-experiencia/{uuid}/ingresar,
+     * api_public, prompt 01 de este grupo) cuando el lead aprieta el botón de
+     * acceso. No hace catch acá a propósito: BotonAcceso necesita leer
+     * `motivo` del 409 para elegir el mensaje correcto o refrescar el
+     * payload completo si el estado quedó viejo -- mismo patrón que
+     * enviar_formulario.
+     *
+     * @returns {Promise<object>} Resuelve con `{ url }` en éxito (200).
+     */
+    ingresar() {
+      const uuid = this.$route.params.uuid
+
+      return api_public.post('/demo-experiencia/' + uuid + '/ingresar').then(function (response) {
+        return response.data
       })
     },
   },
