@@ -165,6 +165,131 @@
         </div>
       </div>
 
+      <!-- Franja horaria de la demo (grupo 306, prompt 01/02/06). Va ARRIBA del horario del
+           closer a propósito: son dos juegos de horarios parecidos en la misma pantalla, y el
+           orden de lectura ayuda a no confundirlos. Solo aplica a demo_experiencia = 'nueva'. -->
+      <div class="row g-2 mb-2">
+        <div class="col-12">
+          <p class="text-muted small mb-0">
+            <strong>Franja de la demo:</strong> en qué horarios un lead puede hacer la demo. La demo
+            es autogestionada, así que no depende de que el closer esté trabajando. Aplica solo a los
+            leads con la dinámica de demo <strong>nueva</strong>.
+          </p>
+        </div>
+      </div>
+
+      <!-- Franja de la demo: lunes a viernes -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-12">
+          <label class="form-label small">Franja de la demo (lunes a viernes)</label>
+          <div class="d-flex flex-wrap align-items-end gap-3">
+            <div class="col-auto">
+              <label class="form-label small mb-0" for="demo_franja_lv_inicio">Inicio</label>
+              <input
+                id="demo_franja_lv_inicio"
+                v-model="local.demo_lv_inicio"
+                type="time"
+                class="form-control form-control-sm"
+                :disabled="saving"
+              />
+            </div>
+            <div class="col-auto">
+              <label class="form-label small mb-0" for="demo_franja_lv_fin">Fin</label>
+              <input
+                id="demo_franja_lv_fin"
+                v-model="local.demo_lv_fin"
+                type="time"
+                class="form-control form-control-sm"
+                :disabled="saving"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Franja de la demo: sábados -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-12">
+          <label class="form-label small">Franja de la demo (sábados)</label>
+          <div class="d-flex flex-wrap align-items-end gap-3">
+            <div class="col-auto">
+              <label class="form-label small mb-0" for="demo_franja_sabado_inicio">Inicio</label>
+              <input
+                id="demo_franja_sabado_inicio"
+                v-model="local.demo_sabado_inicio"
+                type="time"
+                class="form-control form-control-sm"
+                :disabled="saving"
+              />
+            </div>
+            <div class="col-auto">
+              <label class="form-label small mb-0" for="demo_franja_sabado_fin">Fin</label>
+              <input
+                id="demo_franja_sabado_fin"
+                v-model="local.demo_sabado_fin"
+                type="time"
+                class="form-control form-control-sm"
+                :disabled="saving"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Franja de la demo: domingos -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-12">
+          <label class="form-label small">Franja de la demo (domingos)</label>
+          <div class="d-flex flex-wrap align-items-end gap-3">
+            <div class="col-auto">
+              <label class="form-label small mb-0" for="demo_franja_domingo_inicio">Inicio</label>
+              <input
+                id="demo_franja_domingo_inicio"
+                v-model="local.demo_domingo_inicio"
+                type="time"
+                class="form-control form-control-sm"
+                :disabled="saving"
+              />
+            </div>
+            <div class="col-auto">
+              <label class="form-label small mb-0" for="demo_franja_domingo_fin">Fin</label>
+              <input
+                id="demo_franja_domingo_fin"
+                v-model="local.demo_domingo_fin"
+                type="time"
+                class="form-control form-control-sm"
+                :disabled="saving"
+              />
+            </div>
+          </div>
+          <p class="text-muted small mb-0 mt-1">
+            Por defecto la franja cubre el día completo (00:00-23:59): la demo se ofrece "lo antes
+            posible, siempre".
+          </p>
+        </div>
+      </div>
+
+      <!-- Margen mínimo para ofrecer un horario de HOY (grupo 306, prompt 02/06) -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-5">
+          <label class="form-label small" for="demo_minimo_minutos_desde_ahora">Margen mínimo para ofrecer un horario de hoy (minutos)</label>
+          <!-- Tiempo en que el lead entra a la página, completa el formulario y mira el video de intro -->
+          <input
+            id="demo_minimo_minutos_desde_ahora"
+            v-model.number="local.demo_minimo_minutos_desde_ahora"
+            type="number"
+            class="form-control form-control-sm"
+            min="0"
+            max="240"
+            :disabled="saving"
+          />
+          <p class="text-muted small mb-0 mt-1">
+            Aplica solo a los leads con la dinámica de demo <strong>nueva</strong>: es el mínimo tiempo
+            desde ahora para poder ofrecer un horario del día de hoy.
+          </p>
+        </div>
+      </div>
+
       <!-- Horario laboral del closer: lunes a viernes -->
       <div class="row g-2 align-items-end mb-3">
         <div class="col-12">
@@ -192,7 +317,10 @@
               />
             </div>
           </div>
-          <p class="text-muted small mb-0 mt-1">Si dejás Inicio o Fin vacíos, el sistema no ofrecerá slots entre semana.</p>
+          <p class="text-muted small mb-0 mt-1">
+            Cuándo trabaja el closer. Se usa para coordinar la llamada después de la demo, no para
+            ofrecer la demo. Si dejás Inicio o Fin vacíos, el sistema no ofrecerá slots entre semana.
+          </p>
         </div>
       </div>
 
@@ -435,6 +563,20 @@ export default {
         resumen_minutos_antes_fin: 10,
         /** Minutos que el closer necesita para atender al lead post-demo; bloquea la ventana en otras demos. */
         duracion_llamada_closer_minutos: 30,
+        /** Margen mínimo (minutos) para ofrecer un horario de HOY; solo dinámica nueva. */
+        demo_minimo_minutos_desde_ahora: 15,
+        /** Hora de inicio de la franja de la demo lunes a viernes; solo dinámica nueva. */
+        demo_lv_inicio: '00:00',
+        /** Hora de fin de la franja de la demo lunes a viernes; solo dinámica nueva. */
+        demo_lv_fin: '23:59',
+        /** Hora de inicio de la franja de la demo los sábados; solo dinámica nueva. */
+        demo_sabado_inicio: '00:00',
+        /** Hora de fin de la franja de la demo los sábados; solo dinámica nueva. */
+        demo_sabado_fin: '23:59',
+        /** Hora de inicio de la franja de la demo los domingos; solo dinámica nueva. */
+        demo_domingo_inicio: '00:00',
+        /** Hora de fin de la franja de la demo los domingos; solo dinámica nueva. */
+        demo_domingo_fin: '23:59',
         /** Hora de inicio del horario laboral del closer lunes a viernes. */
         closer_lv_inicio: '09:00',
         /** Hora de fin del horario laboral del closer lunes a viernes. */
@@ -475,6 +617,17 @@ export default {
         resumen_minutos_antes_fin: 10,
         /** Espejo del servidor para detectar si el campo fue modificado localmente. */
         duracion_llamada_closer_minutos: 30,
+        /** Espejo del servidor: margen mínimo para ofrecer un horario de hoy. */
+        demo_minimo_minutos_desde_ahora: 15,
+        /** Espejo del servidor: franja de la demo lunes a viernes. */
+        demo_lv_inicio: '00:00',
+        demo_lv_fin: '23:59',
+        /** Espejo del servidor: franja de la demo sábados. */
+        demo_sabado_inicio: '00:00',
+        demo_sabado_fin: '23:59',
+        /** Espejo del servidor: franja de la demo domingos. */
+        demo_domingo_inicio: '00:00',
+        demo_domingo_fin: '23:59',
         /** Espejo del servidor: hora de inicio lunes a viernes. */
         closer_lv_inicio: '09:00',
         /** Espejo del servidor: hora de fin lunes a viernes. */
@@ -595,6 +748,40 @@ export default {
       }
     },
     /**
+     * Pobla los seis campos de la franja de la demo desde la respuesta del servidor (grupo 306,
+     * prompt 06). Mismo patrón que apply_closer_horario_from_api(), franja propia en vez de
+     * horario del closer.
+     *
+     * @param {Object} data - Payload de GET/PUT con demo_horario_*.
+     * @param {boolean} sync_stored - Si true, actualiza también stored para can_save.
+     * @returns {void}
+     */
+    apply_demo_horario_from_api(data, sync_stored) {
+      var lv = this.parse_horario_range(
+        data.demo_horario_lunes_viernes !== undefined ? String(data.demo_horario_lunes_viernes) : ''
+      )
+      var sab = this.parse_horario_range(
+        data.demo_horario_sabado !== undefined ? String(data.demo_horario_sabado) : ''
+      )
+      var dom = this.parse_horario_range(
+        data.demo_horario_domingo !== undefined ? String(data.demo_horario_domingo) : ''
+      )
+      this.local.demo_lv_inicio = lv.inicio
+      this.local.demo_lv_fin = lv.fin
+      this.local.demo_sabado_inicio = sab.inicio
+      this.local.demo_sabado_fin = sab.fin
+      this.local.demo_domingo_inicio = dom.inicio
+      this.local.demo_domingo_fin = dom.fin
+      if (sync_stored) {
+        this.stored.demo_lv_inicio = lv.inicio
+        this.stored.demo_lv_fin = lv.fin
+        this.stored.demo_sabado_inicio = sab.inicio
+        this.stored.demo_sabado_fin = sab.fin
+        this.stored.demo_domingo_inicio = dom.inicio
+        this.stored.demo_domingo_fin = dom.fin
+      }
+    },
+    /**
      * GET /settings/lead-demo — carga la configuración actual de demos.
      *
      * @returns {void}
@@ -613,15 +800,21 @@ export default {
           var string_fields = ['recordatorio_manana_hora', 'experiencia_default']
           /* Campos que se tratan como booleano. */
           var bool_fields = ['llamada_debe_terminar_en_horario']
-          /* Campos que maneja apply_closer_horario_from_api — saltear en el forEach general. */
+          /* Campos que maneja apply_closer_horario_from_api / apply_demo_horario_from_api —
+             saltear en el forEach general (grupo 306, prompt 06 agrega los de demo_*). */
           var horario_closer_fields = [
             'closer_lv_inicio', 'closer_lv_fin',
             'closer_sabado_inicio', 'closer_sabado_fin',
             'closer_domingo_inicio', 'closer_domingo_fin',
           ]
+          var horario_demo_fields = [
+            'demo_lv_inicio', 'demo_lv_fin',
+            'demo_sabado_inicio', 'demo_sabado_fin',
+            'demo_domingo_inicio', 'demo_domingo_fin',
+          ]
           fields.forEach(function (key) {
-            /* Los horarios del closer son strings; no pasarlos por parseInt (vacío → NaN). */
-            if (horario_closer_fields.indexOf(key) !== -1) {
+            /* Los horarios (closer y demo) son strings; no pasarlos por parseInt (vacío → NaN). */
+            if (horario_closer_fields.indexOf(key) !== -1 || horario_demo_fields.indexOf(key) !== -1) {
               return
             }
             if (data[key] !== undefined) {
@@ -640,6 +833,7 @@ export default {
           })
           /* Horarios del closer: el API devuelve strings H:i-H:i; mapear a inicio/fin separados. */
           self.apply_closer_horario_from_api(data, true)
+          self.apply_demo_horario_from_api(data, true)
         })
         .catch(function () {
           self.error_message = 'No se pudo cargar la configuración de demos.'
@@ -672,6 +866,10 @@ export default {
           check_ingreso_minutos_post:          self.local.check_ingreso_minutos_post,
           resumen_minutos_antes_fin:           self.local.resumen_minutos_antes_fin,
           duracion_llamada_closer_minutos:     self.local.duracion_llamada_closer_minutos,
+          demo_minimo_minutos_desde_ahora:     self.local.demo_minimo_minutos_desde_ahora,
+          demo_horario_lunes_viernes:          self.build_horario_range(self.local.demo_lv_inicio, self.local.demo_lv_fin),
+          demo_horario_sabado:                 self.build_horario_range(self.local.demo_sabado_inicio, self.local.demo_sabado_fin),
+          demo_horario_domingo:                self.build_horario_range(self.local.demo_domingo_inicio, self.local.demo_domingo_fin),
           closer_horario_lunes_viernes:        self.build_horario_range(self.local.closer_lv_inicio, self.local.closer_lv_fin),
           closer_horario_sabado:               self.build_horario_range(self.local.closer_sabado_inicio, self.local.closer_sabado_fin),
           closer_horario_domingo:              self.build_horario_range(self.local.closer_domingo_inicio, self.local.closer_domingo_fin),
@@ -691,15 +889,21 @@ export default {
           var string_fields = ['recordatorio_manana_hora', 'experiencia_default']
           /* Campos que se tratan como booleano. */
           var bool_fields = ['llamada_debe_terminar_en_horario']
-          /* Campos que maneja apply_closer_horario_from_api — saltear en el forEach general. */
+          /* Campos que maneja apply_closer_horario_from_api / apply_demo_horario_from_api —
+             saltear en el forEach general (grupo 306, prompt 06 agrega los de demo_*). */
           var horario_closer_fields = [
             'closer_lv_inicio', 'closer_lv_fin',
             'closer_sabado_inicio', 'closer_sabado_fin',
             'closer_domingo_inicio', 'closer_domingo_fin',
           ]
+          var horario_demo_fields = [
+            'demo_lv_inicio', 'demo_lv_fin',
+            'demo_sabado_inicio', 'demo_sabado_fin',
+            'demo_domingo_inicio', 'demo_domingo_fin',
+          ]
           fields.forEach(function (key) {
-            /* Los horarios del closer son strings; no pasarlos por parseInt (vacío → NaN). */
-            if (horario_closer_fields.indexOf(key) !== -1) {
+            /* Los horarios (closer y demo) son strings; no pasarlos por parseInt (vacío → NaN). */
+            if (horario_closer_fields.indexOf(key) !== -1 || horario_demo_fields.indexOf(key) !== -1) {
               return
             }
             if (data[key] !== undefined) {
@@ -717,6 +921,7 @@ export default {
           })
           /* Sincronizar horarios parseados desde la respuesta del PUT. */
           self.apply_closer_horario_from_api(data, true)
+          self.apply_demo_horario_from_api(data, true)
           self.saved_message = 'Configuración de demos guardada.'
         })
         .catch(function (err) {
