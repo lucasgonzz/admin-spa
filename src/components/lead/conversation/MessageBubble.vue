@@ -1,6 +1,18 @@
 <template>
+  <!--
+    Aviso discreto de horario ofrecido caducado (grupo 306, prompt 06, ítem 2): la revalidación
+    del prompt 04 haciendo su trabajo no es un error del sistema, así que no corresponde el
+    bloque rojo genérico de is_error. Va primero en la cadena v-if para interceptar ese caso
+    puntual antes de caer en el error genérico.
+  -->
+  <div v-if="is_horario_caducado_notice" class="wa-status-event">
+    <div class="wa-status-event-line" />
+    <span class="wa-status-event-text">El horario que ofrecía este mensaje dejó de estar disponible. Se generó una sugerencia nueva.</span>
+    <div class="wa-status-event-line" />
+  </div>
+
   <!-- Registro de error de sistema (fallo de envío o de generación): bloque rojo centrado, no burbuja -->
-  <div v-if="is_error" class="wa-error-event">
+  <div v-else-if="is_error" class="wa-error-event">
     <i class="bi bi-exclamation-triangle-fill wa-error-event-icon" aria-hidden="true" />
     <span class="wa-error-event-text">{{ message.content }}</span>
   </div>
@@ -704,6 +716,22 @@ export default {
      */
     is_error() {
       return Boolean(this.message.is_error)
+    },
+    /**
+     * true cuando el registro de error es específicamente el aviso de horario ofrecido caducado
+     * (LeadSuggestionSendService::send_suggestion, vía LeadConversationErrorLogger). Se detecta
+     * matcheando la frase constante que el backend ya escribe como "contexto" del error (el
+     * prompt 04 la nombra como "el motivo legible" a usar) -- no hay campo estructurado propio
+     * para esto, y agregar uno solo para distinguir este caso sería inventar una superficie
+     * nueva para algo que el backend ya deja legible en el propio content.
+     * @returns {boolean}
+     */
+    is_horario_caducado_notice() {
+      if (!this.is_error) {
+        return false
+      }
+      var content = (this.message.content || '') + ''
+      return content.indexOf('Horario ofrecido dejó de estar disponible') === 0
     },
     /**
      * true si el mensaje es la nota de respuesta a un WhatsApp Flow (grupo 186, prompt 03).
