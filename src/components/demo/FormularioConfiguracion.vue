@@ -20,6 +20,9 @@
       class="demo-formulario__pregunta"
     >
       <p class="demo-formulario__pregunta-texto">{{ pregunta.pregunta }}</p>
+      <p v-if="pregunta.descripcion" class="demo-formulario__pregunta-descripcion">
+        {{ pregunta.descripcion }}
+      </p>
       <div class="demo-formulario__opciones">
         <button
           v-for="opcion in pregunta.opciones"
@@ -89,51 +92,64 @@ const OPCIONES_TIPO_PRECIOS = [
  * que contexto/demo_pagina.md §3 (repo claude-comerciocity) -- se transcribe,
  * no se reescribe. Cada `clave` coincide exactamente con la clave que usa el
  * payload del GET/POST del backend (`LeadDemoFormMapper`).
+ *
+ * `descripcion` (grupo 322, prompt 02): texto secundario opcional, debajo de
+ * la pregunta -- `null` en las seis que no lo llevan. Es solo texto visible,
+ * no viaja en el POST ni tiene nada que ver con `clave`/`opciones`/`default`.
  */
 const PREGUNTAS = [
   {
     clave: 'tipo_precios',
     pregunta: '¿Tenés un precio por producto, o distintas listas según el cliente?',
+    descripcion: null,
     opciones: OPCIONES_TIPO_PRECIOS,
   },
   {
     clave: 'costos_en_dolares',
-    pregunta: '¿Comprás en dólares?',
+    pregunta: '¿Manejás costos en dólares?',
+    descripcion: 'Es para saber si el sistema tiene que cotizar tus costos en dólares con una cotización global o con una cotización propia de cada proveedor.',
     opciones: OPCIONES_SI_NO,
   },
   {
     clave: 'descuentos_por_metodo_pago',
-    pregunta: '¿El precio cambia según cómo te paguen?',
+    pregunta: '¿Aplicás descuentos o recargos según el método de pago?',
+    descripcion: null,
     opciones: OPCIONES_SI_NO,
   },
   {
     clave: 'usa_cuentas_corrientes_clientes',
     pregunta: '¿Tenés clientes que se llevan la mercadería y te pagan después?',
+    descripcion: 'Es para saber si vas a necesitar mover pagos y comprobantes entre las cuentas corrientes de tus clientes.',
     opciones: OPCIONES_SI_NO,
   },
   {
     clave: 'usa_cuentas_corrientes_proveedores',
     pregunta: '¿Le comprás a proveedores y les pagás después?',
+    descripcion: 'Es para saber si vas a necesitar mover pagos y comprobantes entre las cuentas corrientes de tus proveedores.',
     opciones: OPCIONES_SI_NO,
   },
   {
     clave: 'usa_presupuestos',
     pregunta: '¿Pasás presupuestos antes de cerrar una venta?',
+    descripcion: null,
     opciones: OPCIONES_SI_NO,
   },
   {
     clave: 'registra_compras',
     pregunta: '¿Querés llevar el registro de lo que le comprás a tus proveedores?',
+    descripcion: null,
     opciones: OPCIONES_SI_NO,
   },
   {
     clave: 'usa_ecommerce',
     pregunta: '¿Vendés por internet, o te gustaría?',
+    descripcion: null,
     opciones: OPCIONES_SI_NO,
   },
   {
     clave: 'usa_depositos',
     pregunta: '¿Tenés más de un depósito o sucursal?',
+    descripcion: null,
     opciones: OPCIONES_SI_NO,
   },
 ]
@@ -319,7 +335,9 @@ export default {
   padding: 0 20px 48px;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  /* Más aire ENTRE preguntas (grupo 322, prompt 02) -- el gap de 12px interno de
+     .demo-formulario__pregunta (texto+descripción+opciones) no se toca. */
+  gap: 44px;
 }
 
 .demo-formulario__encabezado {
@@ -350,6 +368,15 @@ export default {
   margin: 0;
 }
 
+/* Texto secundario opcional debajo de la pregunta (grupo 322, prompt 02): más
+   chico y suave, no compite con la pregunta. */
+.demo-formulario__pregunta-descripcion {
+  font-size: 0.9rem;
+  color: var(--demo-color-texto-suave);
+  margin: -6px 0 0;
+  line-height: 1.4;
+}
+
 /* Controles grandes, pensados para el pulgar: la mayoría entra desde el
    teléfono (contexto/demo_experiencia.md §3.16 B). */
 .demo-formulario__opciones {
@@ -363,14 +390,19 @@ export default {
   min-height: 56px;
   padding: 12px 20px;
   border-radius: 14px;
-  border: 2px solid rgba(28, 35, 51, 0.12);
+  /* No elegida, visualmente apagada (grupo 322, prompt 02): antes solo se
+     distinguía por el fondo (blanco vs degradé); ahora además baja de opacidad
+     y el texto/borde pasan al tono suave, para que se lea como "no elegida" sin
+     dejar de ser legible ni de leerse como clickeable. */
+  border: 2px solid rgba(28, 35, 51, 0.08);
   background: #fff;
-  color: var(--demo-color-texto);
+  color: var(--demo-color-texto-suave);
+  opacity: 0.7;
   font-family: inherit;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
 }
 
 .demo-formulario__opcion:disabled {
@@ -382,6 +414,7 @@ export default {
   border-color: transparent;
   background: var(--demo-gradient-marca);
   color: #fff;
+  opacity: 1;
 }
 
 .demo-formulario__error {
