@@ -36,12 +36,19 @@
         :enviar_formulario="enviar_formulario"
       />
 
+      <!-- Confirmación "armando tu demo" (grupo 322, prompt 03): aparece ~5s
+           tras un envío exitoso del formulario y pasa sola al video de
+           introducción. armando_demo la controla este contenedor. -->
+      <confirmacion-armando-demo :visible="armando_demo" :turno="turno" />
+
       <!-- Video de introducción: pieza "intro" del catálogo. A diferencia de
            los clips del scroll, va con controles y sonido, sin autoplay (son
            5 minutos y el lead lo mira, no lo ojea). Sin URL cargada todavía
            (se graba post-merge), PiezaMultimedia muestra el placeholder de
-           marca con las proporciones reales dentro del mismo marco. -->
-      <section class="demo-experiencia-page__video-intro">
+           marca con las proporciones reales dentro del mismo marco. ref
+           video_intro: destino del scroll automático al cerrarse la
+           confirmación de arriba. -->
+      <section ref="video_intro" class="demo-experiencia-page__video-intro">
         <marco-dispositivo tipo="computadora">
           <pieza-multimedia
             slot_id="intro"
@@ -67,6 +74,7 @@
 import api_public from '@/utils/axios_public'
 import ScrollDolor from '@/components/demo/ScrollDolor.vue'
 import FormularioConfiguracion from '@/components/demo/FormularioConfiguracion.vue'
+import ConfirmacionArmandoDemo from '@/components/demo/ConfirmacionArmandoDemo.vue'
 import BotonAcceso from '@/components/demo/BotonAcceso.vue'
 import MarcoDispositivo from '@/components/demo/MarcoDispositivo.vue'
 import PiezaMultimedia from '@/components/demo/PiezaMultimedia.vue'
@@ -95,6 +103,7 @@ export default {
   components: {
     ScrollDolor,
     FormularioConfiguracion,
+    ConfirmacionArmandoDemo,
     BotonAcceso,
     MarcoDispositivo,
     PiezaMultimedia,
@@ -114,6 +123,12 @@ export default {
       formulario: {},
       /** Mapa { slot_id: url } de todas las piezas multimedia configuradas para este turno. */
       media: {},
+      /**
+       * true mientras se muestra la confirmación "armando tu demo" (grupo 322,
+       * prompt 03), justo después de un envío exitoso del formulario. La
+       * apaga sola mostrar_confirmacion_armando_demo() a los ~5s.
+       */
+      armando_demo: false,
     }
   },
 
@@ -181,6 +196,11 @@ export default {
      * No hace catch acá a propósito: FormularioConfiguracion necesita que el
      * rechazo le llegue para mostrar su propio mensaje de error sobrio y
      * dejar las respuestas tal como estaban, sin perder lo que el lead marcó.
+     * Por el mismo motivo, este .then SOLO corre en éxito (axios rechaza la
+     * promesa ante 4xx/5xx): es el lugar correcto para disparar la
+     * confirmación "armando tu demo" (grupo 322, prompt 03) sin necesitar
+     * distinguir éxito de fallo por separado -- si el POST falla, este bloque
+     * nunca se ejecuta y armando_demo nunca se activa (criterio de éxito 4).
      *
      * @param {object} respuestas Las nueve respuestas del formulario.
      * @returns {Promise<object>} El payload refrescado.
@@ -195,8 +215,32 @@ export default {
         self.turno = data.turno || {}
         self.formulario = data.formulario || {}
         self.media = data.media || {}
+        self.mostrar_confirmacion_armando_demo()
         return data
       })
+    },
+
+    /**
+     * Muestra la confirmación "armando tu demo" durante ~5s y, al vencer, la
+     * oculta y scrollea suave hasta el video de introducción -- sin que el
+     * lead tenga que hacer nada (grupo 322, prompt 03, criterios 1-3).
+     *
+     * @returns {void}
+     */
+    mostrar_confirmacion_armando_demo() {
+      const self = this
+
+      self.armando_demo = true
+
+      setTimeout(function () {
+        self.armando_demo = false
+
+        self.$nextTick(function () {
+          if (self.$refs.video_intro) {
+            self.$refs.video_intro.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }
+        })
+      }, 5000)
     },
 
     /**
