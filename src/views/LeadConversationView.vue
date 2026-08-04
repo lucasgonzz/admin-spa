@@ -278,6 +278,7 @@
       <div v-if="pending_attachment" class="lead-attachment-preview">
         <span class="lead-attachment-icon">{{ attachment_is_image ? '🖼' : '📎' }}</span>
         <span class="lead-attachment-name text-truncate">{{ pending_attachment.name }}</span>
+        <span class="text-muted small">{{ format_file_size(pending_attachment.size) }}</span>
         <button
           v-if="attachment_is_image"
           type="button"
@@ -517,6 +518,22 @@ import audio_recorder_button from '@/mixins/audio_recorder_button'
 import '@/styles/whatsapp-conversation-wallpaper.css'
 import '@/styles/conversation-placeholder-states.css'
 import '@/styles/whatsapp-date-divider.css'
+
+/**
+ * Tope de imagen de la Cloud API de WhatsApp. Duplicado a propósito con el mismo número que
+ * valida `LeadController@send_direct_image_json` en admin-api: avisar acá permite frenar
+ * ANTES de subir 5 MB por una conexión móvil, en vez de dejar que la request muera en el
+ * servidor. Si el límite del backend cambia, hay que cambiar este número también.
+ */
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+/**
+ * Tope de documento, deliberadamente más bajo que los 100 MB que acepta el endpoint. El
+ * límite real no lo pone Meta sino post_max_size/upload_max_filesize de PHP y el
+ * client_max_body_size del servidor web, que el navegador no puede consultar. 16 MB es un
+ * valor conservador que entra en cualquier configuración razonable.
+ */
+const MAX_DOCUMENT_BYTES = 16 * 1024 * 1024
 
 /**
  * Vista de conversación WhatsApp de un lead.
@@ -1762,8 +1779,27 @@ export default {
     },
 
     /**
-     * Archivo elegido desde el selector: las imágenes pasan por el editor de anotaciones;
-     * el resto (documentos) queda directo como adjunto pendiente.
+     * Formatea un tamaño en bytes a un texto legible ("834 KB", "2,3 MB"), con coma decimal
+     * para que se lea en español.
+     *
+     * @param {number} bytes
+     * @returns {string}
+     */
+    format_file_size(bytes) {
+      if (!bytes && bytes !== 0) {
+        return ''
+      }
+      if (bytes < 1024 * 1024) {
+        return Math.round(bytes / 1024) + ' KB'
+      }
+      return (bytes / (1024 * 1024)).toFixed(1).replace('.', ',') + ' MB'
+    },
+
+    /**
+     * Archivo elegido desde el selector: las imágenes pasan por el editor de anotaciones (que
+     * ya garantiza un techo de tamaño, así que acá no se frenan); el resto (documentos) queda
+     * directo como adjunto pendiente, salvo que ya se sepa que va a fallar por peso — ahí es
+     * mejor avisar al elegirlo que después de escribir el caption.
      *
      * @param {Event} event Evento `change` del input file.
      * @returns {void}
@@ -1774,6 +1810,11 @@ export default {
         const file = files[0]
         if (file.type.indexOf('image/') === 0) {
           this.open_image_editor(file)
+        } else if (file.size > MAX_DOCUMENT_BYTES) {
+          alert(
+            'El documento pesa ' + this.format_file_size(file.size) + ' y el máximo es ' +
+            this.format_file_size(MAX_DOCUMENT_BYTES) + '. Elegí un archivo más chico.'
+          )
         } else {
           this.pending_attachment = file
         }
@@ -1825,6 +1866,17 @@ export default {
       }
       /* Distingue imagen de documento por el mime type del archivo pendiente. */
       const is_image = file.type.indexOf('image/') === 0
+      const max_bytes = is_image ? MAX_IMAGE_BYTES : MAX_DOCUMENT_BYTES
+      if (file.size > max_bytes) {
+        alert(
+          (is_image ? 'La imagen' : 'El documento') + ' pesa ' + this.format_file_size(file.size) +
+          ' y el máximo es ' + this.format_file_size(max_bytes) + '. ' +
+          (is_image
+            ? 'Sacala de nuevo con menos resolución o mandala como documento.'
+            : 'Elegí un archivo más chico.')
+        )
+        return
+      }
       const caption = (this.mensaje_directo || '').trim()
       const form = new FormData()
       form.append(is_image ? 'image' : 'document', file, file.name)
