@@ -205,33 +205,17 @@
 		radial-gradient(70% 70% at 50% 55%, rgba(58, 49, 252, 0.12), transparent 55%);
 }
 
-// Variantes con un pin PROPIO anidado (InterludioPortal.vue -- antes
-// InterludioConvergencia.vue -- ya lo hacía; AperturaCinematografica.vue,
-// grupo 325 prompt 03, ahora también) necesitan que
-// .demo-fondo-seccion__contenido deje de ser una ventana fija de 100vh: su hijo
-// real (.demo-interludio / .demo-apertura) mide bastante más que eso a propósito,
-// para darle al scroll el recorrido que la coreografía necesita, y ese hijo trae
-// su PROPIO position:sticky para quedar clavado durante ese recorrido.
-//
-// El height:100vh + overflow:hidden que el prompt 01 le puso a __contenido (para
-// que los bloques 1-5 y el cierre -- contenido simple, sin pin propio -- nunca
-// necesiten scroll interno) rompe esto de dos formas si se deja sin excepción:
-// (1) recorta a 100vh cualquier alto real mayor, y como __contenido ya no
-// transmite el alto de su hijo hacia arriba (height fija, no min-height), el
-// .demo-fondo-seccion exterior tampoco crece -- la sección entera queda en los
-// 160vh del piso en vez de los ~260vh que la coreografía necesita; (2) overflow
-// distinto de "visible" convierte a __contenido en el contenedor de scroll más
-// cercano a efectos de position:sticky, así que el pin anidado (que se calcula
-// contra el scroll del DOCUMENTO, no de esta caja) dejaría de tener sentido.
-// Volver a min-height + overflow visible (el comportamiento de antes del prompt
-// 01) devuelve el auto-crecimiento sin reintroducir el bug original, porque ese
-// bug era sobre bloques SIN pin propio -- acá el hijo se encarga de acotarse solo.
-.demo-fondo-seccion--interludio .demo-fondo-seccion__contenido,
-.demo-fondo-seccion--apertura .demo-fondo-seccion__contenido {
-	height: auto;
-	min-height: 100vh;
-	overflow: visible;
-}
+// ⛔ OBSOLETO desde el grupo 331 (correctivo): esta sección le devolvía
+// height:auto + overflow:visible a __contenido para que el pin PROPIO anidado
+// de Apertura/Interludio (260vh, su propio position:sticky) pudiera transmitir
+// su alto real hacia el .demo-fondo-seccion exterior. Ese pin propio anidado
+// desapareció: FondoSeccionSticky.vue pasó a tener un ÚNICO elemento pinneado
+// (.demo-fondo-seccion__pin) para las siete secciones por igual, sin excepción
+// por variante, y Apertura/Interludio ya no miden nada -- reciben el progreso
+// por slot escopeado. La excepción de ancho full-bleed que SÍ siguen
+// necesitando estas dos variantes vive ahora dentro del propio
+// <style scoped> de FondoSeccionSticky.vue (misma especificidad que la regla
+// base, sin necesitar !important ahí). Se retira en vez de dejarla muerta.
 
 // ---------------------------------------------------------------------------
 // Interludio: panel del cierre superpuesto (grupo 322, prompt 05, punto 3;
@@ -259,30 +243,18 @@
 // ---------------------------------------------------------------------------
 
 @media (prefers-reduced-motion: reduce) {
-	.demo-fondo-seccion__fondo {
-		// Sin pin: se pierde el efecto, pero no hay movimiento de fondo a pantalla
-		// completa mientras el usuario scrollea, que es justo lo que este media query
-		// pide evitar. !important es necesario acá y no es solo prolijidad: el
-		// position:sticky vive en el <style scoped> de FondoSeccionSticky.vue, que
-		// compila con un atributo data-v-* agregado al selector (más específico que
-		// esta regla global) -- sin !important, este "static" nunca le gana.
+	// Desde el grupo 331 (correctivo) hay un ÚNICO elemento pinneado
+	// (.demo-fondo-seccion__pin, no ya __fondo y __contenido por separado):
+	// despinear ese solo alcanza -- __fondo y __contenido son sus hijos en
+	// position:absolute; inset:0, así que siguen resolviendo su tamaño contra
+	// __pin (que conserva su height:100vh + overflow:hidden, ahora en flujo
+	// normal en vez de sticky) sin necesitar tocarlos acá. !important es
+	// necesario y no es solo prolijidad: el position:sticky vive en el
+	// <style scoped> de FondoSeccionSticky.vue, que compila con un atributo
+	// data-v-* agregado al selector (más específico que esta regla global) --
+	// sin !important, este "static" nunca le gana.
+	.demo-fondo-seccion__pin {
 		position: static !important;
-	}
-
-	// Desde el grupo 325/prompt 01 el contenido TAMBIÉN es sticky (antes era
-	// relative, no hacía falta tocarlo acá). Si solo se despinea el fondo y el
-	// contenido sigue sticky, queda un estado mixto roto: el contenido se
-	// clava contra el viewport mientras el fondo ya no. Hay que devolver el
-	// contenido a flujo normal igual que el fondo, Y anular el margin-top:
-	// -100vh (que sigue aplicando aunque position sea static, porque el
-	// margen no depende del position) y el height:100vh + overflow:hidden
-	// (que en modo estático recortaría contenido en vez de solo ser una red
-	// de seguridad contra el pin).
-	.demo-fondo-seccion__contenido {
-		position: static !important;
-		margin-top: 0 !important;
-		height: auto !important;
-		overflow: visible !important;
 	}
 
 	// .demo-bloque cubre la apertura (aunque ya no anima, no hace daño) y el puente

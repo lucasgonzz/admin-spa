@@ -1,90 +1,88 @@
 <template>
-	<fondo-seccion-sticky variante="apertura">
-		<div ref="contenedor" class="demo-apertura">
-			<div class="demo-apertura__pin">
-				<!-- Capa de fondo y forma protagonista: decorativas, sin animación
-				     interna -- solo transform/opacity desde afuera, así que van como
-				     <img> (el navegador las cachea y no infla el DOM). -->
-				<img
-					ref="capa_fondo"
-					src="@/assets/apertura-capa-fondo.svg"
-					alt=""
-					aria-hidden="true"
-					class="demo-apertura__capa-fondo"
-				/>
-				<img
-					ref="forma_protagonista"
-					src="@/assets/apertura-forma-protagonista.svg"
-					alt=""
-					aria-hidden="true"
-					class="demo-apertura__forma-protagonista"
-				/>
+	<fondo-seccion-sticky variante="apertura" v-slot="{ progreso }">
+		<div ref="contenedor" class="demo-apertura" :data-progreso-aplicado="on_progreso(progreso)">
+			<!-- Capa de fondo y forma protagonista: decorativas, sin animación
+			     interna -- solo transform/opacity desde afuera, así que van como
+			     <img> (el navegador las cachea y no infla el DOM). -->
+			<img
+				ref="capa_fondo"
+				src="@/assets/apertura-capa-fondo.svg"
+				alt=""
+				aria-hidden="true"
+				class="demo-apertura__capa-fondo"
+			/>
+			<img
+				ref="forma_protagonista"
+				src="@/assets/apertura-forma-protagonista.svg"
+				alt=""
+				aria-hidden="true"
+				class="demo-apertura__forma-protagonista"
+			/>
 
-				<!-- Capas de cierre: inline y NO <img> a propósito -- hay que animar
-				     #cierre-izquierda, #cierre-derecha y el font-size/fill-opacity de
-				     #nombre-recortado desde JS, y eso es inaccesible dentro de un
-				     <img>. Copiado tal cual de marca/assets/apertura-capas-de-cierre.svg
-				     (ids intactos), solo agregando los ref de Vue. -->
-				<svg
-					ref="svg_cierre"
-					xmlns="http://www.w3.org/2000/svg"
-					viewBox="0 0 1600 900"
-					preserveAspectRatio="xMidYMid slice"
-					class="demo-apertura__capas-cierre"
-					aria-hidden="true"
-				>
-					<title>Capas de cierre con hueco del nombre</title>
-					<defs>
-						<linearGradient id="ec-grad" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1600" y2="900">
-							<stop offset="0" stop-color="#0B84F8"></stop>
-							<stop offset="1" stop-color="#3A31FC"></stop>
-						</linearGradient>
-						<linearGradient id="ec-grad-tinte" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1600" y2="900">
-							<stop offset="0" stop-color="#0B84F8" stop-opacity="0.16"></stop>
-							<stop offset="1" stop-color="#3A31FC" stop-opacity="0.16"></stop>
-						</linearGradient>
-						<mask id="hueco-nombre" maskUnits="userSpaceOnUse" x="-800" y="-600" width="3200" height="2100">
-							<rect x="-800" y="-600" width="3200" height="2100" fill="#ffffff"></rect>
-							<text
-								ref="nombre_recortado"
-								id="nombre-recortado"
-								x="800"
-								y="470"
-								text-anchor="middle"
-								dominant-baseline="middle"
-								font-family="Geist, system-ui, sans-serif"
-								font-weight="600"
-								letter-spacing="0.02em"
-								fill="#000000"
-								font-size="120"
-								fill-opacity="0"
-							>COMERCIOCITY</text>
-						</mask>
-					</defs>
-					<g mask="url(#hueco-nombre)">
-						<g ref="cierre_izquierda" id="cierre-izquierda">
-							<path fill="url(#ec-grad-tinte)" d="M -400 -200 L 860 -200 C 1010 130, 960 310, 950 460 C 1090 620, 880 790, 1000 1100 L -400 1100 Z"></path>
-							<path fill="url(#ec-grad)" d="M -400 -200 L 760 -200 C 900 120, 850 300, 840 450 C 960 590, 760 760, 880 1100 L -400 1100 Z"></path>
-							<path fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="2" d="M 760 -200 C 900 120, 850 300, 840 450 C 960 590, 760 760, 880 1100"></path>
-						</g>
-						<g ref="cierre_derecha" id="cierre-derecha">
-							<path fill="url(#ec-grad-tinte)" d="M 2000 -200 L 650 -200 C 570 150, 790 330, 640 480 C 500 630, 720 800, 590 1100 L 2000 1100 Z"></path>
-							<path fill="url(#ec-grad)" d="M 2000 -200 L 740 -200 C 690 140, 900 320, 760 470 C 630 620, 830 790, 700 1100 L 2000 1100 Z"></path>
-							<path fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="2" d="M 740 -200 C 690 140, 900 320, 760 470 C 630 620, 830 790, 700 1100"></path>
-						</g>
+			<!-- Capas de cierre: inline y NO <img> a propósito -- hay que animar
+			     #cierre-izquierda, #cierre-derecha y el font-size/fill-opacity de
+			     #nombre-recortado desde JS, y eso es inaccesible dentro de un
+			     <img>. Copiado tal cual de marca/assets/apertura-capas-de-cierre.svg
+			     (ids intactos), solo agregando los ref de Vue. -->
+			<svg
+				ref="svg_cierre"
+				xmlns="http://www.w3.org/2000/svg"
+				viewBox="0 0 1600 900"
+				preserveAspectRatio="xMidYMid slice"
+				class="demo-apertura__capas-cierre"
+				aria-hidden="true"
+			>
+				<title>Capas de cierre con hueco del nombre</title>
+				<defs>
+					<linearGradient id="ec-grad" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1600" y2="900">
+						<stop offset="0" stop-color="#0B84F8"></stop>
+						<stop offset="1" stop-color="#3A31FC"></stop>
+					</linearGradient>
+					<linearGradient id="ec-grad-tinte" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1600" y2="900">
+						<stop offset="0" stop-color="#0B84F8" stop-opacity="0.16"></stop>
+						<stop offset="1" stop-color="#3A31FC" stop-opacity="0.16"></stop>
+					</linearGradient>
+					<mask id="hueco-nombre" maskUnits="userSpaceOnUse" x="-800" y="-600" width="3200" height="2100">
+						<rect x="-800" y="-600" width="3200" height="2100" fill="#ffffff"></rect>
+						<text
+							ref="nombre_recortado"
+							id="nombre-recortado"
+							x="800"
+							y="470"
+							text-anchor="middle"
+							dominant-baseline="middle"
+							font-family="Geist, system-ui, sans-serif"
+							font-weight="600"
+							letter-spacing="0.02em"
+							fill="#000000"
+							font-size="120"
+							fill-opacity="0"
+						>COMERCIOCITY</text>
+					</mask>
+				</defs>
+				<g mask="url(#hueco-nombre)">
+					<g ref="cierre_izquierda" id="cierre-izquierda">
+						<path fill="url(#ec-grad-tinte)" d="M -400 -200 L 860 -200 C 1010 130, 960 310, 950 460 C 1090 620, 880 790, 1000 1100 L -400 1100 Z"></path>
+						<path fill="url(#ec-grad)" d="M -400 -200 L 760 -200 C 900 120, 850 300, 840 450 C 960 590, 760 760, 880 1100 L -400 1100 Z"></path>
+						<path fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="2" d="M 760 -200 C 900 120, 850 300, 840 450 C 960 590, 760 760, 880 1100"></path>
 					</g>
-				</svg>
+					<g ref="cierre_derecha" id="cierre-derecha">
+						<path fill="url(#ec-grad-tinte)" d="M 2000 -200 L 650 -200 C 570 150, 790 330, 640 480 C 500 630, 720 800, 590 1100 L 2000 1100 Z"></path>
+						<path fill="url(#ec-grad)" d="M 2000 -200 L 740 -200 C 690 140, 900 320, 760 470 C 630 620, 830 790, 700 1100 L 2000 1100 Z"></path>
+						<path fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="2" d="M 740 -200 C 690 140, 900 320, 760 470 C 630 620, 830 790, 700 1100"></path>
+					</g>
+				</g>
+			</svg>
 
-				<!-- Titular: texto real en el DOM, nunca parte de los SVG decorativos --
-				     tiene que poder leerse con lector de pantalla y seleccionarse
-				     (criterio de éxito 6). Copy transcripto sin cambios de
-				     contexto/demo_pagina.md §1 y §2 (grupo 322, prompt 04), inyectado
-				     por prop desde ScrollDolor.vue -- este componente no lo conoce. -->
-				<header ref="titular" class="demo-bloque demo-bloque--apertura demo-apertura__titular">
-					<h1 class="demo-apertura__titulo">{{ titulo }}</h1>
-					<p class="demo-apertura__subtitulo">{{ subtitulo }}</p>
-				</header>
-			</div>
+			<!-- Titular: texto real en el DOM, nunca parte de los SVG decorativos --
+			     tiene que poder leerse con lector de pantalla y seleccionarse
+			     (criterio de éxito 6). Copy transcripto sin cambios de
+			     contexto/demo_pagina.md §1 y §2 (grupo 322, prompt 04), inyectado
+			     por prop desde ScrollDolor.vue -- este componente no lo conoce. -->
+			<header ref="titular" class="demo-bloque demo-bloque--apertura demo-apertura__titular">
+				<h1 class="demo-apertura__titulo">{{ titulo }}</h1>
+				<p class="demo-apertura__subtitulo">{{ subtitulo }}</p>
+			</header>
 		</div>
 	</fondo-seccion-sticky>
 </template>
@@ -98,17 +96,15 @@ import FondoSeccionSticky from './FondoSeccionSticky.vue'
  * existían. Ahora sí (marca/assets/apertura-*.svg, diseñados por Lucas en
  * Claude Design y calibrados visualmente ahí: no reinventar los tramos).
  *
- * Mismo patrón que InterludioPortal.vue: pin propio anidado dentro de
- * FondoSeccionSticky, progreso [0,1] calculado contra el scroll del
- * DOCUMENTO (no de la ventana global), listener de scroll pasivo +
- * requestAnimationFrame. Prohibido explícito (mismo criterio que ese
- * componente y que el prompt 01): nada de Framer Motion/Motion ni librerías
- * de springs -- todo transform/opacity/filter puro.
- *
- * El componente de Design que originó la coreografía calcula el progreso
- * contra TODO el documento -- acá no sirve: la página real tiene siete
- * secciones, así que el progreso se recalcula relativo a esta sección sola
- * (criterio de éxito 3).
+ * CORRECTIVO (grupo 331): este componente ya NO calcula su propio progreso de
+ * scroll ni tiene pin propio -- los dos vivían acá hasta este prompt y los dos
+ * eran la causa de que la escena quedara congelada (ver comentario largo en
+ * FondoSeccionSticky.vue). Ahora FondoSeccionSticky mide el progreso [0,1] una
+ * sola vez para toda la sección y lo pasa por slot escopeado; este componente
+ * solo lo consume (on_progreso) y aplica la coreografía (aplicar_estilos), que
+ * no cambió en nada -- los tramos, lerp y seg siguen calibrados igual.
+ * Prohibido explícito (se mantiene): nada de Framer Motion/Motion ni
+ * librerías de springs -- todo transform/opacity/filter puro.
  */
 export default {
 	name: 'AperturaCinematografica',
@@ -132,8 +128,6 @@ export default {
 
 	data() {
 		return {
-			/** Flag para no encolar más de un requestAnimationFrame por vez. */
-			ticking: false,
 			/** true si el sistema operativo pide reduced-motion: sin listener de scroll. */
 			reduced_motion: false,
 			/** Ancho/alto reales renderizados de .demo-apertura__capas-cierre (getBoundingClientRect),
@@ -178,20 +172,14 @@ export default {
 			self.observer.observe(self.$refs.contenedor)
 		}
 
-		/* Cálculo inicial real (no arrancar en p=0 a ciegas): si la página carga
-		 * con la apertura ya parcialmente scrolleada -- por ejemplo al volver
-		 * con el botón atrás -- la escena tiene que arrancar en el progreso que
-		 * corresponde. */
-		self.calcular_progreso()
-		window.addEventListener('scroll', self.on_scroll, { passive: true })
-		/* El alto pinneable y el tamaño real del SVG de cierre dependen de
-		 * window.innerHeight/innerWidth: un resize (rotar el celular, cambiar
-		 * de ventana) invalida los dos igual que un scroll. */
+		/* El tamaño real del SVG de cierre depende de window.innerWidth/innerHeight:
+		 * un resize (rotar el celular, cambiar de ventana) lo invalida. El progreso
+		 * en sí ya no se recalcula acá -- lo mide FondoSeccionSticky, que tiene su
+		 * propio listener de resize. */
 		window.addEventListener('resize', self.on_resize, { passive: true })
 	},
 
 	beforeUnmount() {
-		window.removeEventListener('scroll', this.on_scroll)
 		window.removeEventListener('resize', this.on_resize)
 		if (this.observer) {
 			this.observer.disconnect()
@@ -199,6 +187,23 @@ export default {
 	},
 
 	methods: {
+		/**
+		 * Recibe el progreso [0,1] de la sección desde el slot escopeado de
+		 * FondoSeccionSticky y aplica los estilos correspondientes. Se invoca desde
+		 * el template (:data-progreso-aplicado) porque un valor que llega por slot
+		 * escopeado no es una prop de Vue real -- no hay watch nativo posible sobre
+		 * él. Vue re-evalúa esta expresión cada vez que FondoSeccionSticky actualiza
+		 * su progreso (dispara un nuevo render de este slot), así que el efecto es
+		 * el mismo que un watch. El atributo resultante no se usa visualmente.
+		 *
+		 * @param {number} p
+		 * @returns {string}
+		 */
+		on_progreso(p) {
+			this.aplicar_estilos(p)
+			return ''
+		},
+
 		/**
 		 * Mide el ancho/alto reales de .demo-apertura__capas-cierre: con
 		 * preserveAspectRatio="slice" el viewBox se recorta, así que el tamaño
@@ -217,59 +222,14 @@ export default {
 		},
 
 		/**
-		 * Handler de resize: remide el SVG de cierre y recalcula el progreso
-		 * (el alto pinneable también depende de window.innerHeight).
+		 * Handler de resize: remide el SVG de cierre (el tamaño del hueco del
+		 * nombre depende de eso). El recálculo del progreso lo maneja
+		 * FondoSeccionSticky en su propio listener de resize.
 		 *
 		 * @returns {void}
 		 */
 		on_resize() {
 			this.medir_svg_cierre()
-			this.calcular_progreso()
-		},
-
-		/**
-		 * Handler de scroll: encola el recálculo real en requestAnimationFrame,
-		 * sin recalcular en cada evento (pueden llegar decenas por segundo).
-		 *
-		 * @returns {void}
-		 */
-		on_scroll() {
-			const self = this
-			if (self.ticking) {
-				return
-			}
-			self.ticking = true
-			window.requestAnimationFrame(function () {
-				self.calcular_progreso()
-				self.ticking = false
-			})
-		},
-
-		/**
-		 * Progreso [0,1] según cuánto del alto "pinneable" de la sección ya se
-		 * scrolleó -- mismo cálculo que InterludioPortal.vue, relativo a
-		 * ESTA sección (criterio de éxito 3), no al documento completo (eso es
-		 * lo que hacía el componente de Design y acá no sirve: la página real
-		 * tiene siete secciones).
-		 *
-		 * @returns {void}
-		 */
-		calcular_progreso() {
-			if (!this.$refs.contenedor) {
-				return
-			}
-
-			const rect = this.$refs.contenedor.getBoundingClientRect()
-			const alto_pinneable = rect.height - window.innerHeight
-
-			if (alto_pinneable <= 0) {
-				this.aplicar_estilos(rect.top <= 0 ? 1 : 0)
-				return
-			}
-
-			const avance = -rect.top
-			const p = Math.max(0, Math.min(1, avance / alto_pinneable))
-			this.aplicar_estilos(p)
 		},
 
 		/**
@@ -410,21 +370,18 @@ export default {
 </script>
 
 <style scoped>
-/* Alto total de la sección: 100vh de pin + el recorrido que necesita la
-   coreografía completa (fondo + forma + titular + cierre + nombre) para
-   sentirse acompañando al scroll, no apurada -- mismo criterio de tamaño que
-   InterludioPortal.vue (260vh), la única otra escena de este tipo en
-   la página. */
+/* Desde el grupo 331 (correctivo) esta escena ya NO tiene pin propio ni alto
+   propio -- vive dentro del único pin de FondoSeccionSticky (100vh, ver ese
+   componente), que le da tamaño real (height:100% por la excepción full-bleed
+   que ese mismo componente declara para la variante "apertura"). Antes tenía
+   su propio position:sticky anidado dentro del pin de FondoSeccionSticky:
+   un elemento pinneado no puede medir su propio avance de scroll (su rect.top
+   no cambia mientras el pin dura), que era una de las causas de que la escena
+   quedara congelada. */
 .demo-apertura {
 	position: relative;
-	min-height: 260vh;
-}
-
-.demo-apertura__pin {
-	position: sticky;
-	top: 0;
-	height: 100vh;
 	width: 100%;
+	height: 100%;
 	overflow: hidden;
 }
 
@@ -496,23 +453,9 @@ export default {
 	margin: 0;
 }
 
-@media (max-width: 767.98px) {
-	.demo-apertura {
-		min-height: 220vh;
-	}
-}
-
 /* Estático de verdad bajo reduced-motion (§14 de apple-design/SKILL.md): sin
-   movimiento, no una versión "gentil" del mismo movimiento -- aplicar_estilos_estatico()
-   ya deja los valores finales por JS; acá solo hace falta que el pin en sí no
-   quede clavado sin animación (se leería como una captura de pantalla trabada). */
-@media (prefers-reduced-motion: reduce) {
-	.demo-apertura {
-		min-height: 100vh;
-	}
-
-	.demo-apertura__pin {
-		position: static;
-	}
-}
+   movimiento, no una versión "gentil" del mismo movimiento --
+   aplicar_estilos_estatico() ya deja los valores finales por JS. El despineo
+   del pin (que ya no es de este componente) lo maneja demo-experiencia.scss
+   sobre .demo-fondo-seccion__pin, para las siete secciones por igual. */
 </style>

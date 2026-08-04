@@ -1,7 +1,6 @@
 <template>
-	<fondo-seccion-sticky variante="interludio">
-		<div ref="contenedor" class="demo-interludio">
-			<div class="demo-interludio__pin">
+	<fondo-seccion-sticky variante="interludio" v-slot="{ progreso }">
+		<div ref="contenedor" class="demo-interludio" :data-progreso-aplicado="on_progreso(progreso)">
 				<!-- SVG copiado tal cual de marca/assets/interludio-portal.svg (ids y
 				     data-* intactos, es el contrato) -- role="img" + aria-label en vez de
 				     aria-hidden: las doce etiquetas de los íconos son contenido con
@@ -199,7 +198,6 @@
 						<slot name="cierre" />
 					</div>
 				</div>
-			</div>
 		</div>
 	</fondo-seccion-sticky>
 </template>
@@ -224,12 +222,15 @@ const INDICES = [1, 2, 3, 4, 5, 6]
  * (AperturaCinematografica.vue, prompt 03 de este mismo grupo), para que
  * las dos escenas no repitan el mismo truco visual.
  *
- * Mismo patrón que ya usaba InterludioConvergencia.vue (se conserva a
- * propósito): pin propio anidado dentro de FondoSeccionSticky, progreso
- * [0,1] contra el scroll de ESTA sección, listener de scroll pasivo +
- * requestAnimationFrame. Prohibido explícito: nada de Framer Motion/Motion
- * ni librerías de springs -- todo transform/opacity/filter puro, escrito por
- * `style` inline porque el valor es continuo, nunca clases.
+ * CORRECTIVO (grupo 331): este componente ya NO calcula su propio progreso de
+ * scroll ni tiene pin propio -- los dos vivían acá hasta este prompt y los dos
+ * eran la causa de que la escena quedara congelada (ver comentario largo en
+ * FondoSeccionSticky.vue). Ahora FondoSeccionSticky mide el progreso [0,1] una
+ * sola vez para toda la sección y lo pasa por slot escopeado; este componente
+ * solo lo consume (on_progreso) y aplica la coreografía (aplicar_estilos), que
+ * no cambió en nada. Prohibido explícito (se mantiene): nada de Framer
+ * Motion/Motion ni librerías de springs -- todo transform/opacity/filter
+ * puro, escrito por `style` inline porque el valor es continuo, nunca clases.
  */
 export default {
 	name: 'InterludioPortal',
@@ -242,8 +243,6 @@ export default {
 
 	data() {
 		return {
-			/** Flag para no encolar más de un requestAnimationFrame por vez. */
-			ticking: false,
 			/** true si el sistema operativo pide reduced-motion: sin listener de scroll. */
 			reduced_motion: false,
 			/** Los seis pares { n, caos, lbl, orden, lblo, x, y, rot, sc }, leídos de
@@ -272,23 +271,34 @@ export default {
 			 * scroll registrado (criterio de éxito 8): panorama atenuado, arco
 			 * cerrado, nombre visible, cierre encima. */
 			self.aplicar_estilos(1)
-			return
 		}
 
-		/* Cálculo inicial real (no arrancar en p=0 a ciegas): si la página carga
-		 * con esta sección ya parcialmente scrolleada, la escena tiene que
-		 * arrancar en el progreso que corresponde. */
-		self.calcular_progreso()
-		window.addEventListener('scroll', self.on_scroll, { passive: true })
-		window.addEventListener('resize', self.on_scroll, { passive: true })
-	},
-
-	beforeUnmount() {
-		window.removeEventListener('scroll', this.on_scroll)
-		window.removeEventListener('resize', this.on_scroll)
+		/* Sin listener propio de scroll/resize: el progreso [0,1] lo calcula
+		 * FondoSeccionSticky (una sola vez para toda la sección) y llega acá por
+		 * slot escopeado -- ver on_progreso(). */
 	},
 
 	methods: {
+		/**
+		 * Recibe el progreso [0,1] de la sección desde el slot escopeado de
+		 * FondoSeccionSticky y aplica los estilos correspondientes. Se invoca desde
+		 * el template (:data-progreso-aplicado) porque un valor que llega por slot
+		 * escopeado no es una prop de Vue real -- no hay watch nativo posible sobre
+		 * él. Vue re-evalúa esta expresión cada vez que FondoSeccionSticky actualiza
+		 * su progreso (dispara un nuevo render de este slot), así que el efecto es
+		 * el mismo que un watch. El atributo resultante no se usa visualmente.
+		 *
+		 * @param {number} p
+		 * @returns {string}
+		 */
+		on_progreso(p) {
+			if (this.reduced_motion) {
+				return ''
+			}
+			this.aplicar_estilos(p)
+			return ''
+		},
+
 		/**
 		 * Lee del propio DOM los data-h/data-sc de los seis pares caos/orden y
 		 * el data-open de #portal -- "usarlo como origen de los desplazamientos
@@ -331,49 +341,6 @@ export default {
 				const abierto = (self.$refs.portal.getAttribute('data-open') || '1,1').split(',').map(Number)
 				self.portal_abierto = { sx: abierto[0], sy: abierto[1] }
 			}
-		},
-
-		/**
-		 * Handler de scroll: encola el recálculo real en requestAnimationFrame,
-		 * sin recalcular en cada evento (pueden llegar decenas por segundo).
-		 *
-		 * @returns {void}
-		 */
-		on_scroll() {
-			const self = this
-			if (self.ticking) {
-				return
-			}
-			self.ticking = true
-			window.requestAnimationFrame(function () {
-				self.calcular_progreso()
-				self.ticking = false
-			})
-		},
-
-		/**
-		 * Progreso [0,1] según cuánto del alto "pinneable" de la sección ya se
-		 * scrolleó -- idéntico cálculo al que ya usaba InterludioConvergencia.vue,
-		 * relativo a ESTA sección, no al documento completo.
-		 *
-		 * @returns {void}
-		 */
-		calcular_progreso() {
-			if (!this.$refs.contenedor) {
-				return
-			}
-
-			const rect = this.$refs.contenedor.getBoundingClientRect()
-			const alto_pinneable = rect.height - window.innerHeight
-
-			if (alto_pinneable <= 0) {
-				this.aplicar_estilos(rect.top <= 0 ? 1 : 0)
-				return
-			}
-
-			const avance = -rect.top
-			const p = Math.max(0, Math.min(1, avance / alto_pinneable))
-			this.aplicar_estilos(p)
 		},
 
 		/**
@@ -530,18 +497,19 @@ export default {
 </script>
 
 <style scoped>
-/* Alto total de la sección: 100vh de pin + el recorrido que necesita la
-   coreografía completa para sentirse acompañando al scroll, no apurada --
-   mismo criterio de tamaño que tenía InterludioConvergencia.vue. */
+/* Desde el grupo 331 (correctivo) esta escena ya NO tiene pin propio ni alto
+   propio -- vive dentro del único pin de FondoSeccionSticky (100vh, ver ese
+   componente), que le da tamaño real (height:100% por la excepción full-bleed
+   que ese mismo componente declara para la variante "interludio"). Antes
+   tenía su propio position:sticky anidado dentro del pin de FondoSeccionSticky
+   (mismo patrón que InterludioConvergencia.vue, la escena que reemplazó):
+   un elemento pinneado no puede medir su propio avance de scroll, que era una
+   de las causas de que la escena quedara congelada. display:flex acá (antes
+   en el pin propio) sigue centrando el SVG dentro del espacio disponible. */
 .demo-interludio {
 	position: relative;
-	min-height: 260vh;
-}
-
-.demo-interludio__pin {
-	position: sticky;
-	top: 0;
-	height: 100vh;
+	width: 100%;
+	height: 100%;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -585,9 +553,4 @@ export default {
 	pointer-events: none;
 }
 
-@media (max-width: 767.98px) {
-	.demo-interludio {
-		min-height: 220vh;
-	}
-}
 </style>
