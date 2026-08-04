@@ -1,10 +1,20 @@
 <template>
-	<escena-marca v-if="visible" class="demo-confirmacion-armando">
+	<escena-marca class="demo-confirmacion-armando">
+		<!-- Atenúa la escena de marca detrás del texto (grupo 331, correctivo):
+		     capa sólida semitransparente, nunca backdrop-filter (§12 de la skill +
+		     APLICABILIDAD.md) -- el degradé sigue visible pero deja de competir
+		     con el texto. position:fixed para que cubra el viewport completo sin
+		     quedar acotada por el max-width de .escena-marca__contenido. -->
+		<div class="demo-confirmacion-armando__atenuacion" aria-hidden="true"></div>
 		<div class="demo-confirmacion-armando__texto">
 			<!-- v-html sobre copy 100% fijo (nunca datos del lead ni de terceros) --
 			     es la forma más simple de resaltar "tu demo" con peso tipográfico
 			     dentro del título, sin partir el texto en varias interpolaciones. -->
-			<h2 class="demo-confirmacion-armando__titulo" v-html="titulo_html"></h2>
+			<h2
+				class="demo-confirmacion-armando__titulo"
+				:class="{ 'demo-confirmacion-armando__titulo--shimmer': shimmer_activo }"
+				v-html="titulo_html"
+			></h2>
 			<p v-if="parrafo_reserva" class="demo-confirmacion-armando__parrafo">{{ parrafo_reserva }}</p>
 			<p class="demo-confirmacion-armando__parrafo">
 				Mientras tanto, mirá esta introducción: te contamos para qué sirve la demo, qué podés
@@ -19,11 +29,17 @@ import EscenaMarca from './EscenaMarca.vue'
 
 /**
  * Pantalla de confirmación "armando tu demo" (grupo 322, prompt 03), copy de
- * contexto/demo_pagina.md §3-bis -- se transcribe, no se reescribe. El
- * contenedor (ExperienciaDemo.vue) decide cuánto dura montada (~5s) y cuándo
- * se oculta; este componente solo elige QUÉ texto mostrar y lo muestra.
+ * contexto/demo_pagina.md §3-bis -- se transcribe, no se reescribe.
  *
- * Dos variantes elegidas por turno.estado -- NUNCA por el reloj del
+ * CORRECTIVO (grupo 331): deja de ser un overlay `position: fixed` que el
+ * contenedor monta y desmonta -- ahora es el primer tramo (100dvh) de la
+ * "vista posterior" a la confirmación del formulario (ver ExperienciaDemo.vue),
+ * y el contenedor la mantiene montada mientras `intro_desbloqueada` sea true.
+ * El mensaje ya no desaparece a los ~5s: lo único que se apaga es el shimmer
+ * del título (`shimmer_activo`), que pasa a color sólido porque el proceso ya
+ * terminó -- el lead puede volver a subir y seguir leyéndolo.
+ *
+ * Dos variantes de copy elegidas por turno.estado -- NUNCA por el reloj del
  * navegador, mismo criterio que ya usa BotonAcceso.vue para sus cuatro
  * estados. El motivo (demo_pagina.md §3-bis): el formulario no dispara el
  * demo setup (regla formulario + T-15, lo que pase último), así que un lead
@@ -38,17 +54,20 @@ export default {
 	},
 
 	props: {
-		/** Controla si la pantalla se muestra. El temporizador de ~5s vive en el contenedor. */
-		visible: {
-			type: Boolean,
-			default: false,
-		},
 		/** { fecha, hora_inicio, hora_fin, estado, ingreso } del turno, tal como llega del payload. */
 		turno: {
 			type: Object,
 			default: function () {
 				return {}
 			},
+		},
+		/** true mientras dura el proceso de armado (~5s tras enviar el formulario):
+		 *  el título muestra el shimmer tipo skeleton. false de ahí en más (incluida
+		 *  la visita de un lead que ya había completado el formulario antes: para
+		 *  ese lead no hay ningún proceso en curso que anunciar). */
+		shimmer_activo: {
+			type: Boolean,
+			default: false,
 		},
 	},
 
@@ -203,22 +222,37 @@ export default {
 </script>
 
 <style scoped>
-/* Pantalla completa mientras está visible (grupo 325, prompt 02): antes
-   quedaba como un bloque más en el flujo normal, entre el formulario y el
-   video, así que el lead veía el fondo scrolleando detrás. !important en
-   position es necesario: este selector compila con su propio atributo
-   data-v-* (misma especificidad, 0-2-0, que .escena-marca[data-v-*] del
-   propio EscenaMarca.vue, que fija position: relative en su scoped style)
-   -- sin !important, cuál de los dos gana dependería del orden de carga
-   entre los dos bundles, la misma clase de problema que ya resuelve con
-   !important el fallback de prefers-reduced-motion en demo-experiencia.scss. */
+/* CORRECTIVO (grupo 331): ya no es una capa fija a pantalla completa (grupo
+   325, prompt 02) -- ahora es el primer tramo, en flujo normal, de la vista
+   posterior a la confirmación del formulario (ver ExperienciaDemo.vue). Se
+   queda con el position:relative + flex centrado que ya trae .escena-marca
+   por default; solo hace falta el alto de viewport completo, con 100dvh como
+   preferido (barra de direcciones móvil) y 100vh como fallback -- el orden
+   importa: un navegador sin soporte de dvh ignora esa declaración entera y
+   se queda con la de arriba. */
 .demo-confirmacion-armando {
-	position: fixed !important;
+	min-height: 100vh;
+	min-height: 100dvh;
+}
+
+/* Atenúa la escena de marca (degradé + formas) detrás del texto -- el
+   subtítulo #3d4657 no alcanza contraste AA contra la zona más intensa del
+   degradé sin esto. position:fixed (no absolute): rompe el max-width:560px
+   de .escena-marca__contenido (que es el positioning context más cercano)
+   para cubrir el viewport completo, "a todo el ancho" como pide el prompt.
+   z-index explícito + position:relative en __texto (ver esa regla) para que
+   el orden de pintado no dependa de que ninguno de los dos sea position:auto. */
+.demo-confirmacion-armando__atenuacion {
+	position: fixed;
 	inset: 0;
-	z-index: 60;
+	z-index: 0;
+	background: rgba(248, 249, 252, 0.55);
+	pointer-events: none;
 }
 
 .demo-confirmacion-armando__texto {
+	position: relative;
+	z-index: 1;
 	text-align: center;
 	display: flex;
 	flex-direction: column;
@@ -230,16 +264,72 @@ export default {
 	font-weight: 500;
 	line-height: 1.25;
 	margin: 0;
+	/* Color sólido de base -- lo que se ve si el @supports de abajo no aplica
+	   (navegador sin background-clip: text) y también bajo reduced-motion. */
+	color: var(--demo-color-texto);
 }
 
 .demo-confirmacion-armando__titulo strong {
 	font-weight: 800;
 }
 
+/* Shimmer tipo skeleton (pedido de Lucas): un brillo recorre el título
+   mientras el armado está en curso. Envuelto en @supports a propósito --
+   background-clip: text + color: transparent deja el título INVISIBLE en un
+   navegador que no soporte el clip, así que la regla completa (incluido
+   color: transparent) solo se aplica si el navegador puede pintar el texto
+   con ella. El color sólido de arriba queda de base fuera de este bloque. */
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+	.demo-confirmacion-armando__titulo--shimmer {
+		background: linear-gradient(
+			100deg,
+			var(--demo-color-texto) 0%,
+			var(--demo-color-texto) 38%,
+			var(--demo-color-azul) 50%,
+			var(--demo-color-texto) 62%,
+			var(--demo-color-texto) 100%
+		);
+		background-size: 220% 100%;
+		-webkit-background-clip: text;
+		background-clip: text;
+		color: transparent;
+		animation: demo-confirmacion-shimmer 2.1s linear infinite;
+	}
+}
+
+@keyframes demo-confirmacion-shimmer {
+	from {
+		background-position: 180% 0;
+	}
+	to {
+		background-position: -80% 0;
+	}
+}
+
 .demo-confirmacion-armando__parrafo {
 	font-size: 1.05rem;
 	line-height: 1.5;
-	color: #566078;
+	/* #566078 sobre la zona más intensa del degradé, incluso atenuada por la
+	   capa de arriba, no alcanza AA -- #3d4657 sí (medido contra el peor caso:
+	   azul de marca #0b84f8 detrás de la capa rgba(248,249,252,0.55)). */
+	color: #3d4657;
 	margin: 0;
+	position: relative;
+	z-index: 1;
+}
+
+/* Estático de verdad bajo reduced-motion (§14 de apple-design/SKILL.md): sin
+   shimmer y sin el recorte de fondo que lo sostiene. Sin !important: esta
+   regla vive en el mismo archivo y con la misma especificidad (0-2-0) que la
+   del @supports de arriba -- gana por orden de cascada (va despues), no hace
+   falta forzarla; !important acá sería ruido, no protección real. */
+@media (prefers-reduced-motion: reduce) {
+	.demo-confirmacion-armando__titulo--shimmer {
+		background: none;
+		-webkit-background-clip: initial;
+		background-clip: initial;
+		color: var(--demo-color-texto);
+		animation: none;
+	}
 }
 </style>

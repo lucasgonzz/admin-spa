@@ -38,19 +38,24 @@
         :enviar_formulario="enviar_formulario"
       />
 
-      <!-- Confirmación "armando tu demo" (grupo 322, prompt 03): aparece ~5s
-           tras un envío exitoso del formulario y pasa sola al video de
-           introducción. armando_demo la controla este contenedor. -->
-      <confirmacion-armando-demo :visible="armando_demo" :turno="turno" />
-
-      <!-- Video de introducción + botón de acceso: pantalla POSTERIOR a la
-           confirmación (grupo 325, prompt 02) -- antes estaban siempre
-           renderizados, justo debajo del formulario, y el lead los veía
-           apenas terminaba el scroll de dolor, sin haber confirmado nada.
-           v-if (no v-show): con v-show el elemento seguiría en el
-           documento ocupando lugar y, sobre todo, PiezaMultimedia seguiría
-           montada y podría precargar el video antes de tiempo. -->
+      <!-- Confirmación "armando tu demo" + video de introducción + botón de
+           acceso: vista POSTERIOR a la confirmación del formulario (grupo 325,
+           prompt 02; correctivo grupo 331 -- la confirmación pasó a ser el
+           primer tramo de esta misma vista, ya no un overlay que se
+           desmonta solo). Antes estaban siempre renderizados, justo debajo
+           del formulario, y el lead los veía apenas terminaba el scroll de
+           dolor, sin haber confirmado nada. v-if (no v-show): con v-show el
+           elemento seguiría en el documento ocupando lugar y, sobre todo,
+           PiezaMultimedia seguiría montada y podría precargar el video antes
+           de tiempo. -->
       <template v-if="intro_desbloqueada">
+        <!-- El mensaje queda arriba para siempre (no se desmonta a los 5s):
+             lo único que se apaga es el shimmer del título, vía
+             shimmer_activo. Un lead que ya había completado el formulario en
+             una visita anterior nunca tiene shimmer_activo en true -- no hay
+             ningún proceso en curso que anunciarle. -->
+        <confirmacion-armando-demo :turno="turno" :shimmer_activo="shimmer_activo" />
+
         <!-- Video de introducción: pieza "intro" del catálogo. A diferencia de
              los clips del scroll, va con controles y sonido, sin autoplay (son
              5 minutos y el lead lo mira, no lo ojea). Sin URL cargada todavía
@@ -137,11 +142,14 @@ export default {
       /** Mapa { slot_id: url } de todas las piezas multimedia configuradas para este turno. */
       media: {},
       /**
-       * true mientras se muestra la confirmación "armando tu demo" (grupo 322,
-       * prompt 03), justo después de un envío exitoso del formulario. La
-       * apaga sola mostrar_confirmacion_armando_demo() a los ~5s.
+       * true mientras dura el armado (~5s tras un envío exitoso del
+       * formulario): controla el shimmer del título de
+       * ConfirmacionArmandoDemo, no si esta se muestra (eso ya lo decide
+       * intro_desbloqueada, correctivo grupo 331 -- el mensaje queda montado
+       * para siempre una vez que aparece). La apaga sola
+       * mostrar_confirmacion_armando_demo() a los ~5s.
        */
-      armando_demo: false,
+      shimmer_activo: false,
       /**
        * true una vez que el lead confirmó el formulario y terminó la
        * animación de "armando tu demo" -- o ya lo había hecho en una visita
@@ -247,7 +255,7 @@ export default {
      * promesa ante 4xx/5xx): es el lugar correcto para disparar la
      * confirmación "armando tu demo" (grupo 322, prompt 03) sin necesitar
      * distinguir éxito de fallo por separado -- si el POST falla, este bloque
-     * nunca se ejecuta y armando_demo nunca se activa (criterio de éxito 4).
+     * nunca se ejecuta y la confirmación nunca se activa (criterio de éxito 4).
      *
      * @param {object} respuestas Las nueve respuestas del formulario.
      * @returns {Promise<object>} El payload refrescado.
@@ -268,40 +276,49 @@ export default {
     },
 
     /**
-     * Muestra la confirmación "armando tu demo" durante ~5s y, al vencer, la
-     * oculta y scrollea suave hasta el video de introducción -- sin que el
-     * lead tenga que hacer nada (grupo 322, prompt 03, criterios 1-3).
+     * Muestra la confirmación "armando tu demo" durante ~5s y, al vencer,
+     * scrollea sola hasta el video de introducción -- sin que el lead tenga
+     * que hacer nada (grupo 322, prompt 03, criterios 1-3).
      *
-     * Bloquea el scroll del documento mientras dura la confirmación (grupo
-     * 325, prompt 02): la pantalla es una capa fija a pantalla completa
-     * (ver <style scoped> de ConfirmacionArmandoDemo.vue), así que el fondo
-     * no puede seguir scrolleando detrás. Se restaura acá al vencer el
-     * timeout, y también en beforeUnmount si el lead navega antes.
+     * CORRECTIVO (grupo 331): intro_desbloqueada se activa ACÁ, al arrancar
+     * (no al vencer el timeout) -- la confirmación pasó a ser el primer
+     * tramo de la vista posterior, ya no un overlay separado, así que tiene
+     * que existir en el DOM desde el primer momento para que el lead la vea
+     * (con el shimmer prendido) mientras el armado está en curso. Lo único
+     * que cambia a los 5s es shimmer_activo (el título pasa a color sólido:
+     * el proceso ya terminó) y el scroll, que se libera y se mueve solo
+     * hasta el video. El mensaje en sí nunca se desmonta.
      *
-     * Orden al vencer (criterio de éxito 3): intro_desbloqueada primero,
-     * recién después se apaga armando_demo y se libera el scroll, y solo
-     * tras el $nextTick() (para que el v-if del video ya haya renderizado
-     * la sección) se dispara el scrollIntoView -- llamarlo antes dejaría
-     * $refs.video_intro en undefined, porque con v-if la sección no existe
-     * en el DOM hasta que Vue re-renderiza.
+     * Bloquea el scroll del documento mientras dura el armado (grupo 325,
+     * prompt 02): sin esto el lead podría scrollear más allá del mensaje
+     * antes de que termine. Se restaura acá al vencer el timeout, y también
+     * en beforeUnmount si el lead navega antes.
      *
      * @returns {void}
      */
     mostrar_confirmacion_armando_demo() {
       const self = this
 
-      self.armando_demo = true
+      self.intro_desbloqueada = true
+      self.shimmer_activo = true
       document.body.style.overflow = 'hidden'
 
       self.confirmacion_timeout = setTimeout(function () {
         self.confirmacion_timeout = null
-        self.intro_desbloqueada = true
-        self.armando_demo = false
+        self.shimmer_activo = false
         document.body.style.overflow = ''
 
         self.$nextTick(function () {
           if (self.$refs.video_intro) {
-            self.$refs.video_intro.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            const reduced_motion = !!(
+              typeof window !== 'undefined' &&
+              window.matchMedia &&
+              window.matchMedia('(prefers-reduced-motion: reduce)').matches
+            )
+            self.$refs.video_intro.scrollIntoView({
+              behavior: reduced_motion ? 'auto' : 'smooth',
+              block: 'start',
+            })
           }
         })
       }, 5000)
