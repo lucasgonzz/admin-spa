@@ -6,7 +6,11 @@
 		     con el texto. position:fixed para que cubra el viewport completo sin
 		     quedar acotada por el max-width de .escena-marca__contenido. -->
 		<div class="demo-confirmacion-armando__atenuacion" aria-hidden="true"></div>
-		<div class="demo-confirmacion-armando__texto">
+		<div
+			ref="texto"
+			class="demo-confirmacion-armando__texto"
+			:class="{ 'demo-confirmacion-armando__texto--visible': visible }"
+		>
 			<!-- v-html sobre copy 100% fijo (nunca datos del lead ni de terceros) --
 			     es la forma más simple de resaltar "tu demo" con peso tipográfico
 			     dentro del título, sin partir el texto en varias interpolaciones. -->
@@ -69,6 +73,67 @@ export default {
 			type: Boolean,
 			default: false,
 		},
+	},
+
+	data() {
+		return {
+			/**
+			 * true cuando .demo-confirmacion-armando__texto ya entró en el viewport --
+			 * dispara la animación de entrada (grupo 336, correctivo 7). Esta pantalla
+			 * está al fondo de un scroll largo (después de las 7 secciones del scroll de
+			 * dolor) y el scrollIntoView que la trae tarda más que la propia animación
+			 * -- si esta arrancara al montarse (como al principio), terminaría entera
+			 * antes de que el lead viera el primer píxel. Mismo patrón que ya usa
+			 * ScrollDolor.vue para los bloques 1-5 (IntersectionObserver + clase
+			 * --visible), en vez de animar al montar.
+			 */
+			visible: false,
+			/** Instancia del IntersectionObserver que dispara la animación de entrada. */
+			observer: null,
+		}
+	},
+
+	mounted() {
+		const self = this
+
+		const reduced_motion = !!(
+			typeof window !== 'undefined' &&
+			window.matchMedia &&
+			window.matchMedia('(prefers-reduced-motion: reduce)').matches
+		)
+
+		if (reduced_motion || typeof IntersectionObserver === 'undefined') {
+			/* Sin animación que disparar: el texto ya queda visible de una por CSS
+			 * bajo reduced-motion (ver <style scoped>), y sin IntersectionObserver
+			 * (navegador viejo) no hay forma de saber cuándo entra en viewport --
+			 * mejor mostrarlo directo que dejarlo invisible para siempre. */
+			self.visible = true
+			return
+		}
+
+		self.observer = new IntersectionObserver(function (entries) {
+			entries.forEach(function (entry) {
+				if (!entry.isIntersecting) {
+					return
+				}
+				self.visible = true
+				/* Una vez que se vio, no hace falta seguir observando -- la sección no
+				 * se desmonta (queda montada para siempre, ver comentario de la clase
+				 * de este componente) así que sin esto el observer seguiría vivo sin
+				 * ningún propósito. */
+				self.observer.disconnect()
+			})
+		})
+
+		if (self.$refs.texto) {
+			self.observer.observe(self.$refs.texto)
+		}
+	},
+
+	beforeUnmount() {
+		if (this.observer) {
+			this.observer.disconnect()
+		}
 	},
 
 	computed: {
@@ -257,11 +322,20 @@ export default {
 	display: flex;
 	flex-direction: column;
 	gap: 14px;
-	/* Misma animación de entrada que la apertura del scroll de dolor (grupo 336, prompt
-	   03: "las dos pantallas se sientan de la misma familia"), keyframe compartido en
-	   demo-experiencia.scss. Corre una sola vez al montarse -- esta sección recién
-	   existe en el DOM cuando el lead confirma el formulario (v-if en
-	   ExperienciaDemo.vue), así que "al montarse" es exactamente "apenas se ve". */
+	/* CORRECTIVO (grupo 336, correctivo 7): invisible hasta que el IntersectionObserver
+	   de mounted() confirme que el elemento realmente entra en el viewport -- animar
+	   directo al montarse (v-if) corría la animación entera MIENTRAS el scrollIntoView
+	   todavía estaba en camino (la sección queda a ~13.000px scroll abajo, ~1.4s de
+	   smooth scroll contra 1.2s de animación): el lead nunca llegaba a verla, la
+	   encontraba ya en su estado final. */
+	opacity: 0;
+}
+
+/* Misma animación de entrada que la apertura del scroll de dolor (grupo 336, prompt 03:
+   "las dos pantallas se sientan de la misma familia"), keyframe compartido en
+   demo-experiencia.scss -- ver el comentario ahí sobre por qué un @keyframes no puede
+   vivir en un <style scoped> si lo usa más de un componente. */
+.demo-confirmacion-armando__texto--visible {
 	animation: demo-apertura-entrada 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
