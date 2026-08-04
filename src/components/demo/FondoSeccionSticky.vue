@@ -1,5 +1,10 @@
 <template>
-	<section ref="seccion" class="demo-fondo-seccion" :class="'demo-fondo-seccion--' + variante">
+	<section
+		ref="seccion"
+		class="demo-fondo-seccion"
+		:class="'demo-fondo-seccion--' + variante"
+		:style="{ minHeight: recorrido_vh + 'vh' }"
+	>
 		<div class="demo-fondo-seccion__pin">
 			<div class="demo-fondo-seccion__fondo" aria-hidden="true"></div>
 			<div class="demo-fondo-seccion__contenido">
@@ -47,6 +52,13 @@ export default {
 		variante: {
 			type: String,
 			required: true,
+		},
+		/** Alto total de la sección en vh. 160 = 100vh visibles + 60vh de pin. Las escenas
+		 *  con coreografía larga necesitan más recorrido o se sienten atropelladas (grupo 336,
+		 *  prompt 02 -- antes era un valor fijo en el <style scoped>, ver comentario ahí abajo). */
+		recorrido_vh: {
+			type: Number,
+			default: 160,
 		},
 	},
 
@@ -163,14 +175,15 @@ export default {
 </script>
 
 <style scoped>
-/* Recorrido del pin: 160vh = 100vh visibles + 60vh de "duración" del clavado. Un solo
-   hijo pinneado (antes había dos position:sticky hermanos -- fondo y contenido -- con
-   el segundo desplazado con margin-top:-100vh; se despegaban en momentos distintos y
-   dejaban un tramo de scroll sin contenido, bug real grupo 322/325). NO subir este
-   valor sin verificar en pantalla: cada vh de más es scroll en el que no cambia nada. */
+/* Recorrido del pin: min-height por prop `recorrido_vh` (default 160 = 100vh visibles +
+   60vh de "duración" del clavado, ver el inline style del template). Un solo hijo pinneado
+   (antes había dos position:sticky hermanos -- fondo y contenido -- con el segundo
+   desplazado con margin-top:-100vh; se despegaban en momentos distintos y dejaban un tramo
+   de scroll sin contenido, bug real grupo 322/325). NO subir el default sin verificar en
+   pantalla: cada vh de más es scroll en el que no cambia nada -- si una escena puntual
+   necesita más (coreografía larga, grupo 336 prompt 02), se declara con la prop, no acá. */
 .demo-fondo-seccion {
 	position: relative;
-	min-height: 160vh;
 }
 
 /* Único elemento pinneado. Full-bleed acá (no en el fondo): rompe el max-width del

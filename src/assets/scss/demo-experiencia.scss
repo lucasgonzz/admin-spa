@@ -225,9 +225,15 @@
 // ---------------------------------------------------------------------------
 
 .demo-interludio__panel-cierre {
-	background: rgba(248, 249, 252, 0.92);
+	// Menos opaco (grupo 336, prompt 02) y acotado a la mitad inferior de la escena
+	// (max-height, el ancla abajo ya la da align-items:flex-end del wrap en
+	// InterludioPortal.vue): el nombre y el anillo cerrado, arriba, tienen que
+	// seguir viendose con el panel ya entrado -- criterio duro del prompt.
+	background: rgba(248, 249, 252, 0.86);
 	border-radius: 20px;
 	padding: clamp(24px, 4vw, 48px);
+	max-height: 46vh;
+	overflow: auto;
 }
 
 // El override del título del cierre dentro del interludio (color sólido en

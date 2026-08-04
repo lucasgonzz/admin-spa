@@ -1,5 +1,5 @@
 <template>
-	<fondo-seccion-sticky variante="interludio" v-slot="{ progreso }">
+	<fondo-seccion-sticky variante="interludio" :recorrido_vh="320" v-slot="{ progreso }">
 		<div ref="contenedor" class="demo-interludio" :data-progreso-aplicado="on_progreso(progreso)">
 				<!-- SVG copiado tal cual de marca/assets/interludio-portal.svg (ids y
 				     data-* intactos, es el contrato) -- role="img" + aria-label en vez de
@@ -382,26 +382,35 @@ export default {
 				return t * t * t
 			}
 
-			/* 0.18 -> 0.35: el portal se enciende. Antes de 0.18 queda apagado
+			/* 0.12 -> 0.26: el portal se enciende. Antes de 0.12 queda apagado
 			 * (opacity 0, escala 0); el "encendido" pleno usa la escala de
-			 * data-open, no la escala 1 nativa de los paths. */
-			const t_portal = easeOut(self.normalizar(p, 0.18, 0.35))
+			 * data-open, no la escala 1 nativa de los paths. Recorrido largo
+			 * (grupo 336, prompt 02, recorrido_vh 320): tabla de tramos
+			 * redistribuida entera para que los ~15 eventos de esta coreografía
+			 * tengan lugar donde ocurrir -- antes vivían en 60vh de pin, ahora
+			 * en 220vh. */
+			const t_portal = easeOut(self.normalizar(p, 0.12, 0.26))
 			if (self.$refs.portal_luz) {
 				self.$refs.portal_luz.style.opacity = String(t_portal)
 				self.$refs.portal_luz.style.transform =
 					'scale(' + self.portal_abierto.sx * t_portal + ', ' + self.portal_abierto.sy * t_portal + ')'
 			}
 
-			/* 0.35 -> 0.70: los seis del caos, succionados de a uno, escalonados.
-			 * 0.55 -> 0.85: sus seis gemelos, armados del otro lado -- mismo
-			 * índice N, ventanas que se solapan a propósito con las del caos
-			 * para que el emparejamiento se note (criterio de éxito 3). */
-			const CAOS_INICIO = 0.35
-			const CAOS_DURACION = 0.16
-			const CAOS_PASO = (0.7 - CAOS_DURACION - CAOS_INICIO) / (INDICES.length - 1)
-			const ORDEN_INICIO = 0.55
+			/* 0.26 -> 0.62: los seis del caos, succionados de a uno, escalonados
+			 * ~0.06 de progreso entre uno y otro (duración = paso: los seis llenan
+			 * la ventana exacta, sin solapar entre sí -- "succión" rápida y seca).
+			 * 0.46 -> 0.78: sus seis gemelos, armados del otro lado -- mismo
+			 * índice N, ventana más lenta (duración 0.16) y con más solape entre
+			 * consecutivos ("se arman", asentamiento) que se superpone a propósito
+			 * con la de la succión para que el emparejamiento se note (criterio de
+			 * éxito 3), pero desfasada en el tiempo (arranca en 0.46, la succión
+			 * ya arrancó en 0.26). */
+			const CAOS_INICIO = 0.26
+			const CAOS_DURACION = 0.06
+			const CAOS_PASO = (0.62 - CAOS_DURACION - CAOS_INICIO) / (INDICES.length - 1)
+			const ORDEN_INICIO = 0.46
 			const ORDEN_DURACION = 0.16
-			const ORDEN_PASO = (0.85 - ORDEN_DURACION - ORDEN_INICIO) / (INDICES.length - 1)
+			const ORDEN_PASO = (0.78 - ORDEN_DURACION - ORDEN_INICIO) / (INDICES.length - 1)
 
 			self.pares.forEach(function (par, i) {
 				const caos_ini = CAOS_INICIO + i * CAOS_PASO
@@ -432,8 +441,11 @@ export default {
 				/* Al entrar cada uno (cola de su propia ventana) se enciende su
 				 * arco-pulso: un flash breve que recorre el anillo del portal una
 				 * vez y se apaga -- ventana propia, angosta, pegada al final de la
-				 * ventana del ícono ("al entrar cada uno"). */
-				const PULSO_DURACION = 0.06
+				 * ventana del ícono ("al entrar cada uno"). Achicada a la mitad del
+				 * CAOS_DURACION nuevo (grupo 336, prompt 02: la ventana del caos se
+				 * acortó a 0.06 para la succión escalonada) -- si midiera lo mismo
+				 * que la ventana entera dejaría de ser una "cola", ocuparía todo. */
+				const PULSO_DURACION = CAOS_DURACION / 2
 				const pulso_ini = caos_ini + CAOS_DURACION - PULSO_DURACION
 				const u_pulso = self.normalizar(p, pulso_ini, pulso_ini + PULSO_DURACION)
 				if (par.pulso) {
@@ -465,29 +477,35 @@ export default {
 				}
 			})
 
-			/* 0.85 -> 1: el arco se despega y crece a 1.87 (atado al textLength
-			 * del nombre -- no tocar sin recalcular), el panorama entero
-			 * retrocede y se atenúa, y el nombre aparece sobre el anillo ya
-			 * cerrado. */
-			const k = easeOut(self.normalizar(p, 0.85, 1))
+			/* 0.78 -> 0.93: el arco se despega y crece a 1.87 (atado al textLength
+			 * del nombre -- no tocar sin recalcular), el panorama entero retrocede
+			 * y se atenúa. 0.88 -> 0.96: el nombre aparece sobre el anillo, tramo
+			 * propio que arranca antes de que el arco termine de cerrarse (se
+			 * solapan a propósito) y sigue un poco después. 0.93 -> 1: recién ahí
+			 * entra el panel del cierre -- criterio duro: el arco tiene que estar
+			 * cerrado del todo (k_arco llega a 1 en 0.93) antes de que el panel
+			 * empiece a subir (k_panel arranca en 0 en ese mismo punto). */
+			const k_arco = easeOut(self.normalizar(p, 0.78, 0.93))
+			const k_nombre = easeOut(self.normalizar(p, 0.88, 0.96))
+			const k_panel = easeOut(self.normalizar(p, 0.93, 1))
 
 			if (self.$refs.arco_envolvente) {
-				self.$refs.arco_envolvente.style.transform = 'scale(' + lerp(1, 1.87, k) + ')'
+				self.$refs.arco_envolvente.style.transform = 'scale(' + lerp(1, 1.87, k_arco) + ')'
 			}
 			if (self.$refs.panorama) {
-				self.$refs.panorama.style.transform = 'scale(' + lerp(1, 0.86, k) + ')'
-				self.$refs.panorama.style.opacity = String(lerp(1, 0.22, k))
-				self.$refs.panorama.style.filter = k > 0 ? 'saturate(' + lerp(1, 0.65, k) + ')' : 'none'
+				self.$refs.panorama.style.transform = 'scale(' + lerp(1, 0.86, k_arco) + ')'
+				self.$refs.panorama.style.opacity = String(lerp(1, 0.22, k_arco))
+				self.$refs.panorama.style.filter = k_arco > 0 ? 'saturate(' + lerp(1, 0.65, k_arco) + ')' : 'none'
 			}
 			if (self.$refs.nombre_final) {
-				self.$refs.nombre_final.style.opacity = String(k)
+				self.$refs.nombre_final.style.opacity = String(k_nombre)
 			}
 			if (self.$refs.panel_cierre_wrap) {
-				self.$refs.panel_cierre_wrap.style.transform = 'translateY(' + (1 - k) * 100 + '%)'
-				self.$refs.panel_cierre_wrap.style.opacity = String(k)
+				self.$refs.panel_cierre_wrap.style.transform = 'translateY(' + (1 - k_panel) * 100 + '%)'
+				self.$refs.panel_cierre_wrap.style.opacity = String(k_panel)
 			}
 
-			if (k > 0 && !self.cierre_visible_emitido) {
+			if (k_panel > 0 && !self.cierre_visible_emitido) {
 				self.cierre_visible_emitido = true
 				self.$emit('cierre-visible')
 			}
@@ -516,12 +534,18 @@ export default {
 	overflow: hidden;
 }
 
-/* viewBox -24 -12 1048 586 (~1.79:1, mucho más ancho que alto) -- muy
-   distinto del SVG cuadrado de la escena vieja, así que la regla de tamaño
-   es nueva (no una reutilización de .demo-interludio__svg). */
+/* viewBox -24 -12 1048 586 (~1.79:1, mucho más ancho que alto). Full-bleed real
+   (grupo 336, prompt 02): width/height 100% del contenedor -- .demo-interludio ya
+   recibe height:100% por la excepción full-bleed de FondoSeccionSticky.vue para la
+   variante "interludio", pero esa excepción solo alcanza al HIJO DIRECTO del
+   contenido (.demo-interludio), no al SVG que vive un nivel más adentro. Antes el
+   SVG se acotaba a 94vw/1040px con height:auto -- mucho más chico que la ventana
+   disponible, la escena quedaba como un círculo chico en el centro. preserveAspectRatio
+   "xMidYMid meet" (en el <svg>, sin recortar) hace que en pantallas más "cuadradas"
+   que el viewBox sobre alto en vez de recortar ninguna etiqueta. */
 .demo-portal__svg {
-	width: min(94vw, 1040px);
-	height: auto;
+	width: 100%;
+	height: 100%;
 }
 
 /* #panorama, #nucleo-halo y #nucleo-anillo (transform-box/transform-origin
