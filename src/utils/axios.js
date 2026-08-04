@@ -107,15 +107,46 @@ export function admin_api_origin() {
   return base.replace(/\/api\/admin\/?$/, '')
 }
 
+/*
+ * Orden de precedencia (4/8/2026 — caso: adjuntar una foto desde el iPhone fallaba siempre con
+ * el mismo mensaje genérico, sin importar la causa real, porque acá abajo se descartaba el
+ * status HTTP disponible):
+ *   1. Sin respuesta: se distingue timeout de "no se pudo contactar" — son causas y soluciones
+ *      distintas para quien lo lee.
+ *   2. 413: se atiende ANTES de intentar leer el cuerpo, porque en un 413 el cuerpo es HTML del
+ *      servidor web (o está vacío) — leerlo como JSON siempre fallaba y caía al fallback de
+ *      abajo, borrando la única información real que había (el status).
+ *   3. Mensajes de validación de Laravel (422) y el resto de la lógica ya existente: se
+ *      mantienen intactos y con prioridad sobre los dos casos nuevos de abajo, porque son el
+ *      detalle más específico que puede mandar el backend.
+ *   4. 5xx sin `message` utilizable en el cuerpo: se muestra el status real para que se pueda
+ *      buscar en los logs, en vez de caer al fallback genérico.
+ */
 export function resolve_error_message(error) {
-  /** Mensaje por defecto para fallas sin detalle de backend. */
+  /** Mensaje por defecto para fallas sin detalle de backend ni status reconocido. */
   const fallback_message = 'Ocurrió un error al comunicarse con el servidor.'
-  if (!error || !error.response || !error.response.data) {
-    return fallback_message
+
+  if (!error || !error.response) {
+    const is_timeout = !!(
+      error &&
+      (error.code === 'ECONNABORTED' ||
+        (error.message && error.message.toLowerCase().indexOf('timeout') !== -1))
+    )
+    if (is_timeout) {
+      return 'La conexión tardó demasiado. Puede ser una señal débil o un archivo muy pesado.'
+    }
+    return 'No se pudo contactar al servidor. Revisá la conexión.'
+  }
+
+  /** Status HTTP de la respuesta; disponible aunque el cuerpo no sea JSON utilizable. */
+  const status_code = error.response.status
+
+  if (status_code === 413) {
+    return 'El archivo es demasiado grande para el servidor. Probá con uno más chico.'
   }
 
   /** Payload de error devuelto por Laravel/admin-api. */
-  const response_data = error.response.data
+  const response_data = error.response.data || {}
 
   /** Mensajes por campo (422); deben mostrarse antes que el message genérico de Laravel. */
   const validation_messages = extract_laravel_validation_messages(response_data.errors)
@@ -133,6 +164,10 @@ export function resolve_error_message(error) {
   }
   if (typeof response_data.message === 'string' && response_data.message.trim() !== '') {
     return response_data.message
+  }
+
+  if (status_code >= 500) {
+    return 'El servidor tuvo un error (código ' + status_code + '). Volvé a intentar en un momento.'
   }
 
   return fallback_message
