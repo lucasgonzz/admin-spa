@@ -205,6 +205,7 @@
       <div class="d-flex align-items-end gap-2">
 
         <textarea
+          v-if="!audio_recording"
           v-model="mensaje_directo"
           class="message-input"
           rows="1"
@@ -212,24 +213,36 @@
           :disabled="enviando_directo"
           @input="on_input_resize"
         />
+        <!-- Mientras graba: franja compacta con el punto que late, el cronómetro y Cancelar,
+             en lugar del textarea -- mismo tratamiento que LeadConversationView.vue. -->
+        <div v-else class="audio-recording-strip d-flex align-items-center gap-2">
+          <span class="audio-recording-dot audio-recording-pulse" aria-hidden="true"></span>
+          <span class="text-danger small">{{ audio_elapsed_label }}</span>
+          <button type="button" class="btn btn-sm btn-link text-muted ms-auto" @click="cancel_audio_recording">
+            Cancelar
+          </button>
+        </div>
 
         <!-- Botón mic cuando no hay texto: grabación de audio -->
         <button
           v-if="!has_mensaje_directo"
           type="button"
           class="icon-btn flex-shrink-0"
-          :class="recording_audio ? 'text-danger audio-recording-pulse' : 'text-muted'"
+          :class="audio_recording ? 'text-danger audio-recording-pulse' : 'text-muted'"
           :disabled="enviando_audio"
-          :title="recording_audio ? 'Grabando. Tocá para detener y enviar' : 'Mantené pulsado o tocá para grabar audio'"
-          @click="on_mic_click"
-          @mousedown="on_mic_mousedown"
-          @mouseup="on_mic_mouseup_or_leave"
-          @mouseleave="on_mic_mouseup_or_leave"
-          @touchstart.prevent="on_mic_touchstart"
-          @touchend.prevent="on_mic_touchend"
+          :title="audio_recording
+            ? 'Grabando ' + audio_elapsed_label + '. Tocá para enviar'
+            : 'Tocá para grabar, o mantené pulsado para grabar mientras apretás'"
+          @click="on_audio_click"
+          @mousedown="on_audio_mousedown"
+          @mouseup="on_audio_mouseup_or_leave"
+          @mouseleave="on_audio_mouseup_or_leave"
+          @touchstart.prevent="on_audio_touchstart"
+          @touchend.prevent="on_audio_touchend"
+          @touchcancel.prevent="on_audio_touchcancel"
         >
           <span v-if="enviando_audio" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-          <i v-else class="bi" :class="recording_audio ? 'bi-stop-circle-fill' : 'bi-mic'" aria-hidden="true" />
+          <i v-else class="bi" :class="audio_recording ? 'bi-stop-circle-fill' : 'bi-mic'" aria-hidden="true" />
         </button>
 
         <!-- Botón enviar cuando hay texto -->
@@ -288,6 +301,7 @@
 import api from '@/utils/axios'
 import lead_conversation_date_dividers from '@/mixins/lead_conversation_date_dividers'
 import conversation_scroll_behavior from '@/mixins/conversation_scroll_behavior'
+import audio_recorder_button from '@/mixins/audio_recorder_button'
 import '@/styles/whatsapp-conversation-wallpaper.css'
 import '@/styles/conversation-placeholder-states.css'
 import '@/styles/whatsapp-date-divider.css'
@@ -313,7 +327,7 @@ import '@/styles/whatsapp-date-divider.css'
 export default {
   name: 'ImplementationConversationView',
 
-  mixins: [lead_conversation_date_dividers, conversation_scroll_behavior],
+  mixins: [lead_conversation_date_dividers, conversation_scroll_behavior, audio_recorder_button],
 
   props: {
     /**
@@ -367,20 +381,8 @@ export default {
        */
       is_dev: import.meta.env.DEV,
 
-      /** true mientras el micrófono está grabando. */
-      recording_audio: false,
-
-      /** Instancia MediaRecorder activa (null cuando no graba). */
-      audio_recorder: null,
-
-      /** Stream del micrófono activo (null cuando no graba). */
-      audio_stream: null,
-
       /** true mientras se envía el audio grabado al backend. */
       enviando_audio: false,
-
-      /** true cuando el usuario mantiene pulsado el botón mic (modo hold). */
-      audio_hold_mode: false,
 
       /**
        * Referencia al canal Pusher suscrito (admin-implementations).
@@ -553,15 +555,9 @@ export default {
       this.export_conversation_feedback_timer = null
     }
 
-    /* Liberar el micrófono si la vista se destruye durante una grabación. */
-    if (this.recording_audio) {
-      try {
-        if (this.audio_recorder) {
-          this.audio_recorder.stop()
-        }
-      } catch (_) {}
-    }
-    this.release_audio_stream()
+    /* Liberar el micrófono si la vista se destruye durante una grabación: lo
+       hace el beforeUnmount del mixin audio_recorder_button (en Vue 3 corren
+       los dos, el del mixin y el del componente). */
   },
 
   methods: {
@@ -1039,166 +1035,36 @@ export default {
     // -------------------------------------------------------------------------
 
     /**
-     * Click simple en el micrófono:
-     * - Si no está grabando → inicia grabación.
-     * - Si está grabando → detiene y envía.
-     * Si el usuario usó hold (mousedown + mouseup), el click se ignora porque
-     * on_mic_mouseup_or_leave ya manejó el stop.
+     * Hook del contrato de audio_recorder_button: llega con el Blob 'audio/ogg' ya listo.
+     * El envío al backend sigue siendo de esta vista, vía send_pending_audio().
      *
+     * @param {Blob} blob
      * @returns {void}
      */
-    on_mic_click() {
-      if (this.audio_hold_mode) {
-        this.audio_hold_mode = false
-        return
-      }
-      if (this.recording_audio) {
-        this.stop_and_send_audio()
-      } else {
-        this.start_audio_recording()
-      }
+    on_audio_blob(blob) {
+      this._pending_audio_blob = blob
+      this._pending_audio_mime = 'audio/ogg'
+      this.send_pending_audio()
     },
 
     /**
-     * MouseDown: inicia el timer de hold y eventualmente arranca la grabación.
+     * Hook del contrato de audio_recorder_button: no arrancar a grabar si ya hay un audio
+     * enviándose.
      *
-     * @returns {void}
+     * @returns {boolean}
      */
-    on_mic_mousedown() {
-      const self = this
-      this._mic_hold_timer = setTimeout(function () {
-        self.audio_hold_mode = true
-        self.start_audio_recording()
-      }, 200)
+    can_record_audio() {
+      return !this.enviando_audio
     },
 
     /**
-     * MouseUp o MouseLeave: si estaba en modo hold y grabando, detiene y envía.
+     * Hook del contrato de audio_recorder_button: mismo comportamiento que tenía antes.
      *
+     * @param {string} message
      * @returns {void}
      */
-    on_mic_mouseup_or_leave() {
-      if (this._mic_hold_timer) {
-        clearTimeout(this._mic_hold_timer)
-        this._mic_hold_timer = null
-      }
-      if (this.audio_hold_mode && this.recording_audio) {
-        this.audio_hold_mode = false
-        this.stop_and_send_audio()
-      }
-    },
-
-    /**
-     * TouchStart: inicia el hold en dispositivos táctiles.
-     *
-     * @param {TouchEvent} event
-     * @returns {void}
-     */
-    on_mic_touchstart(event) {
-      event.preventDefault()
-      this.audio_hold_mode = true
-      this.start_audio_recording()
-    },
-
-    /**
-     * TouchEnd: detiene la grabación en modo hold táctil.
-     *
-     * @param {TouchEvent} event
-     * @returns {void}
-     */
-    on_mic_touchend(event) {
-      event.preventDefault()
-      if (this.audio_hold_mode && this.recording_audio) {
-        this.audio_hold_mode = false
-        this.stop_and_send_audio()
-      }
-    },
-
-    /**
-     * Solicita acceso al micrófono y empieza a grabar con MediaRecorder.
-     * Al finalizar, el onstop del recorder llama a send_pending_audio.
-     *
-     * @returns {void}
-     */
-    start_audio_recording() {
-      const self = this
-
-      if (this.recording_audio || this.enviando_audio) {
-        return
-      }
-
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        alert('Tu navegador no soporta grabación de audio.')
-        return
-      }
-
-      navigator.mediaDevices
-        .getUserMedia({ audio: true })
-        .then(function (stream) {
-          self.audio_stream = stream
-          const recorder = new MediaRecorder(stream)
-          self.audio_recorder = recorder
-
-          /** Fragmentos de audio acumulados durante la grabación. */
-          const chunks = []
-
-          recorder.ondataavailable = function (e) {
-            if (e.data && e.data.size > 0) {
-              chunks.push(e.data)
-            }
-          }
-
-          recorder.onstop = function () {
-            const mime = recorder.mimeType || 'audio/webm'
-            const blob = new Blob(chunks, { type: mime })
-            self._pending_audio_blob = blob
-            self._pending_audio_mime = mime
-            self.recording_audio = false
-            self.release_audio_stream()
-            self.send_pending_audio()
-          }
-
-          recorder.start()
-          self.recording_audio = true
-        })
-        .catch(function (err) {
-          console.error('Error al acceder al micrófono', err)
-          alert('No se pudo acceder al micrófono. Verificá los permisos del navegador.')
-          self.recording_audio = false
-        })
-    },
-
-    /**
-     * Detiene la grabación activa; el envío se dispara desde recorder.onstop.
-     *
-     * @returns {void}
-     */
-    stop_and_send_audio() {
-      if (!this.recording_audio || !this.audio_recorder) {
-        return
-      }
-      try {
-        this.audio_recorder.stop()
-      } catch (err) {
-        console.error('Error al detener el MediaRecorder', err)
-        this.recording_audio = false
-        this.release_audio_stream()
-      }
-    },
-
-    /**
-     * Libera el stream del micrófono (apaga el indicador de grabación del SO).
-     *
-     * @returns {void}
-     */
-    release_audio_stream() {
-      if (this.audio_stream) {
-        this.audio_stream.getTracks().forEach(function (t) {
-          t.stop()
-        })
-        this.audio_stream = null
-      }
-      this.audio_recorder = null
+    on_audio_error(message) {
+      alert(message)
     },
 
     /**
@@ -1212,7 +1078,7 @@ export default {
     send_pending_audio() {
       const self = this
       const blob = this._pending_audio_blob
-      const mime = this._pending_audio_mime || 'audio/webm'
+      const mime = this._pending_audio_mime || 'audio/ogg'
 
       if (!blob || !this.implementation || !this.implementation.id || this.enviando_audio) {
         return
@@ -1221,8 +1087,10 @@ export default {
       this._pending_audio_blob = null
       this._pending_audio_mime = null
 
-      /** Extensión del archivo según el tipo MIME del MediaRecorder. */
-      let ext = 'webm'
+      /** Extensión del archivo según el tipo MIME -- siempre 'ogg' en la práctica, ya que
+       *  lo que sale del OggOpusRecorder es siempre un .ogg válido byte por byte, sin
+       *  importar el navegador (ver src/utils/oggOpusRecorder.js). */
+      let ext = 'ogg'
       if (mime.indexOf('ogg') !== -1) ext = 'ogg'
       else if (mime.indexOf('mp4') !== -1) ext = 'mp4'
 
@@ -1378,6 +1246,22 @@ export default {
 }
 .audio-recording-pulse {
   animation: audio-pulse 1s ease-in-out infinite;
+}
+
+/* Franja que reemplaza al textarea mientras se graba un audio (grupo 323, prompt 02,
+   copiada tal cual de LeadConversationView.vue -- no existía en esta vista). */
+.audio-recording-strip {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.375rem 0.1rem;
+}
+
+.audio-recording-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--bs-danger);
 }
 
 /* Burbuja de mensaje genérica — misma base que MessageBubble de leads. */
