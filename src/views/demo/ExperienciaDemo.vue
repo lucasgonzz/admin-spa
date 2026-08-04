@@ -43,31 +43,40 @@
            introducción. armando_demo la controla este contenedor. -->
       <confirmacion-armando-demo :visible="armando_demo" :turno="turno" />
 
-      <!-- Video de introducción: pieza "intro" del catálogo. A diferencia de
-           los clips del scroll, va con controles y sonido, sin autoplay (son
-           5 minutos y el lead lo mira, no lo ojea). Sin URL cargada todavía
-           (se graba post-merge), PiezaMultimedia muestra el placeholder de
-           marca con las proporciones reales dentro del mismo marco. ref
-           video_intro: destino del scroll automático al cerrarse la
-           confirmación de arriba. -->
-      <section ref="video_intro" class="demo-experiencia-page__video-intro">
-        <marco-dispositivo tipo="computadora">
-          <pieza-multimedia
-            slot_id="intro"
-            titulo="Video de introducción (Lucas a cámara, 5:15)"
-            :media="media"
-            :controles="true"
-          />
-        </marco-dispositivo>
-      </section>
+      <!-- Video de introducción + botón de acceso: pantalla POSTERIOR a la
+           confirmación (grupo 325, prompt 02) -- antes estaban siempre
+           renderizados, justo debajo del formulario, y el lead los veía
+           apenas terminaba el scroll de dolor, sin haber confirmado nada.
+           v-if (no v-show): con v-show el elemento seguiría en el
+           documento ocupando lugar y, sobre todo, PiezaMultimedia seguiría
+           montada y podría precargar el video antes de tiempo. -->
+      <template v-if="intro_desbloqueada">
+        <!-- Video de introducción: pieza "intro" del catálogo. A diferencia de
+             los clips del scroll, va con controles y sonido, sin autoplay (son
+             5 minutos y el lead lo mira, no lo ojea). Sin URL cargada todavía
+             (se graba post-merge), PiezaMultimedia muestra el placeholder de
+             marca con las proporciones reales dentro del mismo marco. ref
+             video_intro: destino del scroll automático al cerrarse la
+             confirmación de arriba. -->
+        <section ref="video_intro" class="demo-experiencia-page__video-intro">
+          <marco-dispositivo tipo="computadora">
+            <pieza-multimedia
+              slot_id="intro"
+              titulo="Video de introducción (Lucas a cámara, 5:15)"
+              :media="media"
+              :controles="true"
+            />
+          </marco-dispositivo>
+        </section>
 
-      <!-- Botón de acceso: el estado (sin_turno/antes/activo/vencido) lo
-           decide siempre el backend (turno.estado); este componente solo
-           agrega la cuenta regresiva visual, dispara el ingreso real
-           (prompt 01 de este grupo) y pide refrescar el payload
-           (cargar_experiencia) cuando esa cuenta llega a cero o el estado
-           quedó viejo. -->
-      <boton-acceso :turno="turno" :refrescar="cargar_experiencia" :ingresar="ingresar" />
+        <!-- Botón de acceso: el estado (sin_turno/antes/activo/vencido) lo
+             decide siempre el backend (turno.estado); este componente solo
+             agrega la cuenta regresiva visual, dispara el ingreso real
+             (prompt 01 de este grupo) y pide refrescar el payload
+             (cargar_experiencia) cuando esa cuenta llega a cero o el estado
+             quedó viejo. -->
+        <boton-acceso :turno="turno" :refrescar="cargar_experiencia" :ingresar="ingresar" />
+      </template>
     </template>
   </div>
 </template>
@@ -133,12 +142,40 @@ export default {
        * apaga sola mostrar_confirmacion_armando_demo() a los ~5s.
        */
       armando_demo: false,
+      /**
+       * true una vez que el lead confirmó el formulario y terminó la
+       * animación de "armando tu demo" -- o ya lo había hecho en una visita
+       * anterior (ver cargar_experiencia). Antes de eso, el video de
+       * introducción y el botón de acceso no existen en el DOM: el video es
+       * una pantalla posterior, no un bloque más del scroll de dolor
+       * (grupo 325, prompt 02).
+       */
+      intro_desbloqueada: false,
+      /**
+       * Handle del setTimeout de mostrar_confirmacion_armando_demo(), para
+       * poder cancelarlo si el lead navega y este componente se destruye a
+       * mitad de los 5s (si no, el callback correría igual sobre un
+       * componente ya desmontado).
+       */
+      confirmacion_timeout: null,
     }
   },
 
   created() {
     /* Carga inicial: el uuid identifica el turno/lead en la URL pública. */
     this.cargar_experiencia()
+  },
+
+  beforeUnmount() {
+    /* Si el lead navega a mitad de la animación de "armando tu demo", el
+       body no puede quedar con el scroll bloqueado para siempre (grupo 325,
+       prompt 02). Restaurar el overflow acá es seguro incluso si nunca se
+       llegó a bloquear: asignar '' a una propiedad de estilo que ya estaba
+       en '' no hace nada. */
+    if (this.confirmacion_timeout) {
+      clearTimeout(this.confirmacion_timeout)
+    }
+    document.body.style.overflow = ''
   },
 
   methods: {
@@ -165,6 +202,12 @@ export default {
           self.turno = data.turno || {}
           self.formulario = data.formulario || {}
           self.media = data.media || {}
+          // El backend ya resuelve si el lead completó el formulario en una
+          // visita anterior (Lead::demo_form_completado_at, expuesto acá
+          // como formulario.completado) -- si es así, no tiene sentido
+          // hacerlo pasar de nuevo por la confirmación para ver el video
+          // (grupo 325, prompt 02, criterio de éxito 5).
+          self.intro_desbloqueada = !!self.formulario.completado
         })
         .catch(function () {
           self.invalido = true
@@ -229,15 +272,32 @@ export default {
      * oculta y scrollea suave hasta el video de introducción -- sin que el
      * lead tenga que hacer nada (grupo 322, prompt 03, criterios 1-3).
      *
+     * Bloquea el scroll del documento mientras dura la confirmación (grupo
+     * 325, prompt 02): la pantalla es una capa fija a pantalla completa
+     * (ver <style scoped> de ConfirmacionArmandoDemo.vue), así que el fondo
+     * no puede seguir scrolleando detrás. Se restaura acá al vencer el
+     * timeout, y también en beforeUnmount si el lead navega antes.
+     *
+     * Orden al vencer (criterio de éxito 3): intro_desbloqueada primero,
+     * recién después se apaga armando_demo y se libera el scroll, y solo
+     * tras el $nextTick() (para que el v-if del video ya haya renderizado
+     * la sección) se dispara el scrollIntoView -- llamarlo antes dejaría
+     * $refs.video_intro en undefined, porque con v-if la sección no existe
+     * en el DOM hasta que Vue re-renderiza.
+     *
      * @returns {void}
      */
     mostrar_confirmacion_armando_demo() {
       const self = this
 
       self.armando_demo = true
+      document.body.style.overflow = 'hidden'
 
-      setTimeout(function () {
+      self.confirmacion_timeout = setTimeout(function () {
+        self.confirmacion_timeout = null
+        self.intro_desbloqueada = true
         self.armando_demo = false
+        document.body.style.overflow = ''
 
         self.$nextTick(function () {
           if (self.$refs.video_intro) {

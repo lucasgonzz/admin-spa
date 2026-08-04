@@ -203,6 +203,21 @@ export default {
 </script>
 
 <style scoped>
+/* Pantalla completa mientras está visible (grupo 325, prompt 02): antes
+   quedaba como un bloque más en el flujo normal, entre el formulario y el
+   video, así que el lead veía el fondo scrolleando detrás. !important en
+   position es necesario: este selector compila con su propio atributo
+   data-v-* (misma especificidad, 0-2-0, que .escena-marca[data-v-*] del
+   propio EscenaMarca.vue, que fija position: relative en su scoped style)
+   -- sin !important, cuál de los dos gana dependería del orden de carga
+   entre los dos bundles, la misma clase de problema que ya resuelve con
+   !important el fallback de prefers-reduced-motion en demo-experiencia.scss. */
+.demo-confirmacion-armando {
+	position: fixed !important;
+	inset: 0;
+	z-index: 60;
+}
+
 .demo-confirmacion-armando__texto {
 	text-align: center;
 	display: flex;
