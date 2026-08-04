@@ -1,10 +1,15 @@
 <template>
   <section class="demo-scroll-dolor">
-    <!-- Apertura: escena cinematográfica animada por scroll (grupo 325, prompt
-         03, reemplaza al prompt 06 del grupo 322 -- descartado en su momento
-         porque los SVG todavía no existían). Arma su propio FondoSeccionSticky
-         adentro, igual que InterludioPortal -- no lleva uno acá afuera. -->
-    <apertura-cinematografica :titulo="contenido.apertura.titulo" :subtitulo="contenido.apertura.subtitulo" />
+    <!-- Apertura: revertida a solo titular + subtítulo (grupo 336, correctivo 3;
+         decisión de Lucas tras ver la escena cinematográfica implementada -- ver nota
+         de reversión en demo_experiencia.md §3.18-bis). Ya no arma su propia
+         FondoSeccionSticky: la de acá abajo hace todo el trabajo de pin/fondo. -->
+    <fondo-seccion-sticky variante="apertura">
+      <header class="demo-bloque demo-bloque--apertura demo-scroll-dolor__apertura">
+        <h1 class="demo-scroll-dolor__apertura-titulo">{{ contenido.apertura.titulo }}</h1>
+        <p class="demo-scroll-dolor__apertura-subtitulo">{{ contenido.apertura.subtitulo }}</p>
+      </header>
+    </fondo-seccion-sticky>
 
     <!-- Bloques 1 a 5: párrafo(s) de dolor + línea de alivio resaltada + pieza multimedia -->
     <fondo-seccion-sticky
@@ -110,7 +115,6 @@ import MarcoDispositivo from './MarcoDispositivo.vue'
 import PiezaMultimedia from './PiezaMultimedia.vue'
 import FondoSeccionSticky from './FondoSeccionSticky.vue'
 import InterludioPortal from './InterludioPortal.vue'
-import AperturaCinematografica from './AperturaCinematografica.vue'
 
 /**
  * Copy completo del scroll de dolor, transcripto palabra por palabra desde
@@ -295,7 +299,6 @@ export default {
     PiezaMultimedia,
     FondoSeccionSticky,
     InterludioPortal,
-    AperturaCinematografica,
   },
 
   props: {
@@ -478,14 +481,83 @@ export default {
 </script>
 
 <style scoped>
+/* CORRECTIVO (grupo 336): el gap de acá abajo es la causa real de la franja blanca
+   entre secciones -- viene del grupo 300, cuando los hijos directos eran los bloques
+   de texto y el aire entre ellos era deseable. Desde el grupo 322 los hijos son
+   <section class="demo-fondo-seccion"> pinneadas con su propio fondo generado DENTRO
+   del pin (ver FondoSeccionSticky.vue): cualquier gap acá queda sin fondo detrás.
+   NO restaurar este gap pensando que es un descuido: el aire entre bloques ahora lo
+   da el padding interno de cada sección, no la separación entre secciones. */
 .demo-scroll-dolor {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 0 20px;
+  /* max-width y padding también salen: cada sección ya limita su propio contenido a
+     1080px (.demo-fondo-seccion__contenido > * en demo-experiencia.scss). Si quedan
+     acá, el margin-left: calc(50% - 50vw) del breakout full-bleed de cada pin calcula
+     contra una caja angosta y el fondo queda corrido. */
+  max-width: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  /* Mucho aire entre bloques: "poco texto, minimalista, mucho aire" (marca/identidad.md) */
-  gap: clamp(96px, 14vw, 160px);
+  gap: 0;
+}
+
+/* Apertura: full-bleed real, la da la excepción de FondoSeccionSticky.vue para la
+   variante "apertura" (__contenido > * a height:100%, sin max-width ni padding) --
+   acá solo hace falta centrar titular y subtítulo adentro de esa caja. */
+.demo-scroll-dolor__apertura {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  gap: 16px;
+}
+
+/* Animación de entrada de la apertura (grupo 336, revierte la escena cinematográfica
+   del grupo 325): corre UNA sola vez al cargar, no atada al scroll -- la apertura ya
+   está en pantalla cuando el lead llega. CSS puro, sin librerías: es lo primero que
+   carga la página. */
+@keyframes demo-apertura-entrada {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+}
+
+.demo-scroll-dolor__apertura-titulo {
+  font-size: clamp(2rem, 5vw, 3.25rem);
+  font-weight: 700;
+  line-height: 1.15;
+  /* Tracking negativo en texto display grande (§15 de apple-design/SKILL.md). */
+  letter-spacing: -0.02em;
+  max-width: 780px;
+  margin: 0;
+  /* "both": sin esto el subtítulo (con delay) parpadea visible antes de tiempo. */
+  animation: demo-apertura-entrada 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.demo-scroll-dolor__apertura-subtitulo {
+  font-size: clamp(1.1rem, 2.4vw, 1.4rem);
+  color: var(--demo-color-texto-suave);
+  margin: 0;
+  max-width: 620px;
+  animation: demo-apertura-entrada 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.22s both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .demo-scroll-dolor__apertura-titulo,
+  .demo-scroll-dolor__apertura-subtitulo {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
 }
 
 /* Bloques 1-6: texto + pieza, en columnas en desktop, apiladas en móvil */
@@ -586,12 +658,18 @@ export default {
   color: var(--demo-color-texto-suave);
 }
 
-/* Puente al formulario: transición sobria, el formulario en sí va justo debajo (prompt 05) */
+/* Puente al formulario: transición sobria, el formulario en sí va justo debajo (prompt 05).
+   Único hijo directo de .demo-scroll-dolor que NO vive dentro de un FondoSeccionSticky (los
+   demás ya limitan su propio ancho vía .demo-fondo-seccion__contenido > *) -- desde que el
+   padre perdió max-width/padding (correctivo del gap, grupo 336) necesita su propia columna
+   legible acá, o el texto queda pegado a los bordes del viewport. */
 .demo-scroll-dolor__puente {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 20px 24px;
   text-align: center;
   font-size: clamp(1.1rem, 2vw, 1.35rem);
   color: var(--demo-color-texto);
-  padding-bottom: 24px;
 }
 
 .demo-scroll-dolor__puente p {
@@ -599,10 +677,6 @@ export default {
 }
 
 @media (max-width: 767.98px) {
-  .demo-scroll-dolor {
-    gap: 72px;
-  }
-
   .demo-scroll-dolor__bloque,
   .demo-scroll-dolor__cierre {
     grid-template-columns: 1fr;
