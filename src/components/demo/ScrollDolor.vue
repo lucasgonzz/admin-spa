@@ -1,81 +1,90 @@
 <template>
   <section class="demo-scroll-dolor">
     <!-- Apertura: sin media, entra en frío -- nunca se anima (ver demo-bloque--apertura
-         en demo-experiencia.scss). El gancho ya está cuando el lead llega a la página. -->
-    <header class="demo-bloque demo-bloque--apertura demo-scroll-dolor__apertura">
-      <h1 class="demo-scroll-dolor__apertura-titulo">{{ contenido.apertura.titulo }}</h1>
-      <p class="demo-scroll-dolor__apertura-subtitulo">{{ contenido.apertura.subtitulo }}</p>
-    </header>
+         en demo-experiencia.scss). El gancho ya está cuando el lead llega a la página.
+         La escena animada por scroll que sí tiene esta sección es del prompt 06. -->
+    <fondo-seccion-sticky variante="apertura">
+      <header class="demo-bloque demo-bloque--apertura demo-scroll-dolor__apertura">
+        <h1 class="demo-scroll-dolor__apertura-titulo">{{ contenido.apertura.titulo }}</h1>
+        <p class="demo-scroll-dolor__apertura-subtitulo">{{ contenido.apertura.subtitulo }}</p>
+      </header>
+    </fondo-seccion-sticky>
 
     <!-- Bloques 1 a 5: párrafo(s) de dolor + línea de alivio resaltada + pieza multimedia -->
-    <article
-      v-for="bloque in contenido.bloques"
+    <fondo-seccion-sticky
+      v-for="(bloque, indice) in contenido.bloques"
       :key="bloque.id"
-      :ref="registrar_bloque_ref"
-      class="demo-bloque demo-scroll-dolor__bloque"
-      :data-bloque-id="bloque.id"
+      :variante="'bloque-' + (indice + 1)"
     >
-      <div class="demo-scroll-dolor__bloque-texto">
-        <p v-for="(linea, indice) in bloque.texto" :key="indice" class="demo-scroll-dolor__parrafo">
-          {{ linea }}
-        </p>
-        <p class="demo-scroll-dolor__resaltado">{{ bloque.resaltado }}</p>
-      </div>
+      <article
+        :ref="registrar_bloque_ref"
+        class="demo-bloque demo-scroll-dolor__bloque"
+        :data-bloque-id="bloque.id"
+      >
+        <div class="demo-scroll-dolor__bloque-texto">
+          <p v-for="(linea, indice2) in bloque.texto" :key="indice2" class="demo-scroll-dolor__parrafo">
+            {{ linea }}
+          </p>
+          <p class="demo-scroll-dolor__resaltado">{{ bloque.resaltado }}</p>
+        </div>
 
-      <div class="demo-scroll-dolor__bloque-pieza">
-        <marco-dispositivo :tipo="bloque.marco">
-          <!-- Único bloque con marco combinado (scroll.2): misma pieza en las dos pantallas -->
-          <template v-if="bloque.marco === 'computadora+telefono'" #computadora>
-            <pieza-multimedia :slot_id="bloque.id" :titulo="bloque.titulo_pieza" :media="media" />
-          </template>
-          <template v-if="bloque.marco === 'computadora+telefono'" #telefono>
-            <pieza-multimedia :slot_id="bloque.id" :titulo="bloque.titulo_pieza" :media="media" />
-          </template>
-          <pieza-multimedia
-            v-if="bloque.marco !== 'computadora+telefono'"
-            :slot_id="bloque.id"
-            :titulo="bloque.titulo_pieza"
-            :media="media"
-          />
-        </marco-dispositivo>
-      </div>
-    </article>
+        <div class="demo-scroll-dolor__bloque-pieza">
+          <marco-dispositivo :tipo="bloque.marco">
+            <!-- Único bloque con marco combinado (scroll.2): misma pieza en las dos pantallas -->
+            <template v-if="bloque.marco === 'computadora+telefono'" #computadora>
+              <pieza-multimedia :slot_id="bloque.id" :titulo="bloque.titulo_pieza" :media="media" />
+            </template>
+            <template v-if="bloque.marco === 'computadora+telefono'" #telefono>
+              <pieza-multimedia :slot_id="bloque.id" :titulo="bloque.titulo_pieza" :media="media" />
+            </template>
+            <pieza-multimedia
+              v-if="bloque.marco !== 'computadora+telefono'"
+              :slot_id="bloque.id"
+              :titulo="bloque.titulo_pieza"
+              :media="media"
+            />
+          </marco-dispositivo>
+        </div>
+      </article>
+    </fondo-seccion-sticky>
 
     <!-- Bloque 6: cierre / transformación. Estructura de texto distinta a los bloques
          1-5 (título(s) + hitos temporales + frase o párrafo de cierre), pero misma
          pieza multimedia con marco teléfono. -->
-    <article
-      :ref="registrar_bloque_ref"
-      class="demo-bloque demo-scroll-dolor__bloque demo-scroll-dolor__cierre"
-      :data-bloque-id="contenido.cierre.id"
-    >
-      <div class="demo-scroll-dolor__bloque-texto">
-        <h2 v-for="(linea, indice) in contenido.cierre.titulos" :key="indice" class="demo-scroll-dolor__cierre-titulo">
-          {{ linea }}
-        </h2>
+    <fondo-seccion-sticky variante="cierre">
+      <article
+        :ref="registrar_bloque_ref"
+        class="demo-bloque demo-scroll-dolor__bloque demo-scroll-dolor__cierre"
+        :data-bloque-id="contenido.cierre.id"
+      >
+        <div class="demo-scroll-dolor__bloque-texto">
+          <h2 v-for="(linea, indice) in contenido.cierre.titulos" :key="indice" class="demo-scroll-dolor__cierre-titulo">
+            {{ linea }}
+          </h2>
 
-        <ul class="demo-scroll-dolor__hitos">
-          <li v-for="(hito, indice) in contenido.cierre.hitos" :key="indice">
-            <strong>{{ hito.momento }}</strong> {{ hito.texto }}
-          </li>
-        </ul>
+          <ul class="demo-scroll-dolor__hitos">
+            <li v-for="(hito, indice) in contenido.cierre.hitos" :key="indice">
+              <strong>{{ hito.momento }}</strong> {{ hito.texto }}
+            </li>
+          </ul>
 
-        <!-- Versión dueño: frase corta de cierre -->
-        <p v-if="contenido.cierre.frase_final" class="demo-scroll-dolor__frase-final">
-          {{ contenido.cierre.frase_final }}
-        </p>
-        <!-- Versión campeón: párrafo largo ya validado por Lucas (marca/cliente_ideal.md) -->
-        <p v-if="contenido.cierre.parrafo_final" class="demo-scroll-dolor__parrafo-final">
-          {{ contenido.cierre.parrafo_final }}
-        </p>
-      </div>
+          <!-- Versión dueño: frase corta de cierre -->
+          <p v-if="contenido.cierre.frase_final" class="demo-scroll-dolor__frase-final">
+            {{ contenido.cierre.frase_final }}
+          </p>
+          <!-- Versión campeón: párrafo largo ya validado por Lucas (marca/cliente_ideal.md) -->
+          <p v-if="contenido.cierre.parrafo_final" class="demo-scroll-dolor__parrafo-final">
+            {{ contenido.cierre.parrafo_final }}
+          </p>
+        </div>
 
-      <div class="demo-scroll-dolor__bloque-pieza">
-        <marco-dispositivo :tipo="contenido.cierre.marco">
-          <pieza-multimedia :slot_id="contenido.cierre.id" :titulo="contenido.cierre.titulo_pieza" :media="media" />
-        </marco-dispositivo>
-      </div>
-    </article>
+        <div class="demo-scroll-dolor__bloque-pieza">
+          <marco-dispositivo :tipo="contenido.cierre.marco">
+            <pieza-multimedia :slot_id="contenido.cierre.id" :titulo="contenido.cierre.titulo_pieza" :media="media" />
+          </marco-dispositivo>
+        </div>
+      </article>
+    </fondo-seccion-sticky>
 
     <!-- Puente al formulario: el formulario en sí lo agrega el prompt 05 (ver
          armazón en ExperienciaDemo.vue, que renderiza esta sección justo antes) -->
@@ -88,6 +97,7 @@
 <script>
 import MarcoDispositivo from './MarcoDispositivo.vue'
 import PiezaMultimedia from './PiezaMultimedia.vue'
+import FondoSeccionSticky from './FondoSeccionSticky.vue'
 
 /**
  * Copy completo del scroll de dolor, transcripto palabra por palabra desde
@@ -270,6 +280,7 @@ export default {
   components: {
     MarcoDispositivo,
     PiezaMultimedia,
+    FondoSeccionSticky,
   },
 
   props: {
@@ -386,6 +397,7 @@ export default {
               return
             }
             entry.target.classList.add('demo-bloque--visible')
+            self.limpiar_will_change_al_terminar(entry.target)
             const bloque_id = entry.target.dataset.bloqueId
             if (bloque_id) {
               self.emitir_evento('scroll_bloque_visible', { bloque_id: bloque_id, perfil: self.perfil })
@@ -399,6 +411,31 @@ export default {
 
       self.bloque_refs.forEach(function (el) {
         self.observer.observe(el)
+      })
+    },
+
+    /**
+     * Saca will-change de los elementos que animan la entrada de un bloque apenas
+     * termina su animación (grupo 322, prompt 01): la animación real vive en
+     * .demo-scroll-dolor__bloque-texto / -pieza (bloques 1-5 y cierre) o en el propio
+     * bloque (puente, sin esa estructura interna) -- ver demo-experiencia.scss. Sin
+     * esto, will-change quedaría acumulado en las siete secciones del scroll incluso
+     * después de terminar de animar.
+     *
+     * @param {Element} bloque_el
+     * @returns {void}
+     */
+    limpiar_will_change_al_terminar(bloque_el) {
+      const tiene_texto_pieza = bloque_el.classList.contains('demo-scroll-dolor__bloque')
+      const animados = tiene_texto_pieza
+        ? bloque_el.querySelectorAll('.demo-scroll-dolor__bloque-texto, .demo-scroll-dolor__bloque-pieza')
+        : [bloque_el]
+
+      animados.forEach(function (el) {
+        el.addEventListener('animationend', function limpiar() {
+          el.style.willChange = 'auto'
+          el.removeEventListener('animationend', limpiar)
+        })
       })
     },
   },
@@ -416,9 +453,12 @@ export default {
   gap: clamp(96px, 14vw, 160px);
 }
 
-/* Apertura: centrada, sin pieza multimedia, entra en frío */
+/* Apertura: full-bleed (grupo 322, prompt 01) -- 100vh, 100% de ancho, dentro de su
+   FondoSeccionSticky con variante="apertura". El prompt 06 le superpone su escena
+   animada encima; nada acá le impide hacerlo. */
 .demo-scroll-dolor__apertura {
-  min-height: 70vh;
+  min-height: 100vh;
+  width: 100%;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -432,6 +472,8 @@ export default {
   font-size: clamp(2rem, 5vw, 3.25rem);
   font-weight: 700;
   line-height: 1.15;
+  /* Tracking negativo en texto display grande (§15 de apple-design/SKILL.md). */
+  letter-spacing: -0.02em;
   max-width: 780px;
   margin: 0;
 }
@@ -450,12 +492,18 @@ export default {
   align-items: center;
 }
 
-.demo-scroll-dolor__bloque:nth-child(even) {
-  /* Alterna el orden visual texto/pieza para dar ritmo al scroll sin animación extra */
+/* Alterna el orden visual texto/pieza para dar ritmo al scroll sin animación extra.
+   Antes era :nth-child(even) sobre los hermanos directos de .demo-scroll-dolor; desde
+   que cada <article> vive dentro de su propio <fondo-seccion-sticky> (grupo 322,
+   prompt 01) ya no son hermanos entre sí, así que la alternancia se selecciona por la
+   variante del wrapper (bloque-2 y bloque-4 son los "pares" de los cinco bloques). */
+.demo-fondo-seccion--bloque-2 .demo-scroll-dolor__bloque,
+.demo-fondo-seccion--bloque-4 .demo-scroll-dolor__bloque {
   direction: rtl;
 }
 
-.demo-scroll-dolor__bloque:nth-child(even) > * {
+.demo-fondo-seccion--bloque-2 .demo-scroll-dolor__bloque > *,
+.demo-fondo-seccion--bloque-4 .demo-scroll-dolor__bloque > * {
   direction: ltr;
 }
 
@@ -483,6 +531,8 @@ export default {
   font-size: clamp(1.5rem, 3vw, 2.1rem);
   font-weight: 700;
   line-height: 1.25;
+  /* Tracking negativo en texto display grande (§15 de apple-design/SKILL.md). */
+  letter-spacing: -0.02em;
   margin: 0 0 4px;
   background: var(--demo-gradient-marca);
   -webkit-background-clip: text;
@@ -542,7 +592,9 @@ export default {
   }
 
   .demo-scroll-dolor__apertura {
-    min-height: 50vh;
+    /* Full-bleed también en móvil (grupo 322, prompt 01): el pin y el fondo cubren
+       igual la pantalla completa, no se achica a 50vh como antes. */
+    min-height: 100vh;
     padding-top: 8vh;
   }
 }

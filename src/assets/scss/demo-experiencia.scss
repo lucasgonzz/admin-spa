@@ -16,10 +16,10 @@
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap');
 
 .demo-experiencia-page {
-	// Azul ancla de marca (medido del logo actual de ComercioCity).
-	--demo-color-azul: #2a8cfe;
-	// Violeta de pasaje para los degradés (azul -> violeta), regla de marca vigente.
-	--demo-color-violeta: #7b5cfa;
+	// Azul ancla de marca, medido del logo NUEVO (marca/identidad.md, cerrado 3/8/2026).
+	--demo-color-azul: #0b84f8;
+	// Violeta de pasaje para los degradés (azul -> violeta), medido del mismo logo.
+	--demo-color-violeta: #3a31fc;
 	// Naranja: acento puntual único. Regla explícita de marca: nunca en serie/repetido
 	// -- apenas se repite deja de leerse como acento. Este color no debe reutilizarse
 	// para nada que se repita (íconos en lista, bullets, etc.).
@@ -41,7 +41,15 @@
 	background: var(--demo-color-fondo);
 	min-height: 100vh;
 	width: 100%;
-	overflow-x: hidden;
+	// "clip" y no "hidden" (grupo 322, prompt 01): overflow-x: hidden fuerza a
+	// overflow-y a computar "auto" (regla del spec: si un eje no es "visible", el
+	// otro pasa de "visible" a "auto"), y eso convierte esta página en su propio
+	// scroll container -- rompe position: sticky de .demo-fondo-seccion__fondo, que
+	// ancla al scroll container MÁS CERCANO, no al viewport. "clip" recorta el eje X
+	// sin establecer scroll container, así que overflow-y sigue "visible" de verdad
+	// y el sticky ancla correctamente contra el scroll de la página.
+	overflow-x: clip;
+	overflow-y: visible;
 	box-sizing: border-box;
 
 	*,
@@ -51,16 +59,20 @@
 	}
 }
 
-// Animación de entrada de cada bloque del scroll: fade + desplazamiento corto,
-// nada de parallax ni contadores (contexto/demo_experiencia.md §3.18, prompt §5).
+// Animación de entrada de los bloques 1-5 y el cierre (grupo 322, prompt 01): más
+// presente que la anterior, pero sin parallax multicapa -- eso queda reservado a la
+// apertura (contexto/demo_experiencia.md §3.18-bis, prompt 06 de este grupo). La
+// sobriedad acá es un criterio de diseño, no una cita de esa sección: una versión
+// anterior de este archivo le atribuía la prohibición de parallax a §3.18, que nunca
+// dijo eso (ver aclaración en §3.18-bis).
 @keyframes demo-bloque-entrada {
 	from {
 		opacity: 0;
-		transform: translateY(24px);
+		transform: translateY(56px) scale(0.96);
 	}
 	to {
 		opacity: 1;
-		transform: translateY(0);
+		transform: translateY(0) scale(1);
 	}
 }
 
@@ -71,15 +83,165 @@
 		opacity: 0;
 	}
 
-	.demo-bloque--visible {
-		animation: demo-bloque-entrada 0.6s ease-out forwards;
+	// Bloques 1-5 y cierre (estructura interna texto/pieza): el contenedor pasa a
+	// opacity:1 al toque -- lo que se anima con stagger son sus dos hijos, no el
+	// bloque entero, para que el bloque entre como conjunto pero con jerarquía
+	// clara ("primero se lee, después se ve").
+	.demo-bloque--visible.demo-scroll-dolor__bloque {
+		opacity: 1;
 	}
 
-	// La apertura entra en frío: sin animación, el texto ya está cuando el lead
-	// llega a la página (decisión explícita del prompt, no es un olvido).
+	.demo-bloque--visible.demo-scroll-dolor__bloque .demo-scroll-dolor__bloque-texto,
+	.demo-bloque--visible.demo-scroll-dolor__bloque .demo-scroll-dolor__bloque-pieza {
+		opacity: 0;
+		// settle pronunciado, sin overshoot: es contenido que aparece al hacer scroll,
+		// no algo que el usuario soltó con velocidad -- no hay justificación para bounce.
+		animation: demo-bloque-entrada 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+		// Acotado a la ventana de animación (ver limpiar_will_change_al_terminar() en
+		// ScrollDolor.vue, que lo saca en animationend): no acumular capas de
+		// composición en las siete secciones del scroll.
+		will-change: opacity, transform;
+	}
+
+	.demo-bloque--visible.demo-scroll-dolor__bloque .demo-scroll-dolor__bloque-pieza {
+		animation-delay: 0.12s;
+	}
+
+	// Puente al formulario: sin estructura interna texto/pieza, entra como bloque único.
+	.demo-bloque--visible:not(.demo-scroll-dolor__bloque) {
+		animation: demo-bloque-entrada 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+		will-change: opacity, transform;
+	}
+
+	// La apertura entra en frío respecto de la animación de bloques: sin ella, el
+	// texto ya está cuando el lead llega a la página. La escena animada por scroll
+	// que sí tiene la apertura es otra cosa y la agrega el prompt 06 (§3.18-bis).
 	.demo-bloque--apertura {
 		opacity: 1;
 		animation: none;
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Fondos generados por sección (grupo 322, prompt 01): 2 radial-gradient
+// superpuestos sobre la paleta de marca, variando posición/opacidad por sección para
+// que cada una se sienta distinta sin salir de azul -> violeta. Sin backdrop-filter:
+// es un fondo propio, no un vidrio sobre contenido (§12 de apple-design/SKILL.md).
+// ---------------------------------------------------------------------------
+
+.demo-fondo-seccion__fondo {
+	background-color: var(--demo-color-fondo);
+
+	// Textura de grano muy sutil, compartida por las siete secciones: sin esto el
+	// degradé se lee "de PowerPoint" -- contradice el premium/simple de marca/identidad.md.
+	&::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		opacity: 0.035;
+		mix-blend-mode: overlay;
+		background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>");
+		pointer-events: none;
+	}
+}
+
+// Apertura: la más intensa de las siete -- primer momento de la página, tiene que
+// transmitir "premium" de entrada. El prompt 06 la usa como capa de base de su
+// escena; nada acá le impide superponerle capas encima.
+.demo-fondo-seccion--apertura .demo-fondo-seccion__fondo {
+	background-image:
+		radial-gradient(120% 90% at 20% 15%, rgba(11, 132, 248, 0.35), transparent 60%),
+		radial-gradient(100% 80% at 85% 90%, rgba(58, 49, 252, 0.3), transparent 55%);
+}
+
+// Bloques 1-5 y cierre: mismos dos radial-gradient, mucho más sutiles -- estas
+// secciones tienen texto y pieza multimedia encima y no pueden competir con el fondo.
+.demo-fondo-seccion--bloque-1 .demo-fondo-seccion__fondo {
+	background-image:
+		radial-gradient(90% 70% at 80% 10%, rgba(11, 132, 248, 0.16), transparent 55%),
+		radial-gradient(80% 60% at 15% 85%, rgba(58, 49, 252, 0.12), transparent 55%);
+}
+
+.demo-fondo-seccion--bloque-2 .demo-fondo-seccion__fondo {
+	background-image:
+		radial-gradient(85% 65% at 12% 20%, rgba(58, 49, 252, 0.15), transparent 55%),
+		radial-gradient(90% 70% at 90% 80%, rgba(11, 132, 248, 0.13), transparent 55%);
+}
+
+.demo-fondo-seccion--bloque-3 .demo-fondo-seccion__fondo {
+	background-image:
+		radial-gradient(95% 75% at 75% 25%, rgba(11, 132, 248, 0.17), transparent 60%),
+		radial-gradient(75% 55% at 20% 75%, rgba(58, 49, 252, 0.11), transparent 50%);
+}
+
+.demo-fondo-seccion--bloque-4 .demo-fondo-seccion__fondo {
+	background-image:
+		radial-gradient(80% 60% at 25% 15%, rgba(58, 49, 252, 0.16), transparent 55%),
+		radial-gradient(90% 70% at 85% 85%, rgba(11, 132, 248, 0.12), transparent 55%);
+}
+
+.demo-fondo-seccion--bloque-5 .demo-fondo-seccion__fondo {
+	background-image:
+		radial-gradient(90% 70% at 85% 20%, rgba(11, 132, 248, 0.15), transparent 55%),
+		radial-gradient(80% 60% at 15% 80%, rgba(58, 49, 252, 0.13), transparent 55%);
+}
+
+.demo-fondo-seccion--cierre .demo-fondo-seccion__fondo {
+	background-image:
+		radial-gradient(110% 85% at 50% 100%, rgba(58, 49, 252, 0.22), transparent 60%),
+		radial-gradient(90% 70% at 50% 0%, rgba(11, 132, 248, 0.18), transparent 55%);
+}
+
+// ---------------------------------------------------------------------------
+// Accesibilidad (§14 de apple-design/SKILL.md, hoy ausente en toda la página).
+// ---------------------------------------------------------------------------
+
+@media (prefers-reduced-motion: reduce) {
+	.demo-fondo-seccion__fondo {
+		// Sin pin: se pierde el efecto, pero no hay movimiento de fondo a pantalla
+		// completa mientras el usuario scrollea, que es justo lo que este media query
+		// pide evitar. !important es necesario acá y no es solo prolijidad: el
+		// position:sticky vive en el <style scoped> de FondoSeccionSticky.vue, que
+		// compila con un atributo data-v-* agregado al selector (más específico que
+		// esta regla global) -- sin !important, este "static" nunca le gana.
+		position: static !important;
+	}
+
+	// .demo-bloque cubre la apertura (aunque ya no anima, no hace daño) y el puente
+	// (que sí anima como bloque único). will-change: auto !important por el mismo
+	// motivo que abajo -- animationend no dispara con la animación apagada, y sin
+	// !important esta regla (0,1,0) pierde contra la base .demo-bloque--visible:not(...)
+	// (0,3,0 dentro de .demo-experiencia-page), que sí trae will-change seteado.
+	.demo-bloque {
+		animation: none !important;
+		opacity: 1 !important;
+		transition: opacity 200ms ease;
+		will-change: auto !important;
+	}
+
+	// La animación de bloques 1-5 y cierre vive en estos dos hijos (ver arriba), no
+	// en .demo-bloque: hay que apagarla ahí también para que el media query cubra
+	// TODA la página, no solo el puente. will-change: auto !important: con la
+	// animación apagada, animationend nunca dispara (el listener de ScrollDolor.vue
+	// que lo saca no llega a correr), y sin !important esta regla (0,1,0) pierde
+	// contra la base .demo-bloque--visible.demo-scroll-dolor__bloque ... (0,4,0),
+	// que sí trae will-change -- quedaría pegado para siempre en los bloques visibles.
+	.demo-scroll-dolor__bloque-texto,
+	.demo-scroll-dolor__bloque-pieza {
+		animation: none !important;
+		opacity: 1 !important;
+		transition: opacity 200ms ease;
+		will-change: auto !important;
+	}
+}
+
+@media (prefers-contrast: more) {
+	.demo-fondo-seccion__fondo {
+		background: var(--demo-color-fondo) !important;
+
+		&::after {
+			display: none;
+		}
 	}
 }
 
@@ -101,7 +263,7 @@
 	background: #10131c;
 	border-radius: 12px;
 	padding: 10px 10px 22px;
-	box-shadow: 0 24px 60px -20px rgba(42, 140, 254, 0.35);
+	box-shadow: 0 24px 60px -20px rgba(11, 132, 248, 0.35);
 }
 
 .demo-marco__pantalla-compu::after {
@@ -135,7 +297,7 @@
 	background: #10131c;
 	border-radius: 26px;
 	padding: 14px 8px 10px;
-	box-shadow: 0 24px 60px -20px rgba(123, 92, 250, 0.35);
+	box-shadow: 0 24px 60px -20px rgba(58, 49, 252, 0.35);
 }
 
 .demo-marco__pantalla-telefono::before {
