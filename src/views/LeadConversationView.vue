@@ -342,6 +342,7 @@
         />
 
         <textarea
+          v-if="!audio_recording"
           ref="message_input_ref"
           v-model="mensaje_directo"
           class="message-input"
@@ -354,24 +355,36 @@
           @keydown.enter="on_message_input_keydown"
           @paste="on_paste"
         />
+        <!-- Mientras graba: franja compacta con el punto que late, el cronómetro y Cancelar,
+             en lugar del textarea -- misma paleta que el resto (text-danger, text-muted). -->
+        <div v-else class="audio-recording-strip d-flex align-items-center gap-2">
+          <span class="audio-recording-dot audio-recording-pulse" aria-hidden="true"></span>
+          <span class="text-danger small">{{ audio_elapsed_label }}</span>
+          <button type="button" class="btn btn-sm btn-link text-muted ms-auto" @click="cancel_audio_recording">
+            Cancelar
+          </button>
+        </div>
 
         <!-- Botón mic cuando no hay texto ni adjunto pendiente: grabación de audio -->
         <button
           v-if="!has_mensaje_directo && !pending_attachment"
           type="button"
           class="icon-btn flex-shrink-0"
-          :class="recording_audio ? 'text-danger audio-recording-pulse' : 'text-muted'"
+          :class="audio_recording ? 'text-danger audio-recording-pulse' : 'text-muted'"
           :disabled="enviando_audio || !whatsapp_window_open"
-          :title="recording_audio ? 'Grabando. Tocá para detener y enviar' : 'Mantené pulsado o tocá para grabar audio'"
-          @click="on_mic_click"
-          @mousedown="on_mic_mousedown"
-          @mouseup="on_mic_mouseup_or_leave"
-          @mouseleave="on_mic_mouseup_or_leave"
-          @touchstart.prevent="on_mic_touchstart"
-          @touchend.prevent="on_mic_touchend"
+          :title="audio_recording
+            ? 'Grabando ' + audio_elapsed_label + '. Tocá para enviar'
+            : 'Tocá para grabar, o mantené pulsado para grabar mientras apretás'"
+          @click="on_audio_click"
+          @mousedown="on_audio_mousedown"
+          @mouseup="on_audio_mouseup_or_leave"
+          @mouseleave="on_audio_mouseup_or_leave"
+          @touchstart.prevent="on_audio_touchstart"
+          @touchend.prevent="on_audio_touchend"
+          @touchcancel.prevent="on_audio_touchcancel"
         >
           <span v-if="enviando_audio" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-          <i v-else class="bi" :class="recording_audio ? 'bi-stop-circle-fill' : 'bi-mic'" aria-hidden="true" />
+          <i v-else class="bi" :class="audio_recording ? 'bi-stop-circle-fill' : 'bi-mic'" aria-hidden="true" />
         </button>
 
         <!-- Botón enviar cuando hay texto o adjunto pendiente -->
@@ -497,10 +510,10 @@ import LeadResumenTab from '@/components/lead/resumen/Index.vue'
 import TemplatePickerModal from '@/components/lead/conversation/TemplatePickerModal.vue'
 import ImageAnnotationEditor from '@/components/common/ImageAnnotationEditor.vue'
 import api from '@/utils/axios'
-import { OggOpusRecorder } from '@/utils/oggOpusRecorder'
 import { copy_lead_conversation_to_clipboard } from '@/utils/lead_conversation_clipboard'
 import lead_conversation_date_dividers from '@/mixins/lead_conversation_date_dividers'
 import conversation_scroll_behavior from '@/mixins/conversation_scroll_behavior'
+import audio_recorder_button from '@/mixins/audio_recorder_button'
 import '@/styles/whatsapp-conversation-wallpaper.css'
 import '@/styles/conversation-placeholder-states.css'
 import '@/styles/whatsapp-date-divider.css'
@@ -526,7 +539,7 @@ export default {
     TemplatePickerModal,
     ImageAnnotationEditor,
   },
-  mixins: [lead_conversation_date_dividers, conversation_scroll_behavior],
+  mixins: [lead_conversation_date_dividers, conversation_scroll_behavior, audio_recorder_button],
 
   props: {
     /**
@@ -635,17 +648,8 @@ export default {
       /** Timer para resetear el feedback del botón de exportación. */
       export_conversation_feedback_timer: null,
 
-      /** true mientras el micrófono está grabando. */
-      recording_audio: false,
-
-      /** Instancia OggOpusRecorder activa (null cuando no graba). */
-      audio_recorder: null,
-
       /** true mientras se envía el audio al backend. */
       enviando_audio: false,
-
-      /** true cuando el usuario mantiene pulsado el botón (hold mode). */
-      audio_hold_mode: false,
 
       /** Controla la visibilidad del modal de resumen del lead. */
       show_resumen_modal: false,
@@ -1330,15 +1334,9 @@ export default {
       clearTimeout(this.export_conversation_feedback_timer)
       this.export_conversation_feedback_timer = null
     }
-    /* Liberar micrófono si la vista se destruye mientras graba. */
-    if (this.recording_audio) {
-      try {
-        if (this.audio_recorder) {
-          this.audio_recorder.stop()
-        }
-      } catch (_) {}
-    }
-    this.release_audio_stream()
+    /* Liberar el micrófono si la vista se destruye mientras graba: lo hace el
+       beforeUnmount del mixin audio_recorder_button (en Vue 3 corren los dos,
+       el del mixin y el del componente). */
   },
 
   methods: {
@@ -2315,153 +2313,36 @@ export default {
     },
 
     /**
-     * Click simple en el micrófono:
-     * - Si no está grabando → inicia
-     * - Si está grabando → detiene y envía
-     * Si el usuario hizo hold (mousedown + mouseup), el click se ignora
-     * porque on_mic_mouseup_or_leave ya manejó el stop.
+     * Hook del contrato de audio_recorder_button: llega con el Blob 'audio/ogg' ya listo.
+     * El envío al backend lo sigue haciendo send_pending_audio() (sin tocar).
      *
+     * @param {Blob} blob
      * @returns {void}
      */
-    on_mic_click() {
-      if (!this.whatsapp_window_open) {
-        return
-      }
-      if (this.audio_hold_mode) {
-        this.audio_hold_mode = false
-        return
-      }
-      if (this.recording_audio) {
-        this.stop_and_send_audio()
-      } else {
-        this.start_audio_recording()
-      }
+    on_audio_blob(blob) {
+      this._pending_audio_blob = blob
+      this._pending_audio_mime = 'audio/ogg'
+      this.send_pending_audio()
     },
 
     /**
-     * MouseDown: marca que el usuario puede estar en modo hold y empieza a grabar.
-     * Se distingue del click simple con un timer corto.
+     * Hook del contrato de audio_recorder_button: no arrancar a grabar si la ventana de 24hs de
+     * Meta está cerrada o ya hay un audio enviándose.
      *
-     * @returns {void}
+     * @returns {boolean}
      */
-    on_mic_mousedown() {
-      if (!this.whatsapp_window_open) {
-        return
-      }
-      const self = this
-      this._mic_hold_timer = setTimeout(function () {
-        self.audio_hold_mode = true
-        self.start_audio_recording()
-      }, 200)
+    can_record_audio() {
+      return this.whatsapp_window_open && !this.enviando_audio
     },
 
     /**
-     * MouseUp o MouseLeave: si estaba en hold y grabando, detiene y envía.
+     * Hook del contrato de audio_recorder_button: mismo comportamiento que tenía antes.
      *
+     * @param {string} message
      * @returns {void}
      */
-    on_mic_mouseup_or_leave() {
-      if (this._mic_hold_timer) {
-        clearTimeout(this._mic_hold_timer)
-        this._mic_hold_timer = null
-      }
-      if (this.audio_hold_mode && this.recording_audio) {
-        this.audio_hold_mode = false
-        this.stop_and_send_audio()
-      }
-    },
-
-    /**
-     * TouchStart: inicia el hold en dispositivos táctiles.
-     *
-     * @param {TouchEvent} event
-     * @returns {void}
-     */
-    on_mic_touchstart(event) {
-      if (!this.whatsapp_window_open) {
-        return
-      }
-      event.preventDefault()
-      this.audio_hold_mode = true
-      this.start_audio_recording()
-    },
-
-    /**
-     * TouchEnd: detiene la grabación en hold táctil.
-     *
-     * @param {TouchEvent} event
-     * @returns {void}
-     */
-    on_mic_touchend(event) {
-      event.preventDefault()
-      if (this.audio_hold_mode && this.recording_audio) {
-        this.audio_hold_mode = false
-        this.stop_and_send_audio()
-      }
-    },
-
-    /**
-     * Inicia una grabación de audio directamente a Ogg/Opus (vía OggOpusRecorder), sin depender
-     * de qué formato soporte el MediaRecorder nativo de cada navegador.
-     *
-     * @returns {void}
-     */
-    start_audio_recording() {
-      const self = this
-      if (this.recording_audio || this.enviando_audio) {
-        return
-      }
-      if (!OggOpusRecorder.isSupported()) {
-        alert('Tu navegador no soporta grabación de audio.')
-        return
-      }
-      const recorder = new OggOpusRecorder({
-        onData: function (blob) {
-          self._pending_audio_blob = blob
-          self._pending_audio_mime = 'audio/ogg'
-          self.recording_audio = false
-          self.audio_recorder = null
-          self.send_pending_audio()
-        },
-        onError: function (err) {
-          console.error('Error al acceder al micrófono', err)
-          alert('No se pudo acceder al micrófono. Verificá los permisos del navegador.')
-          self.recording_audio = false
-          self.audio_recorder = null
-        },
-      })
-      self.audio_recorder = recorder
-      self.recording_audio = true
-      recorder.start().catch(function () {
-        /* el error ya se maneja en onError */
-      })
-    },
-
-    /**
-     * Detiene la grabación activa; el envío se dispara desde recorder.onstop.
-     *
-     * @returns {void}
-     */
-    stop_and_send_audio() {
-      if (!this.recording_audio || !this.audio_recorder) {
-        return
-      }
-      try {
-        this.audio_recorder.stop()
-      } catch (err) {
-        console.error('Error al detener el grabador de audio', err)
-        this.recording_audio = false
-        this.release_audio_stream()
-      }
-    },
-
-    /**
-     * Libera la instancia del grabador (el micrófono se libera solo al cerrar el encoder).
-     *
-     * @returns {void}
-     */
-    release_audio_stream() {
-      this.audio_recorder = null
+    on_audio_error(message) {
+      alert(message)
     },
 
     /**
@@ -2635,6 +2516,21 @@ export default {
 }
 .audio-recording-pulse {
   animation: audio-pulse 1s ease-in-out infinite;
+}
+
+/* Franja que reemplaza al textarea mientras se graba un audio (grupo 323, prompt 02) */
+.audio-recording-strip {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.375rem 0.1rem;
+}
+
+.audio-recording-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--bs-danger);
 }
 
 /* Overlay del modal de resumen */
