@@ -48,43 +48,57 @@
       </article>
     </fondo-seccion-sticky>
 
-    <!-- Bloque 6: cierre / transformación. Estructura de texto distinta a los bloques
-         1-5 (título(s) + hitos temporales + frase o párrafo de cierre), pero misma
-         pieza multimedia con marco teléfono. -->
-    <fondo-seccion-sticky variante="cierre">
-      <article
-        :ref="registrar_bloque_ref"
-        class="demo-bloque demo-scroll-dolor__bloque demo-scroll-dolor__cierre"
-        :data-bloque-id="contenido.cierre.id"
-      >
-        <div class="demo-scroll-dolor__bloque-texto">
-          <h2 v-for="(linea, indice) in contenido.cierre.titulos" :key="indice" class="demo-scroll-dolor__cierre-titulo">
-            {{ linea }}
-          </h2>
+    <!-- Interludio de convergencia + cierre superpuesto (grupo 322, prompt 05).
+         El cierre ya NO va en su propio FondoSeccionSticky: se renderiza por
+         encima de la escena del interludio (slot #cierre), mientras la
+         convergencia queda atenuada y desaturada detrás. Estructura de texto
+         del cierre sin cambios respecto de los bloques 1-5 (título(s) + hitos
+         temporales + frase o párrafo de cierre), misma pieza multimedia con
+         marco teléfono. -->
+    <interludio-convergencia @cierre-visible="emitir_evento_cierre">
+      <template #cierre>
+        <!-- Sin la clase demo-bloque ni registrar_bloque_ref a propósito: ese
+             sistema (IntersectionObserver + opacity:0 base + demo-bloque-entrada)
+             es para bloques que aparecen en su posición normal de flujo. Este
+             cierre ahora vive dentro de un wrapper posicionado (translateY 100%
+             -> 0%) cuya opacidad y entrada ya las controla por completo el
+             progreso de scroll de InterludioConvergencia -- combinar los dos
+             sistemas haría que el contenido interno animara una segunda vez,
+             de forma descoordinada, apenas el wrapper se vuelve geométricamente
+             visible para el observer. -->
+        <article
+          class="demo-scroll-dolor__bloque demo-scroll-dolor__cierre demo-interludio__cierre"
+          :data-bloque-id="contenido.cierre.id"
+        >
+          <div class="demo-scroll-dolor__bloque-texto">
+            <h2 v-for="(linea, indice) in contenido.cierre.titulos" :key="indice" class="demo-scroll-dolor__cierre-titulo">
+              {{ linea }}
+            </h2>
 
-          <ul class="demo-scroll-dolor__hitos">
-            <li v-for="(hito, indice) in contenido.cierre.hitos" :key="indice">
-              <strong>{{ hito.momento }}</strong> {{ hito.texto }}
-            </li>
-          </ul>
+            <ul class="demo-scroll-dolor__hitos">
+              <li v-for="(hito, indice) in contenido.cierre.hitos" :key="indice">
+                <strong>{{ hito.momento }}</strong> {{ hito.texto }}
+              </li>
+            </ul>
 
-          <!-- Versión dueño: frase corta de cierre -->
-          <p v-if="contenido.cierre.frase_final" class="demo-scroll-dolor__frase-final">
-            {{ contenido.cierre.frase_final }}
-          </p>
-          <!-- Versión campeón: párrafo largo ya validado por Lucas (marca/cliente_ideal.md) -->
-          <p v-if="contenido.cierre.parrafo_final" class="demo-scroll-dolor__parrafo-final">
-            {{ contenido.cierre.parrafo_final }}
-          </p>
-        </div>
+            <!-- Versión dueño: frase corta de cierre -->
+            <p v-if="contenido.cierre.frase_final" class="demo-scroll-dolor__frase-final">
+              {{ contenido.cierre.frase_final }}
+            </p>
+            <!-- Versión campeón: párrafo largo ya validado por Lucas (marca/cliente_ideal.md) -->
+            <p v-if="contenido.cierre.parrafo_final" class="demo-scroll-dolor__parrafo-final">
+              {{ contenido.cierre.parrafo_final }}
+            </p>
+          </div>
 
-        <div class="demo-scroll-dolor__bloque-pieza">
-          <marco-dispositivo :tipo="contenido.cierre.marco">
-            <pieza-multimedia :slot_id="contenido.cierre.id" :titulo="contenido.cierre.titulo_pieza" :media="media" />
-          </marco-dispositivo>
-        </div>
-      </article>
-    </fondo-seccion-sticky>
+          <div class="demo-scroll-dolor__bloque-pieza">
+            <marco-dispositivo :tipo="contenido.cierre.marco">
+              <pieza-multimedia :slot_id="contenido.cierre.id" :titulo="contenido.cierre.titulo_pieza" :media="media" />
+            </marco-dispositivo>
+          </div>
+        </article>
+      </template>
+    </interludio-convergencia>
 
     <!-- Puente al formulario: el formulario en sí lo agrega el prompt 05 (ver
          armazón en ExperienciaDemo.vue, que renderiza esta sección justo antes) -->
@@ -98,6 +112,7 @@
 import MarcoDispositivo from './MarcoDispositivo.vue'
 import PiezaMultimedia from './PiezaMultimedia.vue'
 import FondoSeccionSticky from './FondoSeccionSticky.vue'
+import InterludioConvergencia from './InterludioConvergencia.vue'
 
 /**
  * Copy completo del scroll de dolor, transcripto palabra por palabra desde
@@ -281,6 +296,7 @@ export default {
     MarcoDispositivo,
     PiezaMultimedia,
     FondoSeccionSticky,
+    InterludioConvergencia,
   },
 
   props: {
@@ -370,6 +386,19 @@ export default {
       if (el) {
         this.bloque_refs.push(el)
       }
+    },
+
+    /**
+     * Tracking del bloque de cierre (grupo 322, prompt 05): ya no tiene
+     * IntersectionObserver propio -- el cierre vive dentro de
+     * InterludioConvergencia, que emite 'cierre-visible' apenas arranca a
+     * entrar por encima de la escena. Mismo evento y forma que los bloques
+     * 1-5 en iniciar_observador, para no perder cobertura de tracking.
+     *
+     * @returns {void}
+     */
+    emitir_evento_cierre() {
+      this.emitir_evento('scroll_bloque_visible', { bloque_id: this.contenido.cierre.id, perfil: this.perfil })
     },
 
     /**
@@ -538,6 +567,20 @@ export default {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+/* Dentro del interludio (grupo 322, prompt 05, punto 3): el degradé recortado
+   en texto se come a sí mismo sobre una animación azul/violeta -- pasa a
+   color sólido. Acotado a .demo-interludio__cierre (si el cierre se sigue
+   usando en algún otro lado sin fondo animado, ese caso no se toca). Selector
+   con 3 clases a propósito, más específico que la regla base de arriba (2
+   clases): así gana siempre dentro de este mismo archivo, sin depender del
+   orden de carga entre bundles. */
+.demo-scroll-dolor__cierre.demo-interludio__cierre .demo-scroll-dolor__cierre-titulo {
+  background: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  color: var(--demo-color-texto);
 }
 
 .demo-scroll-dolor__hitos {

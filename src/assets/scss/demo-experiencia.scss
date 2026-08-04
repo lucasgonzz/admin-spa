@@ -186,11 +186,39 @@
 		radial-gradient(80% 60% at 15% 80%, rgba(58, 49, 252, 0.13), transparent 55%);
 }
 
-.demo-fondo-seccion--cierre .demo-fondo-seccion__fondo {
+// La variante "cierre" de FondoSeccionSticky quedó sin uso (grupo 322, prompt
+// 05): el bloque de cierre dejó de tener su propio FondoSeccionSticky --
+// ahora se renderiza superpuesto sobre el interludio de convergencia (ver
+// InterludioConvergencia.vue), que aporta su propio fondo con la variante
+// "interludio" de abajo. Se retira la regla en vez de dejarla muerta.
+
+// Interludio de convergencia (grupo 322, prompt 05): centrado y simétrico --
+// la escena SVG ya trae su propio protagonismo visual, el fondo solo acompaña.
+.demo-fondo-seccion--interludio .demo-fondo-seccion__fondo {
 	background-image:
-		radial-gradient(110% 85% at 50% 100%, rgba(58, 49, 252, 0.22), transparent 60%),
-		radial-gradient(90% 70% at 50% 0%, rgba(11, 132, 248, 0.18), transparent 55%);
+		radial-gradient(80% 80% at 50% 45%, rgba(11, 132, 248, 0.14), transparent 60%),
+		radial-gradient(70% 70% at 50% 55%, rgba(58, 49, 252, 0.12), transparent 55%);
 }
+
+// ---------------------------------------------------------------------------
+// Interludio de convergencia: panel del cierre superpuesto (grupo 322, prompt
+// 05, punto 3). Sin backdrop-filter -- la capa + la atenuación de la escena
+// de atrás (ver InterludioConvergencia.vue) hacen todo el trabajo.
+// ---------------------------------------------------------------------------
+
+.demo-interludio__panel-cierre {
+	background: rgba(248, 249, 252, 0.92);
+	border-radius: 20px;
+	padding: clamp(24px, 4vw, 48px);
+}
+
+// El override del título del cierre dentro del interludio (color sólido en
+// vez de degradé recortado) vive en el <style scoped> de ScrollDolor.vue, NO
+// acá: los dos archivos se cargan como bundles separados y en orden no
+// garantizado, así que una regla con la misma especificidad partida entre
+// los dos dependería de una carrera de carga. Con más especificidad y en el
+// mismo archivo que la regla base, el orden dentro del propio scoped style
+// alcanza para ganar siempre, sin depender de qué bundle cargó primero.
 
 // ---------------------------------------------------------------------------
 // Accesibilidad (§14 de apple-design/SKILL.md, hoy ausente en toda la página).
