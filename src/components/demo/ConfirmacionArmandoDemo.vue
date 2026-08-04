@@ -257,6 +257,12 @@ export default {
 	display: flex;
 	flex-direction: column;
 	gap: 14px;
+	/* Misma animación de entrada que la apertura del scroll de dolor (grupo 336, prompt
+	   03: "las dos pantallas se sientan de la misma familia"), keyframe compartido en
+	   demo-experiencia.scss. Corre una sola vez al montarse -- esta sección recién
+	   existe en el DOM cuando el lead confirma el formulario (v-if en
+	   ExperienciaDemo.vue), así que "al montarse" es exactamente "apenas se ve". */
+	animation: demo-apertura-entrada 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .demo-confirmacion-armando__titulo {
@@ -330,6 +336,13 @@ export default {
 		background-clip: initial;
 		color: var(--demo-color-texto);
 		animation: none;
+	}
+
+	.demo-confirmacion-armando__texto {
+		animation: none;
+		opacity: 1;
+		transform: none;
+		filter: none;
 	}
 }
 </style>

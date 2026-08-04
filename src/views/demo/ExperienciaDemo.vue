@@ -54,7 +54,7 @@
              shimmer_activo. Un lead que ya había completado el formulario en
              una visita anterior nunca tiene shimmer_activo en true -- no hay
              ningún proceso en curso que anunciarle. -->
-        <confirmacion-armando-demo :turno="turno" :shimmer_activo="shimmer_activo" />
+        <confirmacion-armando-demo ref="confirmacion" :turno="turno" :shimmer_activo="shimmer_activo" />
 
         <!-- Video de introducción: pieza "intro" del catálogo. A diferencia de
              los clips del scroll, va con controles y sonido, sin autoplay (son
@@ -302,6 +302,25 @@ export default {
       self.intro_desbloqueada = true
       self.shimmer_activo = true
       document.body.style.overflow = 'hidden'
+
+      /* Scroll automático a la confirmación apenas se monta (grupo 336, prompt 03):
+       * antes solo se scrolleaba al video a los 5s, así que el lead quedaba mirando
+       * el formulario mientras la pantalla nueva aparecía fuera de cuadro. $nextTick
+       * es necesario: con v-if la sección no existe hasta el re-render que sigue a
+       * poner intro_desbloqueada en true. */
+      self.$nextTick(function () {
+        if (self.$refs.confirmacion && self.$refs.confirmacion.$el) {
+          const reduced_motion = !!(
+            typeof window !== 'undefined' &&
+            window.matchMedia &&
+            window.matchMedia('(prefers-reduced-motion: reduce)').matches
+          )
+          self.$refs.confirmacion.$el.scrollIntoView({
+            behavior: reduced_motion ? 'auto' : 'smooth',
+            block: 'start',
+          })
+        }
+      })
 
       self.confirmacion_timeout = setTimeout(function () {
         self.confirmacion_timeout = null

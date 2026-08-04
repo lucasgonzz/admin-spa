@@ -76,6 +76,28 @@
 	}
 }
 
+// Fade + zoom + blur (grupo 336): corre UNA sola vez al montarse, no atada al scroll.
+// La usan dos pantallas que se quieren sentir "de la misma familia" -- la apertura
+// (ScrollDolor.vue) y la confirmación "armando tu demo" (ConfirmacionArmandoDemo.vue,
+// prompt 03) -- por eso vive acá y no en el <style scoped> de ninguna de las dos: un
+// @keyframes declarado dentro de un scoped style NO queda acotado a ese componente
+// (Vue solo le agrega el atributo data-v-* a los selectores, nunca al nombre de un
+// @keyframes), así que definirlo en dos archivos scoped distintos los dejaría
+// pisándose entre sí según qué bundle cargue último -- el mismo motivo por el que el
+// override del título del cierre del interludio vive acá y no en ScrollDolor.vue.
+@keyframes demo-apertura-entrada {
+	from {
+		opacity: 0;
+		transform: scale(0.94);
+		filter: blur(6px);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1);
+		filter: blur(0);
+	}
+}
+
 .demo-experiencia-page {
 	// Oculto por default: el bloque solo aparece cuando entra en viewport (ver
 	// IntersectionObserver en ScrollDolor.vue), salvo la apertura (ver abajo).

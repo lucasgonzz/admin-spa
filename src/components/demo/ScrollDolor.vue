@@ -516,19 +516,14 @@ export default {
 /* Animación de entrada de la apertura (grupo 336, revierte la escena cinematográfica
    del grupo 325): corre UNA sola vez al cargar, no atada al scroll -- la apertura ya
    está en pantalla cuando el lead llega. CSS puro, sin librerías: es lo primero que
-   carga la página. */
-@keyframes demo-apertura-entrada {
-  from {
-    opacity: 0;
-    transform: scale(0.94);
-    filter: blur(6px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-    filter: blur(0);
-  }
-}
+   carga la página. @keyframes demo-apertura-entrada vive en demo-experiencia.scss (no
+   acá): la reutiliza también la pantalla de confirmación (ConfirmacionArmandoDemo.vue,
+   prompt 03 de este grupo) -- un @keyframes definido dentro de un <style scoped> NO
+   queda acotado a ese componente (Vue no le agrega el atributo data-v-*, solo a los
+   selectores), así que declararlo acá otra vez pisaría/sería pisado por el de ese otro
+   archivo según qué bundle cargue último -- mismo motivo por el que el override del
+   título del cierre del interludio vive en el archivo compartido y no en un scoped
+   style (ver comentario en demo-experiencia.scss). */
 
 .demo-scroll-dolor__apertura-titulo {
   font-size: clamp(2rem, 5vw, 3.25rem);

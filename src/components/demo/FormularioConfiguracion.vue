@@ -41,6 +41,11 @@
     <!-- Mensaje sobrio si el envío falla: el lead puede reintentar sin perder lo marcado -->
     <p v-if="error" class="demo-formulario__error">{{ error }}</p>
 
+    <!-- El botón de confirmar es el final de la primera página (grupo 336, prompt 03):
+         nada debajo. El mensaje de cierre ("Listo, armamos tu demo...") se retiró --
+         quedó obsoleto cuando se creó la pantalla de confirmación (grupo 322, prompt 03):
+         decía lo mismo que dice esa pantalla siguiente, y anticipaba un resultado antes
+         de que el lead hubiera confirmado nada. -->
     <button
       type="button"
       class="demo-formulario__enviar"
@@ -49,13 +54,6 @@
     >
       {{ enviando ? 'Guardando…' : 'Confirmar' }}
     </button>
-
-    <!-- Cierre del formulario, texto de demo_pagina.md §3: siempre visible, no
-         depende de si ya se envió o no -->
-    <p class="demo-formulario__cierre">
-      <strong>Listo, armamos tu demo.</strong>
-      Tarda menos de un minuto.
-    </p>
   </section>
 </template>
 
@@ -440,18 +438,6 @@ export default {
 .demo-formulario__enviar:disabled {
   cursor: not-allowed;
   opacity: 0.65;
-}
-
-.demo-formulario__cierre {
-  text-align: center;
-  color: var(--demo-color-texto-suave);
-  margin: 0;
-}
-
-.demo-formulario__cierre strong {
-  color: var(--demo-color-texto);
-  display: block;
-  margin-bottom: 2px;
 }
 
 @media (max-width: 575.98px) {
