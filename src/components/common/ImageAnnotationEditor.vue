@@ -97,12 +97,36 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 /** Ancho máximo del canvas en píxeles (evita imágenes enormes en memoria). */
 const MAX_CANVAS_WIDTH = 1200
 
+/**
+ * Tope de área del canvas (~1200x1800), además del tope de ancho: una imagen muy alta (una
+ * captura de pantalla larga, un panorama) puede superar esto igual aunque el ancho ya esté
+ * acotado. Safari en iOS además limita el área de canvas, y un canvas demasiado grande hace que
+ * toBlob devuelva null sin ningún error — justo el tipo de falla muda que este tope evita.
+ */
+const MAX_CANVAS_PIXELS = 2200000
+
 /** Grosor del trazo libre y de contornos de figuras. */
 const STROKE_LINE_WIDTH = 3
 
 /**
+ * Techo de tamaño (bytes) del archivo que sale del editor. Muy por debajo del límite de 5 MB de
+ * imagen de la Cloud API de WhatsApp, a propósito: el cuello de botella real no es Meta sino
+ * post_max_size de PHP y el client_max_body_size del servidor web, que no conocemos desde el
+ * navegador. Un archivo chico no puede chocar con ninguno de los dos.
+ */
+const MAX_EXPORT_BYTES = 1.5 * 1024 * 1024
+
+/** Calidades de JPEG a probar de mejor a peor si el archivo se pasa del techo. */
+const JPEG_QUALITY_STEPS = [0.85, 0.7, 0.55]
+
+/** Escala mínima del canvas como último recurso si ninguna calidad de JPEG alcanza el techo. */
+const MIN_EXPORT_SCALE = 0.5
+
+/**
  * Modal para anotar una imagen antes de adjuntarla al chat de soporte (estilo WhatsApp).
- * Exporta un PNG con imagen + dibujos aplastados en un File.
+ * Exporta PNG o JPEG según el contenido de origen (PNG sin pérdida para capturas de pantalla,
+ * JPEG con cascada de calidad/escala para fotos de cámara) y garantiza un techo de tamaño de
+ * archivo, para que una foto de cámara no rompa el envío por post_max_size del backend.
  */
 export default {
   name: 'ImageAnnotationEditor',
@@ -294,6 +318,11 @@ export default {
         const ratio = MAX_CANVAS_WIDTH / target_width
         target_width = MAX_CANVAS_WIDTH
         target_height = Math.round(natural_height * ratio)
+      }
+      if (target_width * target_height > MAX_CANVAS_PIXELS) {
+        const area_ratio = Math.sqrt(MAX_CANVAS_PIXELS / (target_width * target_height))
+        target_width = Math.round(target_width * area_ratio)
+        target_height = Math.round(target_height * area_ratio)
       }
       this.canvas_width = target_width
       this.canvas_height = target_height
@@ -579,7 +608,52 @@ export default {
     },
 
     /**
-     * Exporta el canvas a PNG y emite confirm al padre.
+     * Envuelve canvas.toBlob en una Promise. Resuelve con el blob o con null (nunca rechaza):
+     * Safari en iOS puede devolver null sin avisar si el canvas es muy grande, y eso es una
+     * salida válida que la cascada de on_confirm() necesita poder distinguir, no un error.
+     *
+     * @param {HTMLCanvasElement} canvas
+     * @param {string} mime
+     * @param {number} [quality]
+     * @returns {Promise<Blob|null>}
+     */
+    canvas_to_blob(canvas, mime, quality) {
+      return new Promise(function (resolve) {
+        canvas.toBlob(function (blob) {
+          resolve(blob)
+        }, mime, quality)
+      })
+    },
+
+    /**
+     * Canvas fuera de pantalla con el contenido del canvas visible, escalado por `scale`, y con
+     * fondo blanco pintado primero. El fondo blanco no es decorativo: JPEG no tiene canal alfa,
+     * así que si la imagen de origen tenía transparencia (un PNG recortado, por ejemplo), esas
+     * zonas salen negras al exportar a JPEG sin este paso.
+     *
+     * @param {number} scale
+     * @returns {HTMLCanvasElement}
+     */
+    build_export_canvas(scale) {
+      const source_canvas = this.$refs.annotation_canvas
+      const factor = scale || 1
+      const export_canvas = document.createElement('canvas')
+      export_canvas.width = Math.max(1, Math.round(source_canvas.width * factor))
+      export_canvas.height = Math.max(1, Math.round(source_canvas.height * factor))
+      const ctx = export_canvas.getContext('2d')
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, export_canvas.width, export_canvas.height)
+      ctx.drawImage(source_canvas, 0, 0, export_canvas.width, export_canvas.height)
+      return export_canvas
+    },
+
+    /**
+     * Exporta el canvas eligiendo el formato según el contenido (PNG solo si el origen ya era
+     * PNG y entra bajo el techo de tamaño; si no, JPEG con una cascada de calidad y, como último
+     * recurso, de escala) y emite confirm al padre con un File cuyo mime y extensión coinciden
+     * siempre con lo que realmente salió. Un PNG sin pérdida sobre una foto de cámara agranda el
+     * archivo un orden de magnitud (ver contexto arriba del componente) — esta cascada es lo que
+     * evita que eso rompa el envío desde el teléfono.
      */
     on_confirm() {
       const self = this
@@ -588,25 +662,72 @@ export default {
         return
       }
       this.exporting = true
-      canvas_el.toBlob(
-        function (blob) {
+
+      const prefiere_png = !!(this.source_file && this.source_file.type === 'image/png')
+
+      /* Se guarda el blob más chico visto hasta ahora: si ninguna calidad/escala entra bajo el
+       * techo, se usa ese como último recurso en vez de fallar (mejor mandar algo que dejar al
+       * usuario sin poder adjuntar). */
+      let best_blob = null
+      let best_mime = null
+
+      function remember_if_smaller(blob, mime) {
+        if (blob && (!best_blob || blob.size < best_blob.size)) {
+          best_blob = blob
+          best_mime = mime
+        }
+      }
+
+      function try_mime(canvas, mime, quality) {
+        return self.canvas_to_blob(canvas, mime, quality).then(function (blob) {
+          remember_if_smaller(blob, mime)
+          return !!blob && blob.size <= MAX_EXPORT_BYTES
+        })
+      }
+
+      function try_jpeg_cascade_at_scale(scale) {
+        const export_canvas = self.build_export_canvas(scale)
+        let scale_chain = Promise.resolve(false)
+        JPEG_QUALITY_STEPS.forEach(function (quality) {
+          scale_chain = scale_chain.then(function (done) {
+            return done ? true : try_mime(export_canvas, 'image/jpeg', quality)
+          })
+        })
+        return scale_chain
+      }
+
+      let chain = Promise.resolve(false)
+
+      if (prefiere_png) {
+        chain = chain.then(function (done) {
+          return done ? true : try_mime(canvas_el, 'image/png')
+        })
+      }
+
+      chain
+        .then(function (done) { return done ? true : try_jpeg_cascade_at_scale(1) })
+        .then(function (done) { return done ? true : try_jpeg_cascade_at_scale(0.75) })
+        .then(function (done) { return done ? true : try_jpeg_cascade_at_scale(MIN_EXPORT_SCALE) })
+        .then(function () {
           self.exporting = false
-          if (!blob) {
+          if (!best_blob) {
             self.image_error = 'No se pudo generar la imagen.'
             return
           }
           const base_name = self.source_file && self.source_file.name
             ? self.source_file.name.replace(/\.[^.]+$/, '')
             : 'screenshot'
-          const annotated_file = new File([blob], base_name + '_marked.png', {
-            type: 'image/png',
+          const extension = best_mime === 'image/png' ? '.png' : '.jpg'
+          const annotated_file = new File([best_blob], base_name + '_marked' + extension, {
+            type: best_mime,
           })
           self.$emit('update:show', false)
           self.$emit('confirm', annotated_file)
-        },
-        'image/png',
-        0.92,
-      )
+        })
+        .catch(function () {
+          self.exporting = false
+          self.image_error = 'No se pudo generar la imagen.'
+        })
     },
   },
 }
