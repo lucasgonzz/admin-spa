@@ -98,7 +98,7 @@ import FondoSeccionSticky from './FondoSeccionSticky.vue'
  * existían. Ahora sí (marca/assets/apertura-*.svg, diseñados por Lucas en
  * Claude Design y calibrados visualmente ahí: no reinventar los tramos).
  *
- * Mismo patrón que InterludioConvergencia.vue: pin propio anidado dentro de
+ * Mismo patrón que InterludioPortal.vue: pin propio anidado dentro de
  * FondoSeccionSticky, progreso [0,1] calculado contra el scroll del
  * DOCUMENTO (no de la ventana global), listener de scroll pasivo +
  * requestAnimationFrame. Prohibido explícito (mismo criterio que ese
@@ -247,7 +247,7 @@ export default {
 
 		/**
 		 * Progreso [0,1] según cuánto del alto "pinneable" de la sección ya se
-		 * scrolleó -- mismo cálculo que InterludioConvergencia.vue, relativo a
+		 * scrolleó -- mismo cálculo que InterludioPortal.vue, relativo a
 		 * ESTA sección (criterio de éxito 3), no al documento completo (eso es
 		 * lo que hacía el componente de Design y acá no sirve: la página real
 		 * tiene siete secciones).
@@ -413,7 +413,7 @@ export default {
 /* Alto total de la sección: 100vh de pin + el recorrido que necesita la
    coreografía completa (fondo + forma + titular + cierre + nombre) para
    sentirse acompañando al scroll, no apurada -- mismo criterio de tamaño que
-   InterludioConvergencia.vue (260vh), la única otra escena de este tipo en
+   InterludioPortal.vue (260vh), la única otra escena de este tipo en
    la página. */
 .demo-apertura {
 	position: relative;

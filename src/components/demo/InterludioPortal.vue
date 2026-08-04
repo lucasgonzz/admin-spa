@@ -1,0 +1,593 @@
+<template>
+	<fondo-seccion-sticky variante="interludio">
+		<div ref="contenedor" class="demo-interludio">
+			<div class="demo-interludio__pin">
+				<!-- SVG copiado tal cual de marca/assets/interludio-portal.svg (ids y
+				     data-* intactos, es el contrato) -- role="img" + aria-label en vez de
+				     aria-hidden: las doce etiquetas de los íconos son contenido con
+				     significado (criterio de éxito 9), así que la escena entera no puede
+				     quedar oculta para un lector de pantalla. El aria-label ya trae la
+				     frase que describe la transformación completa. -->
+				<svg
+					ref="svg"
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="-24 -12 1048 586"
+					preserveAspectRatio="xMidYMid meet"
+					class="demo-portal__svg"
+					role="img"
+					aria-label="El trabajo disperso atraviesa el arco, sale ordenado y el arco se cierra sobre la escena"
+				>
+					<defs>
+						<linearGradient id="brandStroke" gradientUnits="userSpaceOnUse" x1="-6" y1="-12" x2="6" y2="12">
+							<stop offset="0" stop-color="#0B84F8"></stop>
+							<stop offset="1" stop-color="#3A31FC"></stop>
+						</linearGradient>
+						<linearGradient id="brandArc" gradientUnits="userSpaceOnUse" x1="-90" y1="-150" x2="70" y2="150">
+							<stop offset="0" stop-color="#0B84F8"></stop>
+							<stop offset="1" stop-color="#3A31FC"></stop>
+						</linearGradient>
+						<linearGradient id="brandRing" gradientUnits="userSpaceOnUse" x1="-118" y1="-118" x2="90" y2="118">
+							<stop offset="0" stop-color="#0B84F8"></stop>
+							<stop offset="1" stop-color="#3A31FC"></stop>
+						</linearGradient>
+						<radialGradient id="haloC">
+							<stop offset="0" stop-color="#3A31FC" stop-opacity="0.13"></stop>
+							<stop offset="0.5" stop-color="#0B84F8" stop-opacity="0.06"></stop>
+							<stop offset="1" stop-color="#0B84F8" stop-opacity="0"></stop>
+						</radialGradient>
+						<linearGradient id="ccV3" gradientUnits="userSpaceOnUse" x1="128" y1="8.5" x2="128" y2="247.5">
+							<stop offset="0" stop-color="#0B84F8"></stop>
+							<stop offset="1" stop-color="#3A31FC"></stop>
+						</linearGradient>
+					</defs>
+
+					<g id="escena">
+						<g ref="panorama" id="panorama">
+							<g id="plano-lejos">
+								<g id="horizonte" fill="none" stroke="#9AA3B5" stroke-width="1">
+									<path d="M 60 470 L 960 470" opacity="0.16"></path>
+									<path d="M 210 502 L 900 502" opacity="0.1"></path>
+									<path d="M 40 526 Q 500 452 960 526" opacity="0.12"></path>
+								</g>
+								<g id="zona-orden" fill="none" stroke="url(#brandStroke)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+									<g ref="orden_1" id="orden-1" data-h="700,168" data-sc="1.9">
+										<rect x="-8" y="-1" width="16" height="10" rx="1"></rect>
+										<path d="M -8 3 L 8 3"></path>
+										<path d="M -3 -7 L -0.5 -4.5 L 4 -10"></path>
+									</g>
+									<g ref="orden_2" id="orden-2" data-h="900,168" data-sc="1.9">
+										<path d="M -8 -9 L 3 -9 L 9 -3 L 0 6 L -8 -2 Z"></path>
+										<circle cx="-4" cy="-5" r="1.3"></circle>
+										<path d="M -9 10 L 9 10"></path>
+									</g>
+									<g ref="orden_3" id="orden-3" data-h="700,300" data-sc="1.9">
+										<path d="M -10 -8 L 10 -8 L 10 6 L -10 6 Z"></path>
+										<path d="M -6 -3 L 6 -3"></path>
+										<path d="M -6 1 L 6 1"></path>
+									</g>
+									<g ref="orden_4" id="orden-4" data-h="900,300" data-sc="1.9">
+										<path d="M -7 -10 L 7 -10 L 7 10 L -7 10 Z"></path>
+										<path d="M -4 -4 L 4 -4"></path>
+										<path d="M -4 2 L 4 2"></path>
+									</g>
+									<g ref="orden_5" id="orden-5" data-h="700,432" data-sc="1.9">
+										<circle cx="0" cy="-6" r="3.5"></circle>
+										<path d="M -7 2 A 7 7 0 0 1 7 2"></path>
+										<path d="M -8 8 L 8 8"></path>
+									</g>
+									<g ref="orden_6" id="orden-6" data-h="900,432" data-sc="1.9">
+										<path d="M -9 -4 L 0 -9 L 9 -4"></path>
+										<path d="M -7 -1 L 7 -1 L 7 6 L -7 6 Z"></path>
+										<path d="M -8 10 L 8 10"></path>
+									</g>
+								</g>
+								<g id="etiquetas-orden" font-family="Geist, system-ui, sans-serif" font-size="12" fill="#3A31FC" letter-spacing="0.2">
+									<g ref="lblo_1" id="lblo-1" data-h="700,210"><text text-anchor="middle">compra registrada</text></g>
+									<g ref="lblo_2" id="lblo-2" data-h="900,210"><text text-anchor="middle">precios actualizados</text></g>
+									<g ref="lblo_3" id="lblo-3" data-h="700,342"><text text-anchor="middle">pedidos que entran solos</text></g>
+									<g ref="lblo_4" id="lblo-4" data-h="900,342"><text text-anchor="middle">venta facturada</text></g>
+									<g ref="lblo_5" id="lblo-5" data-h="700,474"><text text-anchor="middle">cuenta corriente de clientes</text></g>
+									<g ref="lblo_6" id="lblo-6" data-h="900,474"><text text-anchor="middle">cuenta corriente de proveedores</text></g>
+								</g>
+							</g>
+
+							<g id="plano-medio">
+								<g ref="portal" id="portal" data-open="0.72,0.72" transform="translate(500,281)">
+									<g ref="portal_luz" id="portal-luz">
+										<circle r="200" fill="url(#haloC)" opacity="1"></circle>
+										<circle r="112" fill="#ffffff" stroke="url(#brandArc)" stroke-width="2.5"></circle>
+										<path d="M 146 -46 A 154 154 0 0 1 46 146" fill="none" stroke="url(#brandArc)" stroke-width="6" stroke-linecap="round" opacity="1"></path>
+										<path d="M -146 46 A 154 154 0 0 1 -46 -146" fill="none" stroke="url(#brandArc)" stroke-width="6" stroke-linecap="round" opacity="1"></path>
+										<circle r="138" fill="none" stroke="url(#brandArc)" stroke-width="1" opacity="0.28"></circle>
+										<g id="arco-pulsos" fill="none" stroke="url(#brandArc)" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="13 100">
+											<path ref="arco_pulso_1" id="arco-pulso-1" pathLength="100" d="M -118 0 A 118 118 0 0 1 118 0 A 118 118 0 0 1 -118 0" opacity="0"></path>
+											<path ref="arco_pulso_2" id="arco-pulso-2" pathLength="100" d="M -118 0 A 118 118 0 0 1 118 0 A 118 118 0 0 1 -118 0" opacity="0"></path>
+											<path ref="arco_pulso_3" id="arco-pulso-3" pathLength="100" d="M -118 0 A 118 118 0 0 1 118 0 A 118 118 0 0 1 -118 0" opacity="0"></path>
+											<path ref="arco_pulso_4" id="arco-pulso-4" pathLength="100" d="M -118 0 A 118 118 0 0 1 118 0 A 118 118 0 0 1 -118 0" opacity="0"></path>
+											<path ref="arco_pulso_5" id="arco-pulso-5" pathLength="100" d="M -118 0 A 118 118 0 0 1 118 0 A 118 118 0 0 1 -118 0" opacity="0"></path>
+											<path ref="arco_pulso_6" id="arco-pulso-6" pathLength="100" d="M -118 0 A 118 118 0 0 1 118 0 A 118 118 0 0 1 -118 0" opacity="0"></path>
+										</g>
+									</g>
+									<g id="logo" transform="translate(-46,-46) scale(0.359)">
+										<g fill="none" stroke="url(#ccV3)" stroke-width="33" stroke-linecap="butt">
+											<path d="M 61.79 49.1 A 103 103 0 0 1 187.08 43.62"></path>
+											<path d="M 52.67 198.24 A 103 103 0 0 1 52.67 57.76"></path>
+											<path d="M 217.2 179.5 A 103 103 0 0 1 61.79 206.9"></path>
+										</g>
+										<g fill="url(#ccV3)">
+											<rect x="75.5" y="140" width="28" height="52" rx="3"></rect>
+											<rect x="114" y="115" width="28" height="77" rx="3"></rect>
+											<rect x="152.5" y="93" width="28" height="99" rx="3"></rect>
+										</g>
+										<path fill="#FA7E06" d="M 205 64 L 178.5 75 Q 193.5 76.4 195.5 92 Z"></path>
+									</g>
+								</g>
+							</g>
+
+							<g id="plano-cerca">
+								<g id="zona-caos" fill="none" stroke="#9AA3B5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+									<g ref="caos_1" id="caos-1" data-h="128,96,-12" data-sc="1.9">
+										<rect x="-8" y="-1" width="16" height="10" rx="1"></rect>
+										<path d="M -8 3 L 8 3"></path>
+										<path d="M 0 -11 L 0 -4 M -3 -7 L 0 -4 L 3 -7"></path>
+									</g>
+									<g ref="caos_2" id="caos-2" data-h="286,112,9" data-sc="1.9">
+										<path d="M -8 -9 L 3 -9 L 9 -3 L 0 6 L -8 -2 Z"></path>
+										<circle cx="-4" cy="-5" r="1.3"></circle>
+										<path d="M -9 9 L -4 5.5 L 0 10 L 5 6 L 9 9.5"></path>
+									</g>
+									<g ref="caos_3" id="caos-3" data-h="108,206,15" data-sc="1.9">
+										<path d="M -10 -8 L 10 -8 L 10 4 L -2 4 L -6 9 L -6 4 L -10 4 Z"></path>
+										<path d="M -6 -4 L 6 -4"></path>
+										<path d="M -6 0 L 2 0"></path>
+									</g>
+									<g ref="caos_4" id="caos-4" data-h="262,222,-8" data-sc="1.9">
+										<path d="M -7 -10 L 7 -10 L 7 10 L -7 10 Z"></path>
+										<path d="M -4 -4 C -2 -6.5 0 -1.5 2 -4 C 3 -5.2 4 -4.2 4.5 -3.6"></path>
+										<path d="M -4 2 C -2 -0.5 0 4.5 2 2 C 3 0.8 4 1.8 4.5 2.4"></path>
+									</g>
+									<g ref="caos_5" id="caos-5" data-h="140,318,7" data-sc="1.9">
+										<circle cx="0" cy="-6" r="3.5"></circle>
+										<path d="M -7 2 A 7 7 0 0 1 7 2"></path>
+										<path d="M -8 8 L -3 6 L 2 10 L 8 7"></path>
+									</g>
+									<g ref="caos_6" id="caos-6" data-h="288,352,-13" data-sc="1.9">
+										<path d="M -9 -4 L 0 -9 L 9 -4"></path>
+										<path d="M -7 -1 L 7 -1 L 7 6 L -7 6 Z"></path>
+										<path d="M -8 10 L -2 10 M 1 10 L 8 10"></path>
+									</g>
+								</g>
+								<g id="etiquetas" font-family="Geist, system-ui, sans-serif" font-size="12" fill="#566078" letter-spacing="0.2">
+									<g ref="lbl_1" id="lbl-1" data-h="128,138"><text text-anchor="middle">mercadería que entra</text></g>
+									<g ref="lbl_2" id="lbl-2" data-h="286,156"><text text-anchor="middle">precios que cambian</text></g>
+									<g ref="lbl_3" id="lbl-3" data-h="108,248"><text text-anchor="middle">pedidos por whatsapp</text></g>
+									<g ref="lbl_4" id="lbl-4" data-h="266,266"><text text-anchor="middle">ventas anotadas a mano</text></g>
+									<g ref="lbl_5" id="lbl-5" data-h="140,360"><text text-anchor="middle">lo que te deben</text></g>
+									<g ref="lbl_6" id="lbl-6" data-h="288,394"><text text-anchor="middle">lo que debés</text></g>
+								</g>
+							</g>
+						</g>
+
+						<!-- id="arco-envolvente" queda en el grupo EXTERIOR, con el
+						     translate(500,281) fijo como atributo XML -- el ref que
+						     escala por JS va en un grupo INTERIOR sin transform propio.
+						     Si se aplicara style.transform directo sobre el grupo que
+						     ya trae el atributo transform="...", el transform de CSS
+						     REEMPLAZA (no compone con) el atributo XML y el anillo
+						     saltaría al origen del SVG en vez de quedarse centrado. -->
+						<g id="arco-envolvente" transform="translate(500,281)">
+							<g ref="arco_envolvente" id="arco-envolvente-escala">
+								<circle r="118" fill="url(#haloC)" opacity="1"></circle>
+								<circle r="118" pathLength="100" fill="none" stroke="url(#brandRing)" stroke-width="8" stroke-linecap="butt" stroke-dasharray="28 22 28 22"></circle>
+								<circle r="138" fill="none" stroke="url(#brandRing)" stroke-width="1" opacity="0.3"></circle>
+							</g>
+						</g>
+
+						<g ref="nombre_final" id="nombre-final">
+							<text x="500" y="189.4" text-anchor="middle" font-family="Geist, system-ui, sans-serif" font-size="53.9" font-weight="600" letter-spacing="0" textLength="344.9" lengthAdjust="spacingAndGlyphs" fill="#3A31FC">ComercioCity</text>
+						</g>
+					</g>
+				</svg>
+
+				<!-- Panel del cierre, superpuesto (se mantiene igual que antes, grupo
+				     322 prompt 05 punto 3): entra desde abajo en el mismo tramo
+				     (0.85 -> 1) en que la escena se atenúa y el arco se cierra detrás.
+				     Sin backdrop-filter -- la capa + la atenuación de la escena de
+				     atrás hacen todo el trabajo (§12 de apple-design/SKILL.md). -->
+				<div ref="panel_cierre_wrap" class="demo-interludio__panel-cierre-wrap">
+					<div class="demo-interludio__panel-cierre">
+						<slot name="cierre" />
+					</div>
+				</div>
+			</div>
+		</div>
+	</fondo-seccion-sticky>
+</template>
+
+<script>
+import FondoSeccionSticky from './FondoSeccionSticky.vue'
+
+/** Los seis pares caos/orden, en el orden en que se escalonan. */
+const INDICES = [1, 2, 3, 4, 5, 6]
+
+/**
+ * Escena del portal (grupo 325, prompt 04): reemplaza entero a
+ * InterludioConvergencia.vue (grupo 322, prompt 05), que queda borrado --
+ * junto con su bug conocido del logo del núcleo que no llegaba a verse.
+ *
+ * Narrativa: el trabajo diario disperso (#zona-caos) entra por la izquierda,
+ * es succionado de a uno por el portal (#portal-luz) y sale ordenado del
+ * otro lado (#zona-orden). Al final el arco (#arco-envolvente) se despega,
+ * crece 1.87x y encapsula todo el panorama, que retrocede y se atenúa,
+ * mientras #nombre-final revela "ComercioCity" sobre el anillo cerrado --
+ * gesto deliberadamente opuesto al nombre-como-hueco de la apertura
+ * (AperturaCinematografica.vue, prompt 03 de este mismo grupo), para que
+ * las dos escenas no repitan el mismo truco visual.
+ *
+ * Mismo patrón que ya usaba InterludioConvergencia.vue (se conserva a
+ * propósito): pin propio anidado dentro de FondoSeccionSticky, progreso
+ * [0,1] contra el scroll de ESTA sección, listener de scroll pasivo +
+ * requestAnimationFrame. Prohibido explícito: nada de Framer Motion/Motion
+ * ni librerías de springs -- todo transform/opacity/filter puro, escrito por
+ * `style` inline porque el valor es continuo, nunca clases.
+ */
+export default {
+	name: 'InterludioPortal',
+
+	components: {
+		FondoSeccionSticky,
+	},
+
+	emits: ['cierre-visible'],
+
+	data() {
+		return {
+			/** Flag para no encolar más de un requestAnimationFrame por vez. */
+			ticking: false,
+			/** true si el sistema operativo pide reduced-motion: sin listener de scroll. */
+			reduced_motion: false,
+			/** Los seis pares { n, caos, lbl, orden, lblo, x, y, rot, sc }, leídos de
+			 *  data-h/data-sc en mounted() -- nunca hardcodeados (son el contrato del SVG). */
+			pares: [],
+			/** { sx, sy } leído de data-open de #portal -- escala de #portal-luz "encendido". */
+			portal_abierto: { sx: 1, sy: 1 },
+			/** Evita emitir el evento de tracking del cierre más de una vez. */
+			cierre_visible_emitido: false,
+		}
+	},
+
+	mounted() {
+		const self = this
+
+		self.reduced_motion = !!(
+			typeof window !== 'undefined' &&
+			window.matchMedia &&
+			window.matchMedia('(prefers-reduced-motion: reduce)').matches
+		)
+
+		self.leer_contrato_svg()
+
+		if (self.reduced_motion) {
+			/* Estado estático correspondiente a progreso = 1, sin listener de
+			 * scroll registrado (criterio de éxito 8): panorama atenuado, arco
+			 * cerrado, nombre visible, cierre encima. */
+			self.aplicar_estilos(1)
+			return
+		}
+
+		/* Cálculo inicial real (no arrancar en p=0 a ciegas): si la página carga
+		 * con esta sección ya parcialmente scrolleada, la escena tiene que
+		 * arrancar en el progreso que corresponde. */
+		self.calcular_progreso()
+		window.addEventListener('scroll', self.on_scroll, { passive: true })
+		window.addEventListener('resize', self.on_scroll, { passive: true })
+	},
+
+	beforeUnmount() {
+		window.removeEventListener('scroll', this.on_scroll)
+		window.removeEventListener('resize', this.on_scroll)
+	},
+
+	methods: {
+		/**
+		 * Lee del propio DOM los data-h/data-sc de los seis pares caos/orden y
+		 * el data-open de #portal -- "usarlo como origen de los desplazamientos
+		 * en vez de volver a medir" (contrato del prompt): nunca duplicar estos
+		 * números a mano en JS.
+		 *
+		 * @returns {void}
+		 */
+		leer_contrato_svg() {
+			const self = this
+
+			self.pares = INDICES.map(function (n) {
+				const caos = self.$refs['caos_' + n]
+				const orden = self.$refs['orden_' + n]
+				const lbl = self.$refs['lbl_' + n]
+				const lblo = self.$refs['lblo_' + n]
+				const pulso = self.$refs['arco_pulso_' + n]
+
+				const h_caos = (caos.getAttribute('data-h') || '0,0,0').split(',').map(Number)
+				const h_orden = (orden.getAttribute('data-h') || '0,0').split(',').map(Number)
+				const sc = parseFloat(caos.getAttribute('data-sc') || '1')
+
+				return {
+					n: n,
+					caos: caos,
+					lbl: lbl,
+					orden: orden,
+					lblo: lblo,
+					pulso: pulso,
+					caos_x: h_caos[0],
+					caos_y: h_caos[1],
+					caos_rot: h_caos[2],
+					orden_x: h_orden[0],
+					orden_y: h_orden[1],
+					sc: sc,
+				}
+			})
+
+			if (self.$refs.portal) {
+				const abierto = (self.$refs.portal.getAttribute('data-open') || '1,1').split(',').map(Number)
+				self.portal_abierto = { sx: abierto[0], sy: abierto[1] }
+			}
+		},
+
+		/**
+		 * Handler de scroll: encola el recálculo real en requestAnimationFrame,
+		 * sin recalcular en cada evento (pueden llegar decenas por segundo).
+		 *
+		 * @returns {void}
+		 */
+		on_scroll() {
+			const self = this
+			if (self.ticking) {
+				return
+			}
+			self.ticking = true
+			window.requestAnimationFrame(function () {
+				self.calcular_progreso()
+				self.ticking = false
+			})
+		},
+
+		/**
+		 * Progreso [0,1] según cuánto del alto "pinneable" de la sección ya se
+		 * scrolleó -- idéntico cálculo al que ya usaba InterludioConvergencia.vue,
+		 * relativo a ESTA sección, no al documento completo.
+		 *
+		 * @returns {void}
+		 */
+		calcular_progreso() {
+			if (!this.$refs.contenedor) {
+				return
+			}
+
+			const rect = this.$refs.contenedor.getBoundingClientRect()
+			const alto_pinneable = rect.height - window.innerHeight
+
+			if (alto_pinneable <= 0) {
+				this.aplicar_estilos(rect.top <= 0 ? 1 : 0)
+				return
+			}
+
+			const avance = -rect.top
+			const p = Math.max(0, Math.min(1, avance / alto_pinneable))
+			this.aplicar_estilos(p)
+		},
+
+		/**
+		 * Normaliza `p` al rango [0,1] dentro de [inicio, fin] -- 0 antes de
+		 * `inicio`, 1 después de `fin`, interpolación lineal en el medio.
+		 *
+		 * @param {number} p
+		 * @param {number} inicio
+		 * @param {number} fin
+		 * @returns {number}
+		 */
+		normalizar(p, inicio, fin) {
+			if (p <= inicio) {
+				return 0
+			}
+			if (p >= fin) {
+				return 1
+			}
+			return (p - inicio) / (fin - inicio)
+		},
+
+		/**
+		 * Escribe por `style`/atributo inline (nunca clases: el valor es
+		 * continuo) la coreografía completa para un progreso `p` dado -- tabla
+		 * del prompt, ids y data-* leídos en leer_contrato_svg().
+		 *
+		 * @param {number} p Progreso [0,1] dentro de la sección pinneada.
+		 * @returns {void}
+		 */
+		aplicar_estilos(p) {
+			const self = this
+			const lerp = function (a, b, t) {
+				return a + (b - a) * t
+			}
+			const easeOut = function (t) {
+				return 1 - Math.pow(1 - t, 3)
+			}
+			const easeIn = function (t) {
+				return t * t * t
+			}
+
+			/* 0.18 -> 0.35: el portal se enciende. Antes de 0.18 queda apagado
+			 * (opacity 0, escala 0); el "encendido" pleno usa la escala de
+			 * data-open, no la escala 1 nativa de los paths. */
+			const t_portal = easeOut(self.normalizar(p, 0.18, 0.35))
+			if (self.$refs.portal_luz) {
+				self.$refs.portal_luz.style.opacity = String(t_portal)
+				self.$refs.portal_luz.style.transform =
+					'scale(' + self.portal_abierto.sx * t_portal + ', ' + self.portal_abierto.sy * t_portal + ')'
+			}
+
+			/* 0.35 -> 0.70: los seis del caos, succionados de a uno, escalonados.
+			 * 0.55 -> 0.85: sus seis gemelos, armados del otro lado -- mismo
+			 * índice N, ventanas que se solapan a propósito con las del caos
+			 * para que el emparejamiento se note (criterio de éxito 3). */
+			const CAOS_INICIO = 0.35
+			const CAOS_DURACION = 0.16
+			const CAOS_PASO = (0.7 - CAOS_DURACION - CAOS_INICIO) / (INDICES.length - 1)
+			const ORDEN_INICIO = 0.55
+			const ORDEN_DURACION = 0.16
+			const ORDEN_PASO = (0.85 - ORDEN_DURACION - ORDEN_INICIO) / (INDICES.length - 1)
+
+			self.pares.forEach(function (par, i) {
+				const caos_ini = CAOS_INICIO + i * CAOS_PASO
+				const u_caos = self.normalizar(p, caos_ini, caos_ini + CAOS_DURACION)
+				/* La etiqueta se apaga ANTES que el ícono (primera mitad de la
+				 * ventana); el ícono se desplaza hacia el centro del portal
+				 * acelerando (easeIn: "cae" hacia adentro) mientras se achica y
+				 * se desvanece un poco después que su etiqueta. */
+				const opacidad_lbl = 1 - easeOut(self.normalizar(u_caos, 0, 0.5))
+				const opacidad_caos = 1 - easeOut(self.normalizar(u_caos, 0.15, 1))
+				const avance_caos = easeIn(u_caos)
+				const x_caos = lerp(par.caos_x, 500, avance_caos)
+				const y_caos = lerp(par.caos_y, 281, avance_caos)
+				const escala_caos = lerp(par.sc, 0, avance_caos)
+
+				if (par.caos) {
+					par.caos.setAttribute(
+						'transform',
+						'translate(' + x_caos + ',' + y_caos + ') rotate(' + lerp(par.caos_rot, 0, avance_caos) + ') scale(' + escala_caos + ')'
+					)
+					par.caos.style.opacity = String(opacidad_caos)
+				}
+				if (par.lbl) {
+					par.lbl.setAttribute('transform', 'translate(' + par.caos_x + ',' + par.caos_y + ')')
+					par.lbl.style.opacity = String(opacidad_lbl)
+				}
+
+				/* Al entrar cada uno (cola de su propia ventana) se enciende su
+				 * arco-pulso: un flash breve que recorre el anillo del portal una
+				 * vez y se apaga -- ventana propia, angosta, pegada al final de la
+				 * ventana del ícono ("al entrar cada uno"). */
+				const PULSO_DURACION = 0.06
+				const pulso_ini = caos_ini + CAOS_DURACION - PULSO_DURACION
+				const u_pulso = self.normalizar(p, pulso_ini, pulso_ini + PULSO_DURACION)
+				if (par.pulso) {
+					/* Envolvente triangular: sube y baja dentro de la propia ventana,
+					 * así que para cualquier p posterior ya quedó en 0 sin necesitar
+					 * una rama aparte. */
+					const opacidad_pulso = u_pulso <= 0.5 ? u_pulso * 2 : (1 - u_pulso) * 2
+					par.pulso.style.opacity = String(Math.max(0, opacidad_pulso))
+					par.pulso.style.strokeDashoffset = String(-100 * easeOut(u_pulso))
+				}
+
+				const orden_ini = ORDEN_INICIO + i * ORDEN_PASO
+				const u_orden = self.normalizar(p, orden_ini, orden_ini + ORDEN_DURACION)
+				/* El ícono primero, la etiqueta después (segunda mitad). */
+				const opacidad_orden = easeOut(self.normalizar(u_orden, 0, 0.6))
+				const opacidad_lblo = easeOut(self.normalizar(u_orden, 0.4, 1))
+				const avance_orden = easeOut(u_orden)
+				const x_orden = lerp(500, par.orden_x, avance_orden)
+				const y_orden = lerp(281, par.orden_y, avance_orden)
+				const escala_orden = lerp(0, par.sc, avance_orden)
+
+				if (par.orden) {
+					par.orden.setAttribute('transform', 'translate(' + x_orden + ',' + y_orden + ') scale(' + escala_orden + ')')
+					par.orden.style.opacity = String(opacidad_orden)
+				}
+				if (par.lblo) {
+					par.lblo.setAttribute('transform', 'translate(' + par.orden_x + ',' + par.orden_y + ')')
+					par.lblo.style.opacity = String(opacidad_lblo)
+				}
+			})
+
+			/* 0.85 -> 1: el arco se despega y crece a 1.87 (atado al textLength
+			 * del nombre -- no tocar sin recalcular), el panorama entero
+			 * retrocede y se atenúa, y el nombre aparece sobre el anillo ya
+			 * cerrado. */
+			const k = easeOut(self.normalizar(p, 0.85, 1))
+
+			if (self.$refs.arco_envolvente) {
+				self.$refs.arco_envolvente.style.transform = 'scale(' + lerp(1, 1.87, k) + ')'
+			}
+			if (self.$refs.panorama) {
+				self.$refs.panorama.style.transform = 'scale(' + lerp(1, 0.86, k) + ')'
+				self.$refs.panorama.style.opacity = String(lerp(1, 0.22, k))
+				self.$refs.panorama.style.filter = k > 0 ? 'saturate(' + lerp(1, 0.65, k) + ')' : 'none'
+			}
+			if (self.$refs.nombre_final) {
+				self.$refs.nombre_final.style.opacity = String(k)
+			}
+			if (self.$refs.panel_cierre_wrap) {
+				self.$refs.panel_cierre_wrap.style.transform = 'translateY(' + (1 - k) * 100 + '%)'
+				self.$refs.panel_cierre_wrap.style.opacity = String(k)
+			}
+
+			if (k > 0 && !self.cierre_visible_emitido) {
+				self.cierre_visible_emitido = true
+				self.$emit('cierre-visible')
+			}
+		},
+	},
+}
+</script>
+
+<style scoped>
+/* Alto total de la sección: 100vh de pin + el recorrido que necesita la
+   coreografía completa para sentirse acompañando al scroll, no apurada --
+   mismo criterio de tamaño que tenía InterludioConvergencia.vue. */
+.demo-interludio {
+	position: relative;
+	min-height: 260vh;
+}
+
+.demo-interludio__pin {
+	position: sticky;
+	top: 0;
+	height: 100vh;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+}
+
+/* viewBox -24 -12 1048 586 (~1.79:1, mucho más ancho que alto) -- muy
+   distinto del SVG cuadrado de la escena vieja, así que la regla de tamaño
+   es nueva (no una reutilización de .demo-interludio__svg). */
+.demo-portal__svg {
+	width: min(94vw, 1040px);
+	height: auto;
+}
+
+/* #panorama, #nucleo-halo y #nucleo-anillo (transform-box/transform-origin
+   de la escena vieja) ya no existen en este SVG: la escala JS de #panorama,
+   #arco-envolvente y #portal-luz necesita el mismo ajuste de caja/origen,
+   ahora con los ids de esta escena. */
+#panorama,
+#arco-envolvente-escala,
+#portal-luz {
+	transform-box: fill-box;
+	transform-origin: center;
+}
+
+.demo-interludio__panel-cierre-wrap {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	display: flex;
+	align-items: flex-end;
+	justify-content: center;
+	padding: 24px 20px 6vh;
+	box-sizing: border-box;
+	/* Estado inicial: fuera de pantalla y transparente -- aplicar_estilos() lo
+	   trae con el progreso, nunca con transition (el valor ya llega continuo). */
+	transform: translateY(100%);
+	opacity: 0;
+	pointer-events: none;
+}
+
+@media (max-width: 767.98px) {
+	.demo-interludio {
+		min-height: 220vh;
+	}
+}
+</style>

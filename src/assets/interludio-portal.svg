@@ -1,0 +1,169 @@
+﻿<?xml version="1.0"?>
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-24 -12 1048 586" preserveAspectRatio="xMidYMid meet" width="1000" height="562" overflow="visible" role="img" aria-label="El trabajo disperso atraviesa el arco, sale ordenado y el arco se cierra sobre la escena">
+        <defs>
+          <linearGradient id="brandStroke" gradientUnits="userSpaceOnUse" x1="-6" y1="-12" x2="6" y2="12">
+            <stop offset="0" stop-color="#0B84F8"></stop>
+            <stop offset="1" stop-color="#3A31FC"></stop>
+          </linearGradient>
+          <linearGradient id="brandArc" gradientUnits="userSpaceOnUse" x1="-90" y1="-150" x2="70" y2="150">
+            <stop offset="0" stop-color="#0B84F8"></stop>
+            <stop offset="1" stop-color="#3A31FC"></stop>
+          </linearGradient>
+          <linearGradient id="brandRing" gradientUnits="userSpaceOnUse" x1="-118" y1="-118" x2="90" y2="118">
+            <stop offset="0" stop-color="#0B84F8"></stop>
+            <stop offset="1" stop-color="#3A31FC"></stop>
+          </linearGradient>
+          <radialGradient id="haloC">
+            <stop offset="0" stop-color="#3A31FC" stop-opacity="0.13"></stop>
+            <stop offset="0.5" stop-color="#0B84F8" stop-opacity="0.06"></stop>
+            <stop offset="1" stop-color="#0B84F8" stop-opacity="0"></stop>
+          </radialGradient>
+          <linearGradient id="ccV3" gradientUnits="userSpaceOnUse" x1="128" y1="8.5" x2="128" y2="247.5">
+            <stop offset="0" stop-color="#0B84F8"></stop>
+            <stop offset="1" stop-color="#3A31FC"></stop>
+          </linearGradient>
+        </defs>
+
+        <g id="escena" data-el="escena">
+
+          <g id="panorama" data-el="panorama">
+
+            <g id="plano-lejos" data-el="plano-lejos">
+              <g id="horizonte" data-el="horizonte" fill="none" stroke="#9AA3B5" stroke-width="1">
+                <path d="M 60 470 L 960 470" opacity="0.16"></path>
+                <path d="M 210 502 L 900 502" opacity="0.1"></path>
+                <path d="M 40 526 Q 500 452 960 526" opacity="0.12"></path>
+              </g>
+              <g id="zona-orden" data-el="zona-orden" fill="none" stroke="url(#brandStroke)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <g id="orden-1" data-el="orden-1" data-h="700,168" data-sc="1.9" transform="translate(700,168) scale(1.9)">
+                  <rect data-s="0" x="-8" y="-1" width="16" height="10" rx="1"></rect>
+                  <path data-s="1" d="M -8 3 L 8 3"></path>
+                  <path data-s="2" d="M -3 -7 L -0.5 -4.5 L 4 -10"></path>
+                </g>
+                <g id="orden-2" data-el="orden-2" data-h="900,168" data-sc="1.9" transform="translate(900,168) scale(1.9)">
+                  <path data-s="0" d="M -8 -9 L 3 -9 L 9 -3 L 0 6 L -8 -2 Z"></path>
+                  <circle data-s="1" cx="-4" cy="-5" r="1.3"></circle>
+                  <path data-s="2" d="M -9 10 L 9 10"></path>
+                </g>
+                <g id="orden-3" data-el="orden-3" data-h="700,300" data-sc="1.9" transform="translate(700,300) scale(1.9)">
+                  <path data-s="0" d="M -10 -8 L 10 -8 L 10 6 L -10 6 Z"></path>
+                  <path data-s="1" d="M -6 -3 L 6 -3"></path>
+                  <path data-s="2" d="M -6 1 L 6 1"></path>
+                </g>
+                <g id="orden-4" data-el="orden-4" data-h="900,300" data-sc="1.9" transform="translate(900,300) scale(1.9)">
+                  <path data-s="0" d="M -7 -10 L 7 -10 L 7 10 L -7 10 Z"></path>
+                  <path data-s="1" d="M -4 -4 L 4 -4"></path>
+                  <path data-s="2" d="M -4 2 L 4 2"></path>
+                </g>
+                <g id="orden-5" data-el="orden-5" data-h="700,432" data-sc="1.9" transform="translate(700,432) scale(1.9)">
+                  <circle data-s="0" cx="0" cy="-6" r="3.5"></circle>
+                  <path data-s="1" d="M -7 2 A 7 7 0 0 1 7 2"></path>
+                  <path data-s="2" d="M -8 8 L 8 8"></path>
+                </g>
+                <g id="orden-6" data-el="orden-6" data-h="900,432" data-sc="1.9" transform="translate(900,432) scale(1.9)">
+                  <path data-s="0" d="M -9 -4 L 0 -9 L 9 -4"></path>
+                  <path data-s="1" d="M -7 -1 L 7 -1 L 7 6 L -7 6 Z"></path>
+                  <path data-s="2" d="M -8 10 L 8 10"></path>
+                </g>
+              </g>
+              <g id="etiquetas-orden" data-el="etiquetas-orden" font-family="Geist, system-ui, sans-serif" font-size="12" fill="#3A31FC" letter-spacing="0.2">
+                <g id="lblo-1" data-el="lblo-1" data-h="700,210" transform="translate(700,210)"><text text-anchor="middle">compra registrada</text></g>
+                <g id="lblo-2" data-el="lblo-2" data-h="900,210" transform="translate(900,210)"><text text-anchor="middle">precios actualizados</text></g>
+                <g id="lblo-3" data-el="lblo-3" data-h="700,342" transform="translate(700,342)"><text text-anchor="middle">pedidos que entran solos</text></g>
+                <g id="lblo-4" data-el="lblo-4" data-h="900,342" transform="translate(900,342)"><text text-anchor="middle">venta facturada</text></g>
+                <g id="lblo-5" data-el="lblo-5" data-h="700,474" transform="translate(700,474)"><text text-anchor="middle">cuenta corriente de clientes</text></g>
+                <g id="lblo-6" data-el="lblo-6" data-h="900,474" transform="translate(900,474)"><text text-anchor="middle">cuenta corriente de proveedores</text></g>
+              </g>
+            </g>
+
+            <g id="plano-medio" data-el="plano-medio">
+              <g id="portal" data-el="portal" data-open="0.72,0.72" transform="translate(500,281)">
+                <g id="portal-luz" data-el="portal-luz">
+                  <circle data-el="halo" r="200" fill="url(#haloC)" opacity="1"></circle>
+                  <circle r="112" fill="#ffffff" stroke="url(#brandArc)" stroke-width="2.5"></circle>
+                  <path data-el="arco-1" d="M 146 -46 A 154 154 0 0 1 46 146" fill="none" stroke="url(#brandArc)" stroke-width="6" stroke-linecap="round" opacity="1"></path>
+                  <path data-el="arco-2" d="M -146 46 A 154 154 0 0 1 -46 -146" fill="none" stroke="url(#brandArc)" stroke-width="6" stroke-linecap="round" opacity="1"></path>
+                  <circle r="138" fill="none" stroke="url(#brandArc)" stroke-width="1" opacity="0.28"></circle>
+                  <g id="arco-pulsos" data-el="arco-pulsos" fill="none" stroke="url(#brandArc)" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="13 100">
+                    <path id="arco-pulso-1" data-el="pulso-1" pathLength="100" d="M -118 0 A 118 118 0 0 1 118 0 A 118 118 0 0 1 -118 0" opacity="0"></path>
+                    <path id="arco-pulso-2" data-el="pulso-2" pathLength="100" d="M -118 0 A 118 118 0 0 1 118 0 A 118 118 0 0 1 -118 0" opacity="0"></path>
+                    <path id="arco-pulso-3" data-el="pulso-3" pathLength="100" d="M -118 0 A 118 118 0 0 1 118 0 A 118 118 0 0 1 -118 0" opacity="0"></path>
+                    <path id="arco-pulso-4" data-el="pulso-4" pathLength="100" d="M -118 0 A 118 118 0 0 1 118 0 A 118 118 0 0 1 -118 0" opacity="0"></path>
+                    <path id="arco-pulso-5" data-el="pulso-5" pathLength="100" d="M -118 0 A 118 118 0 0 1 118 0 A 118 118 0 0 1 -118 0" opacity="0"></path>
+                    <path id="arco-pulso-6" data-el="pulso-6" pathLength="100" d="M -118 0 A 118 118 0 0 1 118 0 A 118 118 0 0 1 -118 0" opacity="0"></path>
+                  </g>
+                </g>
+                <g id="logo" data-el="logo" data-t="translate(-46,-46) scale(0.359)" transform="translate(-46,-46) scale(0.359)">
+                  <g fill="none" stroke="url(#ccV3)" stroke-width="33" stroke-linecap="butt">
+                    <path d="M 61.79 49.1 A 103 103 0 0 1 187.08 43.62"></path>
+                    <path d="M 52.67 198.24 A 103 103 0 0 1 52.67 57.76"></path>
+                    <path d="M 217.2 179.5 A 103 103 0 0 1 61.79 206.9"></path>
+                  </g>
+                  <g fill="url(#ccV3)">
+                    <rect x="75.5" y="140" width="28" height="52" rx="3"></rect>
+                    <rect x="114" y="115" width="28" height="77" rx="3"></rect>
+                    <rect x="152.5" y="93" width="28" height="99" rx="3"></rect>
+                  </g>
+                  <path fill="#FA7E06" d="M 205 64 L 178.5 75 Q 193.5 76.4 195.5 92 Z"></path>
+                </g>
+              </g>
+            </g>
+
+            <g id="plano-cerca" data-el="plano-cerca">
+              <g id="zona-caos" data-el="zona-caos" fill="none" stroke="#9AA3B5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <g id="caos-1" data-el="caos-1" data-h="128,96,-12" data-sc="1.9" transform="translate(128,96) rotate(-12) scale(1.9)">
+                  <rect data-s="0" x="-8" y="-1" width="16" height="10" rx="1"></rect>
+                  <path data-s="1" d="M -8 3 L 8 3"></path>
+                  <path data-s="2" d="M 0 -11 L 0 -4 M -3 -7 L 0 -4 L 3 -7"></path>
+                </g>
+                <g id="caos-2" data-el="caos-2" data-h="286,112,9" data-sc="1.9" transform="translate(286,112) rotate(9) scale(1.9)">
+                  <path data-s="0" d="M -8 -9 L 3 -9 L 9 -3 L 0 6 L -8 -2 Z"></path>
+                  <circle data-s="1" cx="-4" cy="-5" r="1.3"></circle>
+                  <path data-s="2" d="M -9 9 L -4 5.5 L 0 10 L 5 6 L 9 9.5"></path>
+                </g>
+                <g id="caos-3" data-el="caos-3" data-h="108,206,15" data-sc="1.9" transform="translate(108,206) rotate(15) scale(1.9)">
+                  <path data-s="0" d="M -10 -8 L 10 -8 L 10 4 L -2 4 L -6 9 L -6 4 L -10 4 Z"></path>
+                  <path data-s="1" d="M -6 -4 L 6 -4"></path>
+                  <path data-s="2" d="M -6 0 L 2 0"></path>
+                </g>
+                <g id="caos-4" data-el="caos-4" data-h="262,222,-8" data-sc="1.9" transform="translate(262,222) rotate(-8) scale(1.9)">
+                  <path data-s="0" d="M -7 -10 L 7 -10 L 7 10 L -7 10 Z"></path>
+                  <path data-s="1" d="M -4 -4 C -2 -6.5 0 -1.5 2 -4 C 3 -5.2 4 -4.2 4.5 -3.6"></path>
+                  <path data-s="2" d="M -4 2 C -2 -0.5 0 4.5 2 2 C 3 0.8 4 1.8 4.5 2.4"></path>
+                </g>
+                <g id="caos-5" data-el="caos-5" data-h="140,318,7" data-sc="1.9" transform="translate(140,318) rotate(7) scale(1.9)">
+                  <circle data-s="0" cx="0" cy="-6" r="3.5"></circle>
+                  <path data-s="1" d="M -7 2 A 7 7 0 0 1 7 2"></path>
+                  <path data-s="2" d="M -8 8 L -3 6 L 2 10 L 8 7"></path>
+                </g>
+                <g id="caos-6" data-el="caos-6" data-h="288,352,-13" data-sc="1.9" transform="translate(288,352) rotate(-13) scale(1.9)">
+                  <path data-s="0" d="M -9 -4 L 0 -9 L 9 -4"></path>
+                  <path data-s="1" d="M -7 -1 L 7 -1 L 7 6 L -7 6 Z"></path>
+                  <path data-s="2" d="M -8 10 L -2 10 M 1 10 L 8 10"></path>
+                </g>
+              </g>
+              <g id="etiquetas" data-el="etiquetas" font-family="Geist, system-ui, sans-serif" font-size="12" fill="#566078" letter-spacing="0.2">
+                <g id="lbl-1" data-el="lbl-1" data-h="128,138" transform="translate(128,138)"><text text-anchor="middle">mercadería que entra</text></g>
+                <g id="lbl-2" data-el="lbl-2" data-h="286,156" transform="translate(286,156)"><text text-anchor="middle">precios que cambian</text></g>
+                <g id="lbl-3" data-el="lbl-3" data-h="108,248" transform="translate(108,248)"><text text-anchor="middle">pedidos por whatsapp</text></g>
+                <g id="lbl-4" data-el="lbl-4" data-h="266,266" transform="translate(266,266)"><text text-anchor="middle">ventas anotadas a mano</text></g>
+                <g id="lbl-5" data-el="lbl-5" data-h="140,360" transform="translate(140,360)"><text text-anchor="middle">lo que te deben</text></g>
+                <g id="lbl-6" data-el="lbl-6" data-h="288,394" transform="translate(288,394)"><text text-anchor="middle">lo que debés</text></g>
+              </g>
+            </g>
+
+          </g>
+
+          <g id="arco-envolvente" data-el="arco-envolvente" transform="translate(500,281)" opacity="1">
+            <circle data-el="env-halo" r="118" fill="url(#haloC)" opacity="1"></circle>
+            <circle data-el="env-anillo" r="118" pathLength="100" fill="none" stroke="url(#brandRing)" stroke-width="8" stroke-linecap="butt" stroke-dasharray="28 22 28 22"></circle>
+            <circle data-el="env-anillo-fino" r="138" fill="none" stroke="url(#brandRing)" stroke-width="1" opacity="0.3"></circle>
+          </g>
+
+          <g id="nombre-final" data-el="nombre-final" opacity="1">
+            <text data-el="nombre-texto" x="500" y="189.4" text-anchor="middle" font-family="Geist, system-ui, sans-serif" font-size="53.9" font-weight="600" letter-spacing="0" textLength="344.9" lengthAdjust="spacingAndGlyphs" fill="#3A31FC">ComercioCity</text>
+          </g>
+
+        </g>
+      </svg>

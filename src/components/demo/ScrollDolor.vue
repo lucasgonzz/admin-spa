@@ -3,7 +3,7 @@
     <!-- Apertura: escena cinematográfica animada por scroll (grupo 325, prompt
          03, reemplaza al prompt 06 del grupo 322 -- descartado en su momento
          porque los SVG todavía no existían). Arma su propio FondoSeccionSticky
-         adentro, igual que InterludioConvergencia -- no lleva uno acá afuera. -->
+         adentro, igual que InterludioPortal -- no lleva uno acá afuera. -->
     <apertura-cinematografica :titulo="contenido.apertura.titulo" :subtitulo="contenido.apertura.subtitulo" />
 
     <!-- Bloques 1 a 5: párrafo(s) de dolor + línea de alivio resaltada + pieza multimedia -->
@@ -44,21 +44,22 @@
       </article>
     </fondo-seccion-sticky>
 
-    <!-- Interludio de convergencia + cierre superpuesto (grupo 322, prompt 05).
+    <!-- Interludio del portal + cierre superpuesto (grupo 325, prompt 04,
+         reemplaza entero al interludio de convergencia del grupo 322/05).
          El cierre ya NO va en su propio FondoSeccionSticky: se renderiza por
-         encima de la escena del interludio (slot #cierre), mientras la
-         convergencia queda atenuada y desaturada detrás. Estructura de texto
-         del cierre sin cambios respecto de los bloques 1-5 (título(s) + hitos
-         temporales + frase o párrafo de cierre), misma pieza multimedia con
-         marco teléfono. -->
-    <interludio-convergencia @cierre-visible="emitir_evento_cierre">
+         encima de la escena del portal (slot #cierre), mientras el panorama
+         queda atenuado y desaturado detrás y el arco se cierra sobre todo.
+         Estructura de texto del cierre sin cambios respecto de los bloques
+         1-5 (título(s) + hitos temporales + frase o párrafo de cierre),
+         misma pieza multimedia con marco teléfono. -->
+    <interludio-portal @cierre-visible="emitir_evento_cierre">
       <template #cierre>
         <!-- Sin la clase demo-bloque ni registrar_bloque_ref a propósito: ese
              sistema (IntersectionObserver + opacity:0 base + demo-bloque-entrada)
              es para bloques que aparecen en su posición normal de flujo. Este
              cierre ahora vive dentro de un wrapper posicionado (translateY 100%
              -> 0%) cuya opacidad y entrada ya las controla por completo el
-             progreso de scroll de InterludioConvergencia -- combinar los dos
+             progreso de scroll de InterludioPortal -- combinar los dos
              sistemas haría que el contenido interno animara una segunda vez,
              de forma descoordinada, apenas el wrapper se vuelve geométricamente
              visible para el observer. -->
@@ -94,7 +95,7 @@
           </div>
         </article>
       </template>
-    </interludio-convergencia>
+    </interludio-portal>
 
     <!-- Puente al formulario: el formulario en sí lo agrega el prompt 05 (ver
          armazón en ExperienciaDemo.vue, que renderiza esta sección justo antes) -->
@@ -108,7 +109,7 @@
 import MarcoDispositivo from './MarcoDispositivo.vue'
 import PiezaMultimedia from './PiezaMultimedia.vue'
 import FondoSeccionSticky from './FondoSeccionSticky.vue'
-import InterludioConvergencia from './InterludioConvergencia.vue'
+import InterludioPortal from './InterludioPortal.vue'
 import AperturaCinematografica from './AperturaCinematografica.vue'
 
 /**
@@ -293,7 +294,7 @@ export default {
     MarcoDispositivo,
     PiezaMultimedia,
     FondoSeccionSticky,
-    InterludioConvergencia,
+    InterludioPortal,
     AperturaCinematografica,
   },
 
@@ -389,9 +390,10 @@ export default {
     /**
      * Tracking del bloque de cierre (grupo 322, prompt 05): ya no tiene
      * IntersectionObserver propio -- el cierre vive dentro de
-     * InterludioConvergencia, que emite 'cierre-visible' apenas arranca a
-     * entrar por encima de la escena. Mismo evento y forma que los bloques
-     * 1-5 en iniciar_observador, para no perder cobertura de tracking.
+     * InterludioPortal (grupo 325, prompt 04), que emite 'cierre-visible'
+     * apenas arranca a entrar por encima de la escena. Mismo evento y forma
+     * que los bloques 1-5 en iniciar_observador, para no perder cobertura
+     * de tracking.
      *
      * @returns {void}
      */

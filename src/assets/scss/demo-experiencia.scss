@@ -191,20 +191,23 @@
 
 // La variante "cierre" de FondoSeccionSticky quedó sin uso (grupo 322, prompt
 // 05): el bloque de cierre dejó de tener su propio FondoSeccionSticky --
-// ahora se renderiza superpuesto sobre el interludio de convergencia (ver
-// InterludioConvergencia.vue), que aporta su propio fondo con la variante
+// ahora se renderiza superpuesto sobre el interludio (ver InterludioPortal.vue,
+// grupo 325 prompt 04 -- reemplaza al InterludioConvergencia.vue original del
+// grupo 322/05, borrado), que aporta su propio fondo con la variante
 // "interludio" de abajo. Se retira la regla en vez de dejarla muerta.
 
-// Interludio de convergencia (grupo 322, prompt 05): centrado y simétrico --
-// la escena SVG ya trae su propio protagonismo visual, el fondo solo acompaña.
+// Interludio (grupo 322, prompt 05; escena reemplazada por el portal en el
+// grupo 325, prompt 04): centrado y simétrico -- la escena SVG ya trae su
+// propio protagonismo visual, el fondo solo acompaña.
 .demo-fondo-seccion--interludio .demo-fondo-seccion__fondo {
 	background-image:
 		radial-gradient(80% 80% at 50% 45%, rgba(11, 132, 248, 0.14), transparent 60%),
 		radial-gradient(70% 70% at 50% 55%, rgba(58, 49, 252, 0.12), transparent 55%);
 }
 
-// Variantes con un pin PROPIO anidado (grupo 325, prompt 03: InterludioConvergencia.vue
-// ya lo hacía, AperturaCinematografica.vue ahora también) necesitan que
+// Variantes con un pin PROPIO anidado (InterludioPortal.vue -- antes
+// InterludioConvergencia.vue -- ya lo hacía; AperturaCinematografica.vue,
+// grupo 325 prompt 03, ahora también) necesitan que
 // .demo-fondo-seccion__contenido deje de ser una ventana fija de 100vh: su hijo
 // real (.demo-interludio / .demo-apertura) mide bastante más que eso a propósito,
 // para darle al scroll el recorrido que la coreografía necesita, y ese hijo trae
@@ -231,9 +234,10 @@
 }
 
 // ---------------------------------------------------------------------------
-// Interludio de convergencia: panel del cierre superpuesto (grupo 322, prompt
-// 05, punto 3). Sin backdrop-filter -- la capa + la atenuación de la escena
-// de atrás (ver InterludioConvergencia.vue) hacen todo el trabajo.
+// Interludio: panel del cierre superpuesto (grupo 322, prompt 05, punto 3;
+// escena reemplazada por InterludioPortal.vue en el grupo 325, prompt 04,
+// pero el panel del cierre se mantiene igual). Sin backdrop-filter -- la capa
+// + la atenuación de la escena de atrás hacen todo el trabajo.
 // ---------------------------------------------------------------------------
 
 .demo-interludio__panel-cierre {
