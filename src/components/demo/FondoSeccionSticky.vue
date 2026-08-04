@@ -32,11 +32,14 @@ export default {
 </script>
 
 <style scoped>
-/* min-height (no height fija): 180vh alcanza para que el pin se sienta sin ser eterno,
-   pero si el contenido de la sección necesita más, el alto crece con él. */
+/* Recorrido del pin: 160vh = 100vh visibles + 60vh de "duración" del clavado. Fondo Y
+   contenido van pinneados juntos (los dos position: sticky) -- si solo se pinnea el fondo,
+   el contenido se va hacia arriba con el flujo normal y deja al fondo solo, produciendo un
+   tramo de scroll donde no se ve ningún contenido (bug real, grupo 322/325). NO subir este
+   valor sin verificar en pantalla: cada vh de más es scroll en el que no cambia nada. */
 .demo-fondo-seccion {
 	position: relative;
-	min-height: 180vh;
+	min-height: 160vh;
 }
 
 /* Full-bleed: .demo-scroll-dolor (el padre real de estas secciones) está limitado a
@@ -58,20 +61,25 @@ export default {
 	pointer-events: none;
 }
 
-/* Se superpone al fondo (que sí ocupa espacio de flujo pese a ser sticky) tirando hacia
-   arriba la misma altura que el fondo reserva -- así el contenido queda VISUALMENTE
-   encima del pin en vez de aparecer recién después de sus 100vh. Column + justify-content
-   centra el bloque real (el slot) verticalmente dentro de la ventana fija del pin, sin
-   forzarle un ancho de flex-row que le rompería el layout (grid/flex) que ya trae. */
+/* Pinneado (position: sticky, no relative -- ver comentario de arriba) igual que el fondo,
+   y superpuesto tirando hacia arriba la misma altura que el fondo reserva -- así el
+   contenido queda VISUALMENTE encima del pin en vez de aparecer recién después de sus
+   100vh. height fija (no min-height): la ventana es exactamente el viewport, así que
+   ningún bloque puede estirar la sección por su cuenta -- si algo no entra en 100vh se
+   recorta (overflow: hidden) y se ve en QA, nunca aparece un scroll interno para el lead.
+   Column + justify-content centra el bloque real (el slot) verticalmente dentro de esa
+   ventana fija, sin forzarle un ancho de flex-row que le rompería el layout que ya trae. */
 .demo-fondo-seccion__contenido {
-	position: relative;
+	position: sticky;
+	top: 0;
 	z-index: 1;
 	margin-top: -100vh;
-	min-height: 100vh;
+	height: 100vh;
 	display: flex;
 	flex-direction: column;
 	justify-content: center;
-	padding: 10vh 0;
+	padding: 4vh 0;
 	box-sizing: border-box;
+	overflow: hidden;
 }
 </style>

@@ -435,7 +435,13 @@ export default {
             self.observer.unobserve(entry.target)
           })
         },
-        { threshold: 0.2 }
+        /* threshold bajo + rootMargin negativo abajo (grupo 325, prompt 01): con el
+           contenido pinneado y centrado en el viewport (FondoSeccionSticky), un
+           threshold de 0.2 disparaba cuando el bloque ya estaba prácticamente puesto
+           en pantalla -- la animación de entrada corría cuando el lead ya lo estaba
+           mirando y se perdía. Con 0.01 + rootMargin, el disparo ocurre apenas el
+           bloque empieza a entrar. */
+        { threshold: 0.01, rootMargin: '0px 0px -25% 0px' }
       )
 
       self.bloque_refs.forEach(function (el) {

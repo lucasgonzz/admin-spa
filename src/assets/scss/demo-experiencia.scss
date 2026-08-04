@@ -68,7 +68,7 @@
 @keyframes demo-bloque-entrada {
 	from {
 		opacity: 0;
-		transform: translateY(56px) scale(0.96);
+		transform: translateY(96px) scale(0.9);
 	}
 	to {
 		opacity: 1;
@@ -96,7 +96,10 @@
 		opacity: 0;
 		// settle pronunciado, sin overshoot: es contenido que aparece al hacer scroll,
 		// no algo que el usuario soltó con velocidad -- no hay justificación para bounce.
-		animation: demo-bloque-entrada 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+		// Duración y desplazamiento subidos (grupo 325, prompt 01): con el gesto anterior
+		// (56px / 0.9s) la entrada casi no se apreciaba una vez bajado el threshold del
+		// IntersectionObserver en ScrollDolor.vue.
+		animation: demo-bloque-entrada 1.05s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 		// Acotado a la ventana de animación (ver limpiar_will_change_al_terminar() en
 		// ScrollDolor.vue, que lo saca en animationend): no acumular capas de
 		// composición en las siete secciones del scroll.
@@ -104,12 +107,12 @@
 	}
 
 	.demo-bloque--visible.demo-scroll-dolor__bloque .demo-scroll-dolor__bloque-pieza {
-		animation-delay: 0.12s;
+		animation-delay: 0.18s;
 	}
 
 	// Puente al formulario: sin estructura interna texto/pieza, entra como bloque único.
 	.demo-bloque--visible:not(.demo-scroll-dolor__bloque) {
-		animation: demo-bloque-entrada 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+		animation: demo-bloque-entrada 1.05s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 		will-change: opacity, transform;
 	}
 
@@ -235,6 +238,22 @@
 		position: static !important;
 	}
 
+	// Desde el grupo 325/prompt 01 el contenido TAMBIÉN es sticky (antes era
+	// relative, no hacía falta tocarlo acá). Si solo se despinea el fondo y el
+	// contenido sigue sticky, queda un estado mixto roto: el contenido se
+	// clava contra el viewport mientras el fondo ya no. Hay que devolver el
+	// contenido a flujo normal igual que el fondo, Y anular el margin-top:
+	// -100vh (que sigue aplicando aunque position sea static, porque el
+	// margen no depende del position) y el height:100vh + overflow:hidden
+	// (que en modo estático recortaría contenido en vez de solo ser una red
+	// de seguridad contra el pin).
+	.demo-fondo-seccion__contenido {
+		position: static !important;
+		margin-top: 0 !important;
+		height: auto !important;
+		overflow: visible !important;
+	}
+
 	// .demo-bloque cubre la apertura (aunque ya no anima, no hace daño) y el puente
 	// (que sí anima como bloque único). will-change: auto !important por el mismo
 	// motivo que abajo -- animationend no dispara con la animación apagada, y sin
@@ -284,9 +303,20 @@
 
 // Pantalla de computadora: proporción 16:9 fija, con "base" del monitor como
 // detalle visual (evita que se lea como un rectángulo suelto).
+//
+// Acotada por ALTO, no solo por ancho (grupo 325, prompt 01): dentro de
+// FondoSeccionSticky el bloque tiene que entrar en 100vh completos, y antes
+// esta pieza solo tenía width:100%, así que en viewports angostos y bajos
+// (portátil 1366x768) el aspect-ratio 16/9 la estiraba de alto más de lo que
+// el bloque podía darle. width: min(...) deriva el ancho a partir del alto
+// máximo permitido (62vh) según la proporción -- el resultado es "acotar por
+// alto" aunque la propiedad que técnicamente cambia sea el ancho, porque
+// aspect-ratio sigue siendo el que fija la relación entre los dos ejes.
+// max-height es la red de seguridad si algún navegador redondea distinto.
 .demo-marco__pantalla-compu {
 	position: relative;
-	width: 100%;
+	width: min(100%, calc(62vh * 16 / 9));
+	max-height: 62vh;
 	aspect-ratio: 16 / 9;
 	background: #10131c;
 	border-radius: 12px;
@@ -316,10 +346,17 @@
 
 // Pantalla de teléfono: proporción real de dispositivo móvil (9:19.5), con
 // notch simulado arriba.
+//
+// Acotada por ALTO (grupo 325, prompt 01): con ancho 220px y aspect-ratio
+// 9/19.5 el alto real supera los 470px, que en un portátil de 768px de
+// viewport se come todo el espacio disponible del bloque -- por eso el
+// ancho ahora deriva del alto máximo (62vh) igual que en la pantalla de
+// computadora, con 220px como techo aparte (el teléfono nunca fue pensado
+// para verse más ancho que eso). max-height como red de seguridad.
 .demo-marco__pantalla-telefono {
 	position: relative;
-	width: 100%;
-	max-width: 220px;
+	width: min(100%, 220px, calc(62vh * 9 / 19.5));
+	max-height: 62vh;
 	aspect-ratio: 9 / 19.5;
 	margin: 0 auto;
 	background: #10131c;
@@ -350,6 +387,12 @@
 
 // Composición computadora + teléfono (única combinación, pieza scroll.2): los
 // dos dispositivos conviven superpuestos, nunca apilados uno arriba del otro.
+// Es el bloque más alto de los seis (criterio de éxito 2, verificado a propósito):
+// el teléfono es proporcionalmente más chico que la compu (34% de su ancho, tope
+// 170px) y solo sobresale bottom:-16% por fuera de la caja de la compu -- sigue
+// heredando el mismo max-height: 62vh / 45vh de .demo-marco__pantalla-telefono
+// como red de seguridad, así que el combo nunca supera lo que ya deja margen el
+// overflow: hidden de FondoSeccionSticky.
 .demo-marco--computadora-telefono {
 	.demo-marco__compu-wrap {
 		position: relative;
@@ -364,6 +407,22 @@
 		max-width: 170px;
 		z-index: 2;
 		margin: 0;
+	}
+}
+
+// Mobile apilado (mismo breakpoint que ScrollDolor.vue: grid-template-columns
+// pasa a 1fr): el texto tiene que seguir siendo lo primero, así que la pieza
+// se acota más (45vh en vez de 62vh) para no ocupar más de media pantalla
+// (grupo 325, prompt 01).
+@media (max-width: 767.98px) {
+	.demo-marco__pantalla-compu {
+		width: min(100%, calc(45vh * 16 / 9));
+		max-height: 45vh;
+	}
+
+	.demo-marco__pantalla-telefono {
+		width: min(100%, 220px, calc(45vh * 9 / 19.5));
+		max-height: 45vh;
 	}
 }
 
