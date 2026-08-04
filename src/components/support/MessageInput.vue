@@ -79,20 +79,36 @@
             type="button"
             :class="[
               'btn btn-sm support-input-icon-btn',
-              recording ? 'btn-danger support-input-icon-btn--recording' : 'btn-outline-secondary',
+              audio_recording ? 'btn-danger support-input-icon-btn--recording' : 'btn-outline-secondary',
             ]"
             :disabled="!can_send"
-            :title="recording ? ('Detener grabación (' + recording_time_label + ')') : 'Grabar audio'"
-            :aria-label="recording ? ('Detener grabación (' + recording_time_label + ')') : 'Grabar audio'"
-            @click="toggle_recording">
-            <i v-if="recording" class="bi bi-stop-fill" aria-hidden="true" />
+            :title="audio_recording ? ('Detener grabación (' + audio_elapsed_label + ')') : 'Grabar audio'"
+            :aria-label="audio_recording ? ('Detener grabación (' + audio_elapsed_label + ')') : 'Grabar audio'"
+            @click="on_audio_click"
+            @mousedown="on_audio_mousedown"
+            @mouseup="on_audio_mouseup_or_leave"
+            @mouseleave="on_audio_mouseup_or_leave"
+            @touchstart.prevent="on_audio_touchstart"
+            @touchend.prevent="on_audio_touchend"
+            @touchcancel.prevent="on_audio_touchcancel">
+            <i v-if="audio_recording" class="bi bi-stop-fill" aria-hidden="true" />
             <i v-else class="bi bi-mic" aria-hidden="true" />
-            <span v-if="recording" class="support-input-recording-time">{{ recording_time_label }}</span>
+            <span v-if="audio_recording" class="support-input-recording-time">{{ audio_elapsed_label }}</span>
+          </button>
+          <!-- Sólo mientras graba: cancelar sin enviar (grupo 323, prompt 04) -->
+          <button
+            v-if="audio_recording"
+            type="button"
+            class="btn btn-link btn-sm text-muted"
+            title="Cancelar grabación"
+            aria-label="Cancelar grabación"
+            @click="cancel_audio_recording">
+            Cancelar
           </button>
           <button
             type="button"
             class="btn btn-outline-secondary btn-sm support-input-icon-btn"
-            :disabled="!can_send || recording"
+            :disabled="!can_send || audio_recording"
             title="Adjuntar archivo"
             aria-label="Adjuntar archivo"
             @click="open_file_input">
@@ -102,7 +118,7 @@
         <button
           type="button"
           class="btn btn-success btn-sm support-input-icon-btn support-input-icon-btn--send"
-          :disabled="!can_send || recording"
+          :disabled="!can_send || audio_recording"
           title="Enviar mensaje"
           aria-label="Enviar mensaje"
           @click="emit_send">
@@ -129,6 +145,7 @@ import ImageAnnotationEditor from '@/components/common/ImageAnnotationEditor.vue
 import BorderProgressWrap from '@/components/support/BorderProgressWrap.vue'
 import api from '@/utils/axios'
 import { OggOpusRecorder } from '@/utils/oggOpusRecorder'
+import audio_recorder_button from '@/mixins/audio_recorder_button'
 
 export default {
   name: 'SupportMessageInput',
@@ -136,6 +153,7 @@ export default {
     ImageAnnotationEditor,
     BorderProgressWrap,
   },
+  mixins: [audio_recorder_button],
   emits: ['send-message', 'suggested-title'],
   props: {
     can_send: { type: Boolean, default: true },
@@ -166,18 +184,10 @@ export default {
       image_editor_visible: false,
       /** Imagen en edición antes de confirmar adjunto. */
       image_editor_source_file: null,
-      /** true mientras el OggOpusRecorder está activo. */
-      recording: false,
-      /** Instancia activa de OggOpusRecorder; null si no hay grabación. */
-      media_recorder: null,
       /** true si no se puede grabar (contexto inseguro, permiso o API ausente). */
       mic_error: false,
       /** Texto del aviso rojo según el motivo del fallo. */
       mic_error_message: '',
-      /** Segundos transcurridos desde que inició la grabación actual. */
-      recording_seconds: 0,
-      /** ID del interval que incrementa recording_seconds cada 1 s. */
-      recording_timer_id: null,
     }
   },
   computed: {
@@ -209,16 +219,6 @@ export default {
         return ''
       }
       return date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    },
-    /**
-     * Duración de grabación formateada como MM:SS para mostrar junto al botón.
-     * @returns {string}
-     */
-    recording_time_label() {
-      const s = this.recording_seconds
-      const minutes = Math.floor(s / 60)
-      const seconds = s % 60
-      return (minutes < 10 ? '0' : '') + minutes + ':' + (seconds < 10 ? '0' : '') + seconds
     },
     /**
      * getUserMedia requiere contexto seguro (HTTPS, localhost, 127.0.0.1).
@@ -377,51 +377,45 @@ export default {
       return 'No se puede acceder al micrófono en este navegador. Usá Adjuntar para subir un archivo de audio.'
     },
     /**
-     * Inicia o detiene grabación de audio directamente a Ogg/Opus (vía OggOpusRecorder), sin
-     * depender de qué formato soporte el MediaRecorder nativo de cada navegador.
-     * Si el navegador rechaza el permiso, muestra aviso en lugar de fallar silenciosamente.
+     * Hook del contrato de audio_recorder_button: llega con el Blob 'audio/ogg' ya listo. Igual
+     * que hacía antes el onData del botón que alternaba grabar/cortar.
+     *
+     * @param {Blob} blob
+     * @returns {void}
      */
-    toggle_recording() {
-      const self = this
-      if (this.recording && this.media_recorder) {
-        this.media_recorder.stop()
-        return
-      }
-      this.mic_error = false
-      this.mic_error_message = ''
+    on_audio_blob(blob) {
+      this.attachment = new File([blob], 'audio_' + Date.now() + '.ogg', { type: 'audio/ogg' })
+    },
+
+    /**
+     * Hook del contrato de audio_recorder_button: además de decidir si se puede grabar, este
+     * guard es el único punto por el que pasa cada intento de grabación -- por eso también
+     * actualiza el aviso visible (mic_error/mic_error_message), igual que hacía antes el arranque
+     * del botón que alternaba grabar/cortar.
+     *
+     * @returns {boolean}
+     */
+    can_record_audio() {
       if (!this.microphone_available || !OggOpusRecorder.isSupported()) {
         this.mic_error = true
         this.mic_error_message = this.build_mic_unavailable_message()
-        return
+        return false
       }
-      const recorder = new OggOpusRecorder({
-        onData: function (blob) {
-          clearInterval(self.recording_timer_id)
-          self.recording_timer_id = null
-          self.recording_seconds = 0
-          self.attachment = new File([blob], 'audio_' + Date.now() + '.ogg', { type: 'audio/ogg' })
-          self.recording = false
-          self.media_recorder = null
-        },
-        onError: function (error) {
-          console.warn('[SupportChat] error al grabar audio:', error)
-          self.mic_error = true
-          self.mic_error_message = 'Sin acceso al micrófono. Verificá los permisos del navegador o usá Adjuntar.'
-          self.recording = false
-          self.media_recorder = null
-          clearInterval(self.recording_timer_id)
-          self.recording_timer_id = null
-        },
-      })
-      self.media_recorder = recorder
-      self.recording_seconds = 0
-      self.recording_timer_id = setInterval(function () {
-        self.recording_seconds++
-      }, 1000)
-      self.recording = true
-      recorder.start().catch(function () {
-        /* el error ya se maneja en onError */
-      })
+      this.mic_error = false
+      this.mic_error_message = ''
+      return true
+    },
+
+    /**
+     * Hook del contrato de audio_recorder_button: mismo comportamiento que tenía antes.
+     *
+     * @param {string} message
+     * @returns {void}
+     */
+    on_audio_error(message) {
+      console.warn('[SupportChat] error al grabar audio:', message)
+      this.mic_error = true
+      this.mic_error_message = 'Sin acceso al micrófono. Verificá los permisos del navegador o usá Adjuntar.'
     },
     /**
      * Solicita sugerencia IA al backend y completa el textarea.
