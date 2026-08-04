@@ -511,10 +511,6 @@ export default {
   align-items: center;
   text-align: center;
   gap: 16px;
-  /* El contenedor (FondoSeccionSticky.vue) fuerza padding:0 para la variante apertura --
-     excepcion pensada para la escena SVG full-bleed que ya no esta acá (revertida en el
-     grupo 336). Sin esto el titular/subtitulo quedan pegados a los bordes en mobile. */
-  padding: 0 20px;
 }
 
 /* Animación de entrada de la apertura (grupo 336, revierte la escena cinematográfica
@@ -542,6 +538,12 @@ export default {
   letter-spacing: -0.02em;
   max-width: 780px;
   margin: 0;
+  /* El padding va acá y no en .demo-scroll-dolor__apertura (el header): la excepcion de
+     FondoSeccionSticky.vue para la variante apertura (.demo-fondo-seccion__contenido > *)
+     solo alcanza al hijo directo del contenido -- el header -- con padding:0 y (0,3,0) de
+     especificidad. Puesto en el header, ese padding:0 le gana siempre a cualquier padding
+     que se declare ahí. Acá, en el nieto, el selector > * no llega: sin pelea de cascada. */
+  padding: 0 20px;
   /* "both": sin esto el subtítulo (con delay) parpadea visible antes de tiempo. */
   animation: demo-apertura-entrada 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -551,6 +553,7 @@ export default {
   color: var(--demo-color-texto-suave);
   margin: 0;
   max-width: 620px;
+  padding: 0 20px;
   animation: demo-apertura-entrada 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.22s both;
 }
 
