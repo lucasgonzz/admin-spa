@@ -511,6 +511,10 @@ export default {
   align-items: center;
   text-align: center;
   gap: 16px;
+  /* El contenedor (FondoSeccionSticky.vue) fuerza padding:0 para la variante apertura --
+     excepcion pensada para la escena SVG full-bleed que ya no esta acá (revertida en el
+     grupo 336). Sin esto el titular/subtitulo quedan pegados a los bordes en mobile. */
+  padding: 0 20px;
 }
 
 /* Animación de entrada de la apertura (grupo 336, revierte la escena cinematográfica
