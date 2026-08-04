@@ -1,6 +1,6 @@
 <template>
   <div
-    v-if="!session_ready"
+    v-if="!session_ready && !es_ruta_publica"
     class="app-bootstrap-loading min-vh-100 d-flex flex-column align-items-center justify-content-center"
     role="status"
     aria-live="polite"
@@ -191,6 +191,18 @@ export default {
      */
     session_ready() {
       return this.$store.state.auth.session_ready
+    },
+    /**
+     * true si la ruta activa no necesita esperar el bootstrap de sesión (rutas
+     * públicas de cara al lead/cliente, sin auth de admin) -- grupo 322, prompt
+     * 04. Las usa `api_public` (sin auth), así que el spinner "Cargando
+     * ComercioCity" del bootstrap de admin no tiene nada que ver con ellas; el
+     * bootstrap sigue corriendo en paralelo, solo deja de bloquear la UI.
+     *
+     * @returns {boolean}
+     */
+    es_ruta_publica() {
+      return !!(this.$route.meta && this.$route.meta.public)
     },
     show_nav() {
       /* Rutas públicas (formulario del cliente) y login: sin sidebar ni topbar móvil */

@@ -2,12 +2,14 @@
   <!-- Página pública sin login, sin sidebar ni ningún elemento de la interfaz del
        admin (App.vue oculta el layout completo vía meta.public de la ruta) -->
   <div class="demo-experiencia-page">
-    <!-- Estado: cargando el payload inicial -->
-    <div v-if="loading" class="demo-experiencia-page__loading">
-      <div class="spinner-border" role="status" style="color: var(--demo-color-azul)">
-        <span class="visually-hidden">Cargando…</span>
-      </div>
-    </div>
+    <!-- Estado: cargando el payload inicial (grupo 322, prompt 04). Antes era un
+         spinner-border de Bootstrap genérico -- reemplazado por el mismo
+         lenguaje visual de marca del resto de la página (EscenaMarca.vue,
+         compartida con la confirmación del prompt 03), para que loader y
+         apertura no se sientan como dos pantallas distintas. -->
+    <escena-marca v-if="loading" role="status" aria-live="polite" aria-busy="true">
+      <span class="visually-hidden">Cargando tu demo…</span>
+    </escena-marca>
 
     <!-- Estado: uuid inválido o vencido -- nunca el error crudo ni redirección al login -->
     <div v-else-if="invalido" class="demo-experiencia-page__invalido">
@@ -75,6 +77,7 @@ import api_public from '@/utils/axios_public'
 import ScrollDolor from '@/components/demo/ScrollDolor.vue'
 import FormularioConfiguracion from '@/components/demo/FormularioConfiguracion.vue'
 import ConfirmacionArmandoDemo from '@/components/demo/ConfirmacionArmandoDemo.vue'
+import EscenaMarca from '@/components/demo/EscenaMarca.vue'
 import BotonAcceso from '@/components/demo/BotonAcceso.vue'
 import MarcoDispositivo from '@/components/demo/MarcoDispositivo.vue'
 import PiezaMultimedia from '@/components/demo/PiezaMultimedia.vue'
@@ -104,6 +107,7 @@ export default {
     ScrollDolor,
     FormularioConfiguracion,
     ConfirmacionArmandoDemo,
+    EscenaMarca,
     BotonAcceso,
     MarcoDispositivo,
     PiezaMultimedia,
@@ -274,7 +278,8 @@ export default {
   padding: 0 20px 64px;
 }
 
-.demo-experiencia-page__loading,
+/* El estado de carga ya no usa esta clase (grupo 322, prompt 04): reemplazado
+   por EscenaMarca.vue, que trae su propio layout de pantalla completa. */
 .demo-experiencia-page__invalido {
   min-height: 100vh;
   display: flex;
