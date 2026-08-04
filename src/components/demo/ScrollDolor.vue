@@ -1,14 +1,10 @@
 <template>
   <section class="demo-scroll-dolor">
-    <!-- Apertura: sin media, entra en frío -- nunca se anima (ver demo-bloque--apertura
-         en demo-experiencia.scss). El gancho ya está cuando el lead llega a la página.
-         La escena animada por scroll que sí tiene esta sección es del prompt 06. -->
-    <fondo-seccion-sticky variante="apertura">
-      <header class="demo-bloque demo-bloque--apertura demo-scroll-dolor__apertura">
-        <h1 class="demo-scroll-dolor__apertura-titulo">{{ contenido.apertura.titulo }}</h1>
-        <p class="demo-scroll-dolor__apertura-subtitulo">{{ contenido.apertura.subtitulo }}</p>
-      </header>
-    </fondo-seccion-sticky>
+    <!-- Apertura: escena cinematográfica animada por scroll (grupo 325, prompt
+         03, reemplaza al prompt 06 del grupo 322 -- descartado en su momento
+         porque los SVG todavía no existían). Arma su propio FondoSeccionSticky
+         adentro, igual que InterludioConvergencia -- no lleva uno acá afuera. -->
+    <apertura-cinematografica :titulo="contenido.apertura.titulo" :subtitulo="contenido.apertura.subtitulo" />
 
     <!-- Bloques 1 a 5: párrafo(s) de dolor + línea de alivio resaltada + pieza multimedia -->
     <fondo-seccion-sticky
@@ -113,6 +109,7 @@ import MarcoDispositivo from './MarcoDispositivo.vue'
 import PiezaMultimedia from './PiezaMultimedia.vue'
 import FondoSeccionSticky from './FondoSeccionSticky.vue'
 import InterludioConvergencia from './InterludioConvergencia.vue'
+import AperturaCinematografica from './AperturaCinematografica.vue'
 
 /**
  * Copy completo del scroll de dolor, transcripto palabra por palabra desde
@@ -297,6 +294,7 @@ export default {
     PiezaMultimedia,
     FondoSeccionSticky,
     InterludioConvergencia,
+    AperturaCinematografica,
   },
 
   props: {
@@ -488,37 +486,6 @@ export default {
   gap: clamp(96px, 14vw, 160px);
 }
 
-/* Apertura: full-bleed (grupo 322, prompt 01) -- 100vh, 100% de ancho, dentro de su
-   FondoSeccionSticky con variante="apertura". El prompt 06 le superpone su escena
-   animada encima; nada acá le impide hacerlo. */
-.demo-scroll-dolor__apertura {
-  min-height: 100vh;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-  gap: 16px;
-  padding-top: 12vh;
-}
-
-.demo-scroll-dolor__apertura-titulo {
-  font-size: clamp(2rem, 5vw, 3.25rem);
-  font-weight: 700;
-  line-height: 1.15;
-  /* Tracking negativo en texto display grande (§15 de apple-design/SKILL.md). */
-  letter-spacing: -0.02em;
-  max-width: 780px;
-  margin: 0;
-}
-
-.demo-scroll-dolor__apertura-subtitulo {
-  font-size: clamp(1.1rem, 2.4vw, 1.4rem);
-  color: var(--demo-color-texto-suave);
-  margin: 0;
-}
-
 /* Bloques 1-6: texto + pieza, en columnas en desktop, apiladas en móvil */
 .demo-scroll-dolor__bloque {
   display: grid;
@@ -638,13 +605,6 @@ export default {
   .demo-scroll-dolor__cierre {
     grid-template-columns: 1fr;
     direction: ltr !important;
-  }
-
-  .demo-scroll-dolor__apertura {
-    /* Full-bleed también en móvil (grupo 322, prompt 01): el pin y el fondo cubren
-       igual la pantalla completa, no se achica a 50vh como antes. */
-    min-height: 100vh;
-    padding-top: 8vh;
   }
 }
 </style>

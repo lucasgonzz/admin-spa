@@ -1,0 +1,37 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 900" preserveAspectRatio="xMidYMid meet" id="forma-protagonista-svg">
+  <title>Forma protagonista — anillo segmentado</title>
+  <defs>
+    <linearGradient id="fp-grad" gradientUnits="userSpaceOnUse" x1="150" y1="120" x2="760" y2="790">
+      <stop offset="0" stop-color="#0B84F8"></stop>
+      <stop offset="1" stop-color="#3A31FC"></stop>
+    </linearGradient>
+    <linearGradient id="fp-grad-suave" gradientUnits="userSpaceOnUse" x1="150" y1="120" x2="760" y2="790">
+      <stop offset="0" stop-color="#0B84F8" stop-opacity="0.38"></stop>
+      <stop offset="1" stop-color="#3A31FC" stop-opacity="0.38"></stop>
+    </linearGradient>
+  </defs>
+
+  <g id="forma-protagonista">
+    <g id="orbita" fill="none" stroke="url(#fp-grad-suave)">
+      <circle id="orbita-linea" cx="450" cy="450" r="372" stroke-width="1.1" opacity="0.7"></circle>
+      <line id="eje" x1="450" y1="42" x2="450" y2="858" stroke-width="1" opacity="0.28"></line>
+    </g>
+
+    <g id="anillo" fill="none" stroke="url(#fp-grad)" stroke-width="26" stroke-linecap="butt">
+      <path id="arco-a" d="M 300 190.19 A 300 300 0 0 1 731.91 552.61"></path>
+      <path id="arco-b" d="M 662.13 662.13 A 300 300 0 0 1 257.16 679.81"></path>
+      <path id="arco-c" d="M 178.11 576.79 A 300 300 0 0 1 237.87 237.87"></path>
+    </g>
+
+    <g id="rombo" fill="none" stroke="url(#fp-grad)" stroke-width="1.6" opacity="0.55">
+      <path id="rombo-externo" d="M 450 288 L 612 450 L 450 612 L 288 450 Z"></path>
+      <path id="rombo-interno" d="M 450 358 L 542 450 L 450 542 L 358 450 Z" opacity="0.6"></path>
+    </g>
+
+    <g id="nucleo">
+      <circle id="nucleo-lleno" cx="450" cy="450" r="52" fill="url(#fp-grad)"></circle>
+    </g>
+
+    <circle id="acento-naranja" cx="663.3" cy="145.3" r="8.5" fill="#FA7E06"></circle>
+  </g>
+</svg>

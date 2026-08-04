@@ -203,6 +203,33 @@
 		radial-gradient(70% 70% at 50% 55%, rgba(58, 49, 252, 0.12), transparent 55%);
 }
 
+// Variantes con un pin PROPIO anidado (grupo 325, prompt 03: InterludioConvergencia.vue
+// ya lo hacía, AperturaCinematografica.vue ahora también) necesitan que
+// .demo-fondo-seccion__contenido deje de ser una ventana fija de 100vh: su hijo
+// real (.demo-interludio / .demo-apertura) mide bastante más que eso a propósito,
+// para darle al scroll el recorrido que la coreografía necesita, y ese hijo trae
+// su PROPIO position:sticky para quedar clavado durante ese recorrido.
+//
+// El height:100vh + overflow:hidden que el prompt 01 le puso a __contenido (para
+// que los bloques 1-5 y el cierre -- contenido simple, sin pin propio -- nunca
+// necesiten scroll interno) rompe esto de dos formas si se deja sin excepción:
+// (1) recorta a 100vh cualquier alto real mayor, y como __contenido ya no
+// transmite el alto de su hijo hacia arriba (height fija, no min-height), el
+// .demo-fondo-seccion exterior tampoco crece -- la sección entera queda en los
+// 160vh del piso en vez de los ~260vh que la coreografía necesita; (2) overflow
+// distinto de "visible" convierte a __contenido en el contenedor de scroll más
+// cercano a efectos de position:sticky, así que el pin anidado (que se calcula
+// contra el scroll del DOCUMENTO, no de esta caja) dejaría de tener sentido.
+// Volver a min-height + overflow visible (el comportamiento de antes del prompt
+// 01) devuelve el auto-crecimiento sin reintroducir el bug original, porque ese
+// bug era sobre bloques SIN pin propio -- acá el hijo se encarga de acotarse solo.
+.demo-fondo-seccion--interludio .demo-fondo-seccion__contenido,
+.demo-fondo-seccion--apertura .demo-fondo-seccion__contenido {
+	height: auto;
+	min-height: 100vh;
+	overflow: visible;
+}
+
 // ---------------------------------------------------------------------------
 // Interludio de convergencia: panel del cierre superpuesto (grupo 322, prompt
 // 05, punto 3). Sin backdrop-filter -- la capa + la atenuación de la escena

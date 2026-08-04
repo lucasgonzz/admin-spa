@@ -1,0 +1,29 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" id="capas-de-cierre-svg">
+  <title>Capas de cierre con hueco del nombre</title>
+  <defs>
+    <linearGradient id="ec-grad" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1600" y2="900">
+      <stop offset="0" stop-color="#0B84F8"></stop>
+      <stop offset="1" stop-color="#3A31FC"></stop>
+    </linearGradient>
+    <linearGradient id="ec-grad-tinte" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1600" y2="900">
+      <stop offset="0" stop-color="#0B84F8" stop-opacity="0.16"></stop>
+      <stop offset="1" stop-color="#3A31FC" stop-opacity="0.16"></stop>
+    </linearGradient>
+    <mask id="hueco-nombre" maskUnits="userSpaceOnUse" x="-800" y="-600" width="3200" height="2100">
+      <rect x="-800" y="-600" width="3200" height="2100" fill="#ffffff"></rect>
+      <text id="nombre-recortado" x="800" y="470" text-anchor="middle" dominant-baseline="middle" font-family="Geist, system-ui, sans-serif" font-weight="600" letter-spacing="0.02em" fill="#000000" font-size="120" fill-opacity="0">COMERCIOCITY</text>
+    </mask>
+  </defs>
+  <g mask="url(#hueco-nombre)">
+    <g id="cierre-izquierda">
+      <path id="izq-hoja-secundaria" fill="url(#ec-grad-tinte)" d="M -400 -200 L 860 -200 C 1010 130, 960 310, 950 460 C 1090 620, 880 790, 1000 1100 L -400 1100 Z"></path>
+      <path id="izq-hoja-principal" fill="url(#ec-grad)" d="M -400 -200 L 760 -200 C 900 120, 850 300, 840 450 C 960 590, 760 760, 880 1100 L -400 1100 Z"></path>
+      <path id="izq-filo" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="2" d="M 760 -200 C 900 120, 850 300, 840 450 C 960 590, 760 760, 880 1100"></path>
+    </g>
+    <g id="cierre-derecha">
+      <path id="der-hoja-secundaria" fill="url(#ec-grad-tinte)" d="M 2000 -200 L 650 -200 C 570 150, 790 330, 640 480 C 500 630, 720 800, 590 1100 L 2000 1100 Z"></path>
+      <path id="der-hoja-principal" fill="url(#ec-grad)" d="M 2000 -200 L 740 -200 C 690 140, 900 320, 760 470 C 630 620, 830 790, 700 1100 L 2000 1100 Z"></path>
+      <path id="der-filo" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="2" d="M 740 -200 C 690 140, 900 320, 760 470 C 630 620, 830 790, 700 1100"></path>
+    </g>
+  </g>
+</svg>
