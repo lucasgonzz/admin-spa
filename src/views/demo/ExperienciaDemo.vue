@@ -2,17 +2,24 @@
   <!-- Página pública sin login, sin sidebar ni ningún elemento de la interfaz del
        admin (App.vue oculta el layout completo vía meta.public de la ruta) -->
   <div class="demo-experiencia-page">
-    <!-- Estado: cargando el payload inicial (grupo 322, prompt 04). Antes era un
-         spinner-border de Bootstrap genérico -- reemplazado por el mismo
-         lenguaje visual de marca del resto de la página (EscenaMarca.vue,
-         compartida con la confirmación del prompt 03), para que loader y
-         apertura no se sientan como dos pantallas distintas. -->
-    <escena-marca v-if="loading" role="status" aria-live="polite" aria-busy="true">
-      <span class="visually-hidden">Cargando tu demo…</span>
-    </escena-marca>
+    <!-- Estado: cargando el payload inicial. Desde el grupo 355 (prompt 01) es una
+         pantalla de marca de verdad -- fondo de la apertura + isotipo con el shimmer
+         del armado -- y no la EscenaMarca de la confirmación, que no mostraba nada
+         visible: solo el texto para lectores de pantalla sobre las formas pulsantes.
+         Se va con un fundido de 400ms sobre la página ya montada abajo (ver el
+         <style scoped>): el fondo de las dos es el mismo, así que lo único que se
+         cruza es el isotipo saliendo y el titular entrando -- nunca un corte ni un
+         cuadro de fondo vacío. -->
+    <transition name="demo-carga-marca-fundido">
+      <pantalla-carga-marca v-if="loading" />
+    </transition>
 
+    <!-- Todo lo demás espera a que la pantalla de carga se dé por terminada (el piso
+         de 2s incluido): mientras loading sea true no se monta nada, ni siquiera la
+         pantalla de link inválido. -->
+    <template v-if="!loading">
     <!-- Estado: uuid inválido o vencido -- nunca el error crudo ni redirección al login -->
-    <div v-else-if="invalido" class="demo-experiencia-page__invalido">
+    <div v-if="invalido" class="demo-experiencia-page__invalido">
       <img src="@/assets/logo.jpg" alt="ComercioCity" class="demo-experiencia-page__logo" />
       <h1>Este link no es válido</h1>
       <p>Puede que haya vencido o esté mal escrito. Escribinos y te pasamos uno nuevo.</p>
@@ -97,6 +104,7 @@
         <boton-acceso :turno="turno" :refrescar="cargar_experiencia" :ingresar="ingresar" />
       </template>
     </template>
+    </template>
   </div>
 </template>
 
@@ -105,7 +113,7 @@ import api_public from '@/utils/axios_public'
 import ScrollDolor from '@/components/demo/ScrollDolor.vue'
 import FormularioConfiguracion from '@/components/demo/FormularioConfiguracion.vue'
 import ConfirmacionArmandoDemo from '@/components/demo/ConfirmacionArmandoDemo.vue'
-import EscenaMarca from '@/components/demo/EscenaMarca.vue'
+import PantallaCargaMarca from '@/components/demo/PantallaCargaMarca.vue'
 import BotonAcceso from '@/components/demo/BotonAcceso.vue'
 import MarcoDispositivo from '@/components/demo/MarcoDispositivo.vue'
 import PiezaMultimedia from '@/components/demo/PiezaMultimedia.vue'
@@ -114,6 +122,14 @@ import PiezaMultimedia from '@/components/demo/PiezaMultimedia.vue'
 // queda dentro del chunk lazy de la ruta /experiencia/:uuid y nunca se
 // carga en el resto del admin.
 import '@/assets/scss/demo-experiencia.scss'
+
+/**
+ * Piso de la pantalla de carga, en ms (grupo 355, prompt 01). Es un PISO, no una
+ * espera fija: si el payload tarda más, la pantalla se queda hasta que llegue; si
+ * vuelve en 300ms, se sostiene lo que falte para llegar acá. Un destello de medio
+ * segundo se lee como un parpadeo, no como una entrada.
+ */
+const PISO_PANTALLA_CARGA_MS = 2000
 
 /**
  * Página inmersiva de demo (Grupo 300 · pagina-inmersiva-demo, prompts 04 y
@@ -135,7 +151,7 @@ export default {
     ScrollDolor,
     FormularioConfiguracion,
     ConfirmacionArmandoDemo,
-    EscenaMarca,
+    PantallaCargaMarca,
     BotonAcceso,
     MarcoDispositivo,
     PiezaMultimedia,
@@ -180,6 +196,27 @@ export default {
        * componente ya desmontado).
        */
       confirmacion_timeout: null,
+      /**
+       * Handle del setTimeout que sostiene la pantalla de carga hasta completar el
+       * piso de PISO_PANTALLA_CARGA_MS, para poder cancelarlo si el lead navega
+       * antes (mismo criterio que confirmacion_timeout).
+       */
+      carga_timeout: null,
+      /**
+       * true una vez que terminó la PRIMERA carga del payload. El piso de la
+       * pantalla de carga vale solo para esa: cargar_experiencia() también la llama
+       * BotonAcceso para refrescar el estado del turno, y ahí sostener la pantalla
+       * dos segundos sería una interrupción en medio de la experiencia, no una
+       * entrada.
+       */
+      carga_inicial_hecha: false,
+      /**
+       * true una vez que el componente se destruyó. La respuesta del payload puede
+       * llegar después (el lead cierra la pestaña con la request en vuelo): sin
+       * esto, ese .then programaría el setTimeout del piso cuando beforeUnmount ya
+       * pasó y nadie lo va a limpiar.
+       */
+      desmontado: false,
     }
   },
 
@@ -189,6 +226,8 @@ export default {
   },
 
   beforeUnmount() {
+    this.desmontado = true
+
     /* Si el lead navega a mitad de la animación de "armando tu demo", el
        body no puede quedar con el scroll bloqueado para siempre (grupo 325,
        prompt 02). Restaurar el overflow acá es seguro incluso si nunca se
@@ -196,6 +235,9 @@ export default {
        en '' no hace nada. */
     if (this.confirmacion_timeout) {
       clearTimeout(this.confirmacion_timeout)
+    }
+    if (this.carga_timeout) {
+      clearTimeout(this.carga_timeout)
     }
     document.body.style.overflow = ''
   },
@@ -212,6 +254,9 @@ export default {
     cargar_experiencia() {
       const self = this
       const uuid = self.$route.params.uuid
+      /* Momento de arranque de ESTA carga: contra esto se mide lo que falta del piso. */
+      const iniciada_en = Date.now()
+      const es_carga_inicial = !self.carga_inicial_hecha
 
       self.loading = true
       self.invalido = false
@@ -235,7 +280,32 @@ export default {
           self.invalido = true
         })
         .then(function () {
-          self.loading = false
+          /* La respuesta llegó tarde, con el componente ya destruido: no queda
+             ningún timer por programar. */
+          if (self.desmontado) {
+            return
+          }
+
+          self.carga_inicial_hecha = true
+
+          /* Refrescos posteriores (BotonAcceso): sin piso, se apaga apenas llega. */
+          if (!es_carga_inicial) {
+            self.loading = false
+            return
+          }
+
+          /* Piso, no espera fija: solo se espera lo que falte para los 2s. Si el
+             payload tardó más, restante es negativo y se revela de una. */
+          const restante = PISO_PANTALLA_CARGA_MS - (Date.now() - iniciada_en)
+          if (restante <= 0) {
+            self.loading = false
+            return
+          }
+
+          self.carga_timeout = window.setTimeout(function () {
+            self.carga_timeout = null
+            self.loading = false
+          }, restante)
         })
     },
 
@@ -411,6 +481,28 @@ export default {
 </script>
 
 <style scoped>
+/* Salida de la pantalla de carga (grupo 355, prompt 01): un fundido corto, no un
+   corte. Solo la salida -- la entrada no existe: esa pantalla es lo primero que se
+   ve, no aparece sobre nada. Mientras se desvanece, la página de abajo YA está
+   montada y el titular de la apertura está haciendo su animación de entrada; como
+   las dos comparten el fondo de la apertura, no hay ningún cuadro con el fondo
+   vacío en el medio. Las clases de <transition> caen sobre el nodo raíz del
+   componente hijo, que hereda el atributo de scope de esta vista. */
+.demo-carga-marca-fundido-leave-active {
+  transition: opacity 400ms ease;
+}
+
+.demo-carga-marca-fundido-leave-to {
+  opacity: 0;
+}
+
+/* Estático de verdad bajo reduced-motion: la pantalla se retira sin fundido. */
+@media (prefers-reduced-motion: reduce) {
+  .demo-carga-marca-fundido-leave-active {
+    transition: none;
+  }
+}
+
 /* El video de introducción ocupa su propia pantalla (grupo 348, prompt 07). Antes
    era un bloque más del flujo, acotado a 720px y apretado entre la confirmación
    (que ocupa 100dvh) y el botón de acceso: la pieza principal de esta pantalla

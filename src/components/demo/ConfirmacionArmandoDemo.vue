@@ -405,14 +405,12 @@ export default {
 	}
 }
 
-@keyframes demo-confirmacion-shimmer {
-	from {
-		background-position: 180% 0;
-	}
-	to {
-		background-position: -80% 0;
-	}
-}
+/* El @keyframes demo-confirmacion-shimmer se mudó a demo-experiencia.scss (grupo 355,
+   prompt 01): la pantalla de carga de la página (PantallaCargaMarca.vue) usa el mismo
+   efecto sobre el isotipo, y dos declaraciones del mismo nombre en dos <style scoped>
+   distintos se pisan entre sí -- Vue no acota los nombres de @keyframes. La animación
+   de acá arriba lo sigue usando igual: el archivo compartido ya está importado por
+   ExperienciaDemo.vue, que es quien monta esta pantalla. */
 
 .demo-confirmacion-armando__parrafo {
 	font-size: 1.05rem;

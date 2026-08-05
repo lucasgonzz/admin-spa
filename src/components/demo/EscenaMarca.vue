@@ -20,9 +20,13 @@
 <script>
 /**
  * Lenguaje visual de marca compartido (grupo 322, prompt 03): mismo degradé,
- * misma tipografía, mismas formas generadas por código -- lo usan tanto
- * ConfirmacionArmandoDemo.vue (este prompt) como el loader de la ruta pública
- * (prompt 04 de este mismo grupo, que lo reutiliza en vez de duplicar el CSS).
+ * misma tipografía, mismas formas generadas por código.
+ *
+ * Hoy lo usa SOLO ConfirmacionArmandoDemo.vue. También era el loader de la ruta
+ * pública (grupo 322, prompt 04), hasta que el grupo 355 (prompt 01) lo reemplazó
+ * por PantallaCargaMarca.vue: como pantalla de carga no mostraba nada visible --
+ * solo el texto para lectores de pantalla sobre las formas pulsantes -- y la carga
+ * tiene que verse como la primera pantalla del scroll, con su mismo fondo.
  *
  * Deliberadamente AUTOCONTENIDO: no depende de las variables --demo-color-* de
  * demo-experiencia.scss. Esas variables solo existen dentro de

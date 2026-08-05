@@ -82,6 +82,7 @@ function end_route_navigation_feedback(store) {
 
 /**
  * Protege rutas autenticadas; espera bootstrap de sesión antes de navegar.
+ * Las rutas públicas (meta.public) son la única excepción: navegan sin esperarlo.
  * Registra feedback visual (spinner + menú) durante la resolución de rutas lazy.
  *
  * @param {import('vue-router').Router} router
@@ -90,6 +91,30 @@ function end_route_navigation_feedback(store) {
 export function setup_guard(router, store) {
   router.beforeEach(function (to, from, next) {
     begin_route_navigation_feedback(to, from, store)
+
+    /*
+     * Rutas públicas (de cara al lead/cliente): navegan de una, sin esperar el
+     * bootstrap de sesión del admin. Una ruta pública usa `api_public` (sin
+     * auth) y no tiene NADA que esperar de esa sesión -- esperarla le mostraba
+     * al lead el spinner interno "Cargando ComercioCity…" del admin, que es
+     * exactamente lo que App.vue intenta evitar con `es_ruta_publica`: mientras
+     * el guard esperaba, `this.$route` seguía siendo la ruta inicial (`/`, meta
+     * vacío), así que ese computed daba false y el spinner se mostraba igual
+     * (grupo 355, prompt 01 -- reportado por Lucas el 5/8/2026).
+     *
+     * El bootstrap se dispara igual y sigue corriendo en paralelo (no se
+     * cancela): si el lead es en realidad un admin logueado y navega después a
+     * una ruta interna, la sesión ya está resuelta. Se le engancha un catch
+     * vacío porque acá nadie espera la promesa, y una promesa rechazada sin
+     * manejar dejaría un error en la consola de la página del lead.
+     */
+    if (to.meta && to.meta.public) {
+      if (!store.state.auth.session_ready) {
+        store.dispatch('auth/bootstrap').catch(function () {})
+      }
+      resolve_navigation(to, from, next, store)
+      return
+    }
 
     if (store.state.auth.session_ready) {
       resolve_navigation(to, from, next, store)

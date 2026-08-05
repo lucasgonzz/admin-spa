@@ -89,6 +89,24 @@
 	}
 }
 
+// Shimmer de "esto está en curso": una banda de color recorre el elemento en loop.
+// Nació en el <style scoped> de ConfirmacionArmandoDemo.vue (grupo 322, prompt 03)
+// para el título del armado; se muda acá al pasar a usarlo también la pantalla de
+// carga de la página (PantallaCargaMarca.vue, grupo 355 prompt 01), por el mismo
+// motivo que demo-apertura-entrada: un @keyframes declarado en un <style scoped> NO
+// queda acotado a ese componente, así que dos copias en dos archivos scoped se
+// pisarían entre sí según qué bundle cargue último. Solo mueve el background-position:
+// los colores los pone cada uno (texto con background-clip en la confirmación, isotipo
+// enmascarado en la carga).
+@keyframes demo-confirmacion-shimmer {
+	from {
+		background-position: 180% 0;
+	}
+	to {
+		background-position: -80% 0;
+	}
+}
+
 .demo-experiencia-page {
 	// El texto y la pieza de cada bloque los anima el progreso de su sección, con
 	// `:style` inline (ScrollDolor.vue, grupo 348 prompt 03). Acá solo queda el
