@@ -621,13 +621,23 @@ export default {
   will-change: opacity, transform;
 }
 
-/* "both": sin esto el subtítulo (con delay) parpadea visible antes de tiempo. */
+/* "both": sin esto el subtítulo (con delay) parpadea visible antes de tiempo.
+
+   Dos tiempos, no uno (grupo 355, prompt 02; pedido de Lucas del 5/8/2026): con 1.2s
+   para el titular y 0.22s de retraso para el subtítulo, los dos entraban casi juntos y
+   se leían como un solo bloque que aparece de golpe. Ahora el titular tarda 3s y el
+   subtítulo espera a que termine -- 3s de la animación + 1s de pausa = 4s de retraso --
+   para entrar en su propio 1.2s. La curva es la misma de toda la página.
+
+   La duración se declara acá, en el `animation` de cada uso: el @keyframes compartido
+   (demo-experiencia.scss) no se toca, así que la confirmación "armando tu demo"
+   conserva exactamente sus tiempos. */
 .demo-scroll-dolor__apertura--carga .demo-scroll-dolor__apertura-titulo {
-  animation: demo-apertura-entrada 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: demo-apertura-entrada 3s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .demo-scroll-dolor__apertura--carga .demo-scroll-dolor__apertura-subtitulo {
-  animation: demo-apertura-entrada 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.22s both;
+  animation: demo-apertura-entrada 1.2s cubic-bezier(0.16, 1, 0.3, 1) 4s both;
 }
 
 @media (prefers-reduced-motion: reduce) {
