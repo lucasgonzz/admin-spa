@@ -59,22 +59,13 @@
 	}
 }
 
-// Animación de entrada de los bloques 1-5 y el cierre (grupo 322, prompt 01): más
-// presente que la anterior, pero sin parallax multicapa -- eso queda reservado a la
-// apertura (contexto/demo_experiencia.md §3.18-bis, prompt 06 de este grupo). La
-// sobriedad acá es un criterio de diseño, no una cita de esa sección: una versión
-// anterior de este archivo le atribuía la prohibición de parallax a §3.18, que nunca
-// dijo eso (ver aclaración en §3.18-bis).
-@keyframes demo-bloque-entrada {
-	from {
-		opacity: 0;
-		transform: translateY(96px) scale(0.9);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0) scale(1);
-	}
-}
+// RETIRADO (grupo 348, prompt 03): acá vivía @keyframes demo-bloque-entrada, la
+// entrada de los bloques 1-5 y el cierre. La disparaba un IntersectionObserver de
+// una sola vía (clase --visible + forwards + unobserve), que no tenía marcha atrás
+// al subir. Ahora los bloques se animan por el progreso de su propia sección, con
+// `:style` inline calculado en ScrollDolor.vue -- función pura del progreso, así que
+// la reversa sale gratis. No reponer un @keyframes para esto: volvería el doble
+// sistema que ya causó tres correctivos seguidos.
 
 // Fade + zoom + blur (grupo 336): corre UNA sola vez al montarse, no atada al scroll.
 // La usan dos pantallas que se quieren sentir "de la misma familia" -- la apertura
@@ -99,51 +90,15 @@
 }
 
 .demo-experiencia-page {
-	// Oculto por default: el bloque solo aparece cuando entra en viewport (ver
-	// IntersectionObserver en ScrollDolor.vue), salvo la apertura (ver abajo).
-	.demo-bloque {
-		opacity: 0;
-	}
-
-	// Bloques 1-5 y cierre (estructura interna texto/pieza): el contenedor pasa a
-	// opacity:1 al toque -- lo que se anima con stagger son sus dos hijos, no el
-	// bloque entero, para que el bloque entre como conjunto pero con jerarquía
-	// clara ("primero se lee, después se ve").
-	.demo-bloque--visible.demo-scroll-dolor__bloque {
-		opacity: 1;
-	}
-
-	.demo-bloque--visible.demo-scroll-dolor__bloque .demo-scroll-dolor__bloque-texto,
-	.demo-bloque--visible.demo-scroll-dolor__bloque .demo-scroll-dolor__bloque-pieza {
-		opacity: 0;
-		// settle pronunciado, sin overshoot: es contenido que aparece al hacer scroll,
-		// no algo que el usuario soltó con velocidad -- no hay justificación para bounce.
-		// Duración y desplazamiento subidos (grupo 325, prompt 01): con el gesto anterior
-		// (56px / 0.9s) la entrada casi no se apreciaba una vez bajado el threshold del
-		// IntersectionObserver en ScrollDolor.vue.
-		animation: demo-bloque-entrada 1.05s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-		// Acotado a la ventana de animación (ver limpiar_will_change_al_terminar() en
-		// ScrollDolor.vue, que lo saca en animationend): no acumular capas de
-		// composición en las siete secciones del scroll.
+	// El texto y la pieza de cada bloque los anima el progreso de su sección, con
+	// `:style` inline (ScrollDolor.vue, grupo 348 prompt 03). Acá solo queda el
+	// will-change, que ahora es permanente y no hace falta administrar a mano: con
+	// el progreso manejando todo el recorrido no hay un "terminó" en el que sacarlo.
+	// Nada de opacity: 0 de base -- si el JS no llegara a aplicar estilos (navegador
+	// viejo, error), el contenido tiene que quedar VISIBLE, no invisible.
+	.demo-scroll-dolor__bloque-texto,
+	.demo-scroll-dolor__bloque-pieza {
 		will-change: opacity, transform;
-	}
-
-	.demo-bloque--visible.demo-scroll-dolor__bloque .demo-scroll-dolor__bloque-pieza {
-		animation-delay: 0.18s;
-	}
-
-	// Puente al formulario: sin estructura interna texto/pieza, entra como bloque único.
-	.demo-bloque--visible:not(.demo-scroll-dolor__bloque) {
-		animation: demo-bloque-entrada 1.05s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-		will-change: opacity, transform;
-	}
-
-	// La apertura entra en frío respecto de la animación de bloques: sin ella, el
-	// texto ya está cuando el lead llega a la página. La escena animada por scroll
-	// que sí tiene la apertura es otra cosa y la agrega el prompt 06 (§3.18-bis).
-	.demo-bloque--apertura {
-		opacity: 1;
-		animation: none;
 	}
 }
 
@@ -294,30 +249,20 @@
 		position: static !important;
 	}
 
-	// .demo-bloque cubre la apertura (aunque ya no anima, no hace daño) y el puente
-	// (que sí anima como bloque único). will-change: auto !important por el mismo
-	// motivo que abajo -- animationend no dispara con la animación apagada, y sin
-	// !important esta regla (0,1,0) pierde contra la base .demo-bloque--visible:not(...)
-	// (0,3,0 dentro de .demo-experiencia-page), que sí trae will-change seteado.
-	.demo-bloque {
-		animation: none !important;
-		opacity: 1 !important;
-		transition: opacity 200ms ease;
-		will-change: auto !important;
-	}
-
-	// La animación de bloques 1-5 y cierre vive en estos dos hijos (ver arriba), no
-	// en .demo-bloque: hay que apagarla ahí también para que el media query cubra
-	// TODA la página, no solo el puente. will-change: auto !important: con la
-	// animación apagada, animationend nunca dispara (el listener de ScrollDolor.vue
-	// que lo saca no llega a correr), y sin !important esta regla (0,1,0) pierde
-	// contra la base .demo-bloque--visible.demo-scroll-dolor__bloque ... (0,4,0),
-	// que sí trae will-change -- quedaría pegado para siempre en los bloques visibles.
+	// Todo el contenido del scroll de dolor, plenamente visible y estático. Los
+	// `!important` no son prolijidad: ScrollDolor.vue no aplica `:style` bajo
+	// reduced-motion (devuelve un objeto vacío), pero un estilo inline heredado de
+	// un cambio anterior de esta media query -- o cualquier animación de carga que
+	// haya quedado a mitad -- perdería contra un inline sin ellos. Con !important de
+	// autor, esta regla gana igual.
+	.demo-scroll-dolor__apertura-titulo,
+	.demo-scroll-dolor__apertura-subtitulo,
 	.demo-scroll-dolor__bloque-texto,
-	.demo-scroll-dolor__bloque-pieza {
+	.demo-scroll-dolor__bloque-pieza,
+	.demo-scroll-dolor__puente {
 		animation: none !important;
 		opacity: 1 !important;
-		transition: opacity 200ms ease;
+		transform: none !important;
 		will-change: auto !important;
 	}
 }

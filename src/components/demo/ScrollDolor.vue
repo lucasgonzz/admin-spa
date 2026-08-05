@@ -4,10 +4,17 @@
          decisión de Lucas tras ver la escena cinematográfica implementada -- ver nota
          de reversión en demo_experiencia.md §3.18-bis). Ya no arma su propia
          FondoSeccionSticky: la de acá abajo hace todo el trabajo de pin/fondo. -->
-    <fondo-seccion-sticky variante="apertura">
-      <header class="demo-bloque demo-bloque--apertura demo-scroll-dolor__apertura">
-        <h1 class="demo-scroll-dolor__apertura-titulo">{{ contenido.apertura.titulo }}</h1>
-        <p class="demo-scroll-dolor__apertura-subtitulo">{{ contenido.apertura.subtitulo }}</p>
+    <fondo-seccion-sticky variante="apertura" v-slot="{ progreso }" @progreso="on_progreso_apertura">
+      <header
+        class="demo-scroll-dolor__apertura"
+        :class="{ 'demo-scroll-dolor__apertura--carga': !apertura_tomada_por_scroll }"
+      >
+        <h1 class="demo-scroll-dolor__apertura-titulo" :style="estilo_apertura(progreso)">
+          {{ contenido.apertura.titulo }}
+        </h1>
+        <p class="demo-scroll-dolor__apertura-subtitulo" :style="estilo_apertura(progreso, true)">
+          {{ contenido.apertura.subtitulo }}
+        </p>
       </header>
     </fondo-seccion-sticky>
 
@@ -16,20 +23,18 @@
       v-for="(bloque, indice) in contenido.bloques"
       :key="bloque.id"
       :variante="'bloque-' + (indice + 1)"
+      v-slot="{ progreso }"
+      @progreso="on_progreso_bloque($event, bloque.id)"
     >
-      <article
-        :ref="registrar_bloque_ref"
-        class="demo-bloque demo-scroll-dolor__bloque"
-        :data-bloque-id="bloque.id"
-      >
-        <div class="demo-scroll-dolor__bloque-texto">
+      <article class="demo-scroll-dolor__bloque" :data-bloque-id="bloque.id">
+        <div class="demo-scroll-dolor__bloque-texto" :style="estilo_bloque(progreso)">
           <p v-for="(linea, indice2) in bloque.texto" :key="indice2" class="demo-scroll-dolor__parrafo">
             {{ linea }}
           </p>
           <p class="demo-scroll-dolor__resaltado">{{ bloque.resaltado }}</p>
         </div>
 
-        <div class="demo-scroll-dolor__bloque-pieza">
+        <div class="demo-scroll-dolor__bloque-pieza" :style="estilo_bloque(progreso, true)">
           <marco-dispositivo :tipo="bloque.marco">
             <!-- Único bloque con marco combinado (scroll.2): misma pieza en las dos pantallas -->
             <template v-if="bloque.marco === 'computadora+telefono'" #computadora>
@@ -59,15 +64,12 @@
          misma pieza multimedia con marco teléfono. -->
     <interludio-portal @cierre-visible="emitir_evento_cierre">
       <template #cierre>
-        <!-- Sin la clase demo-bloque ni registrar_bloque_ref a propósito: ese
-             sistema (IntersectionObserver + opacity:0 base + demo-bloque-entrada)
-             es para bloques que aparecen en su posición normal de flujo. Este
-             cierre ahora vive dentro de un wrapper posicionado (translateY 100%
-             -> 0%) cuya opacidad y entrada ya las controla por completo el
-             progreso de scroll de InterludioPortal -- combinar los dos
-             sistemas haría que el contenido interno animara una segunda vez,
-             de forma descoordinada, apenas el wrapper se vuelve geométricamente
-             visible para el observer. -->
+        <!-- Sin `:style` por progreso a propósito, a diferencia de los bloques 1-5:
+             este cierre vive dentro de un wrapper posicionado (translateY 100% -> 0%)
+             cuya opacidad y entrada ya las controla por completo el progreso de
+             scroll de InterludioPortal. Animarlo también acá sería animarlo dos
+             veces, de forma descoordinada -- es el mismo motivo por el que antes
+             quedaba afuera del IntersectionObserver (grupo 325, prompt 04). -->
         <article
           class="demo-scroll-dolor__bloque demo-scroll-dolor__cierre demo-interludio__cierre"
           :data-bloque-id="contenido.cierre.id"
@@ -104,7 +106,11 @@
 
     <!-- Puente al formulario: el formulario en sí lo agrega el prompt 05 (ver
          armazón en ExperienciaDemo.vue, que renderiza esta sección justo antes) -->
-    <footer class="demo-bloque demo-scroll-dolor__puente" :ref="registrar_bloque_ref" data-bloque-id="puente">
+    <!-- El puente no vive dentro de un FondoSeccionSticky (es hijo directo de la
+         página), así que no tiene progreso de sección del cual colgarse: al retirarse
+         el IntersectionObserver queda visible y estático. El prompt 05 de este mismo
+         grupo lo pasa a su propia pantalla; ahí sí va a tener progreso propio. -->
+    <footer class="demo-scroll-dolor__puente" data-bloque-id="puente">
       <p v-for="(linea, indice) in contenido.puente" :key="indice">{{ linea }}</p>
     </footer>
   </section>
@@ -280,16 +286,50 @@ const CONTENIDO_POR_PERFIL = {
   },
 }
 
+/* Tramos de la coreografía de cada sección, en unidades de progreso [0,1] (grupo
+   348, prompt 03). Entrada corta, meseta larga, salida corta: la sección está para
+   leerse, no para animarse. El desfasaje de la pieza respecto del texto es el mismo
+   que daba el animation-delay de 0.18s del sistema anterior, traducido a progreso. */
+const ENTRADA_FIN = 0.28
+const SALIDA_INICIO = 0.72
+const DESFASE_PIEZA = 0.05
+/* Desplazamiento vertical, en px: entra desde abajo y sale hacia arriba. */
+const ENTRADA_Y = 96
+const SALIDA_Y = -48
+/* La salida no llega a 0: ver el comentario de estilo_bloque(). */
+const SALIDA_OPACIDAD = 0.35
+
+/**
+ * Misma curva que usa InterludioPortal (1 - (1-t)³). Dos curvas distintas en la
+ * misma página se notan.
+ *
+ * @param {number} t
+ * @returns {number}
+ */
+function ease_out(t) {
+  return 1 - Math.pow(1 - t, 3)
+}
+
 /**
  * Scroll de dolor de la página inmersiva de demo: seis bloques de dolor +
  * alivio, cada uno con su pieza multimedia dentro de un marco de dispositivo,
  * más apertura y puente al formulario. Renderiza la versión dueño o campeón
  * según `perfil` (contexto/demo_experiencia.md §3.17).
  *
- * Instrumentación mínima (§6 del prompt): cada bloque, al entrar en viewport,
+ * Instrumentación mínima (§6 del prompt): cada bloque, al terminar de entrar,
  * dispara `emitir_evento` -- método centralizado en el contenedor
  * (ExperienciaDemo.vue) que hoy solo hace console.debug y mañana se conecta
  * al bus de eventos real sin tener que volver a tocar este componente.
+ *
+ * CORRECTIVO (grupo 348, prompt 03): la página tenía DOS sistemas de animación
+ * conviviendo -- el interludio, función pura del progreso de scroll y por lo tanto
+ * reversible, y los bloques 1-5, con un IntersectionObserver de una sola vía que
+ * agregaba una clase, corría un @keyframes con `forwards` y desobservaba. Ese
+ * segundo sistema no tenía marcha atrás (pedido de Lucas del 4/8/2026: "que a
+ * medida que voy para arriba las animaciones vayan sucediendo en reversa") y el
+ * doble mecanismo ya había causado bugs en tres grupos seguidos. Ahora todo el
+ * scroll de dolor se anima por el progreso de su propia sección: la reversa no se
+ * programa, es consecuencia de que el progreso baje.
  */
 export default {
   name: 'ScrollDolor',
@@ -332,14 +372,24 @@ export default {
   data() {
     return {
       /**
-       * Referencias a los elementos DOM de cada bloque animable (bloques 1-6
-       * + puente; la apertura queda afuera porque nunca se anima). Se
-       * reconstruye en cada render vía registrar_bloque_ref para no acumular
-       * referencias obsoletas entre updates.
+       * true si el sistema operativo pide reduced-motion. Se resuelve acá y no en
+       * mounted() a propósito: los métodos de estilo corren en el PRIMER render, y
+       * un flag que llega después dejaría un frame con los bloques en opacity 0.
        */
-      bloque_refs: [],
-      /** Instancia de IntersectionObserver que dispara la animación de entrada. */
-      observer: null,
+      reduced_motion: !!(
+        typeof window !== 'undefined' &&
+        window.matchMedia &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      ),
+      /**
+       * false hasta que el lead scrollea la apertura por primera vez. Mientras es
+       * false manda la animación CSS de carga (demo-apertura-entrada); apenas hay
+       * scroll, la clase se retira y el titular pasa a depender del progreso, que
+       * es lo que le da la reversa al subir.
+       */
+      apertura_tomada_por_scroll: false,
+      /** Ids de bloque cuyo evento de tracking ya se emitió (una vez por bloque). */
+      bloques_trackeados: {},
     }
   },
 
@@ -358,36 +408,124 @@ export default {
     },
   },
 
-  mounted() {
-    /* Espera al render inicial para tener todos los bloque_refs poblados. */
-    this.$nextTick(this.iniciar_observador)
-  },
-
-  beforeUpdate() {
-    /* Limpia refs antes de cada re-render (cambio de perfil): registrar_bloque_ref
-       las vuelve a poblar durante el render siguiente. */
-    this.bloque_refs = []
-  },
-
-  beforeUnmount() {
-    if (this.observer) {
-      this.observer.disconnect()
-    }
-  },
-
   methods: {
     /**
-     * Function ref usada en el template para juntar, en un array propio, los
-     * elementos DOM de cada bloque animable (patrón estándar de Vue 3 para
-     * refs dentro de v-for).
+     * Normaliza `p` al rango [0,1] dentro de [inicio, fin] -- misma función que
+     * usa InterludioPortal, para no tener dos formas de recortar tramos.
      *
-     * @param {Element|null} el
+     * @param {number} p
+     * @param {number} inicio
+     * @param {number} fin
+     * @returns {number}
+     */
+    normalizar(p, inicio, fin) {
+      if (p <= inicio) {
+        return 0
+      }
+      if (p >= fin) {
+        return 1
+      }
+      return (p - inicio) / (fin - inicio)
+    },
+
+    /**
+     * Estilo de un bloque 1-5 para el progreso `p` de su propia sección. Tres
+     * tramos: entrada (0 -> 0.28), meseta (la mayor parte del recorrido: la
+     * sección está para leerse) y salida parcial (0.72 -> 1).
+     *
+     * La salida es PARCIAL a propósito (hasta 0.35 de opacidad, no hasta 0): que
+     * el contenido se desvanezca del todo antes de irse de pantalla se lee como
+     * un bug, no como una transición.
+     *
+     * Es función pura del progreso, así que la reversa al subir sale gratis: el
+     * progreso baja y los mismos valores se recorren al revés. Si alguna vez
+     * aparece acá un `if (subiendo)`, el enfoque está mal.
+     *
+     * @param {number} p Progreso [0,1] de la sección.
+     * @param {boolean} secundario true para la pieza multimedia, que va desfasada
+     *                             ~0.05 de progreso respecto del texto ("primero
+     *                             se lee, después se ve" -- es el mismo desfasaje
+     *                             que daba el animation-delay de 0.18s).
+     * @returns {object}
+     */
+    estilo_bloque(p, secundario) {
+      if (this.reduced_motion) {
+        /* Sin estilos inline: manda el CSS, que bajo esta media query deja todo
+         * plenamente visible y estático. */
+        return {}
+      }
+
+      const desfase = secundario ? DESFASE_PIEZA : 0
+      const entrada = ease_out(this.normalizar(p, desfase, ENTRADA_FIN + desfase))
+      const salida = ease_out(this.normalizar(p, SALIDA_INICIO + desfase, 1))
+
+      const opacidad = entrada - salida * (1 - SALIDA_OPACIDAD)
+      const y = (1 - entrada) * ENTRADA_Y + salida * SALIDA_Y
+
+      return {
+        opacity: String(opacidad),
+        transform: 'translateY(' + y + 'px)',
+      }
+    },
+
+    /**
+     * Estilo de la apertura. A diferencia de los bloques NO tiene tramo de
+     * entrada: es lo primero que ve el lead al abrir la página, sin haber
+     * scrolleado nada, así que en p = 0 tiene que estar plenamente visible. Su
+     * entrada la hace una sola vez la animación CSS de carga; de ahí en más solo
+     * queda la salida, que al subir se recorre al revés y hace que el titular
+     * "vuelva a entrar".
+     *
+     * @param {number} p
+     * @param {boolean} secundario true para el subtítulo.
+     * @returns {object}
+     */
+    estilo_apertura(p, secundario) {
+      if (this.reduced_motion) {
+        return {}
+      }
+
+      const desfase = secundario ? DESFASE_PIEZA : 0
+      const salida = ease_out(this.normalizar(p, SALIDA_INICIO + desfase, 1))
+
+      return {
+        opacity: String(1 - salida * (1 - SALIDA_OPACIDAD)),
+        transform: 'translateY(' + salida * SALIDA_Y + 'px)',
+      }
+    },
+
+    /**
+     * Retira la animación CSS de carga apenas hay scroll real en la apertura. A
+     * partir de ahí el `:style` por progreso es el único que manda -- mientras la
+     * animación viva, sus valores le ganan a cualquier estilo inline (las
+     * animaciones pisan al inline en la cascada), así que las dos cosas no pueden
+     * convivir sobre los mismos elementos.
+     *
+     * @param {number} p
      * @returns {void}
      */
-    registrar_bloque_ref(el) {
-      if (el) {
-        this.bloque_refs.push(el)
+    on_progreso_apertura(p) {
+      if (!this.apertura_tomada_por_scroll && p > 0.001) {
+        this.apertura_tomada_por_scroll = true
       }
+    },
+
+    /**
+     * Tracking de bloque visible: reemplaza al que emitía el IntersectionObserver,
+     * en el mismo momento aproximado (el bloque terminó de entrar) y con el mismo
+     * evento y payload. Una sola vez por bloque, aunque el lead suba y vuelva a
+     * bajar diez veces: es un evento de "lo vio", no de "lo está viendo".
+     *
+     * @param {number} p
+     * @param {string} bloque_id
+     * @returns {void}
+     */
+    on_progreso_bloque(p, bloque_id) {
+      if (p < ENTRADA_FIN || this.bloques_trackeados[bloque_id]) {
+        return
+      }
+      this.bloques_trackeados[bloque_id] = true
+      this.emitir_evento('scroll_bloque_visible', { bloque_id: bloque_id, perfil: this.perfil })
     },
 
     /**
@@ -404,78 +542,6 @@ export default {
       this.emitir_evento('scroll_bloque_visible', { bloque_id: this.contenido.cierre.id, perfil: this.perfil })
     },
 
-    /**
-     * Arma el IntersectionObserver que agrega la clase de animación de
-     * entrada apenas cada bloque aparece en viewport, y emite el evento de
-     * tracking mínimo. Con fallback sin animación si el navegador no soporta
-     * IntersectionObserver (todo queda visible directamente).
-     *
-     * @returns {void}
-     */
-    iniciar_observador() {
-      const self = this
-
-      if (typeof IntersectionObserver === 'undefined') {
-        self.bloque_refs.forEach(function (el) {
-          el.classList.add('demo-bloque--visible')
-        })
-        return
-      }
-
-      self.observer = new IntersectionObserver(
-        function (entries) {
-          entries.forEach(function (entry) {
-            if (!entry.isIntersecting) {
-              return
-            }
-            entry.target.classList.add('demo-bloque--visible')
-            self.limpiar_will_change_al_terminar(entry.target)
-            const bloque_id = entry.target.dataset.bloqueId
-            if (bloque_id) {
-              self.emitir_evento('scroll_bloque_visible', { bloque_id: bloque_id, perfil: self.perfil })
-            }
-            /* Una vez animado, no hace falta seguir observando ese bloque. */
-            self.observer.unobserve(entry.target)
-          })
-        },
-        /* threshold bajo + rootMargin negativo abajo (grupo 325, prompt 01): con el
-           contenido pinneado y centrado en el viewport (FondoSeccionSticky), un
-           threshold de 0.2 disparaba cuando el bloque ya estaba prácticamente puesto
-           en pantalla -- la animación de entrada corría cuando el lead ya lo estaba
-           mirando y se perdía. Con 0.01 + rootMargin, el disparo ocurre apenas el
-           bloque empieza a entrar. */
-        { threshold: 0.01, rootMargin: '0px 0px -25% 0px' }
-      )
-
-      self.bloque_refs.forEach(function (el) {
-        self.observer.observe(el)
-      })
-    },
-
-    /**
-     * Saca will-change de los elementos que animan la entrada de un bloque apenas
-     * termina su animación (grupo 322, prompt 01): la animación real vive en
-     * .demo-scroll-dolor__bloque-texto / -pieza (bloques 1-5 y cierre) o en el propio
-     * bloque (puente, sin esa estructura interna) -- ver demo-experiencia.scss. Sin
-     * esto, will-change quedaría acumulado en las siete secciones del scroll incluso
-     * después de terminar de animar.
-     *
-     * @param {Element} bloque_el
-     * @returns {void}
-     */
-    limpiar_will_change_al_terminar(bloque_el) {
-      const tiene_texto_pieza = bloque_el.classList.contains('demo-scroll-dolor__bloque')
-      const animados = tiene_texto_pieza
-        ? bloque_el.querySelectorAll('.demo-scroll-dolor__bloque-texto, .demo-scroll-dolor__bloque-pieza')
-        : [bloque_el]
-
-      animados.forEach(function (el) {
-        el.addEventListener('animationend', function limpiar() {
-          el.style.willChange = 'auto'
-          el.removeEventListener('animationend', limpiar)
-        })
-      })
-    },
   },
 }
 </script>
@@ -515,7 +581,11 @@ export default {
 
 /* Animación de entrada de la apertura (grupo 336, revierte la escena cinematográfica
    del grupo 325): corre UNA sola vez al cargar, no atada al scroll -- la apertura ya
-   está en pantalla cuando el lead llega. CSS puro, sin librerías: es lo primero que
+   está en pantalla cuando el lead llega. Desde el grupo 348 (prompt 03) vive detrás
+   del modificador --carga, que ScrollDolor.vue retira apenas hay scroll real: una
+   animación en curso le gana en la cascada a cualquier estilo inline, así que la
+   animación de carga y el `:style` por progreso no pueden convivir sobre los mismos
+   elementos -- primero una, después el otro. CSS puro, sin librerías: es lo primero que
    carga la página. @keyframes demo-apertura-entrada vive en demo-experiencia.scss (no
    acá): la reutiliza también la pantalla de confirmación (ConfirmacionArmandoDemo.vue,
    prompt 03 de este grupo) -- un @keyframes definido dentro de un <style scoped> NO
@@ -539,8 +609,7 @@ export default {
      especificidad. Puesto en el header, ese padding:0 le gana siempre a cualquier padding
      que se declare ahí. Acá, en el nieto, el selector > * no llega: sin pelea de cascada. */
   padding: 0 20px;
-  /* "both": sin esto el subtítulo (con delay) parpadea visible antes de tiempo. */
-  animation: demo-apertura-entrada 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: opacity, transform;
 }
 
 .demo-scroll-dolor__apertura-subtitulo {
@@ -549,6 +618,15 @@ export default {
   margin: 0;
   max-width: 620px;
   padding: 0 20px;
+  will-change: opacity, transform;
+}
+
+/* "both": sin esto el subtítulo (con delay) parpadea visible antes de tiempo. */
+.demo-scroll-dolor__apertura--carga .demo-scroll-dolor__apertura-titulo {
+  animation: demo-apertura-entrada 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.demo-scroll-dolor__apertura--carga .demo-scroll-dolor__apertura-subtitulo {
   animation: demo-apertura-entrada 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.22s both;
 }
 
