@@ -1,11 +1,12 @@
 <template>
-	<escena-marca class="demo-confirmacion-armando">
-		<!-- Atenúa la escena de marca detrás del texto (grupo 331, correctivo):
-		     capa sólida semitransparente, nunca backdrop-filter (§12 de la skill +
-		     APLICABILIDAD.md) -- el degradé sigue visible pero deja de competir
-		     con el texto. position:fixed para que cubra el viewport completo sin
-		     quedar acotada por el max-width de .escena-marca__contenido. -->
-		<div class="demo-confirmacion-armando__atenuacion" aria-hidden="true"></div>
+	<!-- La atenuación de la escena de marca detrás del texto (capa sólida
+	     semitransparente, nunca backdrop-filter: §12 de la skill +
+	     APLICABILIDAD.md) la pinta ahora EscenaMarca por prop, acotada a su
+	     propia pantalla. Antes era un div de este componente con position:fixed
+	     y cubría el viewport entero de la página inmersiva para siempre --
+	     grupo 348, prompt 01. El valor se mantiene en el 0.55 de siempre: ese
+	     correctivo arregla el alcance de la capa, no su intensidad. -->
+	<escena-marca class="demo-confirmacion-armando" :atenuacion="0.55">
 		<div
 			ref="texto"
 			class="demo-confirmacion-armando__texto"
@@ -300,21 +301,6 @@ export default {
 	min-height: 100dvh;
 }
 
-/* Atenúa la escena de marca (degradé + formas) detrás del texto -- el
-   subtítulo #3d4657 no alcanza contraste AA contra la zona más intensa del
-   degradé sin esto. position:fixed (no absolute): rompe el max-width:560px
-   de .escena-marca__contenido (que es el positioning context más cercano)
-   para cubrir el viewport completo, "a todo el ancho" como pide el prompt.
-   z-index explícito + position:relative en __texto (ver esa regla) para que
-   el orden de pintado no dependa de que ninguno de los dos sea position:auto. */
-.demo-confirmacion-armando__atenuacion {
-	position: fixed;
-	inset: 0;
-	z-index: 0;
-	background: rgba(248, 249, 252, 0.55);
-	pointer-events: none;
-}
-
 .demo-confirmacion-armando__texto {
 	position: relative;
 	z-index: 1;
@@ -390,8 +376,9 @@ export default {
 	font-size: 1.05rem;
 	line-height: 1.5;
 	/* #566078 sobre la zona más intensa del degradé, incluso atenuada por la
-	   capa de arriba, no alcanza AA -- #3d4657 sí (medido contra el peor caso:
-	   azul de marca #0b84f8 detrás de la capa rgba(248,249,252,0.55)). */
+	   capa de EscenaMarca (:atenuacion="0.55"), no alcanza AA -- #3d4657 sí
+	   (medido contra el peor caso: azul de marca #0b84f8 detrás de la capa
+	   rgba(248,249,252,0.55)). */
 	color: #3d4657;
 	margin: 0;
 	position: relative;

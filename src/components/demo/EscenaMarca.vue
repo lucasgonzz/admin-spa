@@ -5,6 +5,12 @@
 			<span class="escena-marca__forma escena-marca__forma--2"></span>
 			<span class="escena-marca__forma escena-marca__forma--3"></span>
 		</div>
+		<div
+			v-if="atenuacion > 0"
+			class="escena-marca__atenuacion"
+			:style="{ background: 'rgba(248, 249, 252, ' + atenuacion + ')' }"
+			aria-hidden="true"
+		></div>
 		<div class="escena-marca__contenido">
 			<slot />
 		</div>
@@ -32,6 +38,25 @@
  */
 export default {
 	name: 'EscenaMarca',
+
+	props: {
+		/**
+		 * Opacidad de una capa lisa del color de fondo (#f8f9fc) sobre el degradé
+		 * y las formas, para que el texto de encima gane contraste. 0 = sin capa
+		 * (la pantalla de carga se ve exactamente como antes de que esta prop
+		 * existiera).
+		 *
+		 * Vive acá, y no en el que la usa, porque tiene que quedar ACOTADA a esta
+		 * pantalla: el slot cae dentro de .escena-marca__contenido (max-width:
+		 * 560px), así que una capa pasada por el slot no puede cubrir la escena
+		 * entera sin salirse de su contenedor. Ver el comentario de
+		 * .escena-marca__atenuacion en el <style> sobre por qué eso importa.
+		 */
+		atenuacion: {
+			type: Number,
+			default: 0,
+		},
+	},
 }
 </script>
 
@@ -106,6 +131,32 @@ export default {
 		transform: scale(1.18) translate(3%, -3%);
 		opacity: 0.55;
 	}
+}
+
+/* ABSOLUTE, NUNCA FIXED. Se ve idéntica (esta escena ocupa el viewport entero)
+   y la tentación de volver a fixed es real: fixed rompe cualquier contenedor y
+   ahorra pensar dónde va la capa. Ya pasó, y costó tres correctivos.
+
+   Historia (grupo 348, prompt 01, 4/8/2026): esta capa nació en
+   ConfirmacionArmandoDemo.vue con position:fixed + inset:0, justamente para
+   escaparle al max-width:560px de .escena-marca__contenido. Mientras la
+   confirmación era un overlay que se desmontaba a los 5s, el velo se iba con
+   ella. El correctivo del grupo 331 la dejó montada para siempre -- y desde
+   entonces una capa blanca al 55% cubrió el VIEWPORT COMPLETO de la página
+   inmersiva, para siempre: el marco #10131c se veía ~#8a8d95 y el degradé de
+   marca salía pastel. Nada la acotaba (ningún ancestro tiene transform, filter,
+   perspective ni contain, y el overflow:hidden de .escena-marca NO recorta un
+   hijo fixed), y como la confirmación va última en el DOM se pintaba encima del
+   scroll de dolor y del formulario.
+
+   Acá, como hermano de __fondo y fuera de __contenido, absolute se resuelve
+   contra .escena-marca (position:relative) y queda encerrada en su propia
+   pantalla, que es lo que se quería desde el principio. */
+.escena-marca__atenuacion {
+	position: absolute;
+	inset: 0;
+	z-index: 0;
+	pointer-events: none;
 }
 
 .escena-marca__contenido {
