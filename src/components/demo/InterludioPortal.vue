@@ -258,6 +258,13 @@ export default {
 			portal_abierto: { sx: 1, sy: 1 },
 			/** Evita emitir el evento de tracking del cierre más de una vez. */
 			cierre_visible_emitido: false,
+			/**
+			 * Último progreso [0,1] recibido por el evento de FondoSeccionSticky.
+			 * Existe para que este componente no dependa del orden de montaje: si el
+			 * progreso llegó antes de que mounted() leyera el contrato del SVG, se
+			 * aplica al final de mounted() con este valor (grupo 349, prompt 01).
+			 */
+			ultimo_progreso: 0,
 		}
 	},
 
@@ -277,7 +284,18 @@ export default {
 			 * scroll registrado (criterio de éxito 8): panorama atenuado, arco
 			 * cerrado, nombre visible, cierre encima. */
 			self.aplicar_estilos(1)
+			return
 		}
+
+		/* Pose inicial, ahora que el contrato del SVG ya está leído (grupo 349,
+		 * prompt 01). Ninguno de los elementos del SVG trae transform ni opacidad
+		 * en el markup: si nadie aplica la coreografía antes del primer scroll, la
+		 * escena se ve con los 24 elementos apilados en la esquina del viewBox y
+		 * pega un salto cuando el progreso empieza a llegar. Se usa el último valor
+		 * recibido y no un 0 fijo, porque la página puede haber cargado con esta
+		 * sección ya parcialmente scrolleada. Idempotente: aplicar_estilos() escribe
+		 * la pose absoluta de un p dado, no incrementos. */
+		self.aplicar_estilos(self.ultimo_progreso)
 
 		/* Sin listener propio de scroll/resize: el progreso [0,1] lo calcula
 		 * FondoSeccionSticky (una sola vez para toda la sección, ya amortiguado)
@@ -300,6 +318,11 @@ export default {
 			if (this.reduced_motion) {
 				return
 			}
+			/* Se guarda SIEMPRE, incluso si este evento llegó antes de que mounted()
+			 * leyera el contrato del SVG: en ese caso aplicar_estilos() de acá abajo
+			 * no hace nada (pares está vacío) y el que aplica es el propio mounted(),
+			 * con este mismo valor. */
+			this.ultimo_progreso = p
 			this.aplicar_estilos(p)
 		},
 

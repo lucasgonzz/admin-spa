@@ -117,7 +117,20 @@ export default {
 		 * suavizar el scroll del lead, no la carga de la página. */
 		this.calcular_objetivo()
 		this.progreso = this.progreso_objetivo
-		this.$emit('progreso', this.progreso)
+
+		/* El AVISO va en nextTick, el cálculo de arriba no (grupo 349, prompt 01).
+		 * Vue corre el mounted() del hijo ANTES que el del padre, así que emitir acá
+		 * mismo le llega al consumidor antes de que haya terminado de armarse: en
+		 * InterludioPortal, aplicar_estilos() corría con this.pares todavía en []
+		 * -- leer_contrato_svg() se ejecuta en el mounted() del padre -- y la
+		 * coreografía se quedaba sin pose inicial. Un callback de nextTick registrado
+		 * acá corre cuando el flush terminó, o sea después del mounted del padre.
+		 * NO sacar el nextTick: sin él, el primer emit se pierde en silencio, que es
+		 * el peor modo de falla (no hay error, solo una escena que salta después). */
+		const self = this
+		this.$nextTick(function () {
+			self.$emit('progreso', self.progreso)
+		})
 
 		this.scroll_target.addEventListener('scroll', this.on_scroll, { passive: true })
 		/* El alto pinneable depende de window.innerHeight (el pin es 100vh de VIEWPORT,
