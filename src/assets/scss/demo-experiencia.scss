@@ -213,32 +213,47 @@
 // base, sin necesitar !important ahí). Se retira en vez de dejarla muerta.
 
 // ---------------------------------------------------------------------------
-// Interludio: panel del cierre superpuesto (grupo 322, prompt 05, punto 3;
-// escena reemplazada por InterludioPortal.vue en el grupo 325, prompt 04,
-// pero el panel del cierre se mantiene igual). Sin backdrop-filter -- la capa
-// + la atenuación de la escena de atrás hacen todo el trabajo.
+// El cierre. Nació como panel superpuesto sobre la escena del interludio (grupo 322,
+// prompt 05, punto 3) y dejó de serlo en el grupo 355 (prompt 06): ahora es la sección
+// que sigue al interludio, en flujo normal. Sin backdrop-filter, como toda la página.
 // ---------------------------------------------------------------------------
 
-.demo-interludio__panel-cierre {
-	// Menos opaco (grupo 336, prompt 02) y acotado a la mitad inferior de la escena
-	// (max-height, el ancla abajo ya la da align-items:flex-end del wrap en
-	// InterludioPortal.vue): el nombre y el anillo cerrado, arriba, tienen que
-	// seguir viendose con el panel ya entrado -- criterio duro del prompt.
-	background: rgba(248, 249, 252, 0.86);
+// La sección del cierre: el tramo que sigue al interludio (grupo 355, prompt 06).
+// Antes era un overlay dentro de la escena; ahora es una pantalla más del scroll, con
+// el mismo respiro que las otras y sin techo de alto -- crece lo que necesite el copy,
+// que en la versión campeón es bastante más largo que en la de dueño.
+.demo-cierre {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 12vh 20px;
+	box-sizing: border-box;
+}
+
+.demo-cierre__tarjeta {
+	width: 100%;
+	max-width: 1100px;
+	// El fondo semitransparente venía de cuando la tarjeta se leía SOBRE la escena
+	// del portal: era lo que le daba contraste al texto. Sin escena atrás pierde esa
+	// función, así que se decide en vez de arrastrarse -- queda blanco sólido con una
+	// sombra suave, para que siga leyéndose como la tarjeta que Lucas nombra, apoyada
+	// sobre el fondo de la página en lugar de flotando sobre el anillo.
+	background: #ffffff;
+	box-shadow: 0 24px 60px -32px rgba(28, 35, 51, 0.28);
 	border-radius: 20px;
 	padding: clamp(24px, 4vw, 48px);
-	max-height: 46vh;
-	overflow: auto;
-	// pointer-events:auto (grupo 336, correctivo 6): .demo-interludio__panel-cierre-wrap
-	// (InterludioPortal.vue) tiene pointer-events:none fijo para no interceptar clics
-	// mientras el panel esta oculto/fuera de pantalla -- ese none nunca se levanta cuando
-	// el panel termina de entrar, asi que sin esto el overflow:auto de arriba es un scroll
-	// fantasma: el contenido que no entra en 46vh (la frase final, la pieza multimedia)
-	// queda ahi pero inalcanzable con mouse, touch o teclado. Reactiva la interaccion solo
-	// para la tarjeta y su contenido -- el resto del wrap (el area vacia de la escena)
-	// sigue sin interceptar nada.
-	pointer-events: auto;
+	box-sizing: border-box;
 }
+
+// ⛔ RETIRADO (grupo 355, prompt 06): .demo-interludio__panel-cierre, la tarjeta
+// superpuesta con max-height: 46vh + overflow: auto. El techo estaba para no tapar el
+// anillo con el nombre, y era exactamente lo que dejaba contenido inalcanzable al
+// scrollear fuera de ella (captura de Lucas del 5/8/2026). Al mudarse el cierre fuera
+// del interludio, el conflicto que ese techo resolvía dejó de existir.
+// Con ella se van también sus dos parches: el pointer-events:auto que reactivaba la
+// interacción dentro de un wrap con pointer-events:none (grupo 336, correctivo 6) y el
+// fondo semitransparente que le daba contraste sobre la escena. Ninguno tiene sentido
+// fuera del overlay, así que no se arrastran.
 
 // El override del título del cierre dentro del interludio (color sólido en
 // vez de degradé recortado) vive en el <style scoped> de ScrollDolor.vue, NO

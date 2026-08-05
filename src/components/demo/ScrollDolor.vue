@@ -54,24 +54,28 @@
       </article>
     </fondo-seccion-sticky>
 
-    <!-- Interludio del portal + cierre superpuesto (grupo 325, prompt 04,
-         reemplaza entero al interludio de convergencia del grupo 322/05).
-         El cierre ya NO va en su propio FondoSeccionSticky: se renderiza por
-         encima de la escena del portal (slot #cierre), mientras el panorama
-         queda atenuado y desaturado detrás y el arco se cierra sobre todo.
-         Estructura de texto del cierre sin cambios respecto de los bloques
-         1-5 (título(s) + hitos temporales + frase o párrafo de cierre),
-         misma pieza multimedia con marco teléfono. -->
-    <interludio-portal @cierre-visible="emitir_evento_cierre">
-      <template #cierre>
-        <!-- Sin `:style` por progreso a propósito, a diferencia de los bloques 1-5:
-             este cierre vive dentro de un wrapper posicionado (translateY 100% -> 0%)
-             cuya opacidad y entrada ya las controla por completo el progreso de
-             scroll de InterludioPortal. Animarlo también acá sería animarlo dos
-             veces, de forma descoordinada -- es el mismo motivo por el que antes
-             quedaba afuera del IntersectionObserver (grupo 325, prompt 04). -->
+    <!-- Interludio del portal. El cierre YA NO va adentro (grupo 355, prompt 06):
+         hasta ahora se renderizaba superpuesto sobre la escena (slot #cierre) dentro
+         de una tarjeta acotada a 46vh con scroll propio. Lucas, 5/8/2026: "quiero que
+         la tarjeta no tenga un alto definido y ocupe todo el alto que tenga que
+         ocupar. No quiero que haya un scroll dentro de esa tarjeta".
+         De los dos caminos que daba el prompt se tomó el segundo: el cierre deja de
+         ser un overlay y pasa a ser el tramo siguiente del scroll. El primero -- que
+         el panel entre más arriba y el nombre suba con él -- no cierra: el contenido
+         del cierre en la versión campeón (párrafo largo + pieza multimedia) no entra
+         en una pantalla junto con el anillo, y en teléfono menos todavía. Así el
+         anillo y el nombre se quedan con la escena entera para ellos (el tramo de
+         "nombre solo" pasa de 0.84-0.94 a 0.84-1, más largo que antes) y la tarjeta
+         llega después, en su propio espacio, sin techo. -->
+    <interludio-portal @cierre-visible="emitir_evento_cierre" />
+
+    <!-- El cierre, en flujo normal y sin techo de alto. Sin `:style` por progreso, a
+         diferencia de los bloques 1-5: no vive dentro de un FondoSeccionSticky, así
+         que no hay progreso de sección del que colgarse. Queda visible y estático,
+         como el puente de acá abajo. -->
+    <section class="demo-cierre">
         <article
-          class="demo-scroll-dolor__bloque demo-scroll-dolor__cierre demo-interludio__cierre"
+          class="demo-scroll-dolor__bloque demo-scroll-dolor__cierre demo-cierre__tarjeta"
           :data-bloque-id="contenido.cierre.id"
         >
           <div class="demo-scroll-dolor__bloque-texto">
@@ -101,8 +105,7 @@
             </marco-dispositivo>
           </div>
         </article>
-      </template>
-    </interludio-portal>
+    </section>
 
     <!-- Puente al formulario: el formulario en sí lo agrega el prompt 05 (ver
          armazón en ExperienciaDemo.vue, que renderiza esta sección justo antes) -->
@@ -560,12 +563,16 @@ export default {
     },
 
     /**
-     * Tracking del bloque de cierre (grupo 322, prompt 05): ya no tiene
-     * IntersectionObserver propio -- el cierre vive dentro de
-     * InterludioPortal (grupo 325, prompt 04), que emite 'cierre-visible'
-     * apenas arranca a entrar por encima de la escena. Mismo evento y forma
-     * que los bloques 1-5 en iniciar_observador, para no perder cobertura
-     * de tracking.
+     * Tracking del bloque de cierre (grupo 322, prompt 05): no tiene observador
+     * propio -- lo dispara InterludioPortal cuando su progreso llega a 0.94.
+     * Mismo evento y forma que los bloques 1-5, para no perder cobertura.
+     *
+     * Desde el grupo 355 (prompt 06) el cierre ya no está adentro del interludio:
+     * es la sección siguiente. El 0.94 quedó como proxy -- es el mismo punto del
+     * recorrido en el que antes empezaba a asomar la tarjeta, pero ahora se
+     * adelanta ~30vh de scroll a que se vea de verdad. Si algún día el dato tiene
+     * que ser exacto, lo correcto es un IntersectionObserver sobre .demo-cierre,
+     * que ahora existe como sección propia.
      *
      * @returns {void}
      */
@@ -737,14 +744,14 @@ export default {
   color: transparent;
 }
 
-/* Dentro del interludio (grupo 322, prompt 05, punto 3): el degradé recortado
-   en texto se come a sí mismo sobre una animación azul/violeta -- pasa a
-   color sólido. Acotado a .demo-interludio__cierre (si el cierre se sigue
-   usando en algún otro lado sin fondo animado, ese caso no se toca). Selector
-   con 3 clases a propósito, más específico que la regla base de arriba (2
-   clases): así gana siempre dentro de este mismo archivo, sin depender del
-   orden de carga entre bundles. */
-.demo-scroll-dolor__cierre.demo-interludio__cierre .demo-scroll-dolor__cierre-titulo {
+/* El degradé recortado en texto se come a sí mismo cuando el título va sobre una
+   tarjeta clara -- pasa a color sólido. Nació para el cierre superpuesto sobre la
+   escena animada del portal (grupo 322, prompt 05); desde el grupo 355 (prompt 06) el
+   cierre es su propia pantalla y la clase que lo identifica es .demo-cierre__tarjeta,
+   pero el motivo es el mismo y el selector sigue siendo de 3 clases a propósito: más
+   específico que la regla base de arriba (2 clases), así gana siempre dentro de este
+   mismo archivo, sin depender del orden de carga entre bundles. */
+.demo-scroll-dolor__cierre.demo-cierre__tarjeta .demo-scroll-dolor__cierre-titulo {
   background: none;
   -webkit-background-clip: initial;
   background-clip: initial;

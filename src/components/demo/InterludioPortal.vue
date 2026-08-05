@@ -6,8 +6,11 @@
 	     FondoSeccionSticky para el que lo necesite; acá no se usa a propósito. -->
 	<!-- recorrido_vh 420 y no 320 (grupo 348, prompt 04): en unidades de progreso no
 	     entraban a la vez la meseta de nombre solo y un panel que entrara MÁS lento que
-	     antes. Ver la tabla de tramos en aplicar_estilos(). Cada vh de más es scroll en
-	     el que no cambia nada, así que se subió solo lo necesario.
+	     antes. Ese panel ya no está (grupo 355, prompt 06: el cierre pasó a ser la
+	     sección siguiente) y el recorrido se conserva igual, así que lo que era su
+	     tramo hoy es más meseta de nombre solo -- que es lo que Lucas venía pidiendo.
+	     Ver la tabla de tramos en aplicar_estilos(). Cada vh de más es scroll en el que
+	     no cambia nada, así que se subió solo lo necesario.
 	     El scroll real es `progreso × (recorrido_vh − 100)`, porque el pin ocupa 100vh
 	     fijos: con 420 el progreso se recorre en 320vh, no en 420 (grupo 354, que corrige
 	     esta cuenta). Meseta 0.10 × 320 = 32.0vh; panel 0.06 × 320 = 19.2vh, contra los
@@ -229,30 +232,30 @@
 						<g ref="nombre_final" id="nombre-final">
 							<!-- x/y son los de la disposición horizontal; en vertical los reescribe
 							     aplicar_disposicion() con lo que declaran data-y-v y data-textlength-v.
-							     En vertical el nombre NO conserva el mismo desplazamiento de 41
-							     unidades sobre el centro: en teléfono el panel del cierre entra desde
-							     abajo y su borde superior cae en y≈468 del viewBox, o sea justo sobre
-							     la línea de base del nombre -- le cortaba la cola de la "y" y un filo
-							     de todas las letras. Sube a 80 unidades sobre el centro y se angosta
-							     a 280. Con el anillo vertical (radio 203 tras la escala 1.72), la
-							     semicuerda a la altura del borde superior del texto mide 170 contra
-							     los 140 que necesita ese textLength: el nombre sigue entrando adentro
-							     del anillo con aire, que es el criterio duro del grupo 336. -->
-							<text ref="nombre_texto" x="500" y="240" data-y-v="450" data-textlength-v="280" text-anchor="middle" font-family="Geist, system-ui, sans-serif" font-size="53.9" font-weight="600" letter-spacing="0" textLength="344.9" lengthAdjust="spacingAndGlyphs" fill="#3A31FC">ComercioCity</text>
+							     En vertical conserva el mismo desplazamiento de 41 unidades sobre el
+							     centro (489 = 530 - 41) y solo se angosta a 280, porque la caja es la
+							     mitad de ancha. Estuvo un rato a 450 -- 80 unidades arriba -- para
+							     esquivar el panel del cierre, que entraba justo sobre su línea de
+							     base; el prompt 06 de este mismo grupo sacó ese panel de la escena,
+							     así que el motivo desapareció y el nombre vuelve al centro del
+							     anillo. Con el anillo vertical (radio 203 tras la escala 1.72), la
+							     semicuerda a la altura del borde superior del texto mide 190 contra
+							     los 140 que necesita ese textLength: entra con aire, que es el
+							     criterio duro del grupo 336. -->
+							<text ref="nombre_texto" x="500" y="240" data-y-v="489" data-textlength-v="280" text-anchor="middle" font-family="Geist, system-ui, sans-serif" font-size="53.9" font-weight="600" letter-spacing="0" textLength="344.9" lengthAdjust="spacingAndGlyphs" fill="#3A31FC">ComercioCity</text>
 						</g>
 					</g>
 				</svg>
 
-				<!-- Panel del cierre, superpuesto (se mantiene igual que antes, grupo
-				     322 prompt 05 punto 3): entra desde abajo en el mismo tramo
-				     (0.85 -> 1) en que la escena se atenúa y el arco se cierra detrás.
-				     Sin backdrop-filter -- la capa + la atenuación de la escena de
-				     atrás hacen todo el trabajo (§12 de apple-design/SKILL.md). -->
-				<div ref="panel_cierre_wrap" class="demo-interludio__panel-cierre-wrap">
-					<div class="demo-interludio__panel-cierre">
-						<slot name="cierre" />
-					</div>
-				</div>
+				<!-- RETIRADO (grupo 355, prompt 06): acá vivía el panel del cierre,
+				     superpuesto sobre la escena dentro de un wrap absoluto que entraba
+				     desde abajo con el progreso. La tarjeta estaba acotada a 46vh con
+				     overflow:auto justamente para no tapar el anillo con el nombre, y eso
+				     era lo que dejaba contenido fuera de alcance al scrollear afuera de
+				     ella. Ahora el cierre es el tramo siguiente del scroll, en flujo
+				     normal (ScrollDolor.vue), sin techo de alto: la escena se queda
+				     entera para el anillo y el nombre. No reponer el overlay sin resolver
+				     antes ese conflicto de alto. -->
 		</div>
 	</fondo-seccion-sticky>
 </template>
@@ -403,7 +406,8 @@ export default {
 		if (self.reduced_motion) {
 			/* Estado estático correspondiente a progreso = 1, sin listener de
 			 * scroll registrado (criterio de éxito 8): panorama atenuado, arco
-			 * cerrado, nombre visible, cierre encima. */
+			 * cerrado y nombre visible. El cierre ya no entra por encima -- es la
+			 * sección siguiente (grupo 355, prompt 06). */
 			self.aplicar_estilos(1)
 			return
 		}
@@ -833,12 +837,10 @@ export default {
 			const easeIn = function (t) {
 				return t * t * t
 			}
-			/* Arranque Y final suaves (grupo 348, prompt 04). La usa el panel del
-			 * cierre: con easeOut el gesto más rápido es el arranque, y la tarjeta
-			 * "aparecía" de golpe en vez de subir. Pedido de Lucas, 4/8/2026. */
-			const easeInOut = function (t) {
-				return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
-			}
+			/* RETIRADA (grupo 355, prompt 06): easeInOut existía para que el panel del
+			 * cierre subiera en vez de aparecer de golpe (grupo 348, prompt 04). Ese
+			 * panel ya no vive acá -- el cierre es el tramo siguiente del scroll -- y
+			 * era su único uso. */
 
 			/* 0.12 -> 0.26: el portal se enciende. Antes de 0.12 queda apagado
 			 * (opacity 0, escala 0); el "encendido" pleno usa la escala de
@@ -968,10 +970,12 @@ export default {
 			 *                 se estarían armando mientras el panorama se atenúa).
 			 *   0.80 -> 0.84  el nombre aparece, solapado a propósito con el cierre del
 			 *                 arco, y termina junto con él.
-			 *   0.84 -> 0.94  MESETA: anillo cerrado y nombre completo, sin nada más
-			 *                 entrando. Es el momento de marca de toda la página.
-			 *   0.94 -> 1     el panel del cierre, con easeInOut para que suba en vez de
-			 *                 aparecer.
+			 *   0.84 -> 1     MESETA: anillo cerrado y nombre completo, sin nada más
+			 *                 entrando. Es el momento de marca de toda la página, y
+			 *                 desde el grupo 355 (prompt 06) llega hasta el final de la
+			 *                 sección: el tramo 0.94 -> 1, donde antes subía el panel
+			 *                 del cierre, quedó libre al mudarse el cierre al scroll.
+			 *                 En 0.94 se sigue emitiendo el evento de tracking.
 			 *
 			 * 🔴 PARA PASAR DE PROGRESO A SCROLL, LA FÓRMULA ES `progreso × (recorrido_vh
 			 * − 100)`, NO `progreso × recorrido_vh`. FondoSeccionSticky mide
@@ -988,7 +992,13 @@ export default {
 			 * conserva sus tramos en progreso pero se recorre en un 45% más de scroll. */
 			const k_arco = easeOut(self.normalizar(p, 0.78, 0.84))
 			const k_nombre = easeOut(self.normalizar(p, 0.80, 0.84))
-			const k_panel = easeInOut(self.normalizar(p, 0.94, 1))
+			/* El tramo del panel (0.94 -> 1) desapareció con el overlay (grupo 355,
+			 * prompt 06): el cierre ya no vive acá adentro. Lo que era "el panel sube"
+			 * ahora es meseta, así que el nombre solo pasa de 0.84-0.94 a 0.84-1 --
+			 * más tiempo de marca, que es justo lo que Lucas venía pidiendo. El umbral
+			 * de 0.94 se conserva para el evento de tracking: es el mismo momento del
+			 * recorrido en el que antes empezaba a asomar el cierre. */
+			const cierre_a_la_vista = p >= 0.94
 
 			if (self.$refs.arco_envolvente) {
 				self.$refs.arco_envolvente.style.transform = 'scale(' + lerp(1, self.escala_arco_final(), k_arco) + ')'
@@ -1001,12 +1011,7 @@ export default {
 			if (self.$refs.nombre_final) {
 				self.$refs.nombre_final.style.opacity = String(k_nombre)
 			}
-			if (self.$refs.panel_cierre_wrap) {
-				self.$refs.panel_cierre_wrap.style.transform = 'translateY(' + (1 - k_panel) * 100 + '%)'
-				self.$refs.panel_cierre_wrap.style.opacity = String(k_panel)
-			}
-
-			if (k_panel > 0 && !self.cierre_visible_emitido) {
+			if (cierre_a_la_vista && !self.cierre_visible_emitido) {
 				self.cierre_visible_emitido = true
 				self.$emit('cierre-visible')
 			}
@@ -1093,22 +1098,9 @@ export default {
 	transform-origin: center;
 }
 
-.demo-interludio__panel-cierre-wrap {
-	position: absolute;
-	top: 0;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	display: flex;
-	align-items: flex-end;
-	justify-content: center;
-	padding: 24px 20px 6vh;
-	box-sizing: border-box;
-	/* Estado inicial: fuera de pantalla y transparente -- aplicar_estilos() lo
-	   trae con el progreso, nunca con transition (el valor ya llega continuo). */
-	transform: translateY(100%);
-	opacity: 0;
-	pointer-events: none;
-}
+/* RETIRADO (grupo 355, prompt 06): acá vivía .demo-interludio__panel-cierre-wrap, la
+   capa absoluta que traía el panel del cierre desde abajo. Con el cierre fuera del
+   interludio no queda ninguna capa sobre la escena -- que además era la que tenía
+   pointer-events:none y podía comerse el scroll si algún día dejaba de retirarse. */
 
 </style>
