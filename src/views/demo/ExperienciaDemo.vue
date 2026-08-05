@@ -24,19 +24,31 @@
          (cargar_experiencia) y un refresco después de enviar el formulario
          (enviar_formulario) o al vencer la cuenta regresiva (BotonAcceso). -->
     <template v-else>
-      <scroll-dolor
-        :perfil="lead.perfil"
-        :media="media"
-        :emitir_evento="emitir_evento"
-      />
+      <!-- El RECORRIDO (scroll de dolor + formulario) y la VISTA POSTERIOR
+           (confirmación + video + botón) son excluyentes: las dos caras del
+           mismo intro_desbloqueada (grupo 348, prompt 07). Antes el recorrido
+           quedaba montado para siempre, así que un lead que ya había completado
+           el formulario en otra visita entraba con la vista posterior
+           desbloqueada Y el recorrido todavía arriba -- podía scrollear hasta el
+           video sin haber confirmado nada en esta sesión. Y al revés: confirmar
+           dejaba de ser un punto sin retorno, porque el formulario seguía ahí
+           arriba. Excluirlas resuelve las dos cosas sin repetirle el formulario
+           a quien ya lo completó (criterio 5 del grupo 325). -->
+      <template v-if="!intro_desbloqueada">
+        <scroll-dolor
+          :perfil="lead.perfil"
+          :media="media"
+          :emitir_evento="emitir_evento"
+        />
 
-      <!-- Formulario de configuración: preseleccionado con las respuestas del
-           payload. El envío real (POST + refresco de todo el payload) lo hace
-           este contenedor vía enviar_formulario, inyectado por prop. -->
-      <formulario-configuracion
-        :respuestas="formulario"
-        :enviar_formulario="enviar_formulario"
-      />
+        <!-- Formulario de configuración: preseleccionado con las respuestas del
+             payload. El envío real (POST + refresco de todo el payload) lo hace
+             este contenedor vía enviar_formulario, inyectado por prop. -->
+        <formulario-configuracion
+          :respuestas="formulario"
+          :enviar_formulario="enviar_formulario"
+        />
+      </template>
 
       <!-- Confirmación "armando tu demo" + video de introducción + botón de
            acceso: vista POSTERIOR a la confirmación del formulario (grupo 325,
@@ -54,7 +66,9 @@
              shimmer_activo. Un lead que ya había completado el formulario en
              una visita anterior nunca tiene shimmer_activo en true -- no hay
              ningún proceso en curso que anunciarle. -->
-        <confirmacion-armando-demo ref="confirmacion" :turno="turno" :shimmer_activo="shimmer_activo" />
+        <!-- Sin ref: el scroll ya no la busca para hacerle scrollIntoView, ahora
+             va directo al tope de la página (grupo 348, prompt 07). -->
+        <confirmacion-armando-demo :turno="turno" :shimmer_activo="shimmer_activo" />
 
         <!-- Video de introducción: pieza "intro" del catálogo. A diferencia de
              los clips del scroll, va con controles y sonido, sin autoplay (son
@@ -64,7 +78,7 @@
              video_intro: destino del scroll automático al cerrarse la
              confirmación de arriba. -->
         <section ref="video_intro" class="demo-experiencia-page__video-intro">
-          <marco-dispositivo tipo="computadora">
+          <marco-dispositivo tipo="computadora" class="demo-marco--protagonista">
             <pieza-multimedia
               slot_id="intro"
               titulo="Video de introducción (Lucas a cámara, 5:15)"
@@ -303,23 +317,22 @@ export default {
       self.shimmer_activo = true
       document.body.style.overflow = 'hidden'
 
-      /* Scroll automático a la confirmación apenas se monta (grupo 336, prompt 03):
-       * antes solo se scrolleaba al video a los 5s, así que el lead quedaba mirando
-       * el formulario mientras la pantalla nueva aparecía fuera de cuadro. $nextTick
-       * es necesario: con v-if la sección no existe hasta el re-render que sigue a
-       * poner intro_desbloqueada en true. */
+      /* Al confirmar, el recorrido anterior se DESMONTA (las dos vistas son
+       * excluyentes desde el grupo 348, prompt 07), así que la confirmación pasa a
+       * ser el tope de la página: corresponde llevar el scroll a 0 y no hacer
+       * scrollIntoView sobre ella, que es lo que se hacía cuando quedaba a miles de
+       * píxeles del formulario (grupo 336, prompt 03).
+       *
+       * Y no alcanza con window.scrollTo: en este admin el scroll real vive en
+       * <main class="app-main-scroll">, no en window (hallazgo
+       * 20260804-admin-spa-scroll-real-vive-en-main-no-en-window). El ancestro se
+       * busca igual que en FondoSeccionSticky.encontrar_ancestro_scroll(), sin
+       * hardcodear el selector.
+       *
+       * $nextTick es necesario por partida doble: la sección no existe hasta el
+       * re-render, y el desmontaje del recorrido cambia el alto del documento. */
       self.$nextTick(function () {
-        if (self.$refs.confirmacion && self.$refs.confirmacion.$el) {
-          const reduced_motion = !!(
-            typeof window !== 'undefined' &&
-            window.matchMedia &&
-            window.matchMedia('(prefers-reduced-motion: reduce)').matches
-          )
-          self.$refs.confirmacion.$el.scrollIntoView({
-            behavior: reduced_motion ? 'auto' : 'smooth',
-            block: 'start',
-          })
-        }
+        self.llevar_scroll_al_tope()
       })
 
       self.confirmacion_timeout = setTimeout(function () {
@@ -344,6 +357,39 @@ export default {
     },
 
     /**
+     * Lleva el scroll al tope de la página, buscando el contenedor que realmente
+     * scrollea (mismo criterio que FondoSeccionSticky.encontrar_ancestro_scroll):
+     * en este admin es <main class="app-main-scroll">, porque html/body/#app son
+     * height:100% + overflow:hidden a propósito, "comportamiento tipo app nativa"
+     * (src/sass/_app.sass). Un window.scrollTo acá no mueve nada.
+     *
+     * No se hardcodea el selector: si algún día esta página se usa fuera de este
+     * shell, cae a window como en cualquier página que sí scrollea el documento.
+     *
+     * @returns {void}
+     */
+    llevar_scroll_al_tope() {
+      const reduced_motion = !!(
+        typeof window !== 'undefined' &&
+        window.matchMedia &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      )
+      const opciones = { top: 0, left: 0, behavior: reduced_motion ? 'auto' : 'smooth' }
+
+      let nodo = this.$el ? this.$el.parentElement : null
+      while (nodo && nodo !== document.body) {
+        const overflow_y = window.getComputedStyle(nodo).overflowY
+        if (overflow_y === 'auto' || overflow_y === 'scroll') {
+          nodo.scrollTo(opciones)
+          return
+        }
+        nodo = nodo.parentElement
+      }
+
+      window.scrollTo(opciones)
+    },
+
+    /**
      * Dispara el ingreso a la demo (POST /demo-experiencia/{uuid}/ingresar,
      * api_public, prompt 01 de este grupo) cuando el lead aprieta el botón de
      * acceso. No hace catch acá a propósito: BotonAcceso necesita leer
@@ -365,13 +411,30 @@ export default {
 </script>
 
 <style scoped>
-/* Video de introducción: mismo contenedor centrado y acotado que el resto de
-   la página (coherente con .demo-scroll-dolor), con aire antes del botón de
-   acceso que va justo debajo. */
+/* El video de introducción ocupa su propia pantalla (grupo 348, prompt 07). Antes
+   era un bloque más del flujo, acotado a 720px y apretado entre la confirmación
+   (que ocupa 100dvh) y el botón de acceso: la pieza principal de esta pantalla
+   entraba en menos de la mitad del alto disponible. Ahora es una sección completa y
+   el marco crece con la variante --protagonista (demo-experiencia.scss).
+   100dvh preferido con 100vh de fallback, y el orden importa: un navegador sin
+   soporte de dvh ignora esa declaración entera y se queda con la de arriba. */
 .demo-experiencia-page__video-intro {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 0 20px 64px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
+  box-sizing: border-box;
+}
+
+/* El marco no tiene ancho propio (es un div en flujo): dentro del flex de arriba
+   se encogería al contenido. Con esto ocupa la columna y su pantalla queda
+   centrada, mientras el alto lo sigue mandando el max-height de la variante. */
+.demo-experiencia-page__video-intro :deep(.demo-marco) {
+  width: 100%;
+  display: flex;
+  justify-content: center;
 }
 
 /* El estado de carga ya no usa esta clase (grupo 322, prompt 04): reemplazado

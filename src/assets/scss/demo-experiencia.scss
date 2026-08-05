@@ -395,6 +395,19 @@
 	}
 }
 
+// Variante "protagonista" (grupo 348, prompt 07): el marco no acompaña un texto,
+// ES la sección -- hoy solo el video de introducción, que ocupa su propia
+// pantalla. 72vh en vez de 62vh, con el ancho derivado de la proporción igual que
+// la regla base, así que sigue acotado por alto y no se recorta. Va como
+// modificador y NO cambiando los valores base a propósito: esos los comparten los
+// seis bloques del scroll de dolor, donde el marco convive con el texto al lado.
+.demo-marco--protagonista {
+	.demo-marco__pantalla-compu {
+		width: min(100%, calc(72vh * 16 / 9));
+		max-height: 72vh;
+	}
+}
+
 // Mobile apilado (mismo breakpoint que ScrollDolor.vue: grid-template-columns
 // pasa a 1fr): el texto tiene que seguir siendo lo primero, así que la pieza
 // se acota más (45vh en vez de 62vh) para no ocupar más de media pantalla
@@ -403,6 +416,14 @@
 	.demo-marco__pantalla-compu {
 		width: min(100%, calc(45vh * 16 / 9));
 		max-height: 45vh;
+	}
+
+	// El video protagonista no compite con ningún texto al lado, así que puede
+	// quedarse con más alto que una pieza del scroll -- pero no con los 72vh de
+	// desktop: en teléfono el marco es mucho más angosto y el ancho manda.
+	.demo-marco--protagonista .demo-marco__pantalla-compu {
+		width: min(100%, calc(56vh * 16 / 9));
+		max-height: 56vh;
 	}
 
 	.demo-marco__pantalla-telefono {
