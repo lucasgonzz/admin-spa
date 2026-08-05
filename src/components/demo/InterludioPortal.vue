@@ -1,6 +1,11 @@
 <template>
-	<fondo-seccion-sticky variante="interludio" :recorrido_vh="320" v-slot="{ progreso }">
-		<div ref="contenedor" class="demo-interludio" :data-progreso-aplicado="on_progreso(progreso)">
+	<!-- El progreso llega por EVENTO, no por slot escopeado (grupo 348, prompt 02).
+	     Consumirlo en el template obligaba a Vue a re-renderizar este slot -- un SVG
+	     de ~130 nodos -- en cada frame del scroll, solo para llamar a un método que
+	     escribe estilos inline. El slot escopeado sigue existiendo en
+	     FondoSeccionSticky para el que lo necesite; acá no se usa a propósito. -->
+	<fondo-seccion-sticky variante="interludio" :recorrido_vh="320" @progreso="on_progreso">
+		<div ref="contenedor" class="demo-interludio">
 				<!-- SVG copiado tal cual de marca/assets/interludio-portal.svg (ids y
 				     data-* intactos, es el contrato) -- role="img" + aria-label en vez de
 				     aria-hidden: las doce etiquetas de los íconos son contenido con
@@ -226,7 +231,8 @@ const INDICES = [1, 2, 3, 4, 5, 6]
  * scroll ni tiene pin propio -- los dos vivían acá hasta este prompt y los dos
  * eran la causa de que la escena quedara congelada (ver comentario largo en
  * FondoSeccionSticky.vue). Ahora FondoSeccionSticky mide el progreso [0,1] una
- * sola vez para toda la sección y lo pasa por slot escopeado; este componente
+ * sola vez para toda la sección y lo pasa por el evento `progreso` (grupo 348,
+ * prompt 02 -- antes era por slot escopeado, ver on_progreso); este componente
  * solo lo consume (on_progreso) y aplica la coreografía (aplicar_estilos), que
  * no cambió en nada. Prohibido explícito (se mantiene): nada de Framer
  * Motion/Motion ni librerías de springs -- todo transform/opacity/filter
@@ -274,29 +280,27 @@ export default {
 		}
 
 		/* Sin listener propio de scroll/resize: el progreso [0,1] lo calcula
-		 * FondoSeccionSticky (una sola vez para toda la sección) y llega acá por
-		 * slot escopeado -- ver on_progreso(). */
+		 * FondoSeccionSticky (una sola vez para toda la sección, ya amortiguado)
+		 * y llega acá por el evento `progreso` -- ver on_progreso(). */
 	},
 
 	methods: {
 		/**
-		 * Recibe el progreso [0,1] de la sección desde el slot escopeado de
-		 * FondoSeccionSticky y aplica los estilos correspondientes. Se invoca desde
-		 * el template (:data-progreso-aplicado) porque un valor que llega por slot
-		 * escopeado no es una prop de Vue real -- no hay watch nativo posible sobre
-		 * él. Vue re-evalúa esta expresión cada vez que FondoSeccionSticky actualiza
-		 * su progreso (dispara un nuevo render de este slot), así que el efecto es
-		 * el mismo que un watch. El atributo resultante no se usa visualmente.
+		 * Recibe el progreso [0,1] de la sección por el evento `progreso` de
+		 * FondoSeccionSticky y aplica la coreografía. Antes se invocaba desde el
+		 * template (:data-progreso-aplicado) sobre el valor del slot escopeado: eso
+		 * funcionaba, pero ataba cada frame de scroll a un render de Vue del SVG
+		 * entero. Por evento, el frame solo escribe estilos inline sobre nodos que
+		 * ya existen, que es lo único que aplicar_estilos() necesita.
 		 *
 		 * @param {number} p
-		 * @returns {string}
+		 * @returns {void}
 		 */
 		on_progreso(p) {
 			if (this.reduced_motion) {
-				return ''
+				return
 			}
 			this.aplicar_estilos(p)
-			return ''
 		},
 
 		/**
