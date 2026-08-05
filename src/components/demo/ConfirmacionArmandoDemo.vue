@@ -21,11 +21,21 @@
 				v-html="titulo_html"
 			></h2>
 			<p v-if="parrafo_reserva" class="demo-confirmacion-armando__parrafo">{{ parrafo_reserva }}</p>
-			<p class="demo-confirmacion-armando__parrafo">
-				Mientras tanto, mirá esta introducción: te contamos para qué sirve la demo, qué podés
-				probar adentro y cómo trabajamos.
-			</p>
 		</div>
+
+		<!-- La invitación al video sale del bloque del título (grupo 348, prompt 06):
+		     compartiendo contenedor y animación entraba junto con él y competía en vez
+		     de sucederlo, y es justo lo que tiene que enganchar al lead para que siga
+		     bajando. Ahora es el segundo momento de la pantalla -- separación real y
+		     entrada propia, ~900ms después. El párrafo de la reserva se queda arriba:
+		     es parte del mensaje de confirmación, no de la invitación. -->
+		<p
+			class="demo-confirmacion-armando__invitacion"
+			:class="{ 'demo-confirmacion-armando__invitacion--visible': invitacion_visible }"
+		>
+			Mientras tanto, mirá esta introducción: te contamos para qué sirve la demo, qué podés
+			probar adentro y cómo trabajamos.
+		</p>
 	</escena-marca>
 </template>
 
@@ -89,8 +99,17 @@ export default {
 			 * --visible), en vez de animar al montar.
 			 */
 			visible: false,
+			/**
+			 * true cuando entra la invitación a mirar el video, ~900ms después de que
+			 * el bloque del título se volvió visible (grupo 348, prompt 06). Secuencia
+			 * pedida por Lucas: título con el shimmer del armado, pausa, y recién
+			 * después la invitación.
+			 */
+			invitacion_visible: false,
 			/** Instancia del IntersectionObserver que dispara la animación de entrada. */
 			observer: null,
+			/** Handle del setTimeout de la invitación, para poder cancelarlo al desmontar. */
+			invitacion_timeout: null,
 		}
 	},
 
@@ -109,6 +128,10 @@ export default {
 			 * (navegador viejo) no hay forma de saber cuándo entra en viewport --
 			 * mejor mostrarlo directo que dejarlo invisible para siempre. */
 			self.visible = true
+			/* Sin secuencia temporal tampoco: los dos bloques aparecen de entrada. La
+			 * separación visual entre el mensaje y la invitación se mantiene igual --
+			 * lo que se saca es la espera, no la jerarquía. */
+			self.invitacion_visible = true
 			return
 		}
 
@@ -118,6 +141,18 @@ export default {
 					return
 				}
 				self.visible = true
+				/* La invitación entra DESPUÉS: el bloque del título tarda 1.2s en
+				 * entrar, así que a los 900ms ya se leyó y el shimmer del armado se
+				 * está viendo. Colgado del observer y no de mounted() por el mismo
+				 * motivo que la animación de arriba (grupo 336, correctivo 7): al
+				 * montarse, el scrollIntoView todavía está en camino y la secuencia
+				 * entera se consumiría antes de que el lead vea el primer píxel. */
+				if (!self.invitacion_visible && self.invitacion_timeout === null) {
+					self.invitacion_timeout = window.setTimeout(function () {
+						self.invitacion_visible = true
+						self.invitacion_timeout = null
+					}, 900)
+				}
 				/* Una vez que se vio, no hace falta seguir observando -- la sección no
 				 * se desmonta (queda montada para siempre, ver comentario de la clase
 				 * de este componente) así que sin esto el observer seguiría vivo sin
@@ -134,6 +169,13 @@ export default {
 	beforeUnmount() {
 		if (this.observer) {
 			this.observer.disconnect()
+		}
+		/* Mismo criterio que confirmacion_timeout en ExperienciaDemo.vue: navegar
+		 * fuera de la página durante ese segundo no puede dejar un timer corriendo
+		 * contra un componente que ya no existe. */
+		if (this.invitacion_timeout !== null) {
+			window.clearTimeout(this.invitacion_timeout)
+			this.invitacion_timeout = null
 		}
 	},
 
@@ -385,6 +427,32 @@ export default {
 	z-index: 1;
 }
 
+/* La invitación al video: segundo momento de la pantalla (grupo 348, prompt 06).
+   Un escalón más de presencia que el párrafo de la reserva -- cuerpo más grande y
+   color más firme -- sin llegar al del título: sigue siendo texto de apoyo, pero
+   no una nota al pie. La separación se declara acá y no como gap del contenedor
+   de arriba porque este párrafo ya NO vive adentro de ese contenedor: es hermano
+   de .demo-confirmacion-armando__texto, dentro del slot de EscenaMarca. */
+.demo-confirmacion-armando__invitacion {
+	margin: clamp(40px, 8vh, 88px) 0 0;
+	font-size: clamp(1.1rem, 1.6vw, 1.25rem);
+	line-height: 1.5;
+	text-align: center;
+	/* Un paso más oscuro que el #3d4657 del párrafo de la reserva, medido contra
+	   el mismo peor caso (azul de marca detrás de la atenuación de EscenaMarca). */
+	color: #2b3448;
+	position: relative;
+	z-index: 1;
+	/* Invisible hasta que el setTimeout de los 900ms la habilite, igual que el
+	   bloque del título con su observer: sin esto se vería un frame antes de
+	   arrancar la animación. */
+	opacity: 0;
+}
+
+.demo-confirmacion-armando__invitacion--visible {
+	animation: demo-apertura-entrada 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 /* Estático de verdad bajo reduced-motion (§14 de apple-design/SKILL.md): sin
    shimmer y sin el recorte de fondo que lo sostiene. Sin !important: esta
    regla vive en el mismo archivo y con la misma especificidad (0-2-0) que la
@@ -399,7 +467,8 @@ export default {
 		animation: none;
 	}
 
-	.demo-confirmacion-armando__texto {
+	.demo-confirmacion-armando__texto,
+	.demo-confirmacion-armando__invitacion {
 		animation: none;
 		opacity: 1;
 		transform: none;
