@@ -4,7 +4,12 @@
 	     de ~130 nodos -- en cada frame del scroll, solo para llamar a un método que
 	     escribe estilos inline. El slot escopeado sigue existiendo en
 	     FondoSeccionSticky para el que lo necesite; acá no se usa a propósito. -->
-	<fondo-seccion-sticky variante="interludio" :recorrido_vh="320" @progreso="on_progreso">
+	<!-- recorrido_vh 420 y no 320 (grupo 348, prompt 04): en unidades de progreso no
+	     entraban a la vez la meseta de nombre solo y un panel que entrara MÁS lento que
+	     antes. Ver la tabla de tramos en aplicar_estilos(). Cada vh de más es scroll en
+	     el que no cambia nada, así que se subió solo lo necesario para que la meseta
+	     valga 33.6vh y el panel 25.2vh (antes 22.4vh). -->
+	<fondo-seccion-sticky variante="interludio" :recorrido_vh="420" @progreso="on_progreso">
 		<div ref="contenedor" class="demo-interludio">
 				<!-- SVG copiado tal cual de marca/assets/interludio-portal.svg (ids y
 				     data-* intactos, es el contrato) -- role="img" + aria-label en vez de
@@ -187,8 +192,16 @@
 							</g>
 						</g>
 
+						<!-- y=240 y no 189.4 (grupo 348, prompt 04): a la altura vieja la caja
+						     del texto se METÍA dentro del trazo del anillo cerrado -- medido,
+						     -7.3 unidades de viewBox en el peor caso tipográfico. Es la "barra
+						     azul muy cerca del nombre" que reportó Lucas el 4/8/2026. Bajarlo
+						     hacia el centro del anillo (281) más la escala 1.95 de
+						     ESCALA_ARCO_FINAL dan +29.2 unidades de separación en ese mismo peor
+						     caso. El ancho de la caja no depende de la fuente: textLength con
+						     lengthAdjust lo fija en 344.9 exactas. -->
 						<g ref="nombre_final" id="nombre-final">
-							<text x="500" y="189.4" text-anchor="middle" font-family="Geist, system-ui, sans-serif" font-size="53.9" font-weight="600" letter-spacing="0" textLength="344.9" lengthAdjust="spacingAndGlyphs" fill="#3A31FC">ComercioCity</text>
+							<text x="500" y="240" text-anchor="middle" font-family="Geist, system-ui, sans-serif" font-size="53.9" font-weight="600" letter-spacing="0" textLength="344.9" lengthAdjust="spacingAndGlyphs" fill="#3A31FC">ComercioCity</text>
 						</g>
 					</g>
 				</svg>
@@ -214,6 +227,27 @@ import FondoSeccionSticky from './FondoSeccionSticky.vue'
 const INDICES = [1, 2, 3, 4, 5, 6]
 
 /**
+ * Escala final del anillo envolvente (grupo 348, prompt 04; antes 1.87).
+ *
+ * NO es un número libre: junto con la altura del nombre (y=240 en el SVG) es lo
+ * que le da aire al texto dentro del anillo. Geometría, toda en unidades del
+ * viewBox: centro (500,281), trazo grueso r=118 con stroke 8 -- su borde interior
+ * escalado queda en (118 - 4) * escala --, y la caja del nombre mide 344.9 de
+ * ancho exactas (textLength + lengthAdjust, independiente de la fuente) por
+ * ~0.85em + 0.25em de alto en el peor caso tipográfico.
+ *
+ * Con 1.87 y el nombre en y=189.4 la separación era de -7.3: la caja se metía
+ * DENTRO del trazo, que es lo que Lucas vio el 4/8/2026. Con 1.95 y y=240 la
+ * separación mínima medida es +29.2 (y +31.6 con métricas típicas), por encima de
+ * las 24 unidades pedidas. El anillo entero sigue entrando en el viewBox: su
+ * borde superior queda en y=10.9, contra el -12 del viewBox.
+ *
+ * Si se cambia una de las dos cosas -- esta escala o la altura del nombre --, hay
+ * que volver a medir la otra y actualizar estos números.
+ */
+const ESCALA_ARCO_FINAL = 1.95
+
+/**
  * Escena del portal (grupo 325, prompt 04): reemplaza entero a
  * InterludioConvergencia.vue (grupo 322, prompt 05), que queda borrado --
  * junto con su bug conocido del logo del núcleo que no llegaba a verse.
@@ -221,7 +255,7 @@ const INDICES = [1, 2, 3, 4, 5, 6]
  * Narrativa: el trabajo diario disperso (#zona-caos) entra por la izquierda,
  * es succionado de a uno por el portal (#portal-luz) y sale ordenado del
  * otro lado (#zona-orden). Al final el arco (#arco-envolvente) se despega,
- * crece 1.87x y encapsula todo el panorama, que retrocede y se atenúa,
+ * crece 1.95x (ESCALA_ARCO_FINAL) y encapsula todo el panorama, que retrocede y se atenúa,
  * mientras #nombre-final revela "ComercioCity" sobre el anillo cerrado --
  * gesto deliberadamente opuesto al nombre-como-hueco de la apertura
  * (AperturaCinematografica.vue, prompt 03 de este mismo grupo), para que
@@ -408,6 +442,12 @@ export default {
 			const easeIn = function (t) {
 				return t * t * t
 			}
+			/* Arranque Y final suaves (grupo 348, prompt 04). La usa el panel del
+			 * cierre: con easeOut el gesto más rápido es el arranque, y la tarjeta
+			 * "aparecía" de golpe en vez de subir. Pedido de Lucas, 4/8/2026. */
+			const easeInOut = function (t) {
+				return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+			}
 
 			/* 0.12 -> 0.26: el portal se enciende. Antes de 0.12 queda apagado
 			 * (opacity 0, escala 0); el "encendido" pleno usa la escala de
@@ -504,20 +544,38 @@ export default {
 				}
 			})
 
-			/* 0.78 -> 0.93: el arco se despega y crece a 1.87 (atado al textLength
-			 * del nombre -- no tocar sin recalcular), el panorama entero retrocede
-			 * y se atenúa. 0.88 -> 0.96: el nombre aparece sobre el anillo, tramo
-			 * propio que arranca antes de que el arco termine de cerrarse (se
-			 * solapan a propósito) y sigue un poco después. 0.93 -> 1: recién ahí
-			 * entra el panel del cierre -- criterio duro: el arco tiene que estar
-			 * cerrado del todo (k_arco llega a 1 en 0.93) antes de que el panel
-			 * empiece a subir (k_panel arranca en 0 en ese mismo punto). */
-			const k_arco = easeOut(self.normalizar(p, 0.78, 0.93))
-			const k_nombre = easeOut(self.normalizar(p, 0.88, 0.96))
-			const k_panel = easeOut(self.normalizar(p, 0.93, 1))
+			/* TRAMO FINAL, redistribuido entero (grupo 348, prompt 04). Antes era
+			 * arco 0.78->0.93, nombre 0.88->0.96 y panel 0.93->1: el nombre terminaba
+			 * de aparecer cuando el panel ya venía subiendo desde hacía 0.03, y entre
+			 * "nombre completo" y "fin de la sección" quedaban 0.04 de progreso. Lucas,
+			 * 4/8/2026: "quiero que quede más tiempo ComercioCity".
+			 *
+			 * Ahora:
+			 *   0.78 -> 0.86  el arco se despega y crece (mismo inicio que antes: NO se
+			 *                 corre hacia atrás, o se solaparía con el armado de los seis
+			 *                 del orden, que termina en 0.78 y vive dentro de #panorama --
+			 *                 se estarían armando mientras el panorama se atenúa).
+			 *   0.80 -> 0.86  el nombre aparece, solapado a propósito con el cierre del
+			 *                 arco, y termina junto con él.
+			 *   0.86 -> 0.94  MESETA: anillo cerrado y nombre completo, sin nada más
+			 *                 entrando. Es el momento de marca de toda la página.
+			 *   0.94 -> 1     el panel del cierre, con easeInOut para que suba en vez de
+			 *                 aparecer.
+			 *
+			 * El recorrido de la sección sube de 320vh a 420vh (ver el :recorrido_vh del
+			 * template) porque en unidades de progreso no entraban las tres condiciones a
+			 * la vez: la meseta vale 0.08, que a 320vh eran 25.6vh -- menos de lo pedido --
+			 * y a 420vh son 33.6vh. Con el mismo cambio el panel pasa de 22.4vh (0.07 de
+			 * 320) a 25.2vh (0.06 de 420): entra más lento, no más rápido, que era la otra
+			 * condición dura. Efecto colateral declarado: toda la coreografía anterior
+			 * (succión y armado) conserva sus tramos en progreso pero se recorre en un 31%
+			 * más de scroll, o sea con un ritmo más pausado. */
+			const k_arco = easeOut(self.normalizar(p, 0.78, 0.86))
+			const k_nombre = easeOut(self.normalizar(p, 0.80, 0.86))
+			const k_panel = easeInOut(self.normalizar(p, 0.94, 1))
 
 			if (self.$refs.arco_envolvente) {
-				self.$refs.arco_envolvente.style.transform = 'scale(' + lerp(1, 1.87, k_arco) + ')'
+				self.$refs.arco_envolvente.style.transform = 'scale(' + lerp(1, ESCALA_ARCO_FINAL, k_arco) + ')'
 			}
 			if (self.$refs.panorama) {
 				self.$refs.panorama.style.transform = 'scale(' + lerp(1, 0.86, k_arco) + ')'
