@@ -107,15 +107,25 @@
         </article>
     </section>
 
-    <!-- Puente al formulario: el formulario en sí lo agrega el prompt 05 (ver
-         armazón en ExperienciaDemo.vue, que renderiza esta sección justo antes) -->
-    <!-- El puente no vive dentro de un FondoSeccionSticky (es hijo directo de la
-         página), así que no tiene progreso de sección del cual colgarse: al retirarse
-         el IntersectionObserver queda visible y estático. El prompt 05 de este mismo
-         grupo lo pasa a su propia pantalla; ahí sí va a tener progreso propio. -->
-    <footer class="demo-scroll-dolor__puente" data-bloque-id="puente">
-      <p v-for="(linea, indice) in contenido.puente" :key="indice">{{ linea }}</p>
-    </footer>
+    <!-- Puente al formulario (el formulario lo renderiza ExperienciaDemo.vue justo
+         después de esta sección). Desde el grupo 355 (prompt 08) vive adentro de un
+         FondoSeccionSticky como las otras seis: era la única sección del recorrido sin
+         fondo propio -- "tiene el fondo muy blanco", Lucas, 5/8/2026 -- y sin progreso
+         del cual colgar su entrada, así que quedaba como texto plano y estático en
+         medio de una página que se mueve toda. -->
+    <fondo-seccion-sticky variante="puente" v-slot="{ progreso }">
+      <footer class="demo-scroll-dolor__puente" data-bloque-id="puente">
+        <p
+          v-for="(linea, indice) in contenido.puente"
+          :key="indice"
+          class="demo-scroll-dolor__puente-linea"
+          :class="indice === 0 ? 'demo-scroll-dolor__puente-linea--protagonista' : 'demo-scroll-dolor__puente-linea--remate'"
+          :style="estilo_puente(progreso, indice > 0)"
+        >
+          {{ linea }}
+        </p>
+      </footer>
+    </fondo-seccion-sticky>
   </section>
 </template>
 
@@ -303,6 +313,11 @@ const DESFASE_PIEZA = 0.05
    arriba, que es lo que Lucas pidió mantener ("cuando bajo para despedirme de ese
    dolor, que tenga el efecto que tiene ahora"). */
 const ENTRADA_X = 80
+/* El puente entra desde abajo y no de costado (grupo 355, prompt 08): son dos
+   renglones centrados, no un texto y una pieza que se cruzan. Más corto que los 96px
+   que usaban los bloques antes de la entrada lateral -- es una transición, no una
+   escena. */
+const ENTRADA_Y_PUENTE = 40
 const SALIDA_Y = -48
 /* La salida no llega a 0: ver el comentario de estilo_bloque(). */
 const SALIDA_OPACIDAD = 0.35
@@ -482,6 +497,33 @@ export default {
       return {
         opacity: String(opacidad),
         transform: 'translate(' + x + 'px, ' + y + 'px)',
+      }
+    },
+
+    /**
+     * Estilo de un renglón del puente para el progreso `p` de su sección (grupo 355,
+     * prompt 08). Mismos tramos, misma curva y mismo desfase que los bloques, pero
+     * con desplazamiento VERTICAL: los dos renglones están centrados uno debajo del
+     * otro, así que hacerlos entrar de costados opuestos como a un bloque los
+     * cruzaría en el aire. Igual que estilo_bloque, es función pura del progreso: la
+     * reversa al subir sale gratis.
+     *
+     * @param {number} p Progreso [0,1] de la sección.
+     * @param {boolean} secundario true para el segundo renglón, el remate.
+     * @returns {object}
+     */
+    estilo_puente(p, secundario) {
+      if (this.reduced_motion) {
+        return {}
+      }
+
+      const desfase = secundario ? DESFASE_PIEZA : 0
+      const entrada = ease_out(this.normalizar(p, desfase, ENTRADA_FIN + desfase))
+      const salida = ease_out(this.normalizar(p, SALIDA_INICIO + desfase, 1))
+
+      return {
+        opacity: String(entrada - salida * (1 - SALIDA_OPACIDAD)),
+        transform: 'translateY(' + ((1 - entrada) * ENTRADA_Y_PUENTE + salida * SALIDA_Y) + 'px)',
       }
     },
 
@@ -786,37 +828,57 @@ export default {
   color: var(--demo-color-texto-suave);
 }
 
-/* Puente al formulario: transición sobria, el formulario en sí va justo debajo (prompt 05).
-   Único hijo directo de .demo-scroll-dolor que NO vive dentro de un FondoSeccionSticky (los
-   demás ya limitan su propio ancho vía .demo-fondo-seccion__contenido > *) -- desde que el
-   padre perdió max-width/padding (correctivo del gap, grupo 336) necesita su propia columna
-   legible acá, o el texto queda pegado a los bordes del viewport. */
 /* El puente ocupa su propia pantalla (grupo 348, prompt 05). Antes eran dos
    renglones con 24px de padding: entre el momento de marca de toda la página --el
    anillo cerrado con el nombre-- y un formulario de nueve preguntas quedaban menos
    de 100px de aire, y el cambio de registro se sentía abrupto ("ni bien bajo,
-   aparece enseguida el título del formulario", Lucas, 4/8/2026). Sigue siendo una
-   frase de paso, no un encabezado: un escalón más de tipografía y nada más -- sin
-   caja, sin borde, sin fondo propio. 100dvh preferido con 100vh de fallback, y el
-   orden importa: un navegador sin soporte de dvh ignora esa declaración entera y se
-   queda con la de arriba (mismo criterio que ConfirmacionArmandoDemo.vue). */
+   aparece enseguida el título del formulario", Lucas, 4/8/2026). 100dvh preferido con
+   100vh de fallback, y el orden importa: un navegador sin soporte de dvh ignora esa
+   declaración entera y se queda con la de arriba (mismo criterio que
+   ConfirmacionArmandoDemo.vue).
+
+   Desde el grupo 355 (prompt 08) vive dentro de un FondoSeccionSticky, y eso cambia
+   dos cosas de esta regla, las dos por la misma razón: la pantalla completa ahora la
+   garantiza el pin de la sección (100vh) y el ancho legible lo da
+   .demo-fondo-seccion__contenido > * (max-width 1080 + padding lateral). El
+   min-height pasa de 100dvh a 100% -- un 100dvh acá adentro mide MÁS que la caja del
+   pin, que ya le descuenta su padding vertical, y el overflow:hidden del pin lo
+   recortaría; y el max-width/padding propios se retiran para no duplicar los del
+   contenedor. El efecto que buscaba el grupo 348 (el puente ocupa su propia pantalla)
+   se conserva entero. */
 .demo-scroll-dolor__puente {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 0 20px;
-  min-height: 100vh;
-  min-height: 100dvh;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   text-align: center;
-  font-size: clamp(1.3rem, 2.6vw, 1.7rem);
   color: var(--demo-color-texto);
 }
 
-.demo-scroll-dolor__puente p {
-  margin: 0 0 6px;
+.demo-scroll-dolor__puente-linea {
+  margin: 0;
+  will-change: opacity, transform;
+}
+
+/* Primer renglón: el protagonista (grupo 355, prompt 08, pedido de Lucas). Un escalón
+   más grande y con más peso que el remate, sin llegar al titular de la apertura --
+   sigue siendo una frase de paso, no un encabezado. */
+.demo-scroll-dolor__puente-linea--protagonista {
+  font-size: clamp(1.6rem, 3.4vw, 2.3rem);
+  font-weight: 700;
+  line-height: 1.2;
+  /* Tracking negativo en texto display grande (§15 de apple-design/SKILL.md). */
+  letter-spacing: -0.015em;
+}
+
+/* Segundo renglón: el remate, en el tono suave y con aire respecto del primero. */
+.demo-scroll-dolor__puente-linea--remate {
+  margin-top: clamp(14px, 2.4vh, 26px);
+  font-size: clamp(1.15rem, 2.2vw, 1.45rem);
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--demo-color-texto-suave);
 }
 
 @media (max-width: 767.98px) {
@@ -826,13 +888,13 @@ export default {
     direction: ltr !important;
   }
 
-  /* En teléfono una pantalla entera de puente más el aire del formulario son dos
-     gestos largos de scroll para llegar a la primera pregunta: alcanza con 70vh
-     para que la frase quede sola en cuadro. Mismo breakpoint que ya usa el resto
-     de la página, no uno nuevo. */
-  .demo-scroll-dolor__puente {
-    min-height: 70vh;
-    min-height: 70dvh;
-  }
+  /* RETIRADO (grupo 355, prompt 08): acá el puente bajaba a 70vh en teléfono, para
+     que una pantalla entera de puente más el aire del formulario no fueran dos
+     gestos largos hasta la primera pregunta. Desde que vive dentro de un
+     FondoSeccionSticky el alto lo manda el pin (100vh) y esta excepción no puede
+     cumplirse achicando el hijo: el pin sigue midiendo lo mismo y solo quedaría
+     texto centrado en una caja más chica. El costo de scroll que buscaba evitar lo
+     resuelve ahora el avance guiado del prompt 07: un gesto lleva del puente al
+     formulario, sin importar cuánto mida la sección. */
 }
 </style>

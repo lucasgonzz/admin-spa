@@ -184,6 +184,17 @@
 		radial-gradient(80% 60% at 15% 80%, rgba(58, 49, 252, 0.13), transparent 55%);
 }
 
+// Puente al formulario (grupo 355, prompt 08): era la única sección del recorrido sin
+// fondo propio -- "tiene el fondo muy blanco", Lucas, 5/8/2026. Opacidades del rango
+// de los bloques 1-5 y no del de la apertura: acá hay texto encima y es un momento de
+// transición, no el clímax. Las dos manchas van arriba y abajo, más separadas que en
+// los bloques, para que el centro quede limpio: el texto está centrado en pantalla.
+.demo-fondo-seccion--puente .demo-fondo-seccion__fondo {
+	background-image:
+		radial-gradient(85% 65% at 30% 8%, rgba(11, 132, 248, 0.15), transparent 55%),
+		radial-gradient(85% 65% at 70% 92%, rgba(58, 49, 252, 0.13), transparent 55%);
+}
+
 // La variante "cierre" de FondoSeccionSticky quedó sin uso (grupo 322, prompt
 // 05): el bloque de cierre dejó de tener su propio FondoSeccionSticky --
 // ahora se renderiza superpuesto sobre el interludio (ver InterludioPortal.vue,
@@ -297,10 +308,12 @@
 	scroll-snap-type: none;
 }
 
-// El puente y el cierre no viven en un FondoSeccionSticky (son secciones en flujo,
-// sin pin), así que su punto de snap va sobre ellos mismos y alineado al centro: el
-// contenido es corto y ocupa bastante menos que una pantalla.
-.demo-scroll-guiado .demo-scroll-dolor__puente,
+// El cierre no vive en un FondoSeccionSticky (es una sección en flujo, sin pin), así
+// que su punto de snap va sobre él mismo y alineado al centro: su contenido ocupa
+// bastante menos que una pantalla. El puente TENÍA la misma regla hasta el prompt 08
+// de este grupo; ahora que está adentro de un FondoSeccionSticky recibe el punto de
+// la sección como todos los demás, y dejarle este además sería un segundo punto de
+// snap a media pantalla del primero.
 .demo-scroll-guiado .demo-cierre {
 	scroll-snap-align: center;
 }
@@ -353,7 +366,12 @@
 	.demo-scroll-dolor__apertura-subtitulo,
 	.demo-scroll-dolor__bloque-texto,
 	.demo-scroll-dolor__bloque-pieza,
-	.demo-scroll-dolor__puente {
+	.demo-scroll-dolor__puente,
+	// El renglón, no solo el contenedor: desde el grupo 355 (prompt 08) el `:style`
+	// por progreso lo lleva cada línea. Hoy es defensa en profundidad -- estilo_puente
+	// ya devuelve {} bajo esta preferencia, resuelto antes del primer render -- pero el
+	// patrón de esta lista es nombrar el elemento que realmente se anima.
+	.demo-scroll-dolor__puente-linea {
 		animation: none !important;
 		opacity: 1 !important;
 		transform: none !important;
