@@ -7,8 +7,11 @@
 	<!-- recorrido_vh 420 y no 320 (grupo 348, prompt 04): en unidades de progreso no
 	     entraban a la vez la meseta de nombre solo y un panel que entrara MÁS lento que
 	     antes. Ver la tabla de tramos en aplicar_estilos(). Cada vh de más es scroll en
-	     el que no cambia nada, así que se subió solo lo necesario para que la meseta
-	     valga 33.6vh y el panel 25.2vh (antes 22.4vh). -->
+	     el que no cambia nada, así que se subió solo lo necesario.
+	     El scroll real es `progreso × (recorrido_vh − 100)`, porque el pin ocupa 100vh
+	     fijos: con 420 el progreso se recorre en 320vh, no en 420 (grupo 354, que corrige
+	     esta cuenta). Meseta 0.10 × 320 = 32.0vh; panel 0.06 × 320 = 19.2vh, contra los
+	     15.4vh de antes del 348-04. -->
 	<fondo-seccion-sticky variante="interludio" :recorrido_vh="420" @progreso="on_progreso">
 		<div ref="contenedor" class="demo-interludio">
 				<!-- SVG copiado tal cual de marca/assets/interludio-portal.svg (ids y
@@ -452,10 +455,11 @@ export default {
 			/* 0.12 -> 0.26: el portal se enciende. Antes de 0.12 queda apagado
 			 * (opacity 0, escala 0); el "encendido" pleno usa la escala de
 			 * data-open, no la escala 1 nativa de los paths. Recorrido largo
-			 * (grupo 336, prompt 02, recorrido_vh 320): tabla de tramos
-			 * redistribuida entera para que los ~15 eventos de esta coreografía
-			 * tengan lugar donde ocurrir -- antes vivían en 60vh de pin, ahora
-			 * en 220vh. */
+			 * (grupo 336, prompt 02): tabla de tramos redistribuida entera para
+			 * que los ~15 eventos de esta coreografía tengan lugar donde ocurrir
+			 * -- antes vivían en 60vh de pin efectivo, después en 220vh y desde
+			 * el grupo 348 en 320vh (recorrido_vh 420 menos los 100vh que ocupa
+			 * el pin, ver la fórmula en la tabla de tramos de más abajo). */
 			const t_portal = easeOut(self.normalizar(p, 0.12, 0.26))
 			if (self.$refs.portal_luz) {
 				self.$refs.portal_luz.style.opacity = String(t_portal)
@@ -551,27 +555,32 @@ export default {
 			 * 4/8/2026: "quiero que quede más tiempo ComercioCity".
 			 *
 			 * Ahora:
-			 *   0.78 -> 0.86  el arco se despega y crece (mismo inicio que antes: NO se
+			 *   0.78 -> 0.84  el arco se despega y crece (mismo inicio que antes: NO se
 			 *                 corre hacia atrás, o se solaparía con el armado de los seis
 			 *                 del orden, que termina en 0.78 y vive dentro de #panorama --
 			 *                 se estarían armando mientras el panorama se atenúa).
-			 *   0.80 -> 0.86  el nombre aparece, solapado a propósito con el cierre del
+			 *   0.80 -> 0.84  el nombre aparece, solapado a propósito con el cierre del
 			 *                 arco, y termina junto con él.
-			 *   0.86 -> 0.94  MESETA: anillo cerrado y nombre completo, sin nada más
+			 *   0.84 -> 0.94  MESETA: anillo cerrado y nombre completo, sin nada más
 			 *                 entrando. Es el momento de marca de toda la página.
 			 *   0.94 -> 1     el panel del cierre, con easeInOut para que suba en vez de
 			 *                 aparecer.
 			 *
-			 * El recorrido de la sección sube de 320vh a 420vh (ver el :recorrido_vh del
-			 * template) porque en unidades de progreso no entraban las tres condiciones a
-			 * la vez: la meseta vale 0.08, que a 320vh eran 25.6vh -- menos de lo pedido --
-			 * y a 420vh son 33.6vh. Con el mismo cambio el panel pasa de 22.4vh (0.07 de
-			 * 320) a 25.2vh (0.06 de 420): entra más lento, no más rápido, que era la otra
-			 * condición dura. Efecto colateral declarado: toda la coreografía anterior
-			 * (succión y armado) conserva sus tramos en progreso pero se recorre en un 31%
-			 * más de scroll, o sea con un ritmo más pausado. */
-			const k_arco = easeOut(self.normalizar(p, 0.78, 0.86))
-			const k_nombre = easeOut(self.normalizar(p, 0.80, 0.86))
+			 * 🔴 PARA PASAR DE PROGRESO A SCROLL, LA FÓRMULA ES `progreso × (recorrido_vh
+			 * − 100)`, NO `progreso × recorrido_vh`. FondoSeccionSticky mide
+			 * `alto_pinneable = rect.height − window.innerHeight` y el pin ocupa 100vh
+			 * fijos, así que con recorrido_vh 420 el progreso 0→1 se recorre en 320vh.
+			 * El prompt 348-04 hizo esta cuenta mal, se creyó una meseta de 33.6vh que en
+			 * realidad medía 25.6vh, y con eso justificó bajar la meseta de 0.10 a 0.08 de
+			 * progreso. Corregido en el grupo 354.
+			 *
+			 * Con la fórmula correcta: meseta 0.10 × 320 = 32.0vh, panel 0.06 × 320 =
+			 * 19.2vh contra los 15.4vh que tenía antes del 348-04 (0.07 × 220) -- entra
+			 * más lento, que era la condición dura. El recorrido de la sección subió de
+			 * 320vh a 420vh (pin efectivo: de 220 a 320), o sea la coreografía anterior
+			 * conserva sus tramos en progreso pero se recorre en un 45% más de scroll. */
+			const k_arco = easeOut(self.normalizar(p, 0.78, 0.84))
+			const k_nombre = easeOut(self.normalizar(p, 0.80, 0.84))
 			const k_panel = easeInOut(self.normalizar(p, 0.94, 1))
 
 			if (self.$refs.arco_envolvente) {
