@@ -743,12 +743,27 @@ export default {
    demás ya limitan su propio ancho vía .demo-fondo-seccion__contenido > *) -- desde que el
    padre perdió max-width/padding (correctivo del gap, grupo 336) necesita su propia columna
    legible acá, o el texto queda pegado a los bordes del viewport. */
+/* El puente ocupa su propia pantalla (grupo 348, prompt 05). Antes eran dos
+   renglones con 24px de padding: entre el momento de marca de toda la página --el
+   anillo cerrado con el nombre-- y un formulario de nueve preguntas quedaban menos
+   de 100px de aire, y el cambio de registro se sentía abrupto ("ni bien bajo,
+   aparece enseguida el título del formulario", Lucas, 4/8/2026). Sigue siendo una
+   frase de paso, no un encabezado: un escalón más de tipografía y nada más -- sin
+   caja, sin borde, sin fondo propio. 100dvh preferido con 100vh de fallback, y el
+   orden importa: un navegador sin soporte de dvh ignora esa declaración entera y se
+   queda con la de arriba (mismo criterio que ConfirmacionArmandoDemo.vue). */
 .demo-scroll-dolor__puente {
   max-width: 1080px;
   margin: 0 auto;
-  padding: 0 20px 24px;
+  padding: 0 20px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
   text-align: center;
-  font-size: clamp(1.1rem, 2vw, 1.35rem);
+  font-size: clamp(1.3rem, 2.6vw, 1.7rem);
   color: var(--demo-color-texto);
 }
 
@@ -761,6 +776,15 @@ export default {
   .demo-scroll-dolor__cierre {
     grid-template-columns: 1fr;
     direction: ltr !important;
+  }
+
+  /* En teléfono una pantalla entera de puente más el aire del formulario son dos
+     gestos largos de scroll para llegar a la primera pregunta: alcanza con 70vh
+     para que la frase quede sola en cuadro. Mismo breakpoint que ya usa el resto
+     de la página, no uno nuevo. */
+  .demo-scroll-dolor__puente {
+    min-height: 70vh;
+    min-height: 70dvh;
   }
 }
 </style>

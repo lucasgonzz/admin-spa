@@ -330,7 +330,13 @@ export default {
 .demo-formulario {
   max-width: 640px;
   margin: 0 auto;
-  padding: 0 20px 48px;
+  /* padding-top generoso (grupo 348, prompt 05): el encabezado del formulario no
+     tiene que entrar en cuadro junto con el final del puente, que ahora ocupa su
+     propia pantalla (ver .demo-scroll-dolor__puente). max() y no un 12vh a secas:
+     en una pantalla baja -- un portátil de 768px de alto, o un teléfono apaisado --
+     el 12vh se achica justo donde más falta hace, así que el mínimo en píxeles es
+     el que manda ahí. */
+  padding: max(12vh, 96px) 20px 48px;
   display: flex;
   flex-direction: column;
   /* Más aire ENTRE preguntas (grupo 322, prompt 02) -- el gap de 12px interno de
@@ -438,6 +444,16 @@ export default {
 .demo-formulario__enviar:disabled {
   cursor: not-allowed;
   opacity: 0.65;
+}
+
+/* En teléfono el aire de arriba va a la mitad (grupo 348, prompt 05): el puente ya
+   baja a 70vh ahí, y entre las dos cosas el lead no tiene que scrollear dos
+   pantallas para llegar a la primera pregunta. 767.98px es el breakpoint que ya usa
+   el resto de la página (ScrollDolor.vue y el scss compartido), no uno nuevo. */
+@media (max-width: 767.98px) {
+  .demo-formulario {
+    padding-top: max(6vh, 48px);
+  }
 }
 
 @media (max-width: 575.98px) {
