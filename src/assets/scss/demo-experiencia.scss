@@ -418,12 +418,28 @@
 		max-height: 45vh;
 	}
 
-	// El video protagonista no compite con ningún texto al lado, así que puede
-	// quedarse con más alto que una pieza del scroll -- pero no con los 72vh de
-	// desktop: en teléfono el marco es mucho más angosto y el ancho manda.
+	// 🔴 En teléfono VERTICAL el que manda es el ANCHO, no el alto: con 16:9, un
+	// marco de 390px de ancho mide 219px de alto, muy por debajo de cualquier cap
+	// en vh. El cap de 56vh de acá abajo solo llega a atar en apaisado.
+	//
+	// O sea que la única palanca real para que el video se vea más grande que una
+	// pieza del scroll de dolor es darle más ancho, y la pieza del scroll ya ocupa
+	// (viewport - 40px): el padding lateral de su columna. Por eso el video va
+	// FULL-BLEED en móvil -- la sección le saca su propio padding (ver
+	// ExperienciaDemo.vue) y el marco pierde su radio, que a ancho completo se lee
+	// como un recorte y no como un dispositivo.
+	//
+	// Hasta dónde llega esto, medido y dicho sin adornos: en 390x844 el marco pasa
+	// de 350px a 390px de ancho, o sea 1,11x contra la pieza del scroll. Es todo lo
+	// que da la geometría en vertical; "claramente más grande" en teléfono, con
+	// las dos piezas a ancho completo y la misma proporción, no es alcanzable por
+	// tamaño. Lo que sí gana el video ahí es la pantalla entera para él solo.
 	.demo-marco--protagonista .demo-marco__pantalla-compu {
 		width: min(100%, calc(56vh * 16 / 9));
 		max-height: 56vh;
+		border-radius: 0;
+		padding-left: 0;
+		padding-right: 0;
 	}
 
 	.demo-marco__pantalla-telefono {

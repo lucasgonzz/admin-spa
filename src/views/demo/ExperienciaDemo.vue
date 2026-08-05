@@ -437,6 +437,18 @@ export default {
   justify-content: center;
 }
 
+/* En teléfono el ancho es el único recurso que le queda al video para
+   distinguirse de una pieza del scroll de dolor (ver el comentario largo de
+   .demo-marco--protagonista en demo-experiencia.scss): la sección suelta su
+   padding lateral y el marco llega a los bordes. Mismo breakpoint que el resto
+   de la página. */
+@media (max-width: 767.98px) {
+  .demo-experiencia-page__video-intro {
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+
 /* El estado de carga ya no usa esta clase (grupo 322, prompt 04): reemplazado
    por EscenaMarca.vue, que trae su propio layout de pantalla completa. */
 .demo-experiencia-page__invalido {
