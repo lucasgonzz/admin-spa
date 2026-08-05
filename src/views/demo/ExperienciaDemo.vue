@@ -217,6 +217,8 @@ export default {
        * pasó y nadie lo va a limpiar.
        */
       desmontado: false,
+      /** El contenedor con scroll real del admin, mientras esta página está montada. */
+      scroller: null,
     }
   },
 
@@ -225,8 +227,28 @@ export default {
     this.cargar_experiencia()
   },
 
+  mounted() {
+    /* Scroll guiado sección por sección (grupo 355, prompt 07). La clase va sobre el
+       CONTENEDOR CON SCROLL REAL, que en este admin es <main class="app-main-scroll">
+       y NO el documento -- y ese main lo comparte toda la interfaz interna, así que
+       se marca al montar esta página y se desmarca al salir. Los puntos de snap los
+       ponen las secciones (FondoSeccionSticky y las reglas de demo-experiencia.scss);
+       acá solo se habilita el mecanismo. */
+    this.scroller = this.encontrar_scroller()
+    if (this.scroller && this.scroller.classList) {
+      this.scroller.classList.add('demo-scroll-guiado')
+    }
+  },
+
   beforeUnmount() {
     this.desmontado = true
+
+    /* El scroller es del admin entero: si esta clase quedara puesta, el resto de la
+       interfaz se quedaría con scroll-snap y scroll-behavior:smooth. */
+    if (this.scroller && this.scroller.classList) {
+      this.scroller.classList.remove('demo-scroll-guiado')
+    }
+    this.scroller = null
 
     /* Si el lead navega a mitad de la animación de "armando tu demo", el
        body no puede quedar con el scroll bloqueado para siempre (grupo 325,
@@ -445,18 +467,37 @@ export default {
         window.matchMedia('(prefers-reduced-motion: reduce)').matches
       )
       const opciones = { top: 0, left: 0, behavior: reduced_motion ? 'auto' : 'smooth' }
+      const scroller = this.encontrar_scroller()
 
+      if (scroller && scroller !== window) {
+        scroller.scrollTo(opciones)
+        return
+      }
+
+      window.scrollTo(opciones)
+    },
+
+    /**
+     * Sube por los ancestros hasta el contenedor que realmente scrollea. Mismo
+     * criterio que FondoSeccionSticky.encontrar_ancestro_scroll(): en este admin es
+     * <main class="app-main-scroll">, porque html/body/#app son height:100% +
+     * overflow:hidden a propósito, "comportamiento tipo app nativa"
+     * (src/sass/_app.sass). No se hardcodea el selector: si algún día esta página se
+     * usa fuera de este shell, cae a `window` como en cualquier página que sí
+     * scrollea el documento.
+     *
+     * @returns {Window|Element}
+     */
+    encontrar_scroller() {
       let nodo = this.$el ? this.$el.parentElement : null
       while (nodo && nodo !== document.body) {
         const overflow_y = window.getComputedStyle(nodo).overflowY
         if (overflow_y === 'auto' || overflow_y === 'scroll') {
-          nodo.scrollTo(opciones)
-          return
+          return nodo
         }
         nodo = nodo.parentElement
       }
-
-      window.scrollTo(opciones)
+      return window
     },
 
     /**

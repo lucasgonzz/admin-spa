@@ -15,7 +15,18 @@
 	     fijos: con 420 el progreso se recorre en 320vh, no en 420 (grupo 354, que corrige
 	     esta cuenta). Meseta 0.10 × 320 = 32.0vh; panel 0.06 × 320 = 19.2vh, contra los
 	     15.4vh de antes del 348-04. -->
-	<fondo-seccion-sticky variante="interludio" :recorrido_vh="420" @progreso="on_progreso">
+	<!-- Avance guiado (grupo 355, prompt 07): esta sección es la excepción. Su punto de
+	     snap está en el COMIENZO (snap_progreso 0) y no donde la entrada terminó, porque
+	     acá el lead tiene que aterrizar con la coreografía sin empezar; y mientras la
+	     sección ocupa la pantalla el snap se suspende entero, para que la recorra a su
+	     ritmo y pueda pararse donde quiera. -->
+	<fondo-seccion-sticky
+		variante="interludio"
+		:recorrido_vh="420"
+		:snap_progreso="0"
+		:snap_libre_mientras_ocupa="true"
+		@progreso="on_progreso"
+	>
 		<div ref="contenedor" class="demo-interludio">
 				<!-- SVG copiado tal cual de marca/assets/interludio-portal.svg (ids y
 				     data-* intactos, es el contrato) -- role="img" + aria-label en vez de

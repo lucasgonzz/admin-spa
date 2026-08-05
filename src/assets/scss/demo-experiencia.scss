@@ -264,6 +264,67 @@
 // alcanza para ganar siempre, sin depender de qué bundle cargó primero.
 
 // ---------------------------------------------------------------------------
+// Scroll guiado sección por sección (grupo 355, prompt 07). Pedido de Lucas del
+// 5/8/2026: "yo hago un movimiento de scroll, corto o largo, no importa, y el
+// navegador completa todo el recorrido hasta que la siguiente queda exactamente
+// centrada, ya con su efecto de aparición hecho".
+//
+// Se hace con CSS Scroll Snap y no interceptando la rueda: el navegador ya sabe
+// respetar el gesto, el teclado y el touch. Interceptar `wheel` es lo que hace que
+// estas páginas se sientan secuestradas, y rompe trackpad y móvil.
+//
+// La clase NO está en el markup de la página: la pone y la saca ExperienciaDemo.vue
+// sobre <main class="app-main-scroll">, que es el contenedor con scroll real y lo
+// comparte todo el admin.
+// ---------------------------------------------------------------------------
+
+.demo-scroll-guiado {
+	// mandatory y no proximity: con proximity, un gesto corto se queda a mitad de
+	// camino justo cuando arranca -- que es el problema que Lucas está describiendo.
+	// El tramo sin puntos de snap (el interludio) se recorre libre porque ahí no hay
+	// a dónde enganchar.
+	scroll-snap-type: y mandatory;
+	scroll-behavior: smooth;
+}
+
+// El interludio se recorre a pulso: mientras su sección ocupa la pantalla, el snap se
+// suspende entero. La clase la prende y la apaga FondoSeccionSticky en su handler de
+// scroll (ver el comentario largo de revisar_snap_libre: sacarle los puntos de snap a
+// una sección NO alcanza -- con mandatory Chrome tira igual al punto más cercano y la
+// coreografía queda inalcanzable). Va después de la regla de arriba y con la misma
+// especificidad: gana por orden de cascada, sin !important.
+.demo-scroll-guiado--libre {
+	scroll-snap-type: none;
+}
+
+// El puente y el cierre no viven en un FondoSeccionSticky (son secciones en flujo,
+// sin pin), así que su punto de snap va sobre ellos mismos y alineado al centro: el
+// contenido es corto y ocupa bastante menos que una pantalla.
+.demo-scroll-guiado .demo-scroll-dolor__puente,
+.demo-scroll-guiado .demo-cierre {
+	scroll-snap-align: center;
+}
+
+// El formulario alinea por arriba y no centrado, con aire para que el encabezado se
+// vea entero (captura 9 de Lucas): scroll-margin-top corre el punto de alineación
+// hacia arriba del elemento, así que el título queda por debajo del borde con ese
+// margen en vez de pegado a él.
+.demo-scroll-guiado .demo-formulario {
+	scroll-snap-align: start;
+	scroll-margin-top: clamp(24px, 7vh, 88px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	// Sin desplazamiento animado largo y sin snap: el movimiento automático de una
+	// pantalla entera es exactamente lo que esta preferencia pide evitar (§14 de
+	// apple-design/SKILL.md).
+	.demo-scroll-guiado {
+		scroll-snap-type: none;
+		scroll-behavior: auto;
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Accesibilidad (§14 de apple-design/SKILL.md, hoy ausente en toda la página).
 // ---------------------------------------------------------------------------
 

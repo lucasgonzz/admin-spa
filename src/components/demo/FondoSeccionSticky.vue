@@ -5,6 +5,20 @@
 		:class="'demo-fondo-seccion--' + variante"
 		:style="{ minHeight: recorrido_vh + 'vh' }"
 	>
+		<!-- 🔴 El punto de snap NO va en la <section> ni en el pin, y esto es exactamente
+		     lo que alguien va a "simplificar" (grupo 355, prompt 07). Cada sección mide
+		     recorrido_vh, no 100vh: el contenido entra mientras el progreso va de 0 a
+		     ENTRADA_FIN (0.28 del alto PINNEABLE, que es alto de la sección menos un
+		     viewport). Alinear el borde de la sección dejaría al lead mirando el bloque a
+		     mitad de entrada, que es justo lo que Lucas no quiere. Este div vacío se
+		     planta a `(100% - 100vh) * snap_progreso` del tope y es el que el navegador
+		     alinea: la cuenta sale sola para cualquier recorrido_vh. -->
+		<div
+			class="demo-fondo-seccion__snap"
+			:style="{ top: 'calc((100% - 100vh) * ' + snap_progreso + ')' }"
+			aria-hidden="true"
+		></div>
+
 		<div class="demo-fondo-seccion__pin">
 			<div class="demo-fondo-seccion__fondo" aria-hidden="true"></div>
 			<div class="demo-fondo-seccion__contenido">
@@ -70,6 +84,29 @@ export default {
 			type: Number,
 			default: 160,
 		},
+		/**
+		 * Dónde cae el punto del avance guiado, en fracción del alto PINNEABLE de la
+		 * sección (grupo 355, prompt 07). El default es ENTRADA_FIN de ScrollDolor.vue:
+		 * el progreso en el que el contenido ya terminó de entrar. El interludio pasa 0
+		 * -- ahí el lead tiene que aterrizar con la coreografía en su punto inicial,
+		 * para recorrerla entera con su propio scroll ("debería dejar la animación en
+		 * el punto inicial y ahí sí darle control total al usuario", Lucas, 5/8/2026).
+		 */
+		snap_progreso: {
+			type: Number,
+			default: 0.28,
+		},
+		/**
+		 * true en las secciones que suspenden el avance guiado MIENTRAS ocupan la
+		 * pantalla: se llega a ellas con el gesto guiado, y de ahí en adelante el
+		 * scroll es libre hasta que la sección se termina. Hoy solo el interludio.
+		 * Es una prop y no una excepción por `variante` a propósito: la razón es de
+		 * comportamiento, no de qué fondo usa la sección.
+		 */
+		snap_libre_mientras_ocupa: {
+			type: Boolean,
+			default: false,
+		},
 	},
 
 	emits: ['progreso'],
@@ -92,6 +129,9 @@ export default {
 			/** El ancestro con scroll real (Element) o `window` como fallback -- ver
 			 *  encontrar_ancestro_scroll(). Se guarda para poder desuscribirse en beforeUnmount. */
 			scroll_target: null,
+			/** true en las secciones que suspenden el avance guiado mientras están a la
+			 *  vista (punto_snap:false, hoy solo el interludio). */
+			vigila_snap: false,
 		}
 	},
 
@@ -109,6 +149,7 @@ export default {
 		}
 
 		this.scroll_target = this.encontrar_ancestro_scroll()
+		this.vigilar_seccion_sin_snap()
 
 		/* Cálculo inicial real (no arrancar en p=0 a ciegas): si la página carga con
 		 * esta sección ya parcialmente scrolleada (recarga a media página). Acá el
@@ -145,6 +186,13 @@ export default {
 		}
 		window.removeEventListener('resize', this.on_scroll)
 
+		/* La clase vive en el scroller del admin entero: si esta sección se desmonta
+		 * con el snap suspendido, hay que devolverlo. */
+		if (this.vigila_snap) {
+			this.vigila_snap = false
+			this.alternar_snap_libre(false)
+		}
+
 		/* Si el lead navega fuera de la página a mitad de una animación, el bucle
 		 * sigue vivo con `self` apuntando a un componente desmontado: hay que
 		 * cancelarlo explícitamente, sacar los listeners no alcanza. */
@@ -155,6 +203,101 @@ export default {
 	},
 
 	methods: {
+		/**
+		 * Apaga el avance guiado mientras ESTA sección está en pantalla, y solo para
+		 * las que declaran `punto_snap: false` -- hoy el interludio (grupo 355,
+		 * prompt 07).
+		 *
+		 * Por qué hace falta, medido en el navegador y no deducido: con
+		 * `scroll-snap-type: y mandatory`, un tramo largo SIN puntos de snap no es un
+		 * tramo libre. Chrome busca igual el punto más apropiado y tira para allá:
+		 * pidiendo la mitad del interludio (scrollTop 9360) terminaba en 11022, y
+		 * pidiendo el 25% (8520) terminaba en 6534. O sea, la coreografía entera
+		 * quedaba inalcanzable -- justo lo que el prompt marca como inaceptable.
+		 * Bajar toda la página a `proximity` tampoco sirve: con secciones de 1280px un
+		 * gesto corto no llega a la zona de enganche y el lead vuelve a quedarse a
+		 * mitad de camino, que es el problema original de Lucas.
+		 *
+		 * Así que el snap se apaga y se prende según dónde está el lead. La clase va
+		 * sobre el scroller compartido del admin, y se retira en beforeUnmount.
+		 *
+		 * @returns {void}
+		 */
+		vigilar_seccion_sin_snap() {
+			if (!this.snap_libre_mientras_ocupa || !this.$refs.seccion) {
+				return
+			}
+			this.vigila_snap = true
+			this.revisar_snap_libre()
+		},
+
+		/**
+		 * Suspende o repone el snap según si esta sección está a la vista. Se resuelve
+		 * con un rect en el evento de scroll y no con un IntersectionObserver a
+		 * propósito: el observer entrega sus entradas dentro del ciclo de render del
+		 * navegador, que en una pestaña en segundo plano no corre -- y entonces el
+		 * lead que vuelve a la pestaña se encuentra el snap en el estado equivocado.
+		 * El evento de scroll llega siempre. Es un rect por evento y solo en la
+		 * sección del interludio.
+		 *
+		 * @returns {void}
+		 */
+		revisar_snap_libre() {
+			if (!this.vigila_snap || !this.$refs.seccion) {
+				return
+			}
+			const rect = this.$refs.seccion.getBoundingClientRect()
+			const alto_visible =
+				this.scroll_target && this.scroll_target !== window
+					? this.scroll_target.clientHeight
+					: window.innerHeight
+
+			/* El snap se suspende SOLO mientras esta sección ocupa la pantalla entera,
+			 * o sea desde que su borde superior llega al tope hasta que su borde
+			 * inferior se va. Ni un píxel antes.
+			 *
+			 * La primera versión anticipaba una pantalla a cada lado, y estaba mal
+			 * (medido por el checker): las secciones miden 1,6 pantallas, así que ese
+			 * margen se tragaba los puntos de snap de la sección anterior y del cierre
+			 * -- subiendo, el bloque 5 se salteaba entero. El margen existía para poder
+			 * ENTRAR al interludio con el snap activo; eso ahora lo resuelve el propio
+			 * interludio teniendo su punto en snap_progreso = 0: el gesto guiado
+			 * aterriza justo en su comienzo, que es donde el lead tiene que tomar el
+			 * control. Desde ahí, esta condición ya es verdadera.
+			 *
+			 * 🔴 La tolerancia no es cosmética. Chrome redondea el offset de scroll a
+			 * PÍXELES DE DISPOSITIVO: con la pantalla al 125% (el default de Windows) el
+			 * snap deposita el scroll una décima de píxel POR ARRIBA del borde de la
+			 * sección, así que un `rect.top <= 0` exacto no se cumple nunca y el snap
+			 * no llega a suspenderse -- el lead pasa del bloque 5 al cierre de un tic y
+			 * se saltea la coreografía entera. Medido a dpr 1.25: tope en 9538.5,
+			 * aterrizaje en 9538.4, rect.top = +0.1.
+			 *
+			 * Y no es solo cosa del 125%: barriendo 4 escalas por 10 alturas de
+			 * viewport, la condición sin tolerancia fallaba en 15 de las 40
+			 * combinaciones, incluidas varias a dpr 1. El residuo máximo medido fue
+			 * 0,44px y el techo teórico es un píxel de dispositivo (1/dpr), así que 2px
+			 * cubre todos los casos; el falso positivo más cercano -- que el snap se
+			 * suspendiera estando parado en otra sección -- queda a 715px. */
+			const TOLERANCIA_PX = 2
+			this.alternar_snap_libre(
+				rect.top <= TOLERANCIA_PX && rect.bottom >= alto_visible - TOLERANCIA_PX
+			)
+		},
+
+		/**
+		 * Prende o apaga la clase que suspende el snap en el scroller.
+		 *
+		 * @param {boolean} libre
+		 * @returns {void}
+		 */
+		alternar_snap_libre(libre) {
+			if (!this.scroll_target || !this.scroll_target.classList) {
+				return
+			}
+			this.scroll_target.classList.toggle('demo-scroll-guiado--libre', !!libre)
+		},
+
 		/**
 		 * Sube por los ancestros de esta sección hasta encontrar el que realmente
 		 * scrollea (overflow-y: auto/scroll) -- en este admin es
@@ -187,6 +330,7 @@ export default {
 		 * @returns {void}
 		 */
 		on_scroll() {
+			this.revisar_snap_libre()
 			this.arrancar_bucle()
 		},
 
@@ -289,6 +433,19 @@ export default {
    necesita más (coreografía larga, grupo 336 prompt 02), se declara con la prop, no acá. */
 .demo-fondo-seccion {
 	position: relative;
+}
+
+/* El punto al que engancha el scroll guiado (grupo 355, prompt 07). Sin alto ni ancho
+   visibles: es una marca de posición, no una caja. El `top` lo pone el componente con
+   la prop snap_progreso, contra (100% - 100vh), que es el alto pinneable de esta
+   sección -- o sea lo que el lead scrollea mientras el contenido está clavado. */
+.demo-fondo-seccion__snap {
+	position: absolute;
+	left: 0;
+	width: 1px;
+	height: 1px;
+	pointer-events: none;
+	scroll-snap-align: start;
 }
 
 /* Único elemento pinneado. Full-bleed acá (no en el fondo): rompe el max-width del
