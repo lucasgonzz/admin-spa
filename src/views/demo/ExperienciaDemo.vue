@@ -68,14 +68,15 @@
            PiezaMultimedia seguiría montada y podría precargar el video antes
            de tiempo. -->
       <template v-if="intro_desbloqueada">
-        <!-- El mensaje queda arriba para siempre (no se desmonta a los 5s):
-             lo único que se apaga es el shimmer del título, vía
-             shimmer_activo. Un lead que ya había completado el formulario en
-             una visita anterior nunca tiene shimmer_activo en true -- no hay
-             ningún proceso en curso que anunciarle. -->
+        <!-- El mensaje queda arriba para siempre. Y desde el grupo 355 (prompt 10)
+             el shimmer del título tampoco se apaga: ya no hay un prop que lo prenda
+             y lo apague, es parte fija del título mientras la pantalla está a la
+             vista ("quiero que ese efecto no deje de hacerse, que continúe").
+             Un lead que vuelve con el formulario ya completado ve exactamente la
+             misma secuencia, porque el contenedor se la corre igual. -->
         <!-- Sin ref: el scroll ya no la busca para hacerle scrollIntoView, ahora
              va directo al tope de la página (grupo 348, prompt 07). -->
-        <confirmacion-armando-demo :turno="turno" :shimmer_activo="shimmer_activo" />
+        <confirmacion-armando-demo :turno="turno" />
 
         <!-- Video de introducción: pieza "intro" del catálogo. A diferencia de
              los clips del scroll, va con controles y sonido, sin autoplay (son
@@ -172,14 +173,11 @@ export default {
       /** Mapa { slot_id: url } de todas las piezas multimedia configuradas para este turno. */
       media: {},
       /**
-       * true mientras dura el armado (~5s tras un envío exitoso del
-       * formulario): controla el shimmer del título de
-       * ConfirmacionArmandoDemo, no si esta se muestra (eso ya lo decide
-       * intro_desbloqueada, correctivo grupo 331 -- el mensaje queda montado
-       * para siempre una vez que aparece). La apaga sola
-       * mostrar_confirmacion_armando_demo() a los ~5s.
+       * true cuando la carga inicial encontró el formulario ya completado y hay
+       * que correr la secuencia de la confirmación al retirar la pantalla de
+       * carga (grupo 355, prompt 10). Ver revelar_pagina().
        */
-      shimmer_activo: false,
+      secuencia_pendiente: false,
       /**
        * true una vez que el lead confirmó el formulario y terminó la
        * animación de "armando tu demo" -- o ya lo había hecho en una visita
@@ -219,6 +217,12 @@ export default {
       desmontado: false,
       /** El contenedor con scroll real del admin, mientras esta página está montada. */
       scroller: null,
+      /**
+       * Valor de overflow-y que tenía el scroller antes de que la secuencia de la
+       * confirmación lo bloqueara; null cuando no hay bloqueo puesto. Ver
+       * bloquear_scroll().
+       */
+      overflow_previo: null,
     }
   },
 
@@ -251,17 +255,16 @@ export default {
     this.scroller = null
 
     /* Si el lead navega a mitad de la animación de "armando tu demo", el
-       body no puede quedar con el scroll bloqueado para siempre (grupo 325,
-       prompt 02). Restaurar el overflow acá es seguro incluso si nunca se
-       llegó a bloquear: asignar '' a una propiedad de estilo que ya estaba
-       en '' no hace nada. */
+       scroller no puede quedar bloqueado para siempre (grupo 325, prompt 02).
+       Restaurarlo acá es seguro incluso si nunca se llegó a bloquear: devolver
+       su valor original a una propiedad que ya lo tenía no hace nada. */
     if (this.confirmacion_timeout) {
       clearTimeout(this.confirmacion_timeout)
     }
     if (this.carga_timeout) {
       clearTimeout(this.carga_timeout)
     }
-    document.body.style.overflow = ''
+    this.bloquear_scroll(false)
   },
 
   methods: {
@@ -296,7 +299,23 @@ export default {
           // como formulario.completado) -- si es así, no tiene sentido
           // hacerlo pasar de nuevo por la confirmación para ver el video
           // (grupo 325, prompt 02, criterio de éxito 5).
+          //
+          // Y desde el grupo 355 (prompt 10) no solo se le desbloquea la vista:
+          // se le corre la MISMA secuencia que al confirmar -- shimmer, la
+          // invitación a los 3s, el scroll al video a los 5s. Antes la pantalla
+          // aparecía ya armada y quieta. El copy sigue eligiéndose por
+          // turno.estado, así que lo que se repite es la secuencia, no el texto.
+          //
+          // Solo en la carga inicial: cargar_experiencia() también la llama
+          // BotonAcceso para refrescar el estado del turno, y ahí volver a
+          // bloquear el scroll cinco segundos sería una interrupción.
+          //
+          // No se dispara acá sino cuando la pantalla de carga se retira (ver
+          // revelar_pagina): mientras el loader está encima, la confirmación ni
+          // siquiera está montada, y los 3s de la invitación y los 5s del scroll
+          // correrían tapados y descoordinados entre sí.
           self.intro_desbloqueada = !!self.formulario.completado
+          self.secuencia_pendiente = !!(self.formulario.completado && !self.carga_inicial_hecha)
         })
         .catch(function () {
           self.invalido = true
@@ -312,7 +331,7 @@ export default {
 
           /* Refrescos posteriores (BotonAcceso): sin piso, se apaga apenas llega. */
           if (!es_carga_inicial) {
-            self.loading = false
+            self.revelar_pagina()
             return
           }
 
@@ -320,15 +339,80 @@ export default {
              payload tardó más, restante es negativo y se revela de una. */
           const restante = PISO_PANTALLA_CARGA_MS - (Date.now() - iniciada_en)
           if (restante <= 0) {
-            self.loading = false
+            self.revelar_pagina()
             return
           }
 
           self.carga_timeout = window.setTimeout(function () {
             self.carga_timeout = null
-            self.loading = false
+            self.revelar_pagina()
           }, restante)
         })
+    },
+
+    /**
+     * Bloquea o libera el scroll mientras dura el armado de la confirmación.
+     *
+     * 🔴 Sobre el SCROLLER REAL, no sobre el body. Hasta el grupo 355 (prompt 10)
+     * esto era `document.body.style.overflow = 'hidden'`, y no bloqueaba nada: en
+     * este admin html, body y #app ya son overflow:hidden a propósito
+     * (src/sass/_app.sass, "comportamiento tipo app nativa") y el que scrollea es
+     * <main class="app-main-scroll">. Es el mismo hallazgo
+     * (20260804-admin-spa-scroll-real-vive-en-main-no-en-window) que este archivo
+     * ya citaba dos veces para el scroll automático, pero que nunca se le había
+     * aplicado al bloqueo. Lo detectó el checker del prompt 10.
+     *
+     * Se guarda el valor previo en vez de asumir '': el scroller es del admin
+     * entero y no le corresponde a esta página decidir cómo queda.
+     *
+     * @param {boolean} bloquear
+     * @returns {void}
+     */
+    bloquear_scroll(bloquear) {
+      const scroller = this.scroller || this.encontrar_scroller()
+      if (!scroller || scroller === window || !scroller.style) {
+        return
+      }
+
+      if (bloquear) {
+        if (this.overflow_previo === null) {
+          this.overflow_previo = scroller.style.overflowY || ''
+        }
+        scroller.style.overflowY = 'hidden'
+        return
+      }
+
+      if (this.overflow_previo !== null) {
+        scroller.style.overflowY = this.overflow_previo
+        this.overflow_previo = null
+      }
+    },
+
+    /**
+     * Retira la pantalla de carga y, si el lead llega con el formulario ya
+     * completado, arranca ahí la secuencia de la confirmación (grupo 355, prompt
+     * 10). Acá y no al resolver el payload: mientras el loader está encima, la
+     * confirmación ni siquiera está montada -- todo el contenido vive bajo
+     * `v-if="!loading"` -- así que los 3s de la invitación y los 5s del scroll
+     * correrían tapados, y encima descoordinados entre sí (los 3 los cuenta el
+     * componente desde que se ve; los 5, este método desde que arranca).
+     *
+     * @returns {void}
+     */
+    revelar_pagina() {
+      this.loading = false
+
+      if (!this.secuencia_pendiente) {
+        return
+      }
+      this.secuencia_pendiente = false
+
+      const self = this
+      /* nextTick: la confirmación no existe en el DOM hasta que este cambio de
+         `loading` se renderiza, y la secuencia le busca refs. */
+      this.$nextTick(function () {
+        self.mostrar_confirmacion_armando_demo()
+      })
     },
 
     /**
@@ -389,11 +473,24 @@ export default {
      * CORRECTIVO (grupo 331): intro_desbloqueada se activa ACÁ, al arrancar
      * (no al vencer el timeout) -- la confirmación pasó a ser el primer
      * tramo de la vista posterior, ya no un overlay separado, así que tiene
-     * que existir en el DOM desde el primer momento para que el lead la vea
-     * (con el shimmer prendido) mientras el armado está en curso. Lo único
-     * que cambia a los 5s es shimmer_activo (el título pasa a color sólido:
-     * el proceso ya terminó) y el scroll, que se libera y se mueve solo
-     * hasta el video. El mensaje en sí nunca se desmonta.
+     * que existir en el DOM desde el primer momento. El mensaje nunca se
+     * desmonta.
+     *
+     * GRUPO 355, PROMPT 10. Tres cambios, todos pedidos de Lucas del 5/8/2026:
+     * el shimmer del título ya NO se apaga a los 5s (queda en loop mientras la
+     * pantalla esté a la vista, así que dejó de necesitar un prop que lo
+     * prenda y apague); la invitación al video entra a los 3s en vez de a los
+     * 900ms (eso lo cuenta ConfirmacionArmandoDemo, desde que la pantalla se
+     * ve); y lo único que sigue pasando a los 5s es el scroll al video más la
+     * liberación del scroll del documento. Los 3 y los 5 se cuentan desde el
+     * mismo punto, no encadenados.
+     *
+     * Este método es el ÚNICO lugar donde vive la secuencia: lo llaman
+     * enviar_formulario() (el lead acaba de confirmar) y cargar_experiencia()
+     * (el lead recarga con el formulario ya completado). Antes ese segundo
+     * caso solo prendía intro_desbloqueada y el lead se encontraba la pantalla
+     * ya armada, estática -- "estaría bueno que cuando recargo se desencadenen
+     * todas las acciones que se desencadenan cuando le doy al botón".
      *
      * Bloquea el scroll del documento mientras dura el armado (grupo 325,
      * prompt 02): sin esto el lead podría scrollear más allá del mensaje
@@ -405,9 +502,16 @@ export default {
     mostrar_confirmacion_armando_demo() {
       const self = this
 
+      /* Idempotente: la secuencia se dispara desde dos lados (al confirmar y al
+       * recargar con el formulario ya completado) y no puede encimarse consigo
+       * misma si los dos caminos se cruzaran. */
+      if (self.confirmacion_timeout) {
+        clearTimeout(self.confirmacion_timeout)
+        self.confirmacion_timeout = null
+      }
+
       self.intro_desbloqueada = true
-      self.shimmer_activo = true
-      document.body.style.overflow = 'hidden'
+      self.bloquear_scroll(true)
 
       /* Al confirmar, el recorrido anterior se DESMONTA (las dos vistas son
        * excluyentes desde el grupo 348, prompt 07), así que la confirmación pasa a
@@ -429,8 +533,7 @@ export default {
 
       self.confirmacion_timeout = setTimeout(function () {
         self.confirmacion_timeout = null
-        self.shimmer_activo = false
-        document.body.style.overflow = ''
+        self.bloquear_scroll(false)
 
         self.$nextTick(function () {
           if (self.$refs.video_intro) {

@@ -15,9 +15,11 @@
 			<!-- v-html sobre copy 100% fijo (nunca datos del lead ni de terceros) --
 			     es la forma más simple de resaltar "tu demo" con peso tipográfico
 			     dentro del título, sin partir el texto en varias interpolaciones. -->
+			<!-- El shimmer ya no se prende y se apaga (grupo 355, prompt 10): corre en
+			     loop mientras la pantalla esté a la vista. La clase queda fija, y el
+			     @media (prefers-reduced-motion: reduce) del <style> lo sigue anulando. -->
 			<h2
-				class="demo-confirmacion-armando__titulo"
-				:class="{ 'demo-confirmacion-armando__titulo--shimmer': shimmer_activo }"
+				class="demo-confirmacion-armando__titulo demo-confirmacion-armando__titulo--shimmer"
 				v-html="titulo_html"
 			></h2>
 			<p v-if="parrafo_reserva" class="demo-confirmacion-armando__parrafo">{{ parrafo_reserva }}</p>
@@ -27,11 +29,16 @@
 		     compartiendo contenedor y animación entraba junto con él y competía en vez
 		     de sucederlo, y es justo lo que tiene que enganchar al lead para que siga
 		     bajando. Ahora es el segundo momento de la pantalla -- separación real y
-		     entrada propia, ~900ms después. El párrafo de la reserva se queda arriba:
-		     es parte del mensaje de confirmación, no de la invitación. -->
+		     entrada propia, a los 3s (grupo 355, prompt 10: "durante los primeros tres
+		     segundos lo único que se vea sea ese título"). El párrafo de la reserva se
+		     queda arriba: es parte del mensaje de confirmación, no de la invitación.
+
+		     v-if y no solo una clase: con el elemento en el DOM desde el principio, su
+		     margen y su alto reservan un hueco visible debajo del título durante esos
+		     tres segundos. -->
 		<p
+			v-if="invitacion_visible"
 			class="demo-confirmacion-armando__invitacion"
-			:class="{ 'demo-confirmacion-armando__invitacion--visible': invitacion_visible }"
 		>
 			Mientras tanto, mirá esta introducción: te contamos para qué sirve la demo, qué podés
 			probar adentro y cómo trabajamos.
@@ -43,6 +50,14 @@
 import EscenaMarca from './EscenaMarca.vue'
 
 /**
+ * Cuánto tarda en aparecer la invitación al video desde que la pantalla se ve
+ * (grupo 355, prompt 10). Antes eran 900ms y las dos cosas se leían como un solo
+ * momento: "durante los primeros tres segundos lo único que se vea en la pantalla
+ * sea ese título" (Lucas, 5/8/2026).
+ */
+const RETRASO_INVITACION_MS = 3000
+
+/**
  * Pantalla de confirmación "armando tu demo" (grupo 322, prompt 03), copy de
  * contexto/demo_pagina.md §3-bis -- se transcribe, no se reescribe.
  *
@@ -50,9 +65,9 @@ import EscenaMarca from './EscenaMarca.vue'
  * contenedor monta y desmonta -- ahora es el primer tramo (100dvh) de la
  * "vista posterior" a la confirmación del formulario (ver ExperienciaDemo.vue),
  * y el contenedor la mantiene montada mientras `intro_desbloqueada` sea true.
- * El mensaje ya no desaparece a los ~5s: lo único que se apaga es el shimmer
- * del título (`shimmer_activo`), que pasa a color sólido porque el proceso ya
- * terminó -- el lead puede volver a subir y seguir leyéndolo.
+ * El mensaje ya no desaparece a los ~5s. Y desde el grupo 355 (prompt 10) el
+ * shimmer del título tampoco se apaga: corre en loop mientras la pantalla esté
+ * a la vista, así que dejó de existir el prop que lo prendía y lo apagaba.
  *
  * Dos variantes de copy elegidas por turno.estado -- NUNCA por el reloj del
  * navegador, mismo criterio que ya usa BotonAcceso.vue para sus cuatro
@@ -76,14 +91,6 @@ export default {
 				return {}
 			},
 		},
-		/** true mientras dura el proceso de armado (~5s tras enviar el formulario):
-		 *  el título muestra el shimmer tipo skeleton. false de ahí en más (incluida
-		 *  la visita de un lead que ya había completado el formulario antes: para
-		 *  ese lead no hay ningún proceso en curso que anunciar). */
-		shimmer_activo: {
-			type: Boolean,
-			default: false,
-		},
 	},
 
 	data() {
@@ -100,8 +107,9 @@ export default {
 			 */
 			visible: false,
 			/**
-			 * true cuando entra la invitación a mirar el video, ~900ms después de que
-			 * el bloque del título se volvió visible (grupo 348, prompt 06). Secuencia
+			 * true cuando entra la invitación a mirar el video, RETRASO_INVITACION_MS
+			 * después de que el bloque del título se volvió visible (grupo 348, prompt
+			 * 06; el retraso pasó a 3s en el grupo 355, prompt 10). Secuencia
 			 * pedida por Lucas: título con el shimmer del armado, pausa, y recién
 			 * después la invitación.
 			 */
@@ -141,9 +149,11 @@ export default {
 					return
 				}
 				self.visible = true
-				/* La invitación entra DESPUÉS: el bloque del título tarda 1.2s en
-				 * entrar, así que a los 900ms ya se leyó y el shimmer del armado se
-				 * está viendo. Colgado del observer y no de mounted() por el mismo
+				/* La invitación entra DESPUÉS: tres segundos en los que el lead solo
+				 * ve el título con el shimmer corriendo (grupo 355, prompt 10; antes
+				 * eran 900ms y se leían como parte del mismo momento). Los 3s de acá y
+				 * los 5s del scroll al video (ExperienciaDemo) se cuentan desde el mismo
+				 * punto: no son 3 y después 5 más. Colgado del observer y no de mounted() por el mismo
 				 * motivo que la animación de arriba (grupo 336, correctivo 7): al
 				 * montarse, el scrollIntoView todavía está en camino y la secuencia
 				 * entera se consumiría antes de que el lead vea el primer píxel. */
@@ -151,7 +161,7 @@ export default {
 					self.invitacion_timeout = window.setTimeout(function () {
 						self.invitacion_visible = true
 						self.invitacion_timeout = null
-					}, 900)
+					}, RETRASO_INVITACION_MS)
 				}
 				/* Una vez que se vio, no hace falta seguir observando -- la sección no
 				 * se desmonta (queda montada para siempre, ver comentario de la clase
@@ -432,6 +442,7 @@ export default {
    de arriba porque este párrafo ya NO vive adentro de ese contenedor: es hermano
    de .demo-confirmacion-armando__texto, dentro del slot de EscenaMarca. */
 .demo-confirmacion-armando__invitacion {
+	animation: demo-confirmacion-invitacion 0.8s ease both;
 	margin: clamp(40px, 8vh, 88px) 0 0;
 	font-size: clamp(1.1rem, 1.6vw, 1.25rem);
 	line-height: 1.5;
@@ -441,14 +452,24 @@ export default {
 	color: #2b3448;
 	position: relative;
 	z-index: 1;
-	/* Invisible hasta que el setTimeout de los 900ms la habilite, igual que el
-	   bloque del título con su observer: sin esto se vería un frame antes de
-	   arrancar la animación. */
-	opacity: 0;
 }
 
-.demo-confirmacion-armando__invitacion--visible {
-	animation: demo-apertura-entrada 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+/* Un fundido y nada más (grupo 355, prompt 10): el fundido + zoom + desenfoque de
+   demo-apertura-entrada es el gesto con el que entra un titular, y acá lo que entra
+   es un segundo momento tranquilo, tres segundos después. Se aplica sobre el
+   elemento base porque ahora aparece con v-if -- la animación corre al montarse.
+
+   Este @keyframes SÍ puede vivir en un <style scoped>, a diferencia de los otros dos
+   de la página: un @keyframes scoped no queda acotado al componente, y eso importa
+   cuando dos archivos declaran el mismo nombre. Este lo usa solo esta pantalla y el
+   nombre no existe en ningún otro lado. */
+@keyframes demo-confirmacion-invitacion {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
 }
 
 /* Estático de verdad bajo reduced-motion (§14 de apple-design/SKILL.md): sin
