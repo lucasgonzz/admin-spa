@@ -397,6 +397,30 @@
 // como red de seguridad, así que el combo nunca supera lo que ya deja margen el
 // overflow: hidden de FondoSeccionSticky.
 .demo-marco--computadora-telefono {
+	// Cuánto sobresale el teléfono por fuera de la caja de la computadora, en una
+	// sola variable: la usan el `right` del teléfono y el padding que le reserva ese
+	// espacio (grupo 355, prompt 03). Antes era un número suelto y el colchón no
+	// existía.
+	--demo-marco-combo-sobresalto: 6%;
+
+	// El teléfono es el único elemento de los seis marcos que se sale de su propia
+	// caja. Mientras la pieza estuvo siempre a la derecha del texto eso no molestaba
+	// -- sobresalía hacia el borde de pantalla. Pero en el bloque 2 la composición va
+	// dada vuelta (direction: rtl) y la pieza queda a la IZQUIERDA: ahí el sobresalto
+	// apunta al texto, se come el gap de 40px de la grilla y el teléfono termina
+	// pegado al párrafo (captura de Lucas del 5/8/2026).
+	//
+	// El arreglo reserva ese espacio dentro del propio marco, así que no depende de
+	// en qué lado esté la pieza: el marco cede un 6% de su ancho y el teléfono
+	// sobresale hacia adentro de ese colchón. La cuenta cierra porque el `right` se
+	// calcula sobre el wrap ya angostado: 6% de 94% = 5,64% < 6%.
+	//
+	// Medido en el navegador a 1280x720, contra el elemento realmente pintado más
+	// cerca del texto: 43px en el bloque 2 (el teléfono termina en x=690 y el texto
+	// arranca en 733) contra 40px en el bloque 1. Diferencia de 3px, dentro de la
+	// tolerancia de ±8px que pedía el prompt.
+	padding-right: var(--demo-marco-combo-sobresalto);
+
 	.demo-marco__compu-wrap {
 		position: relative;
 		width: 100%;
@@ -404,7 +428,7 @@
 
 	.demo-marco__pantalla-telefono {
 		position: absolute;
-		right: -6%;
+		right: calc(-1 * var(--demo-marco-combo-sobresalto));
 		bottom: -16%;
 		width: 34%;
 		max-width: 170px;
@@ -469,8 +493,15 @@
 // Móvil: el marco se achica pero nunca se recorta (criterio de éxito 6). La
 // composición combo reduce el solape del teléfono para que no tape de más.
 @media (max-width: 575.98px) {
+	// La grilla acá ya es de una sola columna, así que el sobresalto no invade ningún
+	// texto -- pero el colchón sigue derivándose de la misma variable, que baja junto
+	// con el solape. Sin esto el marco cedería un 6% de ancho para reservar un
+	// espacio de 3%.
+	.demo-marco--computadora-telefono {
+		--demo-marco-combo-sobresalto: 3%;
+	}
+
 	.demo-marco--computadora-telefono .demo-marco__pantalla-telefono {
-		right: -3%;
 		bottom: -10%;
 		width: 28%;
 	}

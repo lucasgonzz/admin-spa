@@ -27,14 +27,14 @@
       @progreso="on_progreso_bloque($event, bloque.id)"
     >
       <article class="demo-scroll-dolor__bloque" :data-bloque-id="bloque.id">
-        <div class="demo-scroll-dolor__bloque-texto" :style="estilo_bloque(progreso)">
+        <div class="demo-scroll-dolor__bloque-texto" :style="estilo_bloque(progreso, false, indice)">
           <p v-for="(linea, indice2) in bloque.texto" :key="indice2" class="demo-scroll-dolor__parrafo">
             {{ linea }}
           </p>
           <p class="demo-scroll-dolor__resaltado">{{ bloque.resaltado }}</p>
         </div>
 
-        <div class="demo-scroll-dolor__bloque-pieza" :style="estilo_bloque(progreso, true)">
+        <div class="demo-scroll-dolor__bloque-pieza" :style="estilo_bloque(progreso, true, indice)">
           <marco-dispositivo :tipo="bloque.marco">
             <!-- Único bloque con marco combinado (scroll.2): misma pieza en las dos pantallas -->
             <template v-if="bloque.marco === 'computadora+telefono'" #computadora>
@@ -293,8 +293,13 @@ const CONTENIDO_POR_PERFIL = {
 const ENTRADA_FIN = 0.28
 const SALIDA_INICIO = 0.72
 const DESFASE_PIEZA = 0.05
-/* Desplazamiento vertical, en px: entra desde abajo y sale hacia arriba. */
-const ENTRADA_Y = 96
+/* Entrada LATERAL (grupo 355, prompt 03; pedido de Lucas del 5/8/2026): cada mitad
+   del bloque entra desplazándose desde su propio lado -- el texto desde el suyo, la
+   pieza desde el suyo -- una contra la otra. Antes las dos subían desde abajo (96px)
+   y se leía como un fundido en el lugar. La SALIDA no cambia: sigue siendo hacia
+   arriba, que es lo que Lucas pidió mantener ("cuando bajo para despedirme de ese
+   dolor, que tenga el efecto que tiene ahora"). */
+const ENTRADA_X = 80
 const SALIDA_Y = -48
 /* La salida no llega a 0: ver el comentario de estilo_bloque(). */
 const SALIDA_OPACIDAD = 0.35
@@ -446,9 +451,11 @@ export default {
      *                             ~0.05 de progreso respecto del texto ("primero
      *                             se lee, después se ve" -- es el mismo desfasaje
      *                             que daba el animation-delay de 0.18s).
+     * @param {number} indice Índice del bloque en el v-for (0-based), para saber de
+     *                        qué lado entra cada mitad. Ver bloque_invertido().
      * @returns {object}
      */
-    estilo_bloque(p, secundario) {
+    estilo_bloque(p, secundario, indice) {
       if (this.reduced_motion) {
         /* Sin estilos inline: manda el CSS, que bajo esta media query deja todo
          * plenamente visible y estático. */
@@ -460,12 +467,36 @@ export default {
       const salida = ease_out(this.normalizar(p, SALIDA_INICIO + desfase, 1))
 
       const opacidad = entrada - salida * (1 - SALIDA_OPACIDAD)
-      const y = (1 - entrada) * ENTRADA_Y + salida * SALIDA_Y
+      /* Cada mitad entra desde el lado donde REALMENTE está: en un bloque normal el
+       * texto viene de la izquierda y la pieza de la derecha; en uno invertido, al
+       * revés. Con un desplazamiento fijo, en los invertidos cada mitad entraría
+       * cruzando por encima de la otra. */
+      const desde_la_derecha = secundario ? !this.bloque_invertido(indice) : this.bloque_invertido(indice)
+      const x = (1 - entrada) * ENTRADA_X * (desde_la_derecha ? 1 : -1)
+      /* La salida sigue siendo vertical y no se toca. */
+      const y = salida * SALIDA_Y
 
       return {
         opacity: String(opacidad),
-        transform: 'translateY(' + y + 'px)',
+        transform: 'translate(' + x + 'px, ' + y + 'px)',
       }
+    },
+
+    /**
+     * true si el bloque tiene su composición dada vuelta (pieza a la izquierda,
+     * texto a la derecha). Lo decide el `direction: rtl` que el <style> de este
+     * mismo archivo le pone a las variantes bloque-2 y bloque-4 del wrapper -- o
+     * sea, a los de índice impar del v-for, que es lo que se replica acá. Si algún
+     * día cambia la alternancia allá abajo, hay que cambiarla acá también: son las
+     * dos caras del mismo dato y no hay forma de leer el `direction` computado sin
+     * ir al DOM, que es justo lo que estos métodos no hacen (son funciones puras
+     * del progreso).
+     *
+     * @param {number} indice Índice 0-based del bloque en el v-for.
+     * @returns {boolean}
+     */
+    bloque_invertido(indice) {
+      return Number(indice) % 2 === 1
     },
 
     /**
