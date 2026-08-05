@@ -230,6 +230,15 @@ import FondoSeccionSticky from './FondoSeccionSticky.vue'
 const INDICES = [1, 2, 3, 4, 5, 6]
 
 /**
+ * Cuánto se corre una etiqueta debajo de su ícono cuando el SVG no declara su
+ * posición (grupo 355, prompt 04). Es un respaldo, no la fuente: las posiciones
+ * buenas viven en el `data-h` de cada `lbl-N`/`lblo-N`, y son ~42 unidades del
+ * viewBox por debajo del ícono. Con el ícono escalando 1.9, esa separación es la
+ * que deja el texto debajo sin tocarlo.
+ */
+const SEPARACION_ETIQUETA_FALLBACK = 42
+
+/**
  * Escala final del anillo envolvente (grupo 348, prompt 04; antes 1.87).
  *
  * NO es un número libre: junto con la altura del nombre (y=240 en el SVG) es lo
@@ -384,6 +393,12 @@ export default {
 				const h_caos = (caos.getAttribute('data-h') || '0,0,0').split(',').map(Number)
 				const h_orden = (orden.getAttribute('data-h') || '0,0').split(',').map(Number)
 				const sc = parseFloat(caos.getAttribute('data-sc') || '1')
+				/* Las etiquetas también traen su propia posición en el contrato, y hasta el
+				 * grupo 355 (prompt 04) nadie la leía: aplicar_estilos() las mandaba a la
+				 * coordenada del ÍCONO, así que texto e ícono caían en el mismo punto y se
+				 * pisaban en las dos zonas. */
+				const h_lbl = self.leer_posicion_etiqueta(lbl, 'lbl-' + n, h_caos)
+				const h_lblo = self.leer_posicion_etiqueta(lblo, 'lblo-' + n, h_orden)
 
 				return {
 					n: n,
@@ -397,6 +412,10 @@ export default {
 					caos_rot: h_caos[2],
 					orden_x: h_orden[0],
 					orden_y: h_orden[1],
+					lbl_x: h_lbl[0],
+					lbl_y: h_lbl[1],
+					lblo_x: h_lblo[0],
+					lblo_y: h_lblo[1],
 					sc: sc,
 				}
 			})
@@ -405,6 +424,42 @@ export default {
 				const abierto = (self.$refs.portal.getAttribute('data-open') || '1,1').split(',').map(Number)
 				self.portal_abierto = { sx: abierto[0], sy: abierto[1] }
 			}
+		},
+
+		/**
+		 * Posición de reposo de una etiqueta, leída de su propio `data-h`. Si faltara,
+		 * cae a la coordenada de su ícono corrida hacia abajo -- pero AVISANDO por
+		 * consola: un fallback mudo es exactamente lo que dejó vivir cinco correctivos
+		 * al bug de las etiquetas superpuestas (grupo 355, prompt 04). El que mire la
+		 * escena y vea una etiqueta fuera de lugar tiene que encontrar el motivo sin
+		 * leer este archivo.
+		 *
+		 * @param {SVGElement|undefined} nodo Nodo <g> de la etiqueta.
+		 * @param {string} id Id del nodo, solo para el aviso.
+		 * @param {Array<number>} h_icono data-h ya parseado del ícono al que acompaña.
+		 * @returns {Array<number>} [x, y] en unidades del viewBox.
+		 */
+		leer_posicion_etiqueta(nodo, id, h_icono) {
+			const crudo = nodo ? nodo.getAttribute('data-h') : null
+			if (crudo) {
+				const partes = crudo.split(',')
+				/* Cada parte se valida como TEXTO antes de convertirla: Number('') es 0, no
+				 * NaN, así que un `data-h=",138"` pasaría por bueno y mandaría la etiqueta
+				 * al origen sin que nadie se entere -- el mismo modo de falla mudo que dejó
+				 * vivir este bug. */
+				const es_numero = function (parte) {
+					return String(parte).trim() !== '' && !isNaN(Number(parte))
+				}
+				if (partes.length >= 2 && es_numero(partes[0]) && es_numero(partes[1])) {
+					return [Number(partes[0]), Number(partes[1])]
+				}
+			}
+
+			console.warn(
+				'[interludio-portal] ' + id + ' no declara un data-h válido: la etiqueta se ubica ' +
+					SEPARACION_ETIQUETA_FALLBACK + ' unidades debajo de su ícono. La posición es contrato del SVG, corregila ahí.'
+			)
+			return [h_icono[0], h_icono[1] + SEPARACION_ETIQUETA_FALLBACK]
 		},
 
 		/**
@@ -505,7 +560,13 @@ export default {
 					par.caos.style.opacity = String(opacidad_caos)
 				}
 				if (par.lbl) {
-					par.lbl.setAttribute('transform', 'translate(' + par.caos_x + ',' + par.caos_y + ')')
+					/* Su propia coordenada del contrato, no la del ícono -- y corrida por el
+					 * mismo delta que se lleva el ícono en la succión, así que la etiqueta lo
+					 * acompaña en vez de quedarse flotando en el aire mientras se apaga. */
+					par.lbl.setAttribute(
+						'transform',
+						'translate(' + (par.lbl_x + (x_caos - par.caos_x)) + ',' + (par.lbl_y + (y_caos - par.caos_y)) + ')'
+					)
 					par.lbl.style.opacity = String(opacidad_lbl)
 				}
 
@@ -543,7 +604,13 @@ export default {
 					par.orden.style.opacity = String(opacidad_orden)
 				}
 				if (par.lblo) {
-					par.lblo.setAttribute('transform', 'translate(' + par.orden_x + ',' + par.orden_y + ')')
+					/* Igual que en el caos: su coordenada propia, corrida por el mismo delta
+					 * que trae su ícono desde el centro del portal. Al final del tramo el
+					 * delta es 0 y la etiqueta queda exactamente donde la puso el SVG. */
+					par.lblo.setAttribute(
+						'transform',
+						'translate(' + (par.lblo_x + (x_orden - par.orden_x)) + ',' + (par.lblo_y + (y_orden - par.orden_y)) + ')'
+					)
 					par.lblo.style.opacity = String(opacidad_lblo)
 				}
 			})
