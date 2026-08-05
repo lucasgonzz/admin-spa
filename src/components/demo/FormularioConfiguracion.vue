@@ -23,13 +23,40 @@
       <p v-if="pregunta.descripcion" class="demo-formulario__pregunta-descripcion">
         {{ pregunta.descripcion }}
       </p>
-      <div class="demo-formulario__opciones">
+      <!-- Un solo control con dos posiciones, no dos botones sueltos (grupo 355,
+           prompt 09). El indicador es un elemento aparte que se DESPLAZA con
+           transform: que se mueva, y no que aparezca del otro lado, es lo que
+           comunica "esto es un interruptor" -- el gesto del IosToggle de empresa-spa,
+           tomado como referencia de forma (otro repo, otro proyecto: no se importa).
+           Cada mitad sigue siendo un <button> y no un checkbox oculto, porque son dos
+           valores con etiqueta y no un booleano: en tipo_precios valen 'unico' y
+           'listas'. -->
+      <div
+        class="demo-formulario__opciones"
+        :class="{
+          'demo-formulario__opciones--sin-transicion': sin_transicion,
+          'demo-formulario__opciones--deshabilitado': enviando,
+        }"
+        role="radiogroup"
+        :aria-label="pregunta.pregunta"
+      >
+        <!-- Se oculta si la respuesta guardada no coincide con ninguna opción: es
+             preferible un control sin posición marcada que uno apuntando a la
+             opción equivocada. -->
+        <span
+          class="demo-formulario__indicador"
+          :style="estilo_indicador(pregunta)"
+          aria-hidden="true"
+        ></span>
+
         <button
           v-for="opcion in pregunta.opciones"
           :key="String(opcion.valor)"
           type="button"
           class="demo-formulario__opcion"
           :class="{ 'demo-formulario__opcion--activa': local_respuestas[pregunta.clave] === opcion.valor }"
+          role="radio"
+          :aria-checked="local_respuestas[pregunta.clave] === opcion.valor ? 'true' : 'false'"
           :disabled="enviando"
           @click="seleccionar(pregunta.clave, opcion.valor)"
         >
@@ -231,7 +258,23 @@ export default {
       enviando: false,
       /** Mensaje sobrio de error si el último envío falló; vacío si no hay error. */
       error: '',
+      /**
+       * true durante el primer render (grupo 355, prompt 09): el indicador del
+       * control segmentado tiene que aparecer YA del lado que corresponde, sin
+       * deslizarse desde la izquierda. Una transición al montar se lee como si el
+       * sistema hubiera elegido solo delante del lead, y las nueve preguntas llegan
+       * preseleccionadas. Se apaga en el primer nextTick, cuando el navegador ya
+       * pintó la posición inicial.
+       */
+      sin_transicion: true,
     }
+  },
+
+  mounted() {
+    const self = this
+    this.$nextTick(function () {
+      self.sin_transicion = false
+    })
   },
 
   computed: {
@@ -280,6 +323,33 @@ export default {
         base[clave] = tiene_valor ? self.respuestas[clave] : DEFAULTS[clave]
       })
       return base
+    },
+
+    /**
+     * Posición del indicador deslizante de una pregunta (grupo 355, prompt 09).
+     * El ancho es siempre la mitad del control -- dos opciones -- así que basta con
+     * correrlo un 100% de sí mismo para la segunda. Si la respuesta guardada no
+     * coincide con ninguna opción, el indicador se oculta en vez de quedar
+     * apuntando a la primera: mejor sin posición marcada que marcando la
+     * equivocada.
+     *
+     * @param {object} pregunta Una entrada de PREGUNTAS.
+     * @returns {object} Estilo inline para el indicador.
+     */
+    estilo_indicador: function (pregunta) {
+      const elegido = this.local_respuestas[pregunta.clave]
+      let indice = -1
+      pregunta.opciones.forEach(function (opcion, i) {
+        if (opcion.valor === elegido) {
+          indice = i
+        }
+      })
+
+      if (indice < 0) {
+        return { opacity: '0' }
+      }
+
+      return { transform: 'translateX(' + indice * 100 + '%)' }
     },
 
     /**
@@ -339,9 +409,10 @@ export default {
   padding: max(12vh, 96px) 20px 48px;
   display: flex;
   flex-direction: column;
-  /* Más aire ENTRE preguntas (grupo 322, prompt 02) -- el gap de 12px interno de
+  /* Más aire ENTRE preguntas (grupo 322, prompt 02; subido de 44 a 64 en el grupo
+     355, prompt 09, a pedido de Lucas) -- el gap de 12px interno de
      .demo-formulario__pregunta (texto+descripción+opciones) no se toca. */
-  gap: 44px;
+  gap: 64px;
 }
 
 .demo-formulario__encabezado {
@@ -381,44 +452,84 @@ export default {
   line-height: 1.4;
 }
 
-/* Controles grandes, pensados para el pulgar: la mayoría entra desde el
-   teléfono (contexto/demo_experiencia.md §3.16 B). */
+/* Control segmentado (grupo 355, prompt 09): UNA pista con dos posiciones, en vez de
+   los dos botones sueltos separados por un gap que había hasta acá -- "que se note
+   que ambas opciones son un interruptor: puede estar una activada o la otra", Lucas,
+   5/8/2026. Grande igual que antes: la mayoría entra desde el teléfono
+   (contexto/demo_experiencia.md §3.16 B).
+
+   La pista es la que lleva el fondo apagado y el borde; las mitades quedan
+   transparentes por encima del indicador. Sin flex-wrap: si las dos mitades se
+   apilaran, el indicador --que mide la mitad del ANCHO-- quedaría a mitad de camino
+   entre las dos y el control dejaría de leerse. Con el ancho completo del formulario
+   y dos etiquetas cortas, entran siempre. */
 .demo-formulario__opciones {
+  position: relative;
   display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
+  border-radius: 14px;
+  border: 2px solid rgba(28, 35, 51, 0.08);
+  background: #fff;
+  overflow: hidden;
+}
+
+/* El indicador: mitad del ancho, con el mismo degradé de marca que tenía la opción
+   activa. Se DESPLAZA (transform) en vez de aparecer del otro lado -- ese movimiento
+   es lo que comunica que es un interruptor y no dos botones. */
+.demo-formulario__indicador {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  border-radius: 12px;
+  background: var(--demo-gradient-marca);
+  box-shadow: 0 6px 16px -8px rgba(11, 132, 248, 0.55);
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  pointer-events: none;
+}
+
+/* Primer render: el indicador ya arranca del lado correcto, sin deslizarse desde la
+   izquierda (ver `sin_transicion` en el componente). */
+.demo-formulario__opciones--sin-transicion .demo-formulario__indicador {
+  transition: none;
+}
+
+.demo-formulario__opciones--deshabilitado {
+  opacity: 0.6;
 }
 
 .demo-formulario__opcion {
-  flex: 1 1 140px;
+  position: relative;
+  z-index: 1;
+  flex: 1 1 50%;
+  min-width: 0;
   min-height: 56px;
-  padding: 12px 20px;
-  border-radius: 14px;
-  /* No elegida, visualmente apagada (grupo 322, prompt 02): antes solo se
-     distinguía por el fondo (blanco vs degradé); ahora además baja de opacidad
-     y el texto/borde pasan al tono suave, para que se lea como "no elegida" sin
-     dejar de ser legible ni de leerse como clickeable. */
-  border: 2px solid rgba(28, 35, 51, 0.08);
-  background: #fff;
+  padding: 12px 16px;
+  border: none;
+  background: transparent;
   color: var(--demo-color-texto-suave);
-  opacity: 0.7;
   font-family: inherit;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+  transition: color 0.2s ease;
 }
 
 .demo-formulario__opcion:disabled {
   cursor: not-allowed;
-  opacity: 0.6;
 }
 
 .demo-formulario__opcion--activa {
-  border-color: transparent;
-  background: var(--demo-gradient-marca);
   color: #fff;
-  opacity: 1;
+}
+
+/* Foco visible por teclado y solo por teclado: el control se opera con Tab y flechas
+   y el usuario tiene que ver dónde está parado. Va por dentro (inset) porque la pista
+   recorta con overflow: hidden. */
+.demo-formulario__opcion:focus-visible {
+  outline: 2px solid var(--demo-color-azul);
+  outline-offset: -4px;
+  border-radius: 12px;
 }
 
 .demo-formulario__error {
@@ -446,23 +557,19 @@ export default {
   opacity: 0.65;
 }
 
-/* En teléfono el aire de arriba va a la mitad (grupo 348, prompt 05): el puente ya
-   baja a 70vh ahí, y entre las dos cosas el lead no tiene que scrollear dos
-   pantallas para llegar a la primera pregunta. 767.98px es el breakpoint que ya usa
-   el resto de la página (ScrollDolor.vue y el scss compartido), no uno nuevo. */
+/* En teléfono el aire de arriba va a la mitad (grupo 348, prompt 05): el lead no
+   tiene que scrollear dos pantallas para llegar a la primera pregunta. 767.98px es el
+   breakpoint que ya usa el resto de la página (ScrollDolor.vue y el scss compartido),
+   no uno nuevo. */
 @media (max-width: 767.98px) {
   .demo-formulario {
     padding-top: max(6vh, 48px);
   }
 }
 
-@media (max-width: 575.98px) {
-  .demo-formulario__opciones {
-    flex-direction: column;
-  }
-
-  .demo-formulario__opcion {
-    flex: 1 1 auto;
-  }
-}
+/* RETIRADO (grupo 355, prompt 09): en pantallas angostas las dos opciones pasaban a
+   columna. Con el control segmentado eso no puede ser: el indicador mide la mitad del
+   ANCHO, así que apiladas quedaría cruzado entre las dos y el control dejaría de
+   leerse. Las dos etiquetas entran horizontales incluso a 375px -- la más larga,
+   "Varias listas", mide bastante menos que la mitad disponible. */
 </style>
