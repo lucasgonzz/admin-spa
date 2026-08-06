@@ -30,6 +30,7 @@
       v-for="(bloque, indice) in contenido.bloques"
       :key="bloque.id"
       :variante="'bloque-' + (indice + 1)"
+      :recorrido_vh="recorrido_dolor_vh"
       v-slot="{ progreso }"
       @progreso="on_progreso_bloque($event, bloque.id)"
     >
@@ -309,10 +310,57 @@ const CONTENIDO_POR_PERFIL = {
 /* Tramos de la coreografía de cada sección, en unidades de progreso [0,1] (grupo
    348, prompt 03). Entrada corta, meseta larga, salida corta: la sección está para
    leerse, no para animarse. El desfasaje de la pieza respecto del texto es el mismo
-   que daba el animation-delay de 0.18s del sistema anterior, traducido a progreso. */
-const ENTRADA_FIN = 0.28
+   que daba el animation-delay de 0.18s del sistema anterior, traducido a progreso.
+
+   Grupo 369, prompt 04 (Lucas: "que la animación de cómo están apareciendo los dolores
+   sea un poco más lenta para que se aprecie mejor"): la entrada pasa de 0.28 a 0.42, y
+   el desfase de la pieza acompaña en la misma proporción (0.05/0.28 = 0.075/0.42) o la
+   pieza entraría pegada al texto. La SALIDA no se toca: Lucas dijo explícitamente que
+   el fundido de salida le gusta como está.
+
+   🔴 LA CUENTA QUE HAY QUE ENTENDER ANTES DE VOLVER A TOCAR ESTOS NÚMEROS, porque el
+   prompt 02 de este mismo grupo cambió las reglas del juego y la intuición acá falla.
+
+   Con el avance guiado, el lead ya no recorre la sección con su propio scroll: cada
+   gesto es un desplazamiento programado de un punto de enganche al siguiente, y durante
+   ESE desplazamiento el progreso de la sección que entra va de 0 a `snap_progreso` --
+   por definición del punto de enganche. O sea que la entrada no dura "0.42 de scroll":
+   dura la fracción `ENTRADA_FIN / snap_progreso` del gesto, y el gesto dura lo que tarde
+   el scroll programado del navegador.
+
+   De ahí salen dos consecuencias que van en contra de lo que uno haría:
+     1. Estirar la entrada Y mover el enganche en la misma proporción se cancela solo:
+        0.28/0.28 y 0.42/0.42 son los dos el 100% del gesto. No cambia nada.
+     2. Poner el enganche donde termina de entrar la PIEZA (0.42 + 0.075 = 0.495), que
+        suena a mejora, deja la entrada del texto en el 85% del gesto: o sea la haría
+        MÁS RÁPIDA que hoy, justo lo contrario de lo que pidió Lucas. Se probó y se
+        descartó por eso. El enganche se queda en ENTRADA_FIN, y la pieza sigue llegando
+        al 99,4% de su entrada en el momento del aterrizaje -- exactamente lo que pasa
+        hoy con 0.28/0.05, así que no se cambia nada que Lucas ya aceptó.
+
+   Lo que queda para que sea más lento, y es lo que se eligió: MÁS DISTANCIA por gesto
+   (ver RECORRIDO_DOLOR_VH). Vale si el navegador escala la duración de su scroll suave
+   con la distancia. 🔴 NO VERIFICADO: el panel de navegador de esta sesión no compone
+   frames, así que un scroll suave no avanza y no hay forma de medir cuánto dura. Es lo
+   único de este prompt que queda a confirmar mirando la página.
+
+   Y si Lucas lo sigue viendo rápido, el lever que manda NO es ninguno de estos números:
+   es la duración del desplazamiento, o sea animarlo nosotros en avance-guiado.js en vez
+   de delegarlo a `behavior: 'smooth'`. Eso ya es cambiar el mecanismo del prompt 02 y no
+   se hizo por cuenta propia. Estirar más estos números no lo va a lograr.
+
+   En scroll libre (hoy el interludio, y cualquier scroll que el control no intercepte)
+   los números sí valen como se leen: ahí la entrada ocupa 0.42 del alto pinneable en vez
+   de 0.28 y se recorre al pulso del lead, o sea 50% más de scroll para el mismo
+   desplazamiento. */
+const ENTRADA_FIN = 0.42
 const SALIDA_INICIO = 0.72
-const DESFASE_PIEZA = 0.05
+const DESFASE_PIEZA = 0.075
+/* Alto de las secciones de dolor, en vh (el default del componente son 160). Más
+   recorrido = más distancia entre un punto de enganche y el siguiente = un
+   desplazamiento programado más largo. 200 y no más: cada vh de más es scroll en el que
+   no cambia nada para quien recorra la página a mano. */
+const RECORRIDO_DOLOR_VH = 200
 /* Entrada LATERAL (grupo 355, prompt 03; pedido de Lucas del 5/8/2026): cada mitad
    del bloque entra desplazándose desde su propio lado -- el texto desde el suyo, la
    pieza desde el suyo -- una contra la otra. Antes las dos subían desde abajo (96px)
@@ -431,6 +479,10 @@ export default {
       apertura_entrada_terminada: false,
       /** Ids de bloque cuyo evento de tracking ya se emitió (una vez por bloque). */
       bloques_trackeados: {},
+      /* Constante de arriba que el template necesita ver. No cambia nunca: vive acá
+         porque un template de Vue no alcanza el ámbito del módulo, y no en computed
+         porque no se calcula a partir de nada. */
+      recorrido_dolor_vh: RECORRIDO_DOLOR_VH,
     }
   },
 
@@ -510,7 +562,7 @@ export default {
 
     /**
      * Estilo de un bloque 1-5 para el progreso `p` de su propia sección. Tres
-     * tramos: entrada (0 -> 0.28), meseta (la mayor parte del recorrido: la
+     * tramos: entrada (0 -> ENTRADA_FIN, hoy 0.42), meseta (la sección
      * sección está para leerse) y salida parcial (0.72 -> 1).
      *
      * La salida es PARCIAL a propósito (hasta 0.35 de opacidad, no hasta 0): que

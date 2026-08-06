@@ -8,7 +8,7 @@
 		<!-- 🔴 El punto de snap NO va en la <section> ni en el pin, y esto es exactamente
 		     lo que alguien va a "simplificar" (grupo 355, prompt 07). Cada sección mide
 		     recorrido_vh, no 100vh: el contenido entra mientras el progreso va de 0 a
-		     ENTRADA_FIN (0.28 del alto PINNEABLE, que es alto de la sección menos un
+		     ENTRADA_FIN (0.42 del alto PINNEABLE desde el grupo 369, que es alto de la sección menos un
 		     viewport). Alinear el borde de la sección dejaría al lead mirando el bloque a
 		     mitad de entrada, que es justo lo que Lucas no quiere. Este div vacío se
 		     planta a `(100% - 100vh) * snap_progreso` del tope y es el que el navegador
@@ -91,10 +91,19 @@ export default {
 		 * -- ahí el lead tiene que aterrizar con la coreografía en su punto inicial,
 		 * para recorrerla entera con su propio scroll ("debería dejar la animación en
 		 * el punto inicial y ahí sí darle control total al usuario", Lucas, 5/8/2026).
+		 *
+		 * 🔴 Este default y ENTRADA_FIN de ScrollDolor.vue son el mismo número escrito
+		 * en dos archivos, y tienen que moverse juntos: si la entrada se estira y el
+		 * enganche se queda, el lead aterriza con el bloque a medio entrar -- justo lo
+		 * que el grupo 355 vino a arreglar. El grupo 369 (prompt 04) los movió de 0.28
+		 * a 0.42. Y no conviene adelantarlo para incluir el desfase de la pieza: con el
+		 * avance guiado eso acorta la fracción del gesto que ocupa la entrada del texto
+		 * y la vuelve más rápida (la cuenta completa está en el bloque de constantes de
+		 * ScrollDolor.vue).
 		 */
 		snap_progreso: {
 			type: Number,
-			default: 0.28,
+			default: 0.42,
 		},
 		/**
 		 * true en las secciones que suspenden el avance guiado MIENTRAS ocupan la
