@@ -4,15 +4,22 @@
          decisión de Lucas tras ver la escena cinematográfica implementada -- ver nota
          de reversión en demo_experiencia.md §3.18-bis). Ya no arma su propia
          FondoSeccionSticky: la de acá abajo hace todo el trabajo de pin/fondo. -->
-    <fondo-seccion-sticky variante="apertura" v-slot="{ progreso }" @progreso="on_progreso_apertura">
+    <fondo-seccion-sticky variante="apertura" v-slot="{ progreso }">
       <header
         class="demo-scroll-dolor__apertura"
-        :class="{ 'demo-scroll-dolor__apertura--carga': !apertura_tomada_por_scroll }"
+        :class="{ 'demo-scroll-dolor__apertura--carga': !apertura_entrada_terminada }"
       >
         <h1 class="demo-scroll-dolor__apertura-titulo" :style="estilo_apertura(progreso)">
           {{ contenido.apertura.titulo }}
         </h1>
-        <p class="demo-scroll-dolor__apertura-subtitulo" :style="estilo_apertura(progreso, true)">
+        <!-- El animationend va en el SUBTÍTULO porque es el último en terminar (entra
+             con 4s de retraso): cuando este termina, la entrada completa terminó. -->
+        <p
+          ref="apertura_subtitulo"
+          class="demo-scroll-dolor__apertura-subtitulo"
+          :style="estilo_apertura(progreso, true)"
+          @animationend="on_entrada_apertura_terminada"
+        >
           {{ contenido.apertura.subtitulo }}
         </p>
       </header>
@@ -405,12 +412,23 @@ export default {
         window.matchMedia('(prefers-reduced-motion: reduce)').matches
       ),
       /**
-       * false hasta que el lead scrollea la apertura por primera vez. Mientras es
-       * false manda la animación CSS de carga (demo-apertura-entrada); apenas hay
-       * scroll, la clase se retira y el titular pasa a depender del progreso, que
-       * es lo que le da la reversa al subir.
+       * false hasta que la entrada de carga de la apertura TERMINÓ de correr.
+       * Mientras es false manda la animación CSS (zoom del titular + bounce del
+       * subtítulo); cuando termina, la clase se retira y los dos pasan a depender del
+       * progreso, que es lo que les da la reversa al subir.
+       *
+       * 🔴 Esto lo decide el TIEMPO, nunca el scroll (grupo 369, prompt 01). Hasta
+       * este prompt la clase se retiraba en cuanto el progreso de la sección superaba
+       * 0.001, y eso dejaba la entrada de 3s a merced del primer píxel de scroll:
+       * medido en un banco que reproduce el scroller del admin, pedir 2px de scroll
+       * con `scroll-snap-type: y mandatory` activo (grupo 355) deposita el scroll en
+       * el punto de snap de la sección -- 121px en un viewport de 720, o sea progreso
+       * 0.28 -- así que la clase se retiraba en el primer frame siguiente, la
+       * animación desaparecía y el titular quedaba en su estado final. Es exactamente
+       * lo que Lucas describió: "no lo hace con ningún efecto, simplemente aparece".
+       * Cualquier reintroducción de una condición de scroll acá revive ese bug.
        */
-      apertura_tomada_por_scroll: false,
+      apertura_entrada_terminada: false,
       /** Ids de bloque cuyo evento de tracking ya se emitió (una vez por bloque). */
       bloques_trackeados: {},
     }
@@ -429,6 +447,45 @@ export default {
       }
       return CONTENIDO_POR_PERFIL.dueno
     },
+  },
+
+  mounted() {
+    /**
+     * Red de seguridad del único camino por el que se libera la clase --carga: si la
+     * entrada no llegó a existir como animación, no va a haber ningún animationend
+     * que esperar y la apertura se quedaría clavada en su estado de carga para
+     * siempre, sin la reversa por progreso al subir. Pasa al menos en un caso real y
+     * previsible: reduced-motion, donde las animaciones quedan en `none`.
+     *
+     * 🔴 Y ojo con CUÁL regla las apaga, porque no es la de este archivo: la media
+     * query del `<style scoped>` de acá abajo sale como
+     * `.demo-scroll-dolor__apertura-titulo[data-v-*]` (0,2,0) y PIERDE contra
+     * `.demo-scroll-dolor__apertura--carga .demo-scroll-dolor__apertura-titulo[data-v-*]`
+     * (0,3,0), que es la que declara la animación. La que gana de verdad es el bloque
+     * de reduced-motion de demo-experiencia.scss, que lleva `animation: none !important`
+     * (verificado por el checker aislando las dos reglas). O sea: si alguien limpia ese
+     * `!important` del archivo compartido pensando que la media query scoped ya cubre el
+     * caso, reduced-motion se come los ~5s de entrada Y esta red deja de dispararse.
+     *
+     * Se consulta al DOM en vez de duplicar acá las duraciones que declara el CSS:
+     * un segundo lugar con los mismos números se desincroniza en el primer ajuste de
+     * tiempos que alguien haga en el <style>. Y tampoco se usa un temporizador de
+     * respaldo "por si acaso": sería otra copia de la duración, y en una pestaña de
+     * fondo (donde el reloj de la animación no avanza pero el del timer sí) cortaría
+     * la entrada, que es el bug que este prompt vino a arreglar.
+     *
+     * getAnimations() acá no es prematuro: medido en el navegador, devuelve la
+     * animación ya creada en el instante siguiente a que el elemento entra al
+     * documento, sin ninguna lectura de layout de por medio -- la llamada obliga al
+     * navegador a resolver los estilos pendientes.
+     */
+    const self = this
+    this.$nextTick(function () {
+      const subtitulo = self.$refs.apertura_subtitulo
+      if (!subtitulo || !subtitulo.getAnimations || subtitulo.getAnimations().length === 0) {
+        self.apertura_entrada_terminada = true
+      }
+    })
   },
 
   methods: {
@@ -571,19 +628,25 @@ export default {
     },
 
     /**
-     * Retira la animación CSS de carga apenas hay scroll real en la apertura. A
-     * partir de ahí el `:style` por progreso es el único que manda -- mientras la
-     * animación viva, sus valores le ganan a cualquier estilo inline (las
+     * Retira la animación CSS de carga cuando la entrada TERMINÓ de correr, y no
+     * antes. A partir de ahí el `:style` por progreso es el único que manda --
+     * mientras la animación viva, sus valores le ganan a cualquier estilo inline (las
      * animaciones pisan al inline en la cascada), así que las dos cosas no pueden
-     * convivir sobre los mismos elementos.
+     * convivir sobre los mismos elementos: primero una, después el otro.
      *
-     * @param {number} p
+     * Lo dispara el animationend del subtítulo, que es el último en terminar. Por qué
+     * el evento y no un temporizador: el reloj de una animación CSS no avanza mientras
+     * la pestaña no se está renderizando, pero un setTimeout sí -- una página abierta
+     * en una pestaña de fondo se comería la entrada igual que antes. El evento llega
+     * cuando la animación terminó de verdad, esté la pestaña donde esté.
+     *
+     * No hace falta filtrar por animationName: el handler está en el subtítulo, que
+     * tiene una sola animación y ningún hijo del cual pudiera burbujear otra.
+     *
      * @returns {void}
      */
-    on_progreso_apertura(p) {
-      if (!this.apertura_tomada_por_scroll && p > 0.001) {
-        this.apertura_tomada_por_scroll = true
-      }
+    on_entrada_apertura_terminada() {
+      this.apertura_entrada_terminada = true
     },
 
     /**
@@ -656,24 +719,37 @@ export default {
   justify-content: center;
   align-items: center;
   text-align: center;
-  gap: 16px;
+  /* Fluido y no los 16px fijos de antes (grupo 369, prompt 01, pedido de Lucas: "que
+     el título y el subtítulo estén un poco más separados verticalmente"): en una
+     pantalla alta hay respiro de verdad y en una baja no se come el aire de los
+     costados. En un viewport de 720 da 28,8px; el techo de 48 llega recién a 1200. */
+  gap: clamp(24px, 4vh, 48px);
 }
 
 /* Animación de entrada de la apertura (grupo 336, revierte la escena cinematográfica
    del grupo 325): corre UNA sola vez al cargar, no atada al scroll -- la apertura ya
    está en pantalla cuando el lead llega. Desde el grupo 348 (prompt 03) vive detrás
-   del modificador --carga, que ScrollDolor.vue retira apenas hay scroll real: una
-   animación en curso le gana en la cascada a cualquier estilo inline, así que la
-   animación de carga y el `:style` por progreso no pueden convivir sobre los mismos
-   elementos -- primero una, después el otro. CSS puro, sin librerías: es lo primero que
-   carga la página. @keyframes demo-apertura-entrada vive en demo-experiencia.scss (no
-   acá): la reutiliza también la pantalla de confirmación (ConfirmacionArmandoDemo.vue,
-   prompt 03 de este grupo) -- un @keyframes definido dentro de un <style scoped> NO
-   queda acotado a ese componente (Vue no le agrega el atributo data-v-*, solo a los
-   selectores), así que declararlo acá otra vez pisaría/sería pisado por el de ese otro
-   archivo según qué bundle cargue último -- mismo motivo por el que el override del
-   título del cierre del interludio vive en el archivo compartido y no en un scoped
-   style (ver comentario en demo-experiencia.scss). */
+   del modificador --carga: una animación en curso le gana en la cascada a cualquier
+   estilo inline, así que la animación de carga y el `:style` por progreso no pueden
+   convivir sobre los mismos elementos -- primero una, después el otro.
+
+   🔴 QUIÉN retira ese modificador es la corrección del grupo 369 (prompt 01): lo
+   retira el FIN de la animación (animationend del subtítulo), no el primer scroll.
+   Hasta acá lo retiraba `p > 0.001`, y con el scroll-snap del grupo 355 eso se cumplía
+   en el primer frame -- 2px de scroll aterrizan en el punto de snap de la sección, o
+   sea progreso 0.28 --, así que la entrada de 3s se veía un cuadro y desaparecía ("no
+   lo hace con ningún efecto, simplemente aparece", Lucas, 5/8/2026). Ver el comentario
+   de apertura_entrada_terminada en el <script>.
+
+   CSS puro, sin librerías: es lo primero que carga la página. Los @keyframes
+   (demo-apertura-zoom para el titular, demo-apertura-bounce para el subtítulo) viven en
+   demo-experiencia.scss y no acá, igual que demo-apertura-entrada, que sigue en uso en
+   la pantalla de confirmación (ConfirmacionArmandoDemo.vue): un @keyframes definido
+   dentro de un <style scoped> NO queda acotado a ese componente (Vue no le agrega el
+   atributo data-v-*, solo a los selectores), así que declararlo acá pisaría/sería
+   pisado por el de ese otro archivo según qué bundle cargue último -- mismo motivo por
+   el que el override del título del cierre del interludio vive en el archivo compartido
+   y no en un scoped style (ver comentario en demo-experiencia.scss). */
 
 .demo-scroll-dolor__apertura-titulo {
   font-size: clamp(2rem, 5vw, 3.25rem);
@@ -701,23 +777,33 @@ export default {
   will-change: opacity, transform;
 }
 
-/* "both": sin esto el subtítulo (con delay) parpadea visible antes de tiempo.
+/* "both": sin esto el subtítulo (con delay) parpadea visible antes de tiempo, y sin él
+   tampoco quedaría retenido el estado final hasta que ScrollDolor retire la clase.
 
    Dos tiempos, no uno (grupo 355, prompt 02; pedido de Lucas del 5/8/2026): con 1.2s
    para el titular y 0.22s de retraso para el subtítulo, los dos entraban casi juntos y
-   se leían como un solo bloque que aparece de golpe. Ahora el titular tarda 3s y el
-   subtítulo espera a que termine -- 3s de la animación + 1s de pausa = 4s de retraso --
-   para entrar en su propio 1.2s. La curva es la misma de toda la página.
+   se leían como un solo bloque que aparece de golpe.
 
-   La duración se declara acá, en el `animation` de cada uso: el @keyframes compartido
-   (demo-experiencia.scss) no se toca, así que la confirmación "armando tu demo"
-   conserva exactamente sus tiempos. */
+   Grupo 369, prompt 01: el titular pasa de demo-apertura-entrada (fade + zoom + blur,
+   3s) a demo-apertura-zoom (zoom limpio desde 0.86, 2s) y el subtítulo a un rebote.
+   El retraso del subtítulo son los 2s que tarda el titular más los 2s de pausa que
+   pidió Lucas ("que espere unos dos segundos y recién ahí aparezca el subtítulo").
+
+   MEDIDO, para el día que alguien quiera ajustar esa pausa: con la curva de la página
+   -- cubic-bezier(0.16, 1, 0.3, 1), que es casi todo movimiento al principio -- el zoom
+   de 2s ya está al 97% al primer segundo. O sea que la pausa PERCIBIDA es de ~3s, no de
+   2. Se deja así porque es lo que declara la especificación del prompt; si Lucas la
+   quiere más corta, lo único que se toca es este retraso (4s -> 3s), no la curva ni la
+   duración.
+
+   La duración se declara acá, en el `animation` de cada uso, y no en el @keyframes: los
+   de demo-experiencia.scss se comparten con otras pantallas. */
 .demo-scroll-dolor__apertura--carga .demo-scroll-dolor__apertura-titulo {
-  animation: demo-apertura-entrada 3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: demo-apertura-zoom 2s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .demo-scroll-dolor__apertura--carga .demo-scroll-dolor__apertura-subtitulo {
-  animation: demo-apertura-entrada 1.2s cubic-bezier(0.16, 1, 0.3, 1) 4s both;
+  animation: demo-apertura-bounce 0.9s cubic-bezier(0.16, 1, 0.3, 1) 4s both;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -886,6 +972,33 @@ export default {
   .demo-scroll-dolor__cierre {
     grid-template-columns: 1fr;
     direction: ltr !important;
+  }
+
+  /* Apertura más grande y más separada en teléfono (grupo 369, prompt 01, pedido de
+     Lucas: "en teléfono los dos sean un poco más grandes y estén más separados").
+
+     El problema no era el clamp en sí sino cuál de sus tres valores manda: con
+     `clamp(2rem, 5vw, 3.25rem)`, en un teléfono de 390px el 5vw da 19,5px, muy por
+     debajo del mínimo, así que el titular quedaba fijo en 2rem -- chico para la
+     primera pantalla de la página. Acá el término central se recalibra a la escala del
+     teléfono (9,8vw sobre 390px = 38,2px) y el mínimo baja apenas para que los
+     teléfonos angostos sigan reduciendo en vez de desbordar.
+
+     Medido en un banco con el mismo markup y el meta viewport de index.html, con los
+     dos titulares (dueño y campeón): 390px -> 38,3px / 19,5px, 360px -> 35,3px en tres
+     renglones, 320px -> 34,4px, y en ninguno de los tres el titular desborda
+     (scrollWidth == clientWidth). Los tamaños de desktop no se tocan: estas reglas
+     viven dentro de la media query. */
+  .demo-scroll-dolor__apertura {
+    gap: clamp(30px, 5vh, 52px);
+  }
+
+  .demo-scroll-dolor__apertura-titulo {
+    font-size: clamp(2.15rem, 9.8vw, 2.55rem);
+  }
+
+  .demo-scroll-dolor__apertura-subtitulo {
+    font-size: clamp(1.2rem, 5vw, 1.4rem);
   }
 
   /* RETIRADO (grupo 355, prompt 08): acá el puente bajaba a 70vh en teléfono, para

@@ -89,6 +89,49 @@
 	}
 }
 
+// Entrada propia del TITULAR de la apertura (grupo 369, prompt 01; pedido de Lucas del
+// 5/8/2026: "que aparezca con un zoom in"). Es un @keyframes nuevo y no un ajuste de
+// demo-apertura-entrada de arriba a propósito: esa la comparten la confirmación
+// "armando tu demo" y el resto de la familia, y tocarle la escala o sacarle el blur les
+// cambiaría la entrada a todas. Acá el blur no va -- el desenfoque le come definición
+// justo al zoom, que es lo único que se está mirando en esa primera pantalla. Vive en
+// este archivo compartido por el mismo motivo que la de arriba (un @keyframes dentro de
+// un <style scoped> NO queda acotado al componente).
+@keyframes demo-apertura-zoom {
+	from {
+		opacity: 0;
+		transform: scale(0.86);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
+// Entrada del SUBTÍTULO de la apertura (grupo 369, prompt 01): sube desde abajo, se
+// pasa un poco de su lugar y vuelve. El sobrepaso es de 3px sobre un recorrido de 28px
+// (10,7%) y ahí se queda: es una página seria para un lead que está evaluando un
+// sistema, no un banner -- por encima de ~12% el rebote se lee como un globo de
+// notificación. El rebote lo hacen los pasos y no una curva "back": con las dos cosas a
+// la vez el sobrepaso se multiplica y deja de ser controlable desde acá.
+@keyframes demo-apertura-bounce {
+	0% {
+		opacity: 0;
+		transform: translateY(28px);
+	}
+	55% {
+		opacity: 1;
+		transform: translateY(-3px);
+	}
+	78% {
+		transform: translateY(1px);
+	}
+	100% {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
 // Shimmer de "esto está en curso": una banda de color recorre el elemento en loop.
 // Nació en el <style scoped> de ConfirmacionArmandoDemo.vue (grupo 322, prompt 03)
 // para el título del armado; se muda acá al pasar a usarlo también la pantalla de
