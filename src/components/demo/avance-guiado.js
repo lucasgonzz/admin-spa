@@ -24,11 +24,19 @@
 /* Umbral de un swipe: por debajo de esto el dedo se movió, no gesticuló. */
 const TOUCH_MINIMO_PX = 40
 
-/* Umbral de la rueda. Sin esto, un gesto HORIZONTAL de trackpad con un poco de ruido
-   vertical (deltaX 300, deltaY 4) contaba como gesto vertical y avanzaba una sección
-   entera -- lo encontró el checker del prompt 02. Es el equivalente de
+/* Umbral de la rueda, en PÍXELES. Sin esto, un gesto HORIZONTAL de trackpad con un poco
+   de ruido vertical (deltaX 300, deltaY 4) contaba como gesto vertical y avanzaba una
+   sección entera -- lo encontró el checker del prompt 02. Es el equivalente de
    TOUCH_MINIMO_PX para la rueda, que no tenía ninguno. */
 const WHEEL_MINIMO_PX = 6
+
+/* Cuánto vale una unidad de `deltaY` cuando el evento NO viene en píxeles. Chrome en
+   Windows entrega la rueda en píxeles (deltaMode 0, 100px por muesca) pero Firefox la
+   entrega en LÍNEAS (deltaMode 1, 3 por muesca): comparar ese 3 crudo contra un umbral de
+   6px dejaba el avance guiado mudo con un mouse en Firefox -- lo encontró el re-check del
+   prompt 02. 16px por línea es la altura de línea que usa el propio Firefox para
+   convertir. */
+const PX_POR_LINEA = 16
 
 /* Los elementos que declaran un punto de enganche en el CSS. Es una sola lista porque
    dos preguntas distintas la necesitan: a dónde se puede ir (destinos) y si la sección
@@ -52,6 +60,23 @@ const SILENCIO_ENTRE_GESTOS_MS = 120
    1,25). Sin tolerancia, "el próximo punto hacia abajo" podría ser el punto en el que
    ya estoy. */
 const TOLERANCIA_PX = 2
+
+/**
+ * El `deltaY` de un evento de rueda, en píxeles, sea cual sea la unidad en la que el
+ * navegador lo entregó (`deltaMode`: 0 píxeles, 1 líneas, 2 páginas).
+ *
+ * @param {WheelEvent} evento
+ * @returns {number}
+ */
+function delta_en_px(evento) {
+  if (evento.deltaMode === 1) {
+    return evento.deltaY * PX_POR_LINEA
+  }
+  if (evento.deltaMode === 2) {
+    return evento.deltaY * (window.innerHeight || 800)
+  }
+  return evento.deltaY
+}
 
 /**
  * Teclas que recorren la página. Se interceptan para que avancen DE A UNA sección --
@@ -442,8 +467,9 @@ export default function crear_avance_guiado(scroller) {
     }
 
     /* Umbral: un gesto horizontal de trackpad con ruido vertical no es un gesto
-       vertical. Ver WHEEL_MINIMO_PX. */
-    if (Math.abs(evento.deltaY) < WHEEL_MINIMO_PX) {
+       vertical. Ver WHEEL_MINIMO_PX -- y ojo que el delta hay que llevarlo a píxeles
+       antes de comparar, ver PX_POR_LINEA. */
+    if (Math.abs(delta_en_px(evento)) < WHEEL_MINIMO_PX) {
       return
     }
     const direccion = evento.deltaY > 0 ? 1 : -1
@@ -491,12 +517,13 @@ export default function crear_avance_guiado(scroller) {
     if (touch_y_inicial === null) {
       return
     }
-    /* Segundo dedo en el medio: es un zoom o un arrastre de dos dedos, no un swipe.
-       Se abandona el gesto -- y hay que abandonarlo de verdad, poniendo el inicial en
-       null, porque si no el touchend posterior contaba el recorrido de un dedo y
-       avanzaba una sección ADEMÁS del desplazamiento nativo (lo encontró el checker del
-       prompt 02). */
-    if (evento.touches.length > 1) {
+    /* Un solo dedo o nada. Dos dedos es un zoom o un arrastre, no un swipe: se abandona
+       el gesto -- y hay que abandonarlo de verdad, poniendo el inicial en null, porque si
+       no el touchend posterior contaba el recorrido de un dedo y avanzaba una sección
+       ADEMÁS del desplazamiento nativo (lo encontró el checker del prompt 02). Y cero
+       dedos no debería llegar nunca de un navegador real, pero la comparación exacta
+       cuesta lo mismo que la desigualdad y evita leer `touches[0]` de una lista vacía. */
+    if (evento.touches.length !== 1) {
       touch_y_inicial = null
       return
     }
@@ -538,7 +565,19 @@ export default function crear_avance_guiado(scroller) {
     if (!nuevo) {
       return
     }
-    pedir_avance(recorrido > 0 ? 1 : -1)
+    const direccion = recorrido > 0 ? 1 : -1
+    /* 🔴 La MISMA condición que consultan la rueda, el touchmove y el teclado, y que acá
+       faltaba: lo encontró el re-check del prompt 02. Mientras `hay_a_donde_ir` sólo
+       quería decir "hay sección vecina", omitirla era inofensivo -- si no había vecina,
+       `mover_a` tampoco se movía. Desde que también quiere decir "esta sección todavía
+       tiene contenido sin ver", omitirla dejaba la mitad de la trampa abierta justo en
+       el teléfono: un swipe en el tope del cierre hacía el desplazamiento nativo Y
+       después saltaba al puente, así que los 373px de abajo del cierre seguían
+       inalcanzables. */
+    if (!hay_a_donde_ir(direccion)) {
+      return
+    }
+    pedir_avance(direccion)
   }
 
   /**
