@@ -76,6 +76,21 @@
          llega después, en su propio espacio, sin techo. -->
     <interludio-portal @cierre-visible="emitir_evento_cierre" />
 
+    <!-- La escena nueva (grupo 369, prompt 05). Todavía con progreso FIJO y todavía
+         conviviendo con el interludio de arriba: atarla al scroll y retirar la escena
+         vieja es el prompt 06. El 0.62 es el punto del recorrido donde ya entraron las
+         tarjetas del caos y la succión está empezando -- o sea el cuadro en el que se ve
+         que la escena hace lo que tiene que hacer. -->
+    <fondo-seccion-sticky
+      variante="interludio"
+      :recorrido_vh="420"
+      :snap_progreso="0"
+      :snap_libre_mientras_ocupa="true"
+      :boton_avance="false"
+    >
+      <escena-hero :progreso="0.62" />
+    </fondo-seccion-sticky>
+
     <!-- El cierre, en flujo normal y sin techo de alto. Sin `:style` por progreso, a
          diferencia de los bloques 1-5: no vive dentro de un FondoSeccionSticky, así
          que no hay progreso de sección del que colgarse. Queda visible y estático,
@@ -141,6 +156,7 @@ import MarcoDispositivo from './MarcoDispositivo.vue'
 import PiezaMultimedia from './PiezaMultimedia.vue'
 import FondoSeccionSticky from './FondoSeccionSticky.vue'
 import InterludioPortal from './InterludioPortal.vue'
+import EscenaHero from './EscenaHero.vue'
 
 /**
  * Copy completo del scroll de dolor, transcripto palabra por palabra desde
@@ -413,6 +429,7 @@ export default {
     PiezaMultimedia,
     FondoSeccionSticky,
     InterludioPortal,
+    EscenaHero,
   },
 
   props: {
