@@ -228,7 +228,8 @@ const SOLUCIONES = [
  * -- el caos a la izquierda, la máquina 3D al centro, el orden a la derecha -- movidas
  * por un único progreso [0,1].
  *
- * Reemplaza a InterludioPortal.vue, que se retira en el prompt 06. Lucas la rehízo desde
+ * Reemplaza a la escena anterior -- el portal de arcos SVG que vivía en un componente
+ * propio desde el grupo 325 y que el prompt 06 de este grupo borró. Lucas la rehízo desde
  * cero el 5/8/2026 y la exportó como HTML autocontenido; el export desempaquetado está
  * en `marca/animacion-hero/` del repo de conocimiento, con un README que explica qué NO
  * se copia tal cual.
@@ -313,11 +314,19 @@ export default {
       return
     }
 
+    /* El eje depende del ancho, así que una rotación de teléfono lo cambia y hay que
+       recalcular: la grilla pasa de tres columnas a una y los viajes de cada tarjeta
+       hasta el centro de la máquina son otros (grupo 369, prompt 06, criterio 4). La
+       coreografía tiene además su propio listener de resize para las medidas; este es
+       sólo para el eje. */
+    window.addEventListener('resize', this.revisar_eje, { passive: true })
+
     this.arrancar()
   },
 
   beforeUnmount() {
     this.desmontado = true
+    window.removeEventListener('resize', this.revisar_eje)
     this.apagar()
   },
 
@@ -377,6 +386,22 @@ export default {
     },
 
     /**
+     * @returns {void}
+     */
+    revisar_eje() {
+      this.eje = window.innerWidth <= 767.98 ? 'v' : 'h'
+      if (this.coreografia) {
+        this.coreografia.set_eje(this.eje)
+      }
+    },
+
+    /**
+     * Aplica el progreso. Es PÚBLICO: lo llama el consumidor por `ref` en cada frame de
+     * scroll, en vez de pasarlo como prop reactiva -- una prop que cambia 60 veces por
+     * segundo hace re-renderizar los ~40 nodos de esta escena para nada, porque el
+     * template no depende del progreso (lo que cambia son estilos que la coreografía
+     * escribe a mano).
+     *
      * @param {number} valor
      * @returns {void}
      */

@@ -264,7 +264,7 @@ export default {
 		/* El AVISO va en nextTick, el cálculo de arriba no (grupo 349, prompt 01).
 		 * Vue corre el mounted() del hijo ANTES que el del padre, así que emitir acá
 		 * mismo le llega al consumidor antes de que haya terminado de armarse: en
-		 * InterludioPortal, aplicar_estilos() corría con this.pares todavía en []
+		 * la escena del interludio de entonces, aplicar_estilos() corría con sus pares en []
 		 * -- leer_contrato_svg() se ejecuta en el mounted() del padre -- y la
 		 * coreografía se quedaba sin pose inicial. Un callback de nextTick registrado
 		 * acá corre cuando el flush terminó, o sea después del mounted del padre.

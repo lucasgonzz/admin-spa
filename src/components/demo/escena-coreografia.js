@@ -288,6 +288,24 @@ export function crear_coreografia(raiz, maquina, eje) {
     relayout: layout,
 
     /**
+     * Cambia el eje de entrada de las tarjetas: 'h' desde el costado (desktop), 'v'
+     * desde arriba (teléfono). Recalcula las medidas, porque la disposición de la grilla
+     * cambió con el breakpoint y los viajes hasta el centro de la máquina ya no son los
+     * mismos.
+     *
+     * @param {string} nuevo 'h' | 'v'
+     * @returns {void}
+     */
+    set_eje(nuevo) {
+      const valor = nuevo === 'v' ? 'v' : 'h'
+      if (valor === axis) {
+        return
+      }
+      axis = valor
+      layout()
+    },
+
+    /**
      * @returns {void}
      */
     destruir() {

@@ -61,34 +61,37 @@
       </article>
     </fondo-seccion-sticky>
 
-    <!-- Interludio del portal. El cierre YA NO va adentro (grupo 355, prompt 06):
-         hasta ahora se renderizaba superpuesto sobre la escena (slot #cierre) dentro
-         de una tarjeta acotada a 46vh con scroll propio. Lucas, 5/8/2026: "quiero que
-         la tarjeta no tenga un alto definido y ocupe todo el alto que tenga que
-         ocupar. No quiero que haya un scroll dentro de esa tarjeta".
-         De los dos caminos que daba el prompt se tomó el segundo: el cierre deja de
-         ser un overlay y pasa a ser el tramo siguiente del scroll. El primero -- que
-         el panel entre más arriba y el nombre suba con él -- no cierra: el contenido
-         del cierre en la versión campeón (párrafo largo + pieza multimedia) no entra
-         en una pantalla junto con el anillo, y en teléfono menos todavía. Así el
-         anillo y el nombre se quedan con la escena entera para ellos (el tramo de
-         "nombre solo" pasa de 0.84-0.94 a 0.84-1, más largo que antes) y la tarjeta
-         llega después, en su propio espacio, sin techo. -->
-    <interludio-portal @cierre-visible="emitir_evento_cierre" />
+    <!-- LA ESCENA CENTRAL (grupo 369, prompts 05 y 06). Reemplaza al portal de arcos SVG
+         que vivía acá desde el grupo 325: Lucas la rehízo desde cero el 5/8/2026 ("la
+         idea es reemplazar toda la animación con la nueva") y el componente del portal se
+         borró del repo, no se dejó comentado.
 
-    <!-- La escena nueva (grupo 369, prompt 05). Todavía con progreso FIJO y todavía
-         conviviendo con el interludio de arriba: atarla al scroll y retirar la escena
-         vieja es el prompt 06. El 0.62 es el punto del recorrido donde ya entraron las
-         tarjetas del caos y la succión está empezando -- o sea el cuadro en el que se ve
-         que la escena hace lo que tiene que hacer. -->
+         Las cuatro props son las mismas que tenía el portal y por los mismos motivos:
+         · recorrido_vh 420 -- calibrado en el grupo 348 (prompt 04). El progreso 0→1 se
+           recorre en 320vh, porque el pin ocupa 100vh fijos.
+         · snap_progreso 0 -- el lead tiene que aterrizar con la coreografía SIN empezar,
+           no a mitad de camino ("debería dejar la animación en el punto inicial y ahí sí
+           darle control total al usuario", Lucas, 5/8/2026).
+         · snap_libre_mientras_ocupa -- adentro el scroll es libre, así se recorre la
+           escena a pulso; el avance por gesto (prompt 02) no la intercepta.
+         · boton_avance false -- un botón que se saltea la escena entera contradice todo
+           lo anterior.
+
+         🔴 El progreso NO va por el slot escopeado ni por una prop reactiva: va por el
+         evento y de ahí a un método del hijo, vía ref. Es el mismo motivo por el que el
+         portal lo hacía así (ver FondoSeccionSticky): consumir el progreso desde el
+         template ata cada frame de scroll a un render de Vue, y acá el hijo tiene ~40
+         nodos que no dependen del progreso para nada -- lo único que cambia son estilos
+         que la coreografía escribe a mano. -->
     <fondo-seccion-sticky
       variante="interludio"
       :recorrido_vh="420"
       :snap_progreso="0"
       :snap_libre_mientras_ocupa="true"
       :boton_avance="false"
+      @progreso="on_progreso_escena"
     >
-      <escena-hero :progreso="0.62" />
+      <escena-hero ref="escena_hero" :progreso_amortiguado="true" />
     </fondo-seccion-sticky>
 
     <!-- El cierre, en flujo normal y sin techo de alto. Sin `:style` por progreso, a
@@ -155,7 +158,6 @@
 import MarcoDispositivo from './MarcoDispositivo.vue'
 import PiezaMultimedia from './PiezaMultimedia.vue'
 import FondoSeccionSticky from './FondoSeccionSticky.vue'
-import InterludioPortal from './InterludioPortal.vue'
 import EscenaHero from './EscenaHero.vue'
 
 /**
@@ -323,9 +325,15 @@ const CONTENIDO_POR_PERFIL = {
 }
 
 /* Tramos de la coreografía de cada sección, en unidades de progreso [0,1] (grupo
-   348, prompt 03). Entrada corta, meseta larga, salida corta: la sección está para
-   leerse, no para animarse. El desfasaje de la pieza respecto del texto es el mismo
-   que daba el animation-delay de 0.18s del sistema anterior, traducido a progreso.
+   348, prompt 03). El desfasaje de la pieza respecto del texto es el mismo que daba el
+   animation-delay de 0.18s del sistema anterior, traducido a progreso.
+
+   ⚠️ Hasta el grupo 369 esto decía "entrada corta, meseta larga, salida corta". Con la
+   entrada estirada a 0.42 dejó de ser cierto y hay que decirlo con números: sobre
+   secciones de 160vh son 25,2vh de entrada, 18vh de meseta y 16,8vh de salida, o sea que
+   el tramo más largo pasó a ser la ENTRADA. La meseta sigue alcanzando para leer porque
+   con el avance guiado el lead queda estacionado justo en su comienzo y la sección no se
+   mueve hasta el gesto siguiente.
 
    Grupo 369, prompt 04 (Lucas: "que la animación de cómo están apareciendo los dolores
    sea un poco más lenta para que se aprecie mejor"): la entrada pasa de 0.28 a 0.42, y
@@ -337,7 +345,7 @@ const CONTENIDO_POR_PERFIL = {
    `ENTRADA_FIN × (recorrido_vh − 100)`: con 160vh de sección y 0.28 eran 16,8vh y con
    0.42 son 25,2vh, o sea la mitad más de scroll para el mismo desplazamiento. El
    `− 100` es porque el alto PINNEABLE es el alto de la sección menos la pantalla que
-   ocupa el pin -- el mismo 🔴 que documenta InterludioPortal.vue en su comentario de
+   ocupa el pin -- el mismo 🔴 que documentaba la escena vieja del interludio en su nota de
    `progreso × (recorrido_vh − 100)`, que ya se había hecho mal una vez (grupo 348).
 
    Y con el avance guiado del prompt 02 hay una cuenta más, que es la que importa para lo
@@ -390,8 +398,9 @@ const SALIDA_Y = -48
 const SALIDA_OPACIDAD = 0.35
 
 /**
- * Misma curva que usa InterludioPortal (1 - (1-t)³). Dos curvas distintas en la
- * misma página se notan.
+ * La curva de toda la página: 1 - (1-t)³. La misma que usaba la escena del interludio y
+ * la que usa la coreografía de la escena nueva (out_cubic en escena-coreografia.js). Dos
+ * curvas distintas en la misma página se notan.
  *
  * @param {number} t
  * @returns {number}
@@ -428,7 +437,6 @@ export default {
     MarcoDispositivo,
     PiezaMultimedia,
     FondoSeccionSticky,
-    InterludioPortal,
     EscenaHero,
   },
 
@@ -553,7 +561,7 @@ export default {
   methods: {
     /**
      * Normaliza `p` al rango [0,1] dentro de [inicio, fin] -- misma función que
-     * usa InterludioPortal, para no tener dos formas de recortar tramos.
+     * usa la coreografía de la escena central, para no tener dos formas de recortar tramos.
      *
      * @param {number} p
      * @param {number} inicio
@@ -572,8 +580,9 @@ export default {
 
     /**
      * Estilo de un bloque 1-5 para el progreso `p` de su propia sección. Tres
-     * tramos: entrada (0 -> ENTRADA_FIN, hoy 0.42), meseta (el tramo más largo del
-     * recorrido: la sección está para leerse) y salida parcial (0.72 -> 1).
+     * tramos: entrada (0 -> ENTRADA_FIN, hoy 0.42), meseta (la sección está para leerse
+     * quieta) y salida parcial (0.72 -> 1). Medidos en scroll con las secciones de 160vh:
+     * entrada 25,2vh, meseta 18vh, salida 16,8vh.
      *
      * La salida es PARCIAL a propósito (hasta 0.35 de opacidad, no hasta 0): que
      * el contenido se desvanezca del todo antes de irse de pantalla se lee como
@@ -730,21 +739,36 @@ export default {
     },
 
     /**
-     * Tracking del bloque de cierre (grupo 322, prompt 05): no tiene observador
-     * propio -- lo dispara InterludioPortal cuando su progreso llega a 0.94.
-     * Mismo evento y forma que los bloques 1-5, para no perder cobertura.
+     * El progreso de la sección de la escena central, que hace dos cosas.
      *
-     * Desde el grupo 355 (prompt 06) el cierre ya no está adentro del interludio:
-     * es la sección siguiente. El 0.94 quedó como proxy -- es el mismo punto del
-     * recorrido en el que antes empezaba a asomar la tarjeta, pero ahora se
-     * adelanta ~30vh de scroll a que se vea de verdad. Si algún día el dato tiene
-     * que ser exacto, lo correcto es un IntersectionObserver sobre .demo-cierre,
-     * que ahora existe como sección propia.
+     * 1. Mover la escena. Se le pasa al hijo por un método y no por una prop reactiva:
+     *    ver el comentario del template.
      *
+     * 2. Disparar el tracking del bloque de cierre, que no tiene observador propio
+     *    (grupo 322, prompt 05). Lo disparaba la escena vieja del interludio al llegar su
+     *    progreso a 0.94; con el portal borrado (grupo 369, prompt 06) se muda acá,
+     *    con el MISMO umbral, para no perder cobertura ni cambiar el significado del
+     *    dato en el medio de una migración.
+     *    El 0.94 es un proxy desde el grupo 355 (prompt 06), cuando el cierre dejó de
+     *    estar adentro de la escena y pasó a ser la sección siguiente: se adelanta ~30vh
+     *    de scroll a que la tarjeta se vea de verdad. Si algún día el dato tiene que ser
+     *    exacto, lo correcto es un IntersectionObserver sobre .demo-cierre, que existe
+     *    como sección propia.
+     *
+     * @param {number} p Progreso [0,1] de la sección, ya amortiguado por el componente.
      * @returns {void}
      */
-    emitir_evento_cierre() {
-      this.emitir_evento('scroll_bloque_visible', { bloque_id: this.contenido.cierre.id, perfil: this.perfil })
+    on_progreso_escena(p) {
+      if (this.$refs.escena_hero) {
+        this.$refs.escena_hero.aplicar_progreso(p)
+      }
+      if (p >= 0.94 && !this.bloques_trackeados[this.contenido.cierre.id]) {
+        this.bloques_trackeados[this.contenido.cierre.id] = true
+        this.emitir_evento('scroll_bloque_visible', {
+          bloque_id: this.contenido.cierre.id,
+          perfil: this.perfil,
+        })
+      }
     },
 
   },
