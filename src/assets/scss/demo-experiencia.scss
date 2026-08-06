@@ -132,6 +132,31 @@
 	}
 }
 
+// Latido del botón de avance de sección (grupo 369, prompt 03). Un ciclo de 2s, 4px de
+// movimiento vertical y la opacidad entre 0,55 y 0,9: se tiene que leer como una
+// invitación, no como algo que parpadea. Si al mirarlo parece un elemento titilando,
+// está de más -- por eso el rango de opacidad no baja de 0,55 (un fundido a casi cero es
+// lo que produce el efecto de parpadeo) y el desplazamiento es de píxeles, no de
+// porcentajes.
+// Vive acá y no en el <style scoped> de FondoSeccionSticky por el mismo motivo que las
+// otras: un @keyframes declarado dentro de un scoped style NO queda acotado a ese
+// componente (Vue solo le agrega el atributo data-v-* a los selectores, nunca al nombre
+// del @keyframes).
+@keyframes demo-latido-avance {
+	0% {
+		opacity: 0.55;
+		transform: translate(-50%, 0);
+	}
+	50% {
+		opacity: 0.9;
+		transform: translate(-50%, 4px);
+	}
+	100% {
+		opacity: 0.55;
+		transform: translate(-50%, 0);
+	}
+}
+
 // Shimmer de "esto está en curso": una banda de color recorre el elemento en loop.
 // Nació en el <style scoped> de ConfirmacionArmandoDemo.vue (grupo 322, prompt 03)
 // para el título del armado; se muda acá al pasar a usarlo también la pantalla de

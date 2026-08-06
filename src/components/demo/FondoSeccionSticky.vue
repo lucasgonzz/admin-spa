@@ -24,11 +24,42 @@
 			<div class="demo-fondo-seccion__contenido">
 				<slot :progreso="progreso" />
 			</div>
+
+			<!-- Botón de avance (grupo 369, prompt 03). Va DENTRO del pin y no en cada
+			     consumidor: así aparece en toda sección sin repetirlo seis veces. Y es un
+			     <button> de verdad, no un div con @click: tiene que poder pulsarse con
+			     Enter y con Espacio y que un lector de pantalla lo anuncie. -->
+			<button
+				v-if="mostrar_boton"
+				type="button"
+				class="demo-fondo-seccion__avance"
+				aria-label="Ir a la siguiente sección"
+				@click="avanzar_seccion"
+			>
+				<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+					<path
+						d="M6 9.5 12 15.5 18 9.5"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/>
+				</svg>
+			</button>
 		</div>
 	</section>
 </template>
 
 <script>
+/* Tolerancia para decidir si la sección ocupa la pantalla. Chrome redondea el offset de
+   scroll a PÍXELES DE DISPOSITIVO, así que después de un enganche el borde de la sección
+   queda a una fracción de píxel del tope y una comparación exacta no se cumple nunca --
+   el detalle medido está en el comentario largo de revisar_snap_libre(). La usan las dos
+   cosas que preguntan "¿esta sección está encuadrada?": la suspensión del snap y la
+   visibilidad del botón de avance. */
+const TOLERANCIA_PX = 2
+
 /**
  * Wrapper reutilizable de "scroll pinning" (grupo 322, prompt 01): envuelve una sección
  * del scroll de la página inmersiva de demo con un fondo generado por CSS que queda
@@ -116,6 +147,27 @@ export default {
 			type: Boolean,
 			default: false,
 		},
+		/**
+		 * false en las secciones que NO llevan el botón de avance (grupo 369, prompt
+		 * 03). Hoy solo el interludio: ahí el scroll es libre a propósito y un botón que
+		 * se saltea la escena entera contradice exactamente eso.
+		 *
+		 * No hace falta apagarlo en la última sección del recorrido: eso lo resuelve
+		 * solo `hay_siguiente()` del avance guiado, que es el que sabe si queda algún
+		 * destino más abajo.
+		 */
+		boton_avance: {
+			type: Boolean,
+			default: true,
+		},
+	},
+
+	/* El avance guiado lo provee ExperienciaDemo.vue. `default: null` para que este
+	   componente siga sirviendo fuera de esa página: sin avance, no hay botón. */
+	inject: {
+		avance_guiado: {
+			default: null,
+		},
 	},
 
 	emits: ['progreso'],
@@ -141,7 +193,33 @@ export default {
 			/** true en las secciones que suspenden el avance guiado mientras están a la
 			 *  vista (punto_snap:false, hoy solo el interludio). */
 			vigila_snap: false,
+			/**
+			 * true mientras ESTA sección ocupa la pantalla (grupo 369, prompt 03). De
+			 * esto depende que se vea su botón de avance: si el botón se atara solo a
+			 * estar montado, scrolleando rápido quedarían seis botones flotando a la vez
+			 * -- dos pines pueden estar parcialmente visibles durante la transición.
+			 */
+			seccion_encuadrada: false,
+			/**
+			 * true si el avance guiado tiene algún destino más abajo. Se refresca cuando
+			 * la sección se encuadra, no en cada frame: es una consulta al DOM.
+			 */
+			queda_siguiente: false,
 		}
+	},
+
+	computed: {
+		/**
+		 * @returns {boolean}
+		 */
+		mostrar_boton() {
+			return !!(
+				this.boton_avance &&
+				this.avance_guiado &&
+				this.seccion_encuadrada &&
+				this.queda_siguiente
+			)
+		},
 	},
 
 	mounted() {
@@ -153,12 +231,20 @@ export default {
 
 		if (this.reduced_motion) {
 			/* Sin listener de scroll registrado: el progreso queda en 0 y cada hijo
-			 * animado aplica su propio estado estático final (aplicar_estilos_estatico). */
+			 * animado aplica su propio estado estático final (aplicar_estilos_estatico).
+			 *
+			 * El botón de avance sí tiene que estar (grupo 369, prompt 03): sin listener
+			 * no hay forma de saber cuándo la sección se encuadra, y bajo esta preferencia
+			 * los pines pasan a `position: static`, así que cada sección ocupa su propio
+			 * tramo del documento y nunca hay dos a la vista. Se da por encuadrada. */
+			this.seccion_encuadrada = true
+			this.revisar_siguiente()
 			return
 		}
 
 		this.scroll_target = this.encontrar_ancestro_scroll()
 		this.vigilar_seccion_sin_snap()
+		this.revisar_encuadre()
 
 		/* Cálculo inicial real (no arrancar en p=0 a ciegas): si la página carga con
 		 * esta sección ya parcialmente scrolleada (recarga a media página). Acá el
@@ -287,11 +373,70 @@ export default {
 			 * combinaciones, incluidas varias a dpr 1. El residuo máximo medido fue
 			 * 0,44px y el techo teórico es un píxel de dispositivo (1/dpr), así que 2px
 			 * cubre todos los casos; el falso positivo más cercano -- que el snap se
-			 * suspendiera estando parado en otra sección -- queda a 715px. */
-			const TOLERANCIA_PX = 2
+			 * suspendiera estando parado en otra sección -- queda a 715px.
+			 *
+			 * La constante se mudó al ámbito del módulo (grupo 369, prompt 03): la misma
+			 * pregunta la hace ahora la visibilidad del botón de avance. */
 			this.alternar_snap_libre(
 				rect.top <= TOLERANCIA_PX && rect.bottom >= alto_visible - TOLERANCIA_PX
 			)
+		},
+
+		/**
+		 * Actualiza si esta sección ocupa la pantalla, que es lo que decide si se ve su
+		 * botón de avance (grupo 369, prompt 03). Mismo criterio y misma tolerancia que
+		 * revisar_snap_libre -- es la misma pregunta -- pero se resuelve para TODA
+		 * sección, no solo para la del interludio.
+		 *
+		 * Un rect por evento de scroll y por sección. Se prefiere eso a un
+		 * IntersectionObserver por el mismo motivo que allá abajo: el observer no entrega
+		 * nada en una pestaña que no se está renderizando, y el lead que vuelve a la
+		 * pestaña se encontraría el botón en el estado equivocado.
+		 *
+		 * @returns {void}
+		 */
+		revisar_encuadre() {
+			if (!this.boton_avance || !this.avance_guiado || !this.$refs.seccion) {
+				return
+			}
+			const rect = this.$refs.seccion.getBoundingClientRect()
+			const alto_visible =
+				this.scroll_target && this.scroll_target !== window
+					? this.scroll_target.clientHeight
+					: window.innerHeight
+			const encuadrada = rect.top <= TOLERANCIA_PX && rect.bottom >= alto_visible - TOLERANCIA_PX
+
+			if (encuadrada === this.seccion_encuadrada) {
+				return
+			}
+			this.seccion_encuadrada = encuadrada
+			if (encuadrada) {
+				this.revisar_siguiente()
+			}
+		},
+
+		/**
+		 * Le pregunta al avance guiado si queda alguna sección más abajo. Es lo que hace
+		 * que el botón no aparezca en la última del recorrido, sin que este componente
+		 * tenga que saber cuántas secciones hay ni en qué orden.
+		 *
+		 * @returns {void}
+		 */
+		revisar_siguiente() {
+			this.queda_siguiente = !!(this.avance_guiado && this.avance_guiado.hay_siguiente())
+		},
+
+		/**
+		 * El botón dispara EL MISMO avance que un gesto de scroll: mismo cerrojo y misma
+		 * cola de uno, así que pulsarlo diez veces seguidas no salta diez secciones
+		 * (criterio 3 del prompt 03).
+		 *
+		 * @returns {void}
+		 */
+		avanzar_seccion() {
+			if (this.avance_guiado) {
+				this.avance_guiado.avanzar(1)
+			}
 		},
 
 		/**
@@ -340,6 +485,7 @@ export default {
 		 */
 		on_scroll() {
 			this.revisar_snap_libre()
+			this.revisar_encuadre()
 			this.arrancar_bucle()
 		},
 
@@ -514,5 +660,60 @@ export default {
 	max-width: none;
 	height: 100%;
 	padding: 0;
+}
+
+/* Botón de avance (grupo 369, prompt 03). Sutil: un chevron fino en el tono suave de la
+   paleta dentro de un círculo apenas insinuado. Sin sombra, sin relleno de color, sin
+   texto -- si se nota más que el contenido de la sección, está mal.
+
+   44x44 REALES y no un círculo chico con área de toque aparte: es el mismo número que
+   pide la guía de accesibilidad para el dedo, y la mayoría de los leads entra desde el
+   teléfono. El z-index 2 lo pone por encima del contenido (que es 1) pero el botón vive
+   abajo al centro, donde ninguna de las siete secciones dibuja nada clickeable. */
+.demo-fondo-seccion__avance {
+	position: absolute;
+	z-index: 2;
+	left: 50%;
+	bottom: clamp(20px, 4vh, 40px);
+	transform: translateX(-50%);
+	width: 44px;
+	height: 44px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	border: 1px solid rgba(86, 96, 120, 0.28);
+	border-radius: 50%;
+	background: rgba(255, 255, 255, 0.42);
+	color: var(--demo-color-texto-suave);
+	cursor: pointer;
+	animation: demo-latido-avance 2s ease-in-out infinite;
+	transition: opacity 0.2s ease, border-color 0.2s ease;
+}
+
+/* Al pasar el mouse el latido se detiene y el botón se afirma: deja de invitar porque
+   el lead ya lo encontró. */
+.demo-fondo-seccion__avance:hover {
+	animation-play-state: paused;
+	opacity: 1;
+	border-color: rgba(86, 96, 120, 0.55);
+}
+
+/* Foco visible, y no el outline del navegador: el anillo de la marca, y con la misma
+   forma redonda del botón. */
+.demo-fondo-seccion__avance:focus-visible {
+	animation-play-state: paused;
+	opacity: 1;
+	outline: none;
+	box-shadow: 0 0 0 3px rgba(11, 132, 248, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	/* Quieto y visible: el latido es exactamente el tipo de movimiento en bucle que esta
+	   preferencia pide evitar. */
+	.demo-fondo-seccion__avance {
+		animation: none;
+		opacity: 1;
+	}
 }
 </style>

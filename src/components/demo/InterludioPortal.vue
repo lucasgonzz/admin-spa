@@ -25,6 +25,7 @@
 		:recorrido_vh="420"
 		:snap_progreso="0"
 		:snap_libre_mientras_ocupa="true"
+		:boton_avance="false"
 		@progreso="on_progreso"
 	>
 		<div ref="contenedor" class="demo-interludio">

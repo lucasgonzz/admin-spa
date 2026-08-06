@@ -238,6 +238,42 @@ export default {
     this.cargar_experiencia()
   },
 
+  /**
+   * El avance guiado, para los descendientes que lo necesitan (grupo 369, prompt 03: el
+   * botón de "siguiente sección" que vive dentro de cada FondoSeccionSticky).
+   *
+   * Se provee un envoltorio y no `this.avance` directo por dos razones: el controlador
+   * se crea y se destruye con la vista, así que un valor provisto una sola vez quedaría
+   * viejo o nulo; y así el botón depende de dos métodos con nombre en vez de del objeto
+   * entero. Lo importante es que el botón entra por el MISMO avance que un gesto -- con
+   * su cerrojo y su cola --, no por una implementación paralela.
+   *
+   * @returns {object}
+   */
+  provide() {
+    const self = this
+    return {
+      avance_guiado: {
+        /**
+         * @param {number} direccion 1 hacia abajo, -1 hacia arriba.
+         * @returns {void}
+         */
+        avanzar(direccion) {
+          if (self.avance) {
+            self.avance.avanzar(direccion)
+          }
+        },
+
+        /**
+         * @returns {boolean}
+         */
+        hay_siguiente() {
+          return self.avance ? self.avance.hay_siguiente() : false
+        },
+      },
+    }
+  },
+
   computed: {
     /**
      * true cuando lo que está en pantalla es el RECORRIDO (scroll de dolor +
