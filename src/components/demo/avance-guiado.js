@@ -83,20 +83,15 @@ const TECLAS_AVANCE = {
  * @returns {boolean}
  */
 function es_elemento_interactivo(destino) {
-  if (!destino || !destino.tagName) {
+  if (!destino || !destino.closest) {
     return false
   }
-  const etiqueta = destino.tagName.toLowerCase()
-  if (
-    etiqueta === 'input' ||
-    etiqueta === 'textarea' ||
-    etiqueta === 'select' ||
-    etiqueta === 'button' ||
-    etiqueta === 'a'
-  ) {
-    return true
-  }
-  if (destino.getAttribute && destino.getAttribute('role') === 'button') {
+  /* `closest` y no el `tagName` del target exacto, que es lo que había: un evento nacido
+     en el <svg> o el <path> de adentro de un botón tenía el svg como target y se
+     interceptaba igual (lo marcó el checker del prompt 03, que además logró disparar un
+     avance con el svg como target). Hoy eso es difícil de alcanzar por teclado, pero
+     preguntar por el ancestro es la pregunta correcta y cuesta lo mismo. */
+  if (destino.closest('input, textarea, select, button, a, [role="button"], [contenteditable]')) {
     return true
   }
   return !!destino.isContentEditable

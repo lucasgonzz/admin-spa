@@ -303,12 +303,19 @@ export default {
      */
     recorrido_visible(visible) {
       if (visible) {
-        /* En nextTick: las secciones se montan en el mismo flush que apagó `loading`,
-           y el controlador necesita el DOM puesto para leer los puntos de enganche. */
-        const self = this
-        this.$nextTick(function () {
-          self.crear_avance()
-        })
+        /* 🔴 SINCRÓNICO, no en `$nextTick`, y esto lo encontró el checker del prompt 03.
+           El controlador no necesita el DOM para nacer: sólo el scroller, que existe
+           desde el mounted de esta vista -- los puntos de enganche los lee en cada
+           gesto, no al crearse. Con el `$nextTick` que había acá, en cambio, el
+           callback se engancha al flush en curso y los `mounted()` de las secciones
+           corren ANTES, así que cada FondoSeccionSticky preguntaba "¿queda alguna
+           sección más abajo?" cuando todavía no había controlador: la respuesta era
+           false, quedaba cacheada, y el botón de avance no aparecía en la apertura
+           hasta que el lead se iba a otra sección y volvía. O sea: no lo veía justo el
+           lead que no sabe scrollear, que es para quien existe el botón.
+           Este watcher es pre-flush, así que crear acá es crear antes de que las
+           secciones se monten. */
+        this.crear_avance()
         return
       }
       this.destruir_avance()

@@ -232,15 +232,20 @@ export default {
 		)
 
 		if (this.reduced_motion) {
-			/* Sin listener de scroll registrado: el progreso queda en 0 y cada hijo
-			 * animado aplica su propio estado estático final (aplicar_estilos_estatico).
+			/* Sin bucle de rAF y sin progreso: el progreso queda en 0 y cada hijo animado
+			 * aplica su propio estado estático final (aplicar_estilos_estatico).
 			 *
-			 * El botón de avance sí tiene que estar (grupo 369, prompt 03): sin listener
-			 * no hay forma de saber cuándo la sección se encuadra, y bajo esta preferencia
-			 * los pines pasan a `position: static`, así que cada sección ocupa su propio
-			 * tramo del documento y nunca hay dos a la vista. Se da por encuadrada. */
-			this.seccion_encuadrada = true
-			this.revisar_siguiente()
+			 * 🔴 Pero SÍ se escucha el scroll, sólo para el encuadre del botón de avance.
+			 * La primera versión de esto daba la sección por encuadrada y listo, y estaba
+			 * mal por dos motivos que midió el checker del prompt 03: las ocho secciones
+			 * quedaban encuadradas para siempre (o sea siete botones a la vez, justo el
+			 * invariante que el botón viene a defender), y encima ninguno se veía --
+			 * `revisar_siguiente()` corría antes de que existiera el controlador. Un
+			 * listener pasivo que hace un rect por evento es más barato que las dos cosas
+			 * que arregla. */
+			this.scroll_target = this.encontrar_ancestro_scroll()
+			this.revisar_encuadre()
+			this.scroll_target.addEventListener('scroll', this.revisar_encuadre, { passive: true })
 			return
 		}
 
@@ -280,6 +285,8 @@ export default {
 	beforeUnmount() {
 		if (this.scroll_target) {
 			this.scroll_target.removeEventListener('scroll', this.on_scroll)
+			/* El de reduced-motion: si no se registró, sacarlo no hace nada. */
+			this.scroll_target.removeEventListener('scroll', this.revisar_encuadre)
 		}
 		window.removeEventListener('resize', this.on_scroll)
 
@@ -409,6 +416,17 @@ export default {
 			const encuadrada = rect.top <= TOLERANCIA_PX && rect.bottom >= alto_visible - TOLERANCIA_PX
 
 			if (encuadrada === this.seccion_encuadrada) {
+				/* Sin cambio de encuadre no hay nada que hacer, con UNA excepción: si la
+				 * bandera quedó en false estando encuadrada, se reintenta. Es la red del
+				 * bug que encontró el checker del prompt 03 -- una respuesta "no queda
+				 * sección siguiente" dada antes de que existiera el controlador quedaba
+				 * cacheada para siempre. La causa está arreglada donde se crea el
+				 * controlador; esto es para que ningún orden de montaje futuro pueda dejar
+				 * al botón invisible sin que nada avise. Sólo corre mientras la respuesta
+				 * es false, así que en el camino normal no cuesta nada. */
+				if (encuadrada && !this.queda_siguiente) {
+					this.revisar_siguiente()
+				}
 				return
 			}
 			this.seccion_encuadrada = encuadrada
@@ -693,10 +711,17 @@ export default {
 	transition: opacity 0.2s ease, border-color 0.2s ease;
 }
 
-/* Al pasar el mouse el latido se detiene y el botón se afirma: deja de invitar porque
-   el lead ya lo encontró. */
+/* Al pasar el mouse el latido se corta y el botón se afirma: deja de invitar porque el
+   lead ya lo encontró.
+
+   🔴 `animation: none` y NO `animation-play-state: paused`, que es lo que había y no
+   funcionaba (lo marcó el checker del prompt 03): mientras la animación existe, sus
+   valores le ganan en la cascada a cualquier declaración de autor, así que el `opacity: 1`
+   de acá no se aplicaba nunca -- el botón quedaba congelado donde estuviera, capaz 4px
+   más abajo y al 55% de opacidad. Sacando la animación, el botón vuelve a su posición y
+   opacidad base, que es exactamente "afirmarse". */
 .demo-fondo-seccion__avance:hover {
-	animation-play-state: paused;
+	animation: none;
 	opacity: 1;
 	border-color: rgba(86, 96, 120, 0.55);
 }
@@ -704,7 +729,7 @@ export default {
 /* Foco visible, y no el outline del navegador: el anillo de la marca, y con la misma
    forma redonda del botón. */
 .demo-fondo-seccion__avance:focus-visible {
-	animation-play-state: paused;
+	animation: none;
 	opacity: 1;
 	outline: none;
 	box-shadow: 0 0 0 3px rgba(11, 132, 248, 0.35);
@@ -712,10 +737,19 @@ export default {
 
 @media (prefers-reduced-motion: reduce) {
 	/* Quieto y visible: el latido es exactamente el tipo de movimiento en bucle que esta
-	   preferencia pide evitar. */
+	   preferencia pide evitar.
+
+	   🔴 Y `position: fixed`, no absolute. Bajo esta preferencia el pin pasa a
+	   `position: static !important` (demo-experiencia.scss), así que el contenedor de
+	   bloque del botón dejaría de ser el pin y pasaría a ser la sección entera, de 160vh:
+	   un `bottom` lo depositaba unos 60vh por debajo del contenido, fuera de pantalla
+	   (medido por el checker del prompt 03). Fijo al viewport queda siempre a la vista, y
+	   no hay riesgo de ver dos: el encuadre exige que la sección ocupe la pantalla
+	   entera, y eso sólo lo puede cumplir una a la vez. */
 	.demo-fondo-seccion__avance {
 		animation: none;
 		opacity: 1;
+		position: fixed;
 	}
 }
 </style>
