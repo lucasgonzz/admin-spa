@@ -285,6 +285,8 @@ export default {
       eje: 'h',
       /** true si el sistema pide reduced-motion. */
       reduced_motion: false,
+      /** El IntersectionObserver que espera a que la sección se acerque, o null. */
+      observador: null,
     }
   },
 
@@ -321,16 +323,59 @@ export default {
        sólo para el eje. */
     window.addEventListener('resize', this.revisar_eje, { passive: true })
 
-    this.arrancar()
+    this.arrancar_cuando_se_acerque()
   },
 
   beforeUnmount() {
     this.desmontado = true
     window.removeEventListener('resize', this.revisar_eje)
+    if (this.observador) {
+      this.observador.disconnect()
+      this.observador = null
+    }
     this.apagar()
   },
 
   methods: {
+    /**
+     * Pide el chunk de la escena 3D recién cuando la sección se acerca, no al montar.
+     *
+     * 🔴 El chunk son 538 kB y esta es una página pública que la mayoría de los leads abre
+     * desde el teléfono. Que viaje aparte del bundle inicial (import dinámico) evita que
+     * BLOQUEE la primera pantalla, pero no evita que se descargue junto con ella: este
+     * componente vive dentro del slot de una sección que se renderiza siempre, así que
+     * arrancar en el `mounted()` pedía el medio megabyte de entrada -- lo marcó el checker
+     * del prompt 05, y es el objetivo de fondo del §1 de ese prompt, no sólo su criterio.
+     * Con un margen de una pantalla entera, la escena ya está lista bastante antes de que
+     * el lead llegue.
+     *
+     * Si no hay IntersectionObserver, se arranca de una: es preferible el comportamiento
+     * de antes a no tener escena.
+     *
+     * @returns {void}
+     */
+    arrancar_cuando_se_acerque() {
+      if (typeof window === 'undefined' || !window.IntersectionObserver || !this.$refs.raiz) {
+        this.arrancar()
+        return
+      }
+      const self = this
+      this.observador = new window.IntersectionObserver(
+        function (entradas) {
+          if (!entradas.length || !entradas[0].isIntersecting) {
+            return
+          }
+          if (self.observador) {
+            self.observador.disconnect()
+            self.observador = null
+          }
+          self.arrancar()
+        },
+        { rootMargin: '100% 0px' }
+      )
+      this.observador.observe(this.$refs.raiz)
+    },
+
     /**
      * Carga la escena 3D y arranca la coreografía.
      *
@@ -912,16 +957,92 @@ export default {
    archivo HTML); acá es la misma escena con el eje 'v' de la coreografía, que hace entrar
    las tarjetas desde abajo en vez de desde el costado. */
 @media (max-width: 767.98px) {
+  /* 🔴 Las tres filas van con TAMAÑO EXPLÍCITO y `minmax(0, ...)`, y esto no es
+     cosmético: la primera versión de este bloque usaba `auto minmax(0,1fr) auto` y el
+     checker midió el resultado -- la máquina (fila `auto`, 28vh) y las soluciones (fila
+     `auto`, 511px de seis tarjetas) se comían el viewport entero y a la fila del medio,
+     la del caos, le quedaban 10px de alto. Con dos `auto` peleando contra un `1fr`, el
+     `1fr` pierde siempre. Acá la máquina tiene techo y las dos zonas de tarjetas se
+     reparten lo que sobra en partes iguales. */
   .hero-escena {
     grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    gap: clamp(10px, 2vh, 20px);
-    padding: clamp(16px, 4vh, 32px) 20px clamp(64px, 10vh, 88px);
+    /* 20vh para la máquina y el resto en partes iguales. Medido a 390x844 con el CSS
+       compilado: la escena entra en los 844 exactos y las cuatro filas de tarjetas del
+       caos (240px) caben en su zona sin pisar la de las soluciones. */
+    grid-template-rows: minmax(0, 20vh) minmax(0, 1fr) minmax(0, 1fr);
+    gap: clamp(6px, 1vh, 12px);
+    padding: clamp(12px, 2.5vh, 24px) 16px clamp(60px, 9vh, 80px);
   }
 
   .hero-escena__core {
     order: -1;
-    min-height: 28vh;
+    min-height: 0;
+    gap: 6px;
+  }
+
+  .hero-escena__side {
+    min-height: 0;
+  }
+
+  /* 🔴 El campo del caos pasa de flex a GRID de dos columnas. En flex, las dos columnas
+     (`flex: 1; min-width: 0`) se achicaban a 0 en cuanto otro ítem del contenedor pedía
+     ancho -- que es exactamente lo que pasaba con la frase de abajo -- y las siete
+     tarjetas quedaban de 22px de ancho, con el texto apilado de a un carácter por línea
+     (medido por el checker a 390 y a 767 de ancho). Con `1fr 1fr` el ancho de cada
+     columna no depende de qué más haya adentro. */
+  .hero-escena__field {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+    gap: 8px;
+    padding-top: 4px;
+  }
+
+  /* Y la frase sigue FUERA DE FLUJO, como en desktop. Volverla `position: static` acá
+     era la otra mitad del bug: pasaba a ser un ítem más del contenedor y se llevaba 326
+     de los 350px de ancho. Tiene que superponerse a las tarjetas a propósito -- aparece
+     cuando el caos ya fue succionado y ya no hay nada abajo que tapar. */
+  .hero-escena__resolve {
+    right: 4%;
+    top: 18%;
+    font-size: clamp(19px, 5.6vw, 26px);
+  }
+
+  .hero-escena__chaos-col--b {
+    padding-top: 0;
+  }
+
+  .hero-escena__chaos-col {
+    gap: 6px;
+  }
+
+  .hero-escena__p-card {
+    padding: 6px 8px 7px;
+  }
+
+  /* En teléfono las tarjetas se quedan con la etiqueta y el título: el renglón de
+     detalle no entra sin achicar la tipografía a un tamaño en el que no se lee. El
+     detalle no es información nueva, es una aclaración de la misma idea. */
+  .hero-escena__p-card p,
+  .hero-escena__s-card p {
+    display: none;
+  }
+
+  .hero-escena__p-card h3 {
+    font-size: 12px;
+  }
+
+  .hero-escena__s-card h3 {
+    font-size: 13px;
+  }
+
+  .hero-escena__s-card {
+    padding: 8px 10px;
+  }
+
+  .hero-escena__s-grid {
+    gap: 8px;
+    align-content: start;
   }
 
   .hero-escena__side--right .hero-escena__side-head {
@@ -934,14 +1055,18 @@ export default {
     text-align: left;
   }
 
+  /* El comerciante se queda (es medio mensaje de cada lado) pero chico, y su nota se va:
+     a este ancho competiría por el lugar de las tarjetas, que son lo que hay que leer. */
   .hero-escena__person-row {
-    height: clamp(64px, 11vh, 110px);
+    height: clamp(44px, 6.5vh, 64px);
   }
 
-  .hero-escena__resolve {
-    position: static;
-    right: auto;
-    margin-bottom: 8px;
+  .hero-escena__person-note {
+    display: none;
+  }
+
+  .hero-escena__footer {
+    padding-bottom: clamp(70px, 8vh, 84px);
   }
 }
 
@@ -956,9 +1081,15 @@ export default {
     transform: none;
   }
 
+  /* 🔴 La frase se ESCONDE, no se muestra. La primera versión la ponía a opacidad 1 junto
+     con las tarjetas y el checker midió el resultado: el titular de 34px se dibujaba
+     encima del texto de tres tarjetas de problema, que también estaban a opacidad 1. Y no
+     es un problema de posición sino de sentido: la frase existe para aparecer DESPUÉS de
+     que el caos se ordenó (`opacity: var(--calm)`), o sea cuando abajo ya no hay nada.
+     En un estado estático las dos cosas no pueden convivir, y lo que el prompt pide que
+     quede legible son las tarjetas. */
   .hero-escena__resolve {
-    opacity: 1;
-    transform: none;
+    display: none;
   }
 
   .hero-escena__side--left .hero-escena__person,

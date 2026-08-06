@@ -78,6 +78,21 @@ function pixel_ratio() {
 }
 
 /**
+ * true si el navegador puede crear un contexto WebGL. Sobre un canvas descartable: ver el
+ * comentario de crear_maquina().
+ *
+ * @returns {boolean}
+ */
+function hay_webgl() {
+  try {
+    const prueba = document.createElement('canvas')
+    return !!(prueba.getContext('webgl2') || prueba.getContext('webgl'))
+  } catch (error) {
+    return false
+  }
+}
+
+/**
  * Crea la escena 3D sobre `canvas`.
  *
  * @param {HTMLCanvasElement} canvas
@@ -86,6 +101,17 @@ function pixel_ratio() {
  *          estático y no hay error en consola.
  */
 export function crear_maquina(canvas) {
+  /* 🔴 Se SONDEA el soporte antes de construir el renderer, y el sondeo va sobre un canvas
+     descartable. Con el try/catch a secas el criterio de "consola limpia" no se cumplía:
+     WebGLRenderer escribe `console.error: THREE.WebGLRenderer: Error creating WebGL
+     context.` ANTES de lanzar la excepción, así que atraparla no evitaba el error en
+     consola -- lo midió el checker del prompt 05, en una página pública. El canvas del
+     sondeo es otro para no dejarle al de la escena un contexto ya creado con opciones
+     distintas de las que pide three. */
+  if (!hay_webgl()) {
+    return null
+  }
+
   let renderer = null
   try {
     renderer = new THREE.WebGLRenderer({
@@ -456,7 +482,12 @@ export function crear_maquina(canvas) {
   lights()
   const root = build_machine()
   scene.add(root)
-  const clock = new THREE.Clock()
+  /* El export usaba `new THREE.Clock()`, que en three 0.184 está deprecado y escribe un
+     warning en consola por cada escena creada (medido por el checker del prompt 05: uno
+     por montaje, en una página pública). No se cambia por THREE.Timer, que tiene otra
+     API: lo único que se le pedía al Clock era el tiempo transcurrido en segundos, y eso
+     es una resta. */
+  const arranque_ms = window.performance.now()
 
   /**
    * @returns {void}
@@ -484,7 +515,7 @@ export function crear_maquina(canvas) {
     if (destruido) {
       return
     }
-    const t = clock.getElapsedTime()
+    const t = (window.performance.now() - arranque_ms) / 1000
     const spin = 0.5 + suck * 5
     gears.forEach(function (m) {
       m.rotation.z += m.userData.spd * spin * 0.016
