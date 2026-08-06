@@ -118,6 +118,7 @@ import PantallaCargaMarca from '@/components/demo/PantallaCargaMarca.vue'
 import BotonAcceso from '@/components/demo/BotonAcceso.vue'
 import MarcoDispositivo from '@/components/demo/MarcoDispositivo.vue'
 import PiezaMultimedia from '@/components/demo/PiezaMultimedia.vue'
+import crear_avance_guiado from '@/components/demo/avance-guiado'
 // Hoja de estilos acotada a esta página (variables de marca, marcos de
 // dispositivo, placeholder, animación de scroll). Al importarse solo acá,
 // queda dentro del chunk lazy de la ruta /experiencia/:uuid y nunca se
@@ -218,6 +219,12 @@ export default {
       /** El contenedor con scroll real del admin, mientras esta página está montada. */
       scroller: null,
       /**
+       * El controlador de avance por gesto (grupo 369, prompt 02), o null cuando el
+       * recorrido no está en pantalla. Ver crear_avance() y el comentario de
+       * recorrido_visible: vive SOLO mientras hay secciones con punto de enganche.
+       */
+      avance: null,
+      /**
        * Valor de overflow-y que tenía el scroller antes de que la secuencia de la
        * confirmación lo bloqueara; null cuando no hay bloqueo puesto. Ver
        * bloquear_scroll().
@@ -231,6 +238,47 @@ export default {
     this.cargar_experiencia()
   },
 
+  computed: {
+    /**
+     * true cuando lo que está en pantalla es el RECORRIDO (scroll de dolor +
+     * formulario), que es lo único que tiene secciones con punto de enganche.
+     *
+     * 🔴 De esto depende que el avance por gesto exista o no, y no es un detalle: el
+     * controlador intercepta el `wheel` con `preventDefault()`, así que si estuviera
+     * vivo en la vista POSTERIOR al formulario -- confirmación + video + botón de
+     * acceso, que no tiene ninguna sección con enganche -- el lead se quedaría sin
+     * poder scrollear nada. Las dos vistas son excluyentes (ver el template), así que
+     * la condición es exactamente esta.
+     *
+     * @returns {boolean}
+     */
+    recorrido_visible() {
+      return !this.loading && !this.invalido && !this.intro_desbloqueada
+    },
+  },
+
+  watch: {
+    /**
+     * El controlador se crea y se destruye con el recorrido, no con la página: el
+     * formulario confirmado cambia de vista sin desmontar este componente.
+     *
+     * @param {boolean} visible
+     * @returns {void}
+     */
+    recorrido_visible(visible) {
+      if (visible) {
+        /* En nextTick: las secciones se montan en el mismo flush que apagó `loading`,
+           y el controlador necesita el DOM puesto para leer los puntos de enganche. */
+        const self = this
+        this.$nextTick(function () {
+          self.crear_avance()
+        })
+        return
+      }
+      this.destruir_avance()
+    },
+  },
+
   mounted() {
     /* Scroll guiado sección por sección (grupo 355, prompt 07). La clase va sobre el
        CONTENEDOR CON SCROLL REAL, que en este admin es <main class="app-main-scroll">
@@ -242,10 +290,23 @@ export default {
     if (this.scroller && this.scroller.classList) {
       this.scroller.classList.add('demo-scroll-guiado')
     }
+
+    /* Si el payload ya estaba resuelto antes de este mounted (no pasa hoy, porque
+       `loading` arranca en true y el piso de la pantalla de carga son 2s, pero no hay
+       que depender de eso), el watch de recorrido_visible no se va a disparar nunca. */
+    if (this.recorrido_visible) {
+      this.crear_avance()
+    }
   },
 
   beforeUnmount() {
     this.desmontado = true
+
+    /* Antes de soltar el scroller: los listeners del avance por gesto están puestos
+       sobre él (y el de teclado sobre el documento). Si quedaran, el resto del admin
+       se quedaría con el scroll secuestrado -- la peor herencia posible de esta
+       página. */
+    this.destruir_avance()
 
     /* El scroller es del admin entero: si esta clase quedara puesta, el resto de la
        interfaz se quedaría con scroll-snap y scroll-behavior:smooth. */
@@ -348,6 +409,48 @@ export default {
             self.revelar_pagina()
           }, restante)
         })
+    },
+
+    /**
+     * Monta el avance guiado: un gesto, una sección (grupo 369, prompt 02).
+     *
+     * POR QUÉ HACE FALTA, más allá del CSS. El grupo 355 (prompt 07) resolvió el
+     * encuadre con `scroll-snap-type: y mandatory`, y con la rueda del mouse alcanza.
+     * Pero el snap encuadra y NO limita la distancia: un gesto de trackpad o un swipe
+     * fuerte desplazan cientos de píxeles más el momentum, el navegador los aplica y
+     * recién después engancha en el punto más cercano a donde quedó -- dos o tres
+     * secciones más abajo ("con el pad de la computadora se saltea varias", Lucas,
+     * 5/8/2026). No existe un "snap de a uno" en CSS.
+     *
+     * Y EL SNAP DE CSS SE QUEDA IGUAL, no se retira. Son dos cosas distintas y las dos
+     * hacen falta: el controlador limita el gesto, y el snap sigue siendo la red de
+     * todo lo que el controlador no intercepta a propósito -- el re-enganche del
+     * navegador después de un resize o una rotación de teléfono, y el tramo de scroll
+     * libre del interludio, cuya maquinaria (`snap_libre_mientras_ocupa` en
+     * FondoSeccionSticky, que prende y apaga `demo-scroll-guiado--libre`) es
+     * justamente lo que el controlador consulta para saber cuándo no meterse.
+     *
+     * @returns {void}
+     */
+    crear_avance() {
+      if (this.avance || !this.scroller || this.scroller === window) {
+        return
+      }
+      this.avance = crear_avance_guiado(this.scroller)
+    },
+
+    /**
+     * Retira el avance guiado y todos sus listeners. Idempotente: se llama desde el
+     * watch y desde beforeUnmount, y llamarlo dos veces no hace nada.
+     *
+     * @returns {void}
+     */
+    destruir_avance() {
+      if (!this.avance) {
+        return
+      }
+      this.avance.destruir()
+      this.avance = null
     },
 
     /**
