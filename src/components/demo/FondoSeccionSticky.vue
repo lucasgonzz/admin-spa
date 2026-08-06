@@ -127,10 +127,12 @@ export default {
 		 * en dos archivos, y tienen que moverse juntos: si la entrada se estira y el
 		 * enganche se queda, el lead aterriza con el bloque a medio entrar -- justo lo
 		 * que el grupo 355 vino a arreglar. El grupo 369 (prompt 04) los movió de 0.28
-		 * a 0.42. Y no conviene adelantarlo para incluir el desfase de la pieza: con el
-		 * avance guiado eso acorta la fracción del gesto que ocupa la entrada del texto
-		 * y la vuelve más rápida (la cuenta completa está en el bloque de constantes de
-		 * ScrollDolor.vue).
+		 * a 0.42. Y no se adelanta para incluir el desfase de la pieza (0.495) por el
+		 * criterio 2 de ese prompt: donde está, la pieza llega al 99,43% de su entrada
+		 * en el aterrizaje, el mismo número de antes. Mover el enganche NO cambia la
+		 * velocidad de la entrada, sólo cuándo termina dentro del gesto -- la cuenta
+		 * completa, con los dos errores que se cometieron al hacerla, está en el bloque
+		 * de constantes de ScrollDolor.vue.
 		 */
 		snap_progreso: {
 			type: Number,

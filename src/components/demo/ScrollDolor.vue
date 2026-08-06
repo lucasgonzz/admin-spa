@@ -30,7 +30,6 @@
       v-for="(bloque, indice) in contenido.bloques"
       :key="bloque.id"
       :variante="'bloque-' + (indice + 1)"
-      :recorrido_vh="recorrido_dolor_vh"
       v-slot="{ progreso }"
       @progreso="on_progreso_bloque($event, bloque.id)"
     >
@@ -318,49 +317,46 @@ const CONTENIDO_POR_PERFIL = {
    pieza entraría pegada al texto. La SALIDA no se toca: Lucas dijo explícitamente que
    el fundido de salida le gusta como está.
 
-   🔴 LA CUENTA QUE HAY QUE ENTENDER ANTES DE VOLVER A TOCAR ESTOS NÚMEROS, porque el
-   prompt 02 de este mismo grupo cambió las reglas del juego y la intuición acá falla.
+   🔴 LA CUENTA, QUE NO ES LA OBVIA. En vh de scroll, la entrada ocupa
+   `ENTRADA_FIN × (recorrido_vh − 100)`: con 160vh de sección y 0.28 eran 16,8vh y con
+   0.42 son 25,2vh, o sea la mitad más de scroll para el mismo desplazamiento. El
+   `− 100` es porque el alto PINNEABLE es el alto de la sección menos la pantalla que
+   ocupa el pin -- el mismo 🔴 que documenta InterludioPortal.vue en su comentario de
+   `progreso × (recorrido_vh − 100)`, que ya se había hecho mal una vez (grupo 348).
 
-   Con el avance guiado, el lead ya no recorre la sección con su propio scroll: cada
-   gesto es un desplazamiento programado de un punto de enganche al siguiente, y durante
-   ESE desplazamiento el progreso de la sección que entra va de 0 a `snap_progreso` --
-   por definición del punto de enganche. O sea que la entrada no dura "0.42 de scroll":
-   dura la fracción `ENTRADA_FIN / snap_progreso` del gesto, y el gesto dura lo que tarde
-   el scroll programado del navegador.
+   Y con el avance guiado del prompt 02 hay una cuenta más, que es la que importa para lo
+   que pidió Lucas: cada gesto es un desplazamiento programado de un punto de enganche al
+   siguiente, o sea de `recorrido_vh` de distancia, y la entrada ocupa de ese gesto la
+   fracción `ENTRADA_FIN × (1 − 100/recorrido_vh)`. Con 0.28 era el 10,5% del gesto; con
+   0.42 es el 15,7%. El resto del gesto la sección viene subiendo desde abajo de la
+   pantalla con su progreso clavado en 0 (`calcular_objetivo` recorta en 0), así que no
+   se ve nada de la entrada hasta el último tramo.
 
-   De ahí salen dos consecuencias que van en contra de lo que uno haría:
-     1. Estirar la entrada Y mover el enganche en la misma proporción se cancela solo:
-        0.28/0.28 y 0.42/0.42 son los dos el 100% del gesto. No cambia nada.
-     2. Poner el enganche donde termina de entrar la PIEZA (0.42 + 0.075 = 0.495), que
-        suena a mejora, deja la entrada del texto en el 85% del gesto: o sea la haría
-        MÁS RÁPIDA que hoy, justo lo contrario de lo que pidió Lucas. Se probó y se
-        descartó por eso. El enganche se queda en ENTRADA_FIN, y la pieza sigue llegando
-        al 99,4% de su entrada en el momento del aterrizaje -- exactamente lo que pasa
-        hoy con 0.28/0.05, así que no se cambia nada que Lucas ya aceptó.
+   ⚠️ Dos cosas que parecen ciertas y NO lo son -- las dos las escribí acá y las midió el
+   checker, así que quedan anotadas para que nadie las repita:
+     · "estirar la entrada y mover el enganche en la misma proporción se cancela": falso,
+       la velocidad no depende del enganche. Va de 10,5% a 15,7% del gesto.
+     · "poner el enganche en ENTRADA_FIN + DESFASE_PIEZA (0.495) haría la entrada más
+       rápida (85% del gesto)": falso, ocupa exactamente la misma fracción. Lo que cambia
+       es CUÁNDO termina dentro del gesto, no cuánto dura. Ese 85% salía de dividir
+       progresos como si fueran tiempos.
+   El enganche igual se queda en ENTRADA_FIN, por el criterio 2 del prompt: la pieza llega
+   al 99,43% de su entrada en el aterrizaje, exactamente el mismo número que daba
+   0.28/0.05, así que no se cambia nada que Lucas ya aceptó.
 
-   Lo que queda para que sea más lento, y es lo que se eligió: MÁS DISTANCIA por gesto
-   (ver RECORRIDO_DOLOR_VH). Vale si el navegador escala la duración de su scroll suave
-   con la distancia. 🔴 NO VERIFICADO: el panel de navegador de esta sesión no compone
-   frames, así que un scroll suave no avanza y no hay forma de medir cuánto dura. Es lo
-   único de este prompt que queda a confirmar mirando la página.
+   ⚠️ Y lo que NO se hace, aunque el prompt lo ofrezca: subir el `recorrido_vh` de estas
+   secciones. Se probó con 200 y se revirtió, porque el tramo de SALIDA se mide con la
+   misma regla y pasaba de 16,8vh a 28vh -- un 67% más lento --, y Lucas dijo
+   explícitamente que la salida le gusta como está. Estirar solo ENTRADA_FIN deja la
+   salida intacta: 0.72→1 sobre 60vh pinneables sigue siendo 16,8vh.
 
-   Y si Lucas lo sigue viendo rápido, el lever que manda NO es ninguno de estos números:
-   es la duración del desplazamiento, o sea animarlo nosotros en avance-guiado.js en vez
-   de delegarlo a `behavior: 'smooth'`. Eso ya es cambiar el mecanismo del prompt 02 y no
-   se hizo por cuenta propia. Estirar más estos números no lo va a lograr.
-
-   En scroll libre (hoy el interludio, y cualquier scroll que el control no intercepte)
-   los números sí valen como se leen: ahí la entrada ocupa 0.42 del alto pinneable en vez
-   de 0.28 y se recorre al pulso del lead, o sea 50% más de scroll para el mismo
-   desplazamiento. */
+   Si Lucas lo sigue viendo rápido, el lever que queda es la duración del desplazamiento
+   del avance guiado, o sea animarlo nosotros en avance-guiado.js en vez de delegarlo a
+   `behavior: 'smooth'`. Eso es cambiar el mecanismo del prompt 02 y no se hizo por cuenta
+   propia. */
 const ENTRADA_FIN = 0.42
 const SALIDA_INICIO = 0.72
 const DESFASE_PIEZA = 0.075
-/* Alto de las secciones de dolor, en vh (el default del componente son 160). Más
-   recorrido = más distancia entre un punto de enganche y el siguiente = un
-   desplazamiento programado más largo. 200 y no más: cada vh de más es scroll en el que
-   no cambia nada para quien recorra la página a mano. */
-const RECORRIDO_DOLOR_VH = 200
 /* Entrada LATERAL (grupo 355, prompt 03; pedido de Lucas del 5/8/2026): cada mitad
    del bloque entra desplazándose desde su propio lado -- el texto desde el suyo, la
    pieza desde el suyo -- una contra la otra. Antes las dos subían desde abajo (96px)
@@ -470,8 +466,9 @@ export default {
        * 0.001, y eso dejaba la entrada de 3s a merced del primer píxel de scroll:
        * medido en un banco que reproduce el scroller del admin, pedir 2px de scroll
        * con `scroll-snap-type: y mandatory` activo (grupo 355) deposita el scroll en
-       * el punto de snap de la sección -- 121px en un viewport de 720, o sea progreso
-       * 0.28 -- así que la clase se retiraba en el primer frame siguiente, la
+       * el punto de snap de la sección -- 121px en un viewport de 720, que con el
+       * snap_progreso de ese momento (0.28; hoy es 0.42) era progreso 0.28 -- así que
+       * la clase se retiraba en el primer frame siguiente, la
        * animación desaparecía y el titular quedaba en su estado final. Es exactamente
        * lo que Lucas describió: "no lo hace con ningún efecto, simplemente aparece".
        * Cualquier reintroducción de una condición de scroll acá revive ese bug.
@@ -479,10 +476,6 @@ export default {
       apertura_entrada_terminada: false,
       /** Ids de bloque cuyo evento de tracking ya se emitió (una vez por bloque). */
       bloques_trackeados: {},
-      /* Constante de arriba que el template necesita ver. No cambia nunca: vive acá
-         porque un template de Vue no alcanza el ámbito del módulo, y no en computed
-         porque no se calcula a partir de nada. */
-      recorrido_dolor_vh: RECORRIDO_DOLOR_VH,
     }
   },
 
@@ -562,8 +555,8 @@ export default {
 
     /**
      * Estilo de un bloque 1-5 para el progreso `p` de su propia sección. Tres
-     * tramos: entrada (0 -> ENTRADA_FIN, hoy 0.42), meseta (la sección
-     * sección está para leerse) y salida parcial (0.72 -> 1).
+     * tramos: entrada (0 -> ENTRADA_FIN, hoy 0.42), meseta (el tramo más largo del
+     * recorrido: la sección está para leerse) y salida parcial (0.72 -> 1).
      *
      * La salida es PARCIAL a propósito (hasta 0.35 de opacidad, no hasta 0): que
      * el contenido se desvanezca del todo antes de irse de pantalla se lee como
@@ -788,8 +781,9 @@ export default {
    🔴 QUIÉN retira ese modificador es la corrección del grupo 369 (prompt 01): lo
    retira el FIN de la animación (animationend del subtítulo), no el primer scroll.
    Hasta acá lo retiraba `p > 0.001`, y con el scroll-snap del grupo 355 eso se cumplía
-   en el primer frame -- 2px de scroll aterrizan en el punto de snap de la sección, o
-   sea progreso 0.28 --, así que la entrada de 3s se veía un cuadro y desaparecía ("no
+   en el primer frame -- 2px de scroll aterrizan en el punto de snap de la sección, o sea
+   el progreso de `snap_progreso` --, así que la entrada de 3s se veía un cuadro y
+   desaparecía ("no
    lo hace con ningún efecto, simplemente aparece", Lucas, 5/8/2026). Ver el comentario
    de apertura_entrada_terminada en el <script>.
 
