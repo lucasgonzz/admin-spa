@@ -24,6 +24,17 @@
 /* Umbral de un swipe: por debajo de esto el dedo se movió, no gesticuló. */
 const TOUCH_MINIMO_PX = 40
 
+/* Umbral de la rueda. Sin esto, un gesto HORIZONTAL de trackpad con un poco de ruido
+   vertical (deltaX 300, deltaY 4) contaba como gesto vertical y avanzaba una sección
+   entera -- lo encontró el checker del prompt 02. Es el equivalente de
+   TOUCH_MINIMO_PX para la rueda, que no tenía ninguno. */
+const WHEEL_MINIMO_PX = 6
+
+/* Los elementos que declaran un punto de enganche en el CSS. Es una sola lista porque
+   dos preguntas distintas la necesitan: a dónde se puede ir (destinos) y si la sección
+   donde estoy todavía tiene contenido sin ver (hay_contenido_sin_ver). */
+const SELECTOR_DESTINOS = '.demo-fondo-seccion__snap, .demo-cierre, .demo-formulario'
+
 /* Cerrojo por TIEMPO desde que arranca un avance. Cubre lo que dura el
    desplazamiento suave más un margen: mientras corre, todo gesto nuevo se ignora. */
 const CERROJO_MS = 700
@@ -137,9 +148,7 @@ export default function crear_avance_guiado(scroller) {
    * @returns {Array<number>} Posiciones de scroll, ordenadas.
    */
   function destinos() {
-    const nodos = scroller.querySelectorAll(
-      '.demo-fondo-seccion__snap, .demo-cierre, .demo-formulario'
-    )
+    const nodos = scroller.querySelectorAll(SELECTOR_DESTINOS)
     const base = scroller.getBoundingClientRect().top - scroller.scrollTop
     const alto_visible = scroller.clientHeight
     const posiciones = []
@@ -223,9 +232,57 @@ export default function crear_avance_guiado(scroller) {
    * @returns {boolean}
    */
   function hay_recorrido() {
-    return !!scroller.querySelector(
-      '.demo-fondo-seccion__snap, .demo-cierre, .demo-formulario'
-    )
+    return !!scroller.querySelector(SELECTOR_DESTINOS)
+  }
+
+  /**
+   * true si la sección donde está parado el lead TODAVÍA tiene contenido sin ver en ese
+   * sentido.
+   *
+   * 🔴 Esta es la segunda mitad de la trampa de scroll, y la encontró el checker del
+   * prompt 02 después de que la primera (no interceptar cuando no hay sección vecina) ya
+   * estaba cerrada. El caso: una sección MÁS ALTA que la pantalla. `.demo-cierre` mide
+   * 1153px en un teléfono de 390x780 -- 373px por debajo del pliegue, que es casi todo el
+   * marco con la pieza multimedia --, su punto de enganche es su tope, y el destino
+   * siguiente es el puente, que está más abajo que su fondo. Con `preventDefault()` puesto
+   * no queda ninguna posición de reposo en el medio, así que la parte de abajo del cierre
+   * no se podía ver ni bajando ni subiendo. Y era una REGRESIÓN: con `scroll-snap-type: y
+   * mandatory` a secas, una snap area más alta que el snapport deja válida cualquier
+   * posición interna (lo pide la especificación), así que antes de este control el cierre
+   * se recorría. Encima es justo el contenido que Lucas pidió poder leer entero en el
+   * grupo 355, prompt 06 ("no quiero que haya un scroll dentro de esa tarjeta").
+   *
+   * Cuando hay contenido sin ver, el scroll es del navegador: él sabe recorrerlo, y el
+   * enganche vuelve a actuar en cuanto no queda nada abajo. Los marcadores de las
+   * secciones pinneadas no entran nunca por acá porque miden 1px: lo que se pinnea siempre
+   * ocupa exactamente una pantalla.
+   *
+   * @param {number} direccion
+   * @returns {boolean}
+   */
+  function hay_contenido_sin_ver(direccion) {
+    const alto_visible = scroller.clientHeight
+    const base = scroller.getBoundingClientRect().top
+    let sin_ver = false
+
+    scroller.querySelectorAll(SELECTOR_DESTINOS).forEach(function (nodo) {
+      if (sin_ver) {
+        return
+      }
+      const rect = nodo.getBoundingClientRect()
+      if (rect.height <= alto_visible + TOLERANCIA_PX) {
+        return
+      }
+      const arriba = rect.top - base
+      const abajo = rect.bottom - base
+      if (direccion > 0 && arriba <= TOLERANCIA_PX && abajo > alto_visible + TOLERANCIA_PX) {
+        sin_ver = true
+      }
+      if (direccion < 0 && abajo >= alto_visible - TOLERANCIA_PX && arriba < -TOLERANCIA_PX) {
+        sin_ver = true
+      }
+    })
+    return sin_ver
   }
 
   /**
@@ -279,6 +336,21 @@ export default function crear_avance_guiado(scroller) {
       pendiente = 0
       return
     }
+
+    /* 🔴 El estado del mundo cambió entre que el gesto se encoló y ahora: el
+       desplazamiento anterior lo llevó a otra parte. Si aterrizó en un tramo de scroll
+       libre, el pendiente se descarta.
+       Lo encontró el checker del prompt 02, medido con un scroll suave de 400ms de
+       verdad (no instantáneo): dos muescas separadas 200ms al entrar al interludio se
+       llevaban al lead hasta el cierre, o sea 2223px de coreografía que nunca se veían.
+       El handler de la rueda ya consultaba scroll_libre(), pero la cola no, y el gesto
+       encolado se ejecutaba igual un rato después. Mismo motivo para revisar que siga
+       habiendo a dónde ir. */
+    if (scroll_libre() || !hay_a_donde_ir(pendiente)) {
+      pendiente = 0
+      return
+    }
+
     const ahora = window.performance.now()
     if (ahora < bloqueado_hasta) {
       timer_pendiente = window.setTimeout(correr_pendiente, bloqueado_hasta - ahora)
@@ -322,6 +394,9 @@ export default function crear_avance_guiado(scroller) {
    */
   function hay_a_donde_ir(direccion) {
     if (!direccion) {
+      return false
+    }
+    if (hay_contenido_sin_ver(direccion)) {
       return false
     }
     return siguiente_destino(direccion) !== null
@@ -371,7 +446,12 @@ export default function crear_avance_guiado(scroller) {
       return
     }
 
-    const direccion = evento.deltaY > 0 ? 1 : (evento.deltaY < 0 ? -1 : 0)
+    /* Umbral: un gesto horizontal de trackpad con ruido vertical no es un gesto
+       vertical. Ver WHEEL_MINIMO_PX. */
+    if (Math.abs(evento.deltaY) < WHEEL_MINIMO_PX) {
+      return
+    }
+    const direccion = evento.deltaY > 0 ? 1 : -1
     if (!hay_a_donde_ir(direccion)) {
       return
     }
@@ -413,7 +493,16 @@ export default function crear_avance_guiado(scroller) {
    * @returns {void}
    */
   function on_touchmove(evento) {
-    if (touch_y_inicial === null || evento.touches.length !== 1) {
+    if (touch_y_inicial === null) {
+      return
+    }
+    /* Segundo dedo en el medio: es un zoom o un arrastre de dos dedos, no un swipe.
+       Se abandona el gesto -- y hay que abandonarlo de verdad, poniendo el inicial en
+       null, porque si no el touchend posterior contaba el recorrido de un dedo y
+       avanzaba una sección ADEMÁS del desplazamiento nativo (lo encontró el checker del
+       prompt 02). */
+    if (evento.touches.length > 1) {
+      touch_y_inicial = null
       return
     }
     /* El dedo sube => el contenido baja => se avanza. Si en ese sentido no hay sección
