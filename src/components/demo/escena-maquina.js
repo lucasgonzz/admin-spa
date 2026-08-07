@@ -61,20 +61,46 @@ function smooth(t) {
 }
 
 /**
- * Pixel ratio del render. El export usaba `min(dpr, 2)` a secas; acá se baja a 1.5 en
- * pantallas de teléfono (decisión pedida por el prompt): a dpr 3, que es lo normal en un
- * teléfono, renderizar a 2x son 1,8 veces más píxeles que a 1.5x para una escena que
- * ocupa media pantalla y está en movimiento, y en gama baja eso es la diferencia entre
- * 60 y 25 fps. En desktop se deja el 2 del export.
+ * Pixel ratio del render (grupo 370, correctivo 8, prompt 04, criterio c: "cuatro veces
+ * los píxeles de un canvas grande" con el tope viejo de 2). El export usaba `min(dpr, 2)`
+ * a secas. Ahora:
+ *
+ *  - Desktop: tope 1.5 (antes 2). A dpr 2 (pantallas retina/HiDPI, cada vez más comunes
+ *    en notebooks) bajar a 1.5 son 0,56 veces los píxeles -- casi la mitad del fill rate
+ *    del renderer para una escena que ocupa la mitad ancha de la pantalla y está en
+ *    movimiento constante.
+ *  - Teléfono de gama baja: tope 1. La gama se estima con las dos señales que expone el
+ *    navegador para esto (`deviceMemory` y `hardwareConcurrency`); ninguna es exacta por
+ *    sí sola -- por eso alcanza con que UNA de las dos indique gama baja, no las dos --
+ *    y donde el navegador no las expone (Safari no tiene ninguna de las dos) se cae al
+ *    tope de teléfono normal, que es el comportamiento de antes de este prompt.
+ *  - Teléfono normal: tope 1.5, sin cambios respecto de antes.
  *
  * @returns {number}
  */
 function pixel_ratio() {
   const dpr = window.devicePixelRatio || 1
   if (window.innerWidth <= 767.98) {
+    if (es_telefono_gama_baja()) {
+      return Math.min(dpr, 1)
+    }
     return Math.min(dpr, 1.5)
   }
-  return Math.min(dpr, 2)
+  return Math.min(dpr, 1.5)
+}
+
+/**
+ * Heurística de gama baja para teléfonos: menos de 4GB de RAM reportados o 4 núcleos o
+ * menos. Las dos señales son opcionales según el navegador (Safari no expone ninguna),
+ * así que la ausencia de ambas NO cuenta como gama baja -- se prefiere el tope de 1.5 de
+ * "teléfono normal" antes que asumir lo peor sin ninguna señal real.
+ *
+ * @returns {boolean}
+ */
+function es_telefono_gama_baja() {
+  const memoria = typeof navigator !== 'undefined' ? navigator.deviceMemory : undefined
+  const nucleos = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : undefined
+  return !!((memoria && memoria <= 4) || (nucleos && nucleos <= 4))
 }
 
 /**
@@ -559,6 +585,46 @@ export function crear_maquina(canvas) {
     },
 
     relayout: resize,
+
+    /**
+     * Corta el bucle sin soltar nada de la GPU (grupo 370, correctivo 8, prompt 04): lo
+     * llama EscenaHero cuando la escena sale del viewport o la pestaña pasa a segundo
+     * plano. `raf_id` es la guarda, igual que en destruir().
+     *
+     * No hace falta resetear nada para volver sin salto, pero las dos mitades vuelven
+     * distinto y conviene tenerlo claro:
+     *
+     * · Los engranajes SÍ quedan donde estaban: `rotation.z +=` es un acumulador, no
+     *   depende del reloj.
+     * · Las luces y el cuerpo NO: `emissiveIntensity`, `root.rotation` y `root.position`
+     *   son funciones absolutas de `t` (= performance.now() - arranque_ms), con períodos
+     *   de 21 a 29 s en los términos lentos. Después de una pausa larga vuelven en una
+     *   fase arbitraria, que puede ser media amplitud -- no es "un cuadro salteado".
+     *
+     * Se deja así, y no se congela el reloj, por dos razones: al reanudar por
+     * IntersectionObserver falta todavía una pantalla entera para que la escena se vea
+     * (rootMargin 100%), y en el caso de la pestaña oculta el navegador ya frenaba rAF
+     * por su cuenta, o sea que ese salto existía igual antes de este prompt.
+     *
+     * @returns {void}
+     */
+    pausar() {
+      if (raf_id !== null) {
+        window.cancelAnimationFrame(raf_id)
+        raf_id = null
+      }
+    },
+
+    /**
+     * Reanuda el bucle si estaba pausado.
+     *
+     * @returns {void}
+     */
+    reanudar() {
+      if (raf_id === null && !destruido) {
+        raf_id = window.requestAnimationFrame(tick)
+      }
+    },
 
     /**
      * Apaga la escena y suelta la GPU. Sin esto, cada entrada a la página deja un

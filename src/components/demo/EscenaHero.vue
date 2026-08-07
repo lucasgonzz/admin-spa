@@ -287,6 +287,21 @@ export default {
       reduced_motion: false,
       /** El IntersectionObserver que espera a que la sección se acerque, o null. */
       observador: null,
+      /**
+       * El IntersectionObserver PERMANENTE que pausa y reanuda los dos bucles según si
+       * la escena está en pantalla (grupo 370, correctivo 8, prompt 04, criterio b). Es
+       * uno distinto de `observador`: ese es de un solo uso (arranca la carga del chunk
+       * y se desconecta), este vigila todo el tiempo que el componente vive.
+       */
+      observador_visibilidad: null,
+      /**
+       * true si la escena está dentro del viewport (según `observador_visibilidad`).
+       * Arranca en true a propósito: hasta que el observer entregue su primera medición
+       * no hay que pausar nada, y si el navegador no tiene IntersectionObserver esto se
+       * queda en true para siempre -- se prefiere gastar batería de más a romper la
+       * escena en un navegador viejo.
+       */
+      en_viewport: true,
     }
   },
 
@@ -323,15 +338,28 @@ export default {
        sólo para el eje. */
     window.addEventListener('resize', this.revisar_eje, { passive: true })
 
+    /* Pestaña en segundo plano (grupo 370, correctivo 8, prompt 04, criterio b): se
+       escucha acá y no adentro de cada bucle porque es UNA sola señal para los dos.
+       `document.visibilitychange` existe en cualquier navegador con soporte de la Page
+       Visibility API; donde no exista, `document.hidden` es siempre `undefined` (falsy)
+       y `revisar_pausa()` nunca pausa por este motivo, que es el comportamiento de antes
+       de este prompt. */
+    document.addEventListener('visibilitychange', this.revisar_pausa)
+
     this.arrancar_cuando_se_acerque()
   },
 
   beforeUnmount() {
     this.desmontado = true
     window.removeEventListener('resize', this.revisar_eje)
+    document.removeEventListener('visibilitychange', this.revisar_pausa)
     if (this.observador) {
       this.observador.disconnect()
       this.observador = null
+    }
+    if (this.observador_visibilidad) {
+      this.observador_visibilidad.disconnect()
+      this.observador_visibilidad = null
     }
     this.apagar()
   },
@@ -427,7 +455,67 @@ export default {
            es la escena 3D. */
         self.coreografia = crear_coreografia(self.$refs.raiz, self.maquina, self.eje)
         self.aplicar_progreso(self.progreso)
+        self.arrancar_observador_visibilidad()
       })
+    },
+
+    /**
+     * Prende el vigía permanente de viewport (grupo 370, correctivo 8, prompt 04,
+     * criterio b). Se arranca acá (no en `mounted()`) porque recién acá existen
+     * `coreografia` y (si hay WebGL) `maquina`, que son a quienes hay que pausar.
+     *
+     * Mismo margen generoso que `arrancar_cuando_se_acerque()` (una pantalla entera):
+     * así los bucles ya están corriendo de nuevo antes de que la escena vuelva a
+     * quedar realmente a la vista, y el lead nunca ve el primer cuadro "arrancando".
+     *
+     * @returns {void}
+     */
+    arrancar_observador_visibilidad() {
+      if (typeof window === 'undefined' || !window.IntersectionObserver || !this.$refs.raiz) {
+        /* Sin IntersectionObserver no hay señal de viewport: `en_viewport` se queda en
+           su default (true) y los bucles corren siempre, que es el comportamiento de
+           antes de este prompt -- preferible a pausar mal en un navegador que no puede
+           avisar cuándo hay que reanudar. */
+        return
+      }
+      const self = this
+      this.observador_visibilidad = new window.IntersectionObserver(
+        function (entradas) {
+          self.en_viewport = !!(entradas.length && entradas[0].isIntersecting)
+          self.revisar_pausa()
+        },
+        { rootMargin: '100% 0px' }
+      )
+      this.observador_visibilidad.observe(this.$refs.raiz)
+    },
+
+    /**
+     * Pausa o reanuda los dos bucles según las dos señales combinadas: si la escena está
+     * en el viewport (`en_viewport`, la mueve `observador_visibilidad`) Y la pestaña
+     * está en primer plano (`!document.hidden`, la mueve el listener de
+     * `visibilitychange` puesto en `mounted()`). Reanudar sin salto no exige ningún
+     * estado especial acá: `coreografia.reanudar()` y `maquina.reanudar()` retoman
+     * exactamente donde quedaron (ver el comentario largo de `pausar()` en cada módulo).
+     *
+     * @returns {void}
+     */
+    revisar_pausa() {
+      const debe_correr = this.en_viewport && !document.hidden
+      if (debe_correr) {
+        if (this.coreografia) {
+          this.coreografia.reanudar()
+        }
+        if (this.maquina) {
+          this.maquina.reanudar()
+        }
+        return
+      }
+      if (this.coreografia) {
+        this.coreografia.pausar()
+      }
+      if (this.maquina) {
+        this.maquina.pausar()
+      }
     },
 
     /**
@@ -540,6 +628,21 @@ export default {
     linear-gradient(150deg, #f4f8fd 0%, #fbfcfe 46%, #f8f6fe 100%);
 }
 
+/* 🔴 SIN `filter: blur()` (grupo 370, correctivo 8, prompt 04, criterio a). `--out` se
+   reescribe en CADA CUADRO desde escena-coreografia.js, y cambiar la opacidad de un
+   elemento con blur(90px) obligaba al navegador a rehacer el desenfoque de una
+   superficie de casi medio viewport sesenta veces por segundo -- el gasto más grande de
+   toda la escena, según la lectura del código que motivó este prompt.
+   `radial-gradient(closest-side, …, transparent 72%)` ya es una superficie suave por sí
+   sola; el blur encima era casi redundante. Lo que el blur SÍ aportaba era una
+   transición más gradual entre el color y el transparente final, así que acá se agrega
+   una parada intermedia al 42% (mismo criterio que sugiere el prompt: "se ajustan las
+   paradas del gradiente, que es gratis") para no perder esa gradualidad.
+   🔴 NO se pudo hacer la comparación visual antes/después que pide el criterio 2 del
+   prompt: el navegador de este entorno de medición no composita frames (no hay captura
+   de pantalla posible), así que este ajuste queda MEDIDO en el sentido de "se sacó lo
+   más caro y se compensó con lo que el propio prompt indica que es gratis", pero NO
+   verificado con los ojos -- lo dice el reporte de este prompt explícitamente. */
 .hero-escena__haze::before,
 .hero-escena__haze::after {
   content: "";
@@ -547,18 +650,27 @@ export default {
   top: -10%;
   height: 120%;
   width: 48%;
-  filter: blur(90px);
 }
 
 .hero-escena__haze::before {
   left: -8%;
-  background: radial-gradient(closest-side, rgba(250, 126, 6, 0.1), transparent 72%);
+  background: radial-gradient(
+    closest-side,
+    rgba(250, 126, 6, 0.1) 0%,
+    rgba(250, 126, 6, 0.055) 42%,
+    transparent 72%
+  );
   opacity: calc(1 - var(--out) * 0.8);
 }
 
 .hero-escena__haze::after {
   right: -8%;
-  background: radial-gradient(closest-side, rgba(27, 111, 245, 0.16), transparent 72%);
+  background: radial-gradient(
+    closest-side,
+    rgba(27, 111, 245, 0.16) 0%,
+    rgba(27, 111, 245, 0.09) 42%,
+    transparent 72%
+  );
   opacity: calc(0.05 + var(--out) * 0.95);
 }
 
@@ -866,15 +978,22 @@ export default {
   opacity: 0.92;
 }
 
+/* Mismo criterio que .hero-escena__haze de arriba: sin filter:blur(), con una parada
+   intermedia en el gradiente para conservar la gradualidad (a menor escala -- este es
+   el blur chico que el prompt marca como "de menor escala" dentro del mismo punto a). */
 .hero-escena__core-glow {
   position: absolute;
   width: 120%;
   height: 120%;
   border-radius: 50%;
   pointer-events: none;
-  background: radial-gradient(closest-side, rgba(27, 111, 245, 0.16), transparent 70%);
+  background: radial-gradient(
+    closest-side,
+    rgba(27, 111, 245, 0.16) 0%,
+    rgba(27, 111, 245, 0.085) 44%,
+    transparent 70%
+  );
   opacity: calc(0.1 + var(--power) * 0.9);
-  filter: blur(12px);
 }
 
 .hero-escena__brand {

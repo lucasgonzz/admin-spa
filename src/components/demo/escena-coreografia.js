@@ -134,6 +134,31 @@ export function crear_coreografia(raiz, maquina, eje) {
     sols.push({ el: el, dx: 0, dy: 0 })
   })
 
+  /* Último string escrito para cada variable CSS compartida (grupo 370, correctivo 8,
+     prompt 04, criterio d). `setProperty` dispara una invalidación de estilo en TODO lo
+     que hereda la variable -- las trece tarjetas más los dos blurs del fondo -- así que
+     escribirla igual cuando el valor redondeado no cambió (pasa seguido cerca de los
+     extremos de una fase, donde range()/toFixed() devuelven el mismo string cuadro tras
+     cuadro) es trabajo tirado. Se compara el string YA REDONDEADO, no el número crudo:
+     dos números que difieren en la sexta cifra decimal redondean al mismo texto. */
+  const ultimo_css = { p: null, suck: null, out: null, power: null, calm: null, stress: null }
+
+  /**
+   * Escribe una variable CSS en la raíz solo si el string cambió desde el cuadro
+   * anterior.
+   *
+   * @param {string} clave Nombre corto (sin el `--`) de la variable.
+   * @param {string} valor String ya formateado con toFixed().
+   * @returns {void}
+   */
+  function escribir_si_cambio(clave, valor) {
+    if (ultimo_css[clave] === valor) {
+      return
+    }
+    ultimo_css[clave] = valor
+    raiz.style.setProperty('--' + clave, valor)
+  }
+
   /**
    * Factor de escala del contenedor. El export lo leía de `.stage`; acá es la raíz de la
    * escena. Hace falta porque los desplazamientos se calculan en píxeles de pantalla y se
@@ -243,13 +268,12 @@ export function crear_coreografia(raiz, maquina, eje) {
       lift.style.transform = 'translate3d(0,' + d.toFixed(1) + 'px,0)'
     }
 
-    const S = raiz.style
-    S.setProperty('--p', p.toFixed(4))
-    S.setProperty('--suck', range(p, SUCK_0, SUCK_0 + 0.14).toFixed(3))
-    S.setProperty('--out', range(p, OUT_0, 0.9).toFixed(3))
-    S.setProperty('--power', range(p, 0.02, 0.2).toFixed(3))
-    S.setProperty('--calm', range(p, 0.76, 0.94).toFixed(3))
-    S.setProperty('--stress', (1 - range(p, 0.66, 0.84)).toFixed(3))
+    escribir_si_cambio('p', p.toFixed(4))
+    escribir_si_cambio('suck', range(p, SUCK_0, SUCK_0 + 0.14).toFixed(3))
+    escribir_si_cambio('out', range(p, OUT_0, 0.9).toFixed(3))
+    escribir_si_cambio('power', range(p, 0.02, 0.2).toFixed(3))
+    escribir_si_cambio('calm', range(p, 0.76, 0.94).toFixed(3))
+    escribir_si_cambio('stress', (1 - range(p, 0.66, 0.84)).toFixed(3))
 
     const ph = fase(p)
     if (raiz.dataset.phase !== ph) {
@@ -303,6 +327,39 @@ export function crear_coreografia(raiz, maquina, eje) {
       }
       axis = valor
       layout()
+    },
+
+    /**
+     * Corta el bucle sin destruir nada (grupo 370, correctivo 8, prompt 04): lo llama
+     * EscenaHero cuando la escena sale del viewport o la pestaña pasa a segundo plano.
+     * `raf_id` hace de guarda: llamarlo dos veces seguidas no hace nada raro.
+     *
+     * Por qué no hace falta resetear ningún estado para que la reanudación no salte: P
+     * (el progreso renderizado) queda congelado en el valor que tenía -- no se toca acá
+     * -- así que las tarjetas quedan exactamente donde estaban. El jitter usa el
+     * timestamp de rAF tal cual llega (no un contador propio), así que al reanudar
+     * simplemente sigue desde el reloj real; es una fase distinta del seno/coseno, no
+     * un salto de posición.
+     *
+     * @returns {void}
+     */
+    pausar() {
+      if (raf_id !== null) {
+        window.cancelAnimationFrame(raf_id)
+        raf_id = null
+      }
+    },
+
+    /**
+     * Reanuda el bucle si estaba pausado. Si ya estaba corriendo (o si ya se destruyó),
+     * no hace nada.
+     *
+     * @returns {void}
+     */
+    reanudar() {
+      if (raf_id === null && !destruido) {
+        raf_id = window.requestAnimationFrame(frame)
+      }
     },
 
     /**
