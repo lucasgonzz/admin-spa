@@ -298,12 +298,42 @@
 // Antes era un overlay dentro de la escena; ahora es una pantalla más del scroll, con
 // el mismo respiro que las otras y sin techo de alto -- crece lo que necesite el copy,
 // que en la versión campeón es bastante más largo que en la de dueño.
+//
+// CORRECTIVO (grupo 370, correctivo 8, prompt 05). El diagnóstico del prompt ("el
+// cierre no tiene punto de snap") NO se sostuvo -- medido en el navegador, no
+// asumido: `.demo-cierre` YA está en SELECTOR_DESTINOS de avance-guiado.js y YA
+// recibe `scroll-snap-align: center` de acá abajo, así que el avance guiado SÍ lo
+// tiene registrado como destino. El bug real es otro: sin un `min-height` propio,
+// esta sección mide sólo lo que ocupa la tarjeta más su padding -- en desktop,
+// bastante MENOS que una pantalla: 764,7px de SECCIÓN (la tarjeta sola son ~576px)
+// contra 785px de viewport a 1280x800, y a 1440x900 el faltante sube a 48px de cada
+// lado, porque la tarjeta ya topea en max-width y no crece. El destino "centrado" que calcula
+// avance-guiado dejaba entonces un resto de esa pantalla sin cubrir arriba Y abajo
+// por partes iguales -- exactamente el "se ve parte de la animación arriba y parte
+// de la sección siguiente abajo" que describió Lucas, no una caída a mitad de
+// camino entre secciones.
+//
+// min-height (no height, y no en la tarjeta): la sección tiene que ocupar COMO
+// MÍNIMO una pantalla completa cuando el contenido entra de sobra (ahí el flex de
+// acá abajo centra la tarjeta dentro de esa pantalla, sin resto visible ni arriba
+// ni abajo), pero seguir creciendo sin techo cuando el contenido es más alto --
+// la versión campeón en teléfono mide 1255px contra un viewport de 844px, y ahí
+// min-height no le pone ningún límite: la sección crece y el punto de enganche
+// (alineación 'center', que el cálculo de avance-guiado recorta a 0 cuando la
+// sección mide más que la pantalla) la deja alineada arriba, mostrando el título,
+// sin recortar nada.
+//
+// 100dvh preferido con 100vh de fallback, mismo orden que
+// .demo-experiencia-page__video-intro y el resto de la página: un navegador sin
+// soporte de dvh ignora esa declaración entera y se queda con la de arriba.
 .demo-cierre {
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	padding: 12vh 20px;
 	box-sizing: border-box;
+	min-height: 100vh;
+	min-height: 100dvh;
 }
 
 .demo-cierre__tarjeta {
