@@ -38,10 +38,13 @@
     >
       <article class="demo-scroll-dolor__bloque" :data-bloque-id="bloque.id">
         <div class="demo-scroll-dolor__bloque-texto" :style="estilo_bloque(progreso, false, indice)">
-          <!-- Ícono sutil por dolor (grupo 370, prompt 02). Va DENTRO del mismo div con
+          <!-- Ícono por dolor (grupo 370, prompt 02; desde el grupo 374 es una marca de
+               agua grande detrás del texto, ver el <style>). Va DENTRO del mismo div con
                :style por progreso que el texto -- así se mueve exactamente igual que el
                párrafo, sin animación propia que pueda desincronizarse (criterio 4 del
-               prompt). No se cablea por índice: sale de bloque.icono, al lado de marco y
+               prompt). Sigue siendo el primer hijo aunque ya no esté en el flujo: el
+               orden del markup no lo posiciona, lo posiciona el centrado absoluto.
+               No se cablea por índice: sale de bloque.icono, al lado de marco y
                titulo_pieza en CONTENIDO_POR_PERFIL, así que un bloque agregado o
                reordenado no rompe nada acá. -->
           <i
@@ -992,37 +995,62 @@ export default {
   direction: ltr;
 }
 
-/* Ícono sutil por dolor (grupo 370, prompt 02). display:block + text-align lo alinea
-   con el borde del bloque de texto, no del glifo -- por eso no hace falta tocar nada
-   acá para que quede "encima del primer párrafo": el <p> de abajo es el próximo hijo
-   en el mismo flujo normal, sin position ni floats de por medio.
+/* Ícono por dolor. Grupo 374 (prompt 02) lo saca del flujo y lo convierte en MARCA DE
+   AGUA: hasta el grupo 370 eran 28px en bloque, arriba del primer párrafo y alineado
+   con él, y a Lucas le quedaba "como una viñeta suelta" (7/8/2026) -- ni acompañaba al
+   texto ni tenía entidad propia. Ahora es una textura de fondo de la columna de texto:
+   grande, centrada y detrás del párrafo.
 
-   28px es EL tamaño, no un mínimo: es un detalle que acompaña el texto, no un ícono de
-   navegación. Azul de marca a baja opacidad y no --demo-color-texto-suave (la otra
-   opción que daba el prompt) para que se lea como un acento de marca discreto y no como
-   texto gris más -- el mismo criterio que el degradé de los títulos de cierre. Sin
-   fondo, sin caja: el peso visual de la sección lo siguen teniendo el texto y la pieza.
+   Se probó primero esta opción y no hizo falta la segunda que daba el prompt (48px
+   centrado SOBRE el texto): con 0.08 de opacidad el glifo aporta silueta y color sin
+   ensuciar los párrafos de dos líneas.
+
+   MEDIDO (no estimado) sobre --demo-color-fondo #f8f9fc, que es la peor parte del
+   recorrido para el contraste porque los radial-gradient de la sección solo oscurecen:
+   el párrafo (--demo-color-texto-suave) pasa de 5,97:1 sin marca de agua a 5,45:1 con
+   ella, y el resaltado de 14,91:1 a 13,61:1. Los dos siguen bien por encima del 4,5:1
+   de AA. Para referencia de cuánto margen hay: al 0,10 el párrafo da 5,30:1, y con la
+   opacidad vieja de 0,55 (cuando el ícono era un pictograma y no tapaba texto) daría
+   3,02:1 -- o sea que esta opacidad no se puede subir "un poquito" sin volver a medir.
+
+   El centrado es absoluto respecto del contenedor de texto, así que NO depende de la
+   dirección: por eso desapareció la regla que en los bloques 2 y 4 (los que el scss da
+   vuelta con `direction: rtl`) lo mandaba a `text-align: right`. Centrado es centrado
+   en los cinco bloques.
+
+   z-index explícito en los dos lados y no `z-index: -1` en el ícono: el contenedor de
+   texto ya crea su propio stacking context (`will-change: transform` en
+   demo-experiencia.scss), así que un valor negativo funcionaría, pero el día que ese
+   will-change se saque el ícono se iría detrás del fondo de la sección y desaparecería
+   sin que nada avise. Con el ícono en 0 y el texto en 1 el orden no depende de eso.
 
    rgba(11, 132, 248, ...) y no color-mix() sobre --demo-color-azul: el resto de este
    archivo (los radial-gradient de abajo) ya resuelve la opacidad de este mismo azul
    como literal en vez de con la variable, por soporte de navegador -- una sola forma
    de hacerlo en el archivo compartido. */
-.demo-scroll-dolor__icono-dolor {
-  display: block;
-  font-size: 28px;
-  line-height: 1;
-  color: rgba(11, 132, 248, 0.55);
-  margin: 0 0 14px;
+.demo-scroll-dolor__bloque-texto {
+  position: relative;
 }
 
-/* Mismo criterio que la alternancia texto/pieza de acá abajo: en los bloques 2 y 4 el
-   texto queda del lado derecho de la grilla (direction: rtl en el wrapper), así que el
-   ícono tiene que acompañarlo ahí y no clavado a la izquierda -- si no, quedaría pegado
-   al hueco de 40px que separa texto y pieza, compitiendo con la pieza en vez de con el
-   texto (motivo explícito del prompt: "para que quede acorde con el diseño"). */
-.demo-fondo-seccion--bloque-2 .demo-scroll-dolor__icono-dolor,
-.demo-fondo-seccion--bloque-4 .demo-scroll-dolor__icono-dolor {
-  text-align: right;
+.demo-scroll-dolor__icono-dolor {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: clamp(96px, 9vw, 140px);
+  line-height: 1;
+  color: rgba(11, 132, 248, 0.08);
+  z-index: 0;
+  /* Es decoración: no tiene que comerse ningún click ni selección de texto. */
+  pointer-events: none;
+}
+
+/* El texto, por encima de la marca de agua. Va acá y no en el contenedor porque el
+   z-index solo lo respetan los elementos posicionados. */
+.demo-scroll-dolor__parrafo,
+.demo-scroll-dolor__resaltado {
+  position: relative;
+  z-index: 1;
 }
 
 .demo-scroll-dolor__parrafo {
@@ -1160,16 +1188,21 @@ export default {
     direction: ltr !important;
   }
 
-  /* En teléfono la grilla pasa a una sola columna (arriba, direction: ltr !important),
-     así que la alineación a la derecha de los bloques 2 y 4 ya no aplica -- el texto
-     ocupa todo el ancho igual que en los demás. Si se dejara la regla de desktop, el
-     ícono quedaría solo en ese caso pegado al borde derecho de la pantalla, sin nada
-     con que alinearse. Se achica en vez de reinventar el layout (criterio del prompt):
-     mismo ícono, mismo lugar relativo al párrafo, menos espacio que ocupa. */
+  /* La marca de agua, a escala del teléfono (grupo 374, prompt 02). El clamp de desktop
+     acá se clavaría en su mínimo -- 9vw sobre 390px da 35px --, o sea 96px fijos en
+     todas las pantallas chicas. El término central se recalibra a 24vw (93,6px en 390px,
+     76,8px en 320px) para que el glifo acompañe el ancho disponible en vez de quedar
+     siempre del mismo tamaño.
+
+     No desborda por construcción: está centrado con position absolute, así que aunque el
+     glifo midiera más que la columna sobresaldría medio de cada lado -- y el contenedor
+     de texto no tiene overflow visible hacia afuera de la sección, que ya recorta en el
+     pin. Con 120px de techo contra los ~350px de columna útil, no llega ni cerca.
+
+     La regla vieja de desktop que en los bloques 2 y 4 lo mandaba a la derecha ya no
+     existe, así que acá tampoco hace falta desandarla con text-align. */
   .demo-scroll-dolor__icono-dolor {
-    font-size: 22px;
-    margin-bottom: 10px;
-    text-align: left;
+    font-size: clamp(84px, 24vw, 120px);
   }
 
   /* Apertura más grande y más separada en teléfono (grupo 369, prompt 01, pedido de
