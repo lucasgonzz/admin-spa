@@ -927,11 +927,27 @@ export default {
    aparezca a los dos segundos, o al segundo y medio, mejor", 6/8/2026). O sea el
    retraso pasa de 4s a 3,5s = 2s de titular + 1,5s de pausa.
 
+   🔴 Grupo 374, prompt 01: ese 3,5s era la lectura EQUIVOCADA del pedido. Lucas cuenta
+   el segundo y medio desde que el titular APARECE, no desde que TERMINA su zoom ("la
+   primera sección me sigue mostrando el subtítulo recién a los tres segundos de que
+   aparece el título, y te había pedido que sea al segundo y medio", 7/8/2026). El
+   retraso es entonces 1,5s a secas, medido desde el arranque de la entrada, y NO se
+   suma nada por el titular. Si en algún momento el solapamiento con el final del zoom
+   molesta, lo que se acorta es el zoom del titular -- este 1,5s es el número que pidió
+   Lucas y no se vuelve a correr para acomodar otra cosa.
+
+   Y por eso el subtítulo SIGUE siendo el último en terminar, que es de lo que cuelga el
+   @animationend que retira --carga: 1,5s + 0,9s = 2,4s contra los 2s del titular. El
+   margen quedó en 0,4s: si alguien acorta este retraso por debajo de 1,1s o alarga el
+   zoom del titular, el animationend hay que mudarlo al titular o la apertura se queda
+   con la clase de carga puesta para siempre y el progreso nunca toma el control.
+
    MEDIDO, para el día que alguien quiera ajustar esa pausa: con la curva de la página
    -- cubic-bezier(0.16, 1, 0.3, 1), que es casi todo movimiento al principio -- el zoom
-   de 2s ya está al 97% al primer segundo. Por eso lo que Lucas mide a ojo es siempre
-   más que la pausa declarada. Lo único que se toca para ajustarla es este retraso, no
-   la curva ni la duración del zoom.
+   de 2s ya está al 97% al primer segundo. O sea que a los 1,5s el titular está
+   prácticamente quieto y el solapamiento no se lee como dos cosas moviéndose a la vez.
+   Lo único que se toca para ajustar la pausa es este retraso, no la curva ni la
+   duración del zoom.
 
    La duración se declara acá, en el `animation` de cada uso, y no en el @keyframes: los
    de demo-experiencia.scss se comparten con otras pantallas. */
@@ -940,7 +956,7 @@ export default {
 }
 
 .demo-scroll-dolor__apertura--carga .demo-scroll-dolor__apertura-subtitulo {
-  animation: demo-apertura-bounce 0.9s cubic-bezier(0.16, 1, 0.3, 1) 3.5s both;
+  animation: demo-apertura-bounce 0.9s cubic-bezier(0.16, 1, 0.3, 1) 1.5s both;
 }
 
 @media (prefers-reduced-motion: reduce) {
