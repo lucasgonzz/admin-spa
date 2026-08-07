@@ -38,6 +38,17 @@
     >
       <article class="demo-scroll-dolor__bloque" :data-bloque-id="bloque.id">
         <div class="demo-scroll-dolor__bloque-texto" :style="estilo_bloque(progreso, false, indice)">
+          <!-- Ícono sutil por dolor (grupo 370, prompt 02). Va DENTRO del mismo div con
+               :style por progreso que el texto -- así se mueve exactamente igual que el
+               párrafo, sin animación propia que pueda desincronizarse (criterio 4 del
+               prompt). No se cablea por índice: sale de bloque.icono, al lado de marco y
+               titulo_pieza en CONTENIDO_POR_PERFIL, así que un bloque agregado o
+               reordenado no rompe nada acá. -->
+          <i
+            class="bi demo-scroll-dolor__icono-dolor"
+            :class="bloque.icono"
+            aria-hidden="true"
+          />
           <p v-for="(linea, indice2) in bloque.texto" :key="indice2" class="demo-scroll-dolor__parrafo">
             {{ linea }}
           </p>
@@ -184,6 +195,9 @@ const CONTENIDO_POR_PERFIL = {
         id: 'scroll.1',
         marco: 'computadora',
         titulo_pieza: 'Stock real por depósito',
+        // Ícono por dolor (grupo 370, prompt 02): depósito/stock -- la promesa que se
+        // rompe es justamente que lo que se ofrece no está en el depósito.
+        icono: 'bi-box-seam',
         texto: [
           'Le prometés a un cliente algo que creés que tenés.',
           'Vas al depósito y no está.',
@@ -194,6 +208,8 @@ const CONTENIDO_POR_PERFIL = {
         id: 'scroll.2',
         marco: 'computadora+telefono',
         titulo_pieza: 'El artículo del sistema publicado en la tienda',
+        // Duplicación: el mismo artículo cargado tres veces en tres lugares distintos.
+        icono: 'bi-copy',
         texto: [
           'El mismo artículo, cargado tres veces: en el sistema, en el Excel, en la página.',
         ],
@@ -203,6 +219,8 @@ const CONTENIDO_POR_PERFIL = {
         id: 'scroll.3',
         marco: 'computadora',
         titulo_pieza: 'Actualización masiva de precios aplicándose',
+        // Lista de precios: el dolor es el precio, no el mecanismo de carga masiva.
+        icono: 'bi-tag',
         texto: [
           'Llega la lista nueva del proveedor y la vas a cargar cuando puedas.',
           'Mientras tanto seguís vendiendo al precio de antes.',
@@ -213,6 +231,8 @@ const CONTENIDO_POR_PERFIL = {
         id: 'scroll.4',
         marco: 'computadora',
         titulo_pieza: 'La venta que se factura en el mismo acto',
+        // Comprobante/factura: cargar la venta y volver a cargarla en ARCA.
+        icono: 'bi-receipt',
         texto: [
           'Cargás la venta. Y después la volvés a cargar en ARCA.',
         ],
@@ -222,6 +242,9 @@ const CONTENIDO_POR_PERFIL = {
         id: 'scroll.5',
         marco: 'computadora',
         titulo_pieza: 'Cuenta corriente con los comprobantes detrás',
+        // Cuenta corriente/deuda: quién debe, no el comprobante en sí (ese ya es el
+        // ícono del bloque 4) -- por eso billetera y no recibo.
+        icono: 'bi-wallet2',
         texto: [
           'Quién te debe. Desde cuándo. Por qué comprobante.',
           'Hoy eso vive en una libreta y en tu cabeza.',
@@ -260,6 +283,9 @@ const CONTENIDO_POR_PERFIL = {
         id: 'scroll.1',
         marco: 'computadora',
         titulo_pieza: 'Stock real por depósito',
+        // Ícono por dolor (grupo 370, prompt 02): depósito/stock -- la promesa que se
+        // rompe es justamente que lo que se ofrece no está en el depósito.
+        icono: 'bi-box-seam',
         texto: [
           'Ves que se prometen cosas que no hay en el depósito.',
           'Y que el problema no es de nadie en particular.',
@@ -270,6 +296,8 @@ const CONTENIDO_POR_PERFIL = {
         id: 'scroll.2',
         marco: 'computadora+telefono',
         titulo_pieza: 'El artículo del sistema publicado en la tienda',
+        // Duplicación: el mismo artículo cargado tres veces en tres lugares distintos.
+        icono: 'bi-copy',
         texto: [
           'Contás las veces que la misma información se carga de nuevo.',
           'Nadie más las cuenta.',
@@ -280,6 +308,8 @@ const CONTENIDO_POR_PERFIL = {
         id: 'scroll.3',
         marco: 'computadora',
         titulo_pieza: 'Actualización masiva de precios aplicándose',
+        // Lista de precios: el dolor es el precio, no el mecanismo de carga masiva.
+        icono: 'bi-tag',
         texto: [
           'Sabés que se está vendiendo con precios viejos.',
           'Explicar cuánto cuesta eso es otra historia.',
@@ -290,6 +320,8 @@ const CONTENIDO_POR_PERFIL = {
         id: 'scroll.4',
         marco: 'computadora',
         titulo_pieza: 'La venta que se factura en el mismo acto',
+        // Comprobante/factura: cargar la venta y volver a cargarla en ARCA.
+        icono: 'bi-receipt',
         texto: [
           'Ves cargar la misma venta dos veces, todos los días.',
         ],
@@ -299,6 +331,9 @@ const CONTENIDO_POR_PERFIL = {
         id: 'scroll.5',
         marco: 'computadora',
         titulo_pieza: 'Cuenta corriente con los comprobantes detrás',
+        // Cuenta corriente/deuda: quién debe, no el comprobante en sí (ese ya es el
+        // ícono del bloque 4) -- por eso billetera y no recibo.
+        icono: 'bi-wallet2',
         texto: [
           'Preguntás quién debe qué, y la respuesta es una libreta.',
         ],
@@ -933,6 +968,39 @@ export default {
   direction: ltr;
 }
 
+/* Ícono sutil por dolor (grupo 370, prompt 02). display:block + text-align lo alinea
+   con el borde del bloque de texto, no del glifo -- por eso no hace falta tocar nada
+   acá para que quede "encima del primer párrafo": el <p> de abajo es el próximo hijo
+   en el mismo flujo normal, sin position ni floats de por medio.
+
+   28px es EL tamaño, no un mínimo: es un detalle que acompaña el texto, no un ícono de
+   navegación. Azul de marca a baja opacidad y no --demo-color-texto-suave (la otra
+   opción que daba el prompt) para que se lea como un acento de marca discreto y no como
+   texto gris más -- el mismo criterio que el degradé de los títulos de cierre. Sin
+   fondo, sin caja: el peso visual de la sección lo siguen teniendo el texto y la pieza.
+
+   rgba(11, 132, 248, ...) y no color-mix() sobre --demo-color-azul: el resto de este
+   archivo (los radial-gradient de abajo) ya resuelve la opacidad de este mismo azul
+   como literal en vez de con la variable, por soporte de navegador -- una sola forma
+   de hacerlo en el archivo compartido. */
+.demo-scroll-dolor__icono-dolor {
+  display: block;
+  font-size: 28px;
+  line-height: 1;
+  color: rgba(11, 132, 248, 0.55);
+  margin: 0 0 14px;
+}
+
+/* Mismo criterio que la alternancia texto/pieza de acá abajo: en los bloques 2 y 4 el
+   texto queda del lado derecho de la grilla (direction: rtl en el wrapper), así que el
+   ícono tiene que acompañarlo ahí y no clavado a la izquierda -- si no, quedaría pegado
+   al hueco de 40px que separa texto y pieza, compitiendo con la pieza en vez de con el
+   texto (motivo explícito del prompt: "para que quede acorde con el diseño"). */
+.demo-fondo-seccion--bloque-2 .demo-scroll-dolor__icono-dolor,
+.demo-fondo-seccion--bloque-4 .demo-scroll-dolor__icono-dolor {
+  text-align: right;
+}
+
 .demo-scroll-dolor__parrafo {
   font-size: clamp(1.05rem, 1.6vw, 1.25rem);
   line-height: 1.5;
@@ -1066,6 +1134,18 @@ export default {
   .demo-scroll-dolor__cierre {
     grid-template-columns: 1fr;
     direction: ltr !important;
+  }
+
+  /* En teléfono la grilla pasa a una sola columna (arriba, direction: ltr !important),
+     así que la alineación a la derecha de los bloques 2 y 4 ya no aplica -- el texto
+     ocupa todo el ancho igual que en los demás. Si se dejara la regla de desktop, el
+     ícono quedaría solo en ese caso pegado al borde derecho de la pantalla, sin nada
+     con que alinearse. Se achica en vez de reinventar el layout (criterio del prompt):
+     mismo ícono, mismo lugar relativo al párrafo, menos espacio que ocupa. */
+  .demo-scroll-dolor__icono-dolor {
+    font-size: 22px;
+    margin-bottom: 10px;
+    text-align: left;
   }
 
   /* Apertura más grande y más separada en teléfono (grupo 369, prompt 01, pedido de
