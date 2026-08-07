@@ -13,7 +13,10 @@
           {{ contenido.apertura.titulo }}
         </h1>
         <!-- El animationend va en el SUBTÍTULO porque es el último en terminar (entra
-             con 4s de retraso): cuando este termina, la entrada completa terminó. -->
+             con retraso): cuando este termina, la entrada completa terminó.
+             El retraso no se repite acá a propósito -- el número vive en el <style>, y
+             una segunda copia se desincroniza en el primer ajuste de tiempos (pasó: el
+             grupo 370 bajó el retraso a 3,5s y este comentario quedó diciendo 4s). -->
         <p
           ref="apertura_subtitulo"
           class="demo-scroll-dolor__apertura-subtitulo"
@@ -873,15 +876,19 @@ export default {
 
    Grupo 369, prompt 01: el titular pasa de demo-apertura-entrada (fade + zoom + blur,
    3s) a demo-apertura-zoom (zoom limpio desde 0.86, 2s) y el subtítulo a un rebote.
-   El retraso del subtítulo son los 2s que tarda el titular más los 2s de pausa que
-   pidió Lucas ("que espere unos dos segundos y recién ahí aparezca el subtítulo").
+   El retraso del subtítulo son los 2s que tarda el titular más la pausa que pidió
+   Lucas después.
+
+   Grupo 370, prompt 01: esa pausa baja de 2s a 1,5s ("me gusta lo que agregaste de
+   que aparezca el subtítulo a los tres segundos, pero quiero cambiarlo para que
+   aparezca a los dos segundos, o al segundo y medio, mejor", 6/8/2026). O sea el
+   retraso pasa de 4s a 3,5s = 2s de titular + 1,5s de pausa.
 
    MEDIDO, para el día que alguien quiera ajustar esa pausa: con la curva de la página
    -- cubic-bezier(0.16, 1, 0.3, 1), que es casi todo movimiento al principio -- el zoom
-   de 2s ya está al 97% al primer segundo. O sea que la pausa PERCIBIDA es de ~3s, no de
-   2. Se deja así porque es lo que declara la especificación del prompt; si Lucas la
-   quiere más corta, lo único que se toca es este retraso (4s -> 3s), no la curva ni la
-   duración.
+   de 2s ya está al 97% al primer segundo. Por eso lo que Lucas mide a ojo es siempre
+   más que la pausa declarada. Lo único que se toca para ajustarla es este retraso, no
+   la curva ni la duración del zoom.
 
    La duración se declara acá, en el `animation` de cada uso, y no en el @keyframes: los
    de demo-experiencia.scss se comparten con otras pantallas. */
@@ -890,7 +897,7 @@ export default {
 }
 
 .demo-scroll-dolor__apertura--carga .demo-scroll-dolor__apertura-subtitulo {
-  animation: demo-apertura-bounce 0.9s cubic-bezier(0.16, 1, 0.3, 1) 4s both;
+  animation: demo-apertura-bounce 0.9s cubic-bezier(0.16, 1, 0.3, 1) 3.5s both;
 }
 
 @media (prefers-reduced-motion: reduce) {
