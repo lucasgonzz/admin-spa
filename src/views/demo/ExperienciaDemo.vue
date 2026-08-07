@@ -119,6 +119,15 @@ import BotonAcceso from '@/components/demo/BotonAcceso.vue'
 import MarcoDispositivo from '@/components/demo/MarcoDispositivo.vue'
 import PiezaMultimedia from '@/components/demo/PiezaMultimedia.vue'
 import crear_avance_guiado from '@/components/demo/avance-guiado'
+/* Los dos tiempos de la secuencia de confirmación vienen del mismo módulo que usa
+   ConfirmacionArmandoDemo.vue (grupo 370, correctivo 8, prompt 06). Antes cada archivo
+   declaraba su propio número "sincronizado a mano" por comentario, y se desincronizaron:
+   la invitación pasó a 3s y el scroll se quedó en 5s, así que entre una cosa y la otra
+   pasaban 2 segundos en vez de 3. */
+import {
+  RETRASO_INVITACION_MS,
+  RETRASO_SCROLL_VIDEO_MS,
+} from '@/components/demo/tiempos-confirmacion'
 // Hoja de estilos acotada a esta página (variables de marca, marcos de
 // dispositivo, placeholder, animación de scroll). Al importarse solo acá,
 // queda dentro del chunk lazy de la ruta /experiencia/:uuid y nunca se
@@ -132,6 +141,7 @@ import '@/assets/scss/demo-experiencia.scss'
  * segundo se lee como un parpadeo, no como una entrada.
  */
 const PISO_PANTALLA_CARGA_MS = 2000
+
 
 /**
  * Página inmersiva de demo (Grupo 300 · pagina-inmersiva-demo, prompts 04 y
@@ -191,10 +201,16 @@ export default {
       /**
        * Handle del setTimeout de mostrar_confirmacion_armando_demo(), para
        * poder cancelarlo si el lead navega y este componente se destruye a
-       * mitad de los 5s (si no, el callback correría igual sobre un
+       * mitad de los 6s (si no, el callback correría igual sobre un
        * componente ya desmontado).
        */
       confirmacion_timeout: null,
+      /**
+       * Handle del setTimeout que libera el scroll antes del desplazamiento
+       * (grupo 370, correctivo 8). Cancela a los 3s (RETRASO_INVITACION_MS)
+       * para que el lead pueda leer la invitación sin estar bloqueado.
+       */
+      confirmacion_scroll_release_timeout: null,
       /**
        * Handle del setTimeout que sostiene la pantalla de carga hasta completar el
        * piso de PISO_PANTALLA_CARGA_MS, para poder cancelarlo si el lead navega
@@ -364,6 +380,9 @@ export default {
        su valor original a una propiedad que ya lo tenía no hace nada. */
     if (this.confirmacion_timeout) {
       clearTimeout(this.confirmacion_timeout)
+    }
+    if (this.confirmacion_scroll_release_timeout) {
+      clearTimeout(this.confirmacion_scroll_release_timeout)
     }
     if (this.carga_timeout) {
       clearTimeout(this.carga_timeout)
@@ -612,7 +631,7 @@ export default {
     },
 
     /**
-     * Muestra la confirmación "armando tu demo" durante ~5s y, al vencer,
+     * Muestra la confirmación "armando tu demo" durante ~6s y, al vencer,
      * scrollea sola hasta el video de introducción -- sin que el lead tenga
      * que hacer nada (grupo 322, prompt 03, criterios 1-3).
      *
@@ -623,13 +642,21 @@ export default {
      * desmonta.
      *
      * GRUPO 355, PROMPT 10. Tres cambios, todos pedidos de Lucas del 5/8/2026:
-     * el shimmer del título ya NO se apaga a los 5s (queda en loop mientras la
+     * el shimmer del título ya NO se apaga a los 6s (queda en loop mientras la
      * pantalla esté a la vista, así que dejó de necesitar un prop que lo
      * prenda y apague); la invitación al video entra a los 3s en vez de a los
      * 900ms (eso lo cuenta ConfirmacionArmandoDemo, desde que la pantalla se
-     * ve); y lo único que sigue pasando a los 5s es el scroll al video más la
-     * liberación del scroll del documento. Los 3 y los 5 se cuentan desde el
-     * mismo punto, no encadenados.
+     * ve); y lo único que sigue pasando a los 6s es el scroll al video.
+     * Los 3 y los 6 se cuentan desde el mismo punto, no encadenados.
+     *
+     * GRUPO 370, CORRECTIVO 8 (grupo-370-correctivo-8-pagina-inmersiva-demo):
+     * el retraso del scroll dejó de ser un número propio y pasa a DERIVARSE del
+     * de la invitación en tiempos-confirmacion.js (RETRASO_SCROLL_VIDEO_MS = 6s),
+     * para que entre la invitación y el scroll haya 3 segundos completos de
+     * lectura y para que no se puedan volver a desincronizar. El scroll
+     * del documento se libera a los 3s (justo cuando aparece la invitación),
+     * no a los 6s: el lead puede leer la invitación sin estar bloqueado,
+     * aunque la transición al video siga en curso.
      *
      * Este método es el ÚNICO lugar donde vive la secuencia: lo llaman
      * enviar_formulario() (el lead acaba de confirmar) y cargar_experiencia()
@@ -638,10 +665,10 @@ export default {
      * ya armada, estática -- "estaría bueno que cuando recargo se desencadenen
      * todas las acciones que se desencadenan cuando le doy al botón".
      *
-     * Bloquea el scroll del documento mientras dura el armado (grupo 325,
-     * prompt 02): sin esto el lead podría scrollear más allá del mensaje
-     * antes de que termine. Se restaura acá al vencer el timeout, y también
-     * en beforeUnmount si el lead navega antes.
+     * Bloquea el scroll del documento mientras dura la lectura de la invitación
+     * (grupo 325, prompt 02): sin esto el lead podría scrollear más allá del
+     * mensaje en los primeros 3 segundos. Se restaura acá a los RETRASO_INVITACION_MS,
+     * y también en beforeUnmount si el lead navega antes.
      *
      * @returns {void}
      */
@@ -654,6 +681,10 @@ export default {
       if (self.confirmacion_timeout) {
         clearTimeout(self.confirmacion_timeout)
         self.confirmacion_timeout = null
+      }
+      if (self.confirmacion_scroll_release_timeout) {
+        clearTimeout(self.confirmacion_scroll_release_timeout)
+        self.confirmacion_scroll_release_timeout = null
       }
 
       self.intro_desbloqueada = true
@@ -677,9 +708,18 @@ export default {
         self.llevar_scroll_al_tope()
       })
 
+      /* Liberar el scroll ANTES del desplazamiento (grupo 370, correctivo 8): el lead
+       * puede leer la invitación sin estar bloqueado, aunque la transición al video
+       * siga en curso. Es más cómodo que mantener el scroll bloqueado 6 segundos
+       * completos. Son dos cosas distintas -- liberar el scroll y mover la página --
+       * y se pueden desacoplar sin afectar la secuencia de confirmación. */
+      self.confirmacion_scroll_release_timeout = setTimeout(function () {
+        self.confirmacion_scroll_release_timeout = null
+        self.bloquear_scroll(false)
+      }, RETRASO_INVITACION_MS)
+
       self.confirmacion_timeout = setTimeout(function () {
         self.confirmacion_timeout = null
-        self.bloquear_scroll(false)
 
         self.$nextTick(function () {
           if (self.$refs.video_intro) {
@@ -694,7 +734,7 @@ export default {
             })
           }
         })
-      }, 5000)
+      }, RETRASO_SCROLL_VIDEO_MS)
     },
 
     /**

@@ -48,14 +48,10 @@
 
 <script>
 import EscenaMarca from './EscenaMarca.vue'
-
-/**
- * Cuánto tarda en aparecer la invitación al video desde que la pantalla se ve
- * (grupo 355, prompt 10). Antes eran 900ms y las dos cosas se leían como un solo
- * momento: "durante los primeros tres segundos lo único que se vea en la pantalla
- * sea ese título" (Lucas, 5/8/2026).
- */
-const RETRASO_INVITACION_MS = 3000
+/* El retraso ya no se declara acá: vive en tiempos-confirmacion.js junto al del
+   scroll al video, que se deriva de él (grupo 370, correctivo 8, prompt 06). Los dos
+   momentos son la misma secuencia contada desde el mismo instante, en dos archivos. */
+import { RETRASO_INVITACION_MS } from './tiempos-confirmacion'
 
 /**
  * Pantalla de confirmación "armando tu demo" (grupo 322, prompt 03), copy de
