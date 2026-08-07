@@ -21,7 +21,10 @@
 
 		<div class="demo-fondo-seccion__pin">
 			<div class="demo-fondo-seccion__fondo" aria-hidden="true"></div>
-			<div class="demo-fondo-seccion__contenido">
+			<div
+				class="demo-fondo-seccion__contenido"
+				:class="{ 'demo-fondo-seccion__contenido--full-bleed': contenido_full_bleed }"
+			>
 				<slot :progreso="progreso" />
 			</div>
 
@@ -161,6 +164,22 @@ export default {
 		boton_avance: {
 			type: Boolean,
 			default: true,
+		},
+		/**
+		 * true si el contenido de esta sección es full-bleed (grupo 370, correctivo 8,
+		 * prompt 03): hoy la apertura y el interludio. Le saca al contenedor el padding
+		 * vertical y al hijo el max-width de 1080px, y le da el alto completo del pin --
+		 * pero NO le fuerza ningún padding al hijo: ese lo declara el propio contenido
+		 * (ver el comentario largo junto a `--full-bleed` en el <style>, ahí está LA
+		 * CUENTA de por qué forzarlo rompe las cosas).
+		 *
+		 * Antes esto salía de la variante (`--apertura`/`--interludio` hardcodeadas en
+		 * el <style>); con una prop, cualquier sección puede pedirlo sin acoplar este
+		 * componente a qué fondo usa cada una.
+		 */
+		contenido_full_bleed: {
+			type: Boolean,
+			default: false,
 		},
 	},
 
@@ -658,28 +677,51 @@ export default {
 	box-sizing: border-box;
 }
 
-.demo-fondo-seccion__contenido > * {
+/* :not(--full-bleed) y no un selector aparte para el caso "normal": así esta regla
+   directamente NO MATCHEA los hijos full-bleed, en vez de competir por especificidad
+   con lo que ese hijo declare para sí mismo (ver el comentario largo de acá abajo). */
+.demo-fondo-seccion__contenido:not(.demo-fondo-seccion__contenido--full-bleed) > * {
 	width: 100%;
 	max-width: 1080px;
 	padding: 0 20px;
 }
 
-/* Apertura e interludio son escenas full-bleed (fondo/SVG a viewport completo), no
-   texto de columna legible: la caja de 1080px de arriba les recortaría el fondo (deja
-   de "llegar a los bordes", criterio de éxito 6 del prompt 01). Excepción DENTRO de
-   este mismo <style scoped> (misma especificidad que la regla base, gana por orden de
-   cascada) para no depender de !important ni de la carrera de carga entre bundles que
-   ya obligó a usarlo en otro lado de esta página (ver demo-experiencia.scss). */
-.demo-fondo-seccion--apertura .demo-fondo-seccion__contenido,
-.demo-fondo-seccion--interludio .demo-fondo-seccion__contenido {
+/* Full-bleed (grupo 370, correctivo 8, prompt 03): reemplaza a la excepción vieja por
+   variante (--apertura/--interludio), que forzaba `padding: 0` sobre EL HIJO. Eso
+   estaba bien mientras el hijo full-bleed era markup sin padding propio (el header de
+   la apertura), pero desde que el interludio pasó a alojar <EscenaHero> (grupo 369,
+   prompt 05) -- un componente que declara SU PROPIO padding en `.hero-escena` -- ese
+   `padding: 0` le ganaba en la cascada y lo dejaba en cero: (0,3,0) contra (0,2,0).
+   La cuenta, verificada compilando el selector con el @vue/compiler-sfc de este mismo
+   proyecto en vez de suponerla: Vue pega el atributo de scope UNA sola vez, en el
+   compound anterior al `>` -- o sea `.demo-fondo-seccion--interludio
+   .demo-fondo-seccion__contenido[data-v-x] > *` son dos clases + UN atributo, no dos,
+   contra la clase + atributo de `.hero-escena[data-v-y]` del propio EscenaHero.vue.
+
+   🔴 MEDIDO en el navegador (prompt 03), no asumido, y el diagnóstico original del
+   prompt NO se sostuvo: no era un problema de overflow. Con la regla vieja,
+   `.hero-escena` medía EXACTAMENTE el alto del pin (800px = 800px a 1280x800, sin
+   overflow.hidden recortando nada) y su padding computado daba 0px en los cuatro
+   lados -- el título "Hoy" quedaba a 0px del borde superior e izquierdo, calcado a la
+   queja de Lucas, pero por padding pisado, no por recorte. Y el contenedor de
+   contenido (`.demo-fondo-seccion__contenido`) ya estaba en `padding: 0` para el
+   interludio desde el grupo 322, no en los `4vh 0` que asumía el diagnóstico.
+
+   Por eso acá NO se fuerza `padding` sobre el hijo full-bleed: solo se le saca la
+   caja angosta de 1080px y se le da el alto completo, y el padding queda enteramente
+   en manos de lo que vive adentro (el header de la apertura, que no declara padding
+   propio y por lo tanto no cambia; `.hero-escena` en EscenaHero.vue, que sí declara
+   el suyo). Si el día de mañana alguien "limpia" esto agregando de nuevo
+   `padding: 0` acá pensando que es simetría con `max-width` y `height`, vuelve a
+   ganarle por especificidad al padding de EscenaHero.vue y el título vuelve a
+   quedar pegado al borde -- sin que exista ningún overflow real que lo explique. */
+.demo-fondo-seccion__contenido--full-bleed {
 	padding: 0;
 }
 
-.demo-fondo-seccion--apertura .demo-fondo-seccion__contenido > *,
-.demo-fondo-seccion--interludio .demo-fondo-seccion__contenido > * {
+.demo-fondo-seccion__contenido--full-bleed > * {
 	max-width: none;
 	height: 100%;
-	padding: 0;
 }
 
 /* Botón de avance (grupo 369, prompt 03). Sutil: un chevron fino en el tono suave de la

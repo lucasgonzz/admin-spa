@@ -517,7 +517,14 @@ export default {
   grid-template-columns: 1.2fr 0.72fr 1.2fr;
   grid-template-rows: minmax(0, 1fr);
   align-items: stretch;
-  padding: clamp(20px, 3vw, 48px) clamp(20px, 3.2vw, 56px) clamp(56px, 5vw, 72px);
+  /* Subido un escalón (grupo 370, correctivo 8, prompt 03) para acompañar al resto de
+     la página, que es más generosa. Hasta este prompt, este padding quedaba pisado en
+     cero por FondoSeccionSticky.vue -- no había overflow real, era la cascada -- así
+     que nunca se había visto en pantalla; ver el comentario largo de
+     FondoSeccionSticky.vue (`.demo-fondo-seccion__contenido--full-bleed > *`) para la
+     causa. Arriba y a los costados con el mismo clamp; abajo más, para que el logo y
+     "PLATAFORMA DE GESTIÓN" respiren del borde. */
+  padding: clamp(28px, 3.6vw, 64px) clamp(28px, 3.6vw, 64px) clamp(64px, 6vw, 88px);
   font-family: var(--demo-font-family);
   color: var(--hero-ink);
 }

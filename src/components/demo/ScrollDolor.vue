@@ -4,7 +4,7 @@
          decisión de Lucas tras ver la escena cinematográfica implementada -- ver nota
          de reversión en demo_experiencia.md §3.18-bis). Ya no arma su propia
          FondoSeccionSticky: la de acá abajo hace todo el trabajo de pin/fondo. -->
-    <fondo-seccion-sticky variante="apertura" v-slot="{ progreso }">
+    <fondo-seccion-sticky variante="apertura" :contenido_full_bleed="true" v-slot="{ progreso }">
       <header
         class="demo-scroll-dolor__apertura"
         :class="{ 'demo-scroll-dolor__apertura--carga': !apertura_entrada_terminada }"
@@ -91,6 +91,13 @@
          · boton_avance false -- un botón que se saltea la escena entera contradice todo
            lo anterior.
 
+         🔴 contenido_full_bleed true (grupo 370, correctivo 8, prompt 03) -- sin esto, el
+         `padding: 0 20px` y el `max-width: 1080px` que FondoSeccionSticky le pone a
+         cualquier hijo "de columna" le ganan por especificidad al padding propio de
+         EscenaHero.vue (.hero-escena) y lo dejan en cero: el título queda pegado al
+         borde, no por overflow -- medido, no hay ningún recorte -- sino por ese padding
+         pisado. Ver el comentario largo en el <style> de FondoSeccionSticky.vue.
+
          🔴 El progreso NO va por el slot escopeado ni por una prop reactiva: va por el
          evento y de ahí a un método del hijo, vía ref. Es el mismo motivo por el que el
          portal lo hacía así (ver FondoSeccionSticky): consumir el progreso desde el
@@ -103,6 +110,7 @@
       :snap_progreso="0"
       :snap_libre_mientras_ocupa="true"
       :boton_avance="false"
+      :contenido_full_bleed="true"
       @progreso="on_progreso_escena"
     >
       <escena-hero ref="escena_hero" :progreso_amortiguado="true" />
