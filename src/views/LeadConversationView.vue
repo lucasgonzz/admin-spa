@@ -67,11 +67,11 @@
           class="icon-btn"
           :class="notify_active ? 'text-primary' : 'text-muted'"
           :title="notify_active
-            ? 'Recibirás un WhatsApp cuando llegue un mensaje de este lead. Clic para desactivar.'
-            : 'Activar notificaciones WhatsApp para mensajes de este lead.'"
+            ? 'Recibirás una notificación en el teléfono cuando llegue un mensaje de este lead. Clic para desactivar.'
+            : 'Activar notificaciones para mensajes de este lead.'"
           :aria-label="notify_active
-            ? 'Desactivar notificaciones WhatsApp para este lead'
-            : 'Activar notificaciones WhatsApp para este lead'"
+            ? 'Desactivar notificaciones para este lead'
+            : 'Activar notificaciones para este lead'"
           :disabled="toggling_notify || !effective_record"
           @click="on_toggle_notify_messages(!notify_active)"
         >
@@ -788,8 +788,10 @@ export default {
     },
 
     /**
-     * true si el admin autenticado está suscrito a notificaciones WhatsApp de este lead.
+     * true si el admin autenticado está suscrito a las notificaciones de este lead.
      * Lee is_notified_by_me que el backend incluye en la respuesta del lead.
+     * El canal es push desde el 11/8/2026 (WhatsApp quedó como red de seguridad para
+     * admins sin device registrado); el mecanismo de suscripción no cambió.
      *
      * @returns {boolean}
      */

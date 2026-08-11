@@ -151,6 +151,7 @@ import VirtualClockPanel from '@/components/debug/VirtualClockPanel.vue'
 import TaskNotificationStack from '@/components/task/TaskNotificationStack.vue'
 import routes from '@/router/routes'
 import api from '@/utils/axios'
+import { ensure_push_registration } from '@/utils/push_notifications'
 
 /**
  * Layout raíz: barra lateral fija + contenido. Oculta nav en login.
@@ -178,6 +179,8 @@ export default {
       pwa_update_available: false,
       /** true mientras se está chequeando o ejecutando seeders pendientes (evita doble disparo). */
       pending_seeders_checked: false,
+      /** true una vez que se corrió el re-registro push del arranque (evita doble disparo). */
+      push_registration_checked: false,
       /** Debug: tiempo virtual (solo activo en entorno local — en producción el endpoint retorna 404). */
       debug_virtual_time_available: false,
       debug_virtual_time_active: false,
@@ -381,6 +384,9 @@ export default {
       if (is_ready && this.$store.state.auth.admin && !this.pending_seeders_checked) {
         this.check_pending_seeders()
       }
+      if (is_ready && this.$store.state.auth.admin && !this.push_registration_checked) {
+        this.refresh_push_registration()
+      }
     },
     /**
      * Tras login manual, session_ready ya es true; dispara el chequeo cuando aparece admin.
@@ -391,6 +397,9 @@ export default {
     '$store.state.auth.admin'(admin) {
       if (admin && this.session_ready && !this.pending_seeders_checked) {
         this.check_pending_seeders()
+      }
+      if (admin && this.session_ready && !this.push_registration_checked) {
+        this.refresh_push_registration()
       }
     },
   },
@@ -720,6 +729,28 @@ export default {
         ':' +
         minute
       )
+    },
+    /**
+     * Mantenimiento del registro push del device, una sola vez por arranque con sesión.
+     *
+     * iOS invalida suscripciones push por su cuenta (se reinstala la PWA, se limpia el
+     * sitio, caduca la suscripción) y el admin no tiene ningún motivo para volver a
+     * Cuenta a rearmarlas: se quedaría sin notificaciones sin enterarse. Con el permiso
+     * ya concedido, re-suscribir no le pide ni le muestra nada — es mantenimiento, no
+     * una acción suya, así que un fallo se loguea y no molesta.
+     *
+     * No dispara el diálogo de permiso: si el permiso no está concedido, no hace nada.
+     *
+     * @returns {Promise<void>}
+     */
+    refresh_push_registration() {
+      /* Evitar que se dispare más de una vez por arranque. */
+      this.push_registration_checked = true
+
+      return ensure_push_registration()
+        .catch(function (error) {
+          console.warn('No se pudo re-registrar el push de este dispositivo.', error)
+        })
     },
     /**
      * Consulta al backend si hay seeders pendientes de ejecución.

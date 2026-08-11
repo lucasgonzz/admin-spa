@@ -7,15 +7,22 @@
       instalada como PWA en el teléfono.
     </p>
 
+    <!-- Mientras se consulta el estado real (permiso + suscripción + backend). -->
+    <div v-if="loading" class="d-flex align-items-center gap-2 text-muted small">
+      <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+      Verificando el estado de las notificaciones…
+    </div>
+
     <!-- El navegador no soporta Web Push (navegador viejo o contexto inseguro/HTTP). -->
-    <div v-if="status === 'unsupported'" class="alert alert-secondary small mb-0">
+    <div v-else-if="state === 'unsupported'" class="alert alert-secondary small mb-0">
       Este navegador no soporta notificaciones push. Probá instalando la app como PWA o usando
       un navegador actualizado sobre HTTPS.
     </div>
 
     <template v-else>
-      <!-- Notificaciones ya activadas en este device. -->
-      <div v-if="status === 'granted'" class="d-flex align-items-center gap-2 flex-wrap">
+      <!-- Permiso concedido Y device registrado en el backend: el único caso en el que
+           las notificaciones realmente van a llegar. -->
+      <div v-if="state === 'registered'" class="d-flex align-items-center gap-2 flex-wrap">
         <span class="badge text-bg-success">✓ Activadas en este dispositivo</span>
         <button
           type="button"
@@ -27,8 +34,25 @@
         </button>
       </div>
 
+      <!-- Permiso concedido pero el device NO quedó registrado en el servidor.
+           Antes este caso mostraba el badge verde y el usuario no recibía nada. -->
+      <div v-else-if="state === 'not_registered'" class="alert alert-warning small mb-0">
+        <p class="mb-2">
+          <strong>Atención:</strong> diste el permiso, pero este dispositivo no quedó registrado:
+          no vas a recibir notificaciones.
+        </p>
+        <button
+          type="button"
+          class="btn btn-warning btn-sm"
+          :disabled="working"
+          @click="on_retry"
+        >
+          {{ working ? 'Reintentando…' : 'Reintentar registro' }}
+        </button>
+      </div>
+
       <!-- El usuario bloqueó el permiso en el navegador: no se puede re-pedir desde JS. -->
-      <div v-else-if="status === 'denied'" class="alert alert-warning small mb-0">
+      <div v-else-if="state === 'denied'" class="alert alert-warning small mb-0">
         Las notificaciones están bloqueadas en la configuración del navegador para este sitio.
         Para activarlas, habilitá los permisos de notificaciones de este sitio desde el navegador
         y recargá la página.
@@ -56,20 +80,29 @@
 import {
   enable_push_notifications,
   disable_push_notifications,
-  push_permission_status,
+  push_registration_status,
+  PUSH_STEPS,
 } from '@/utils/push_notifications'
 
 /**
  * Sección en Cuenta: activa/desactiva las notificaciones Web Push del device actual.
  *
- * Backend: GET /push/vapid-public-key, POST /push/subscribe, POST /push/unsubscribe.
+ * El estado que se muestra es el REAL (permiso del navegador + suscripción del navegador +
+ * fila en el backend), no solo el permiso: hasta el 11/8/2026 esta sección decía "Activadas
+ * en este dispositivo" con solo mirar Notification.permission, así que cuando el guardado en
+ * el servidor fallaba la interfaz afirmaba lo contrario de la realidad.
+ *
+ * Backend: GET /push/vapid-public-key, POST /push/subscribe, POST /push/unsubscribe,
+ * POST /push/subscription-status.
  */
 export default {
   name: 'PushNotificationsSection',
   data() {
     return {
-      /** Estado del permiso del navegador: 'unsupported' | 'granted' | 'denied' | 'default'. */
-      status: 'default',
+      /** Estado real: 'unsupported' | 'denied' | 'default' | 'registered' | 'not_registered'. */
+      state: 'default',
+      /** true mientras se consulta el estado real al montar o después de una acción. */
+      loading: true,
       /** Indica una operación de suscripción/desuscripción en curso. */
       working: false,
       /** Mensaje de éxito mostrado bajo el botón. */
@@ -79,37 +112,105 @@ export default {
     }
   },
   mounted() {
-    // Lee el estado inicial del permiso para decidir qué control mostrar.
-    this.status = push_permission_status()
+    // Consulta el estado real para decidir qué control mostrar.
+    this.refresh_state()
   },
   methods: {
+    /**
+     * Recalcula el estado real combinando permiso, suscripción del navegador y backend.
+     *
+     * @returns {Promise<void>}
+     */
+    refresh_state() {
+      var self = this
+      self.loading = true
+      return push_registration_status()
+        .then(function (status) {
+          self.state = status.state
+        })
+        .catch(function () {
+          // Si ni siquiera se pudo determinar el estado, mostrar el caso de atención:
+          // es preferible ofrecer el reintento a afirmar que está todo bien.
+          self.state = 'not_registered'
+        })
+        .then(function () {
+          self.loading = false
+        })
+    },
+
     /**
      * Pide permiso y suscribe el device a Web Push, guardando la suscripción en el backend.
      */
     on_enable() {
+      this.register('Notificaciones activadas en este dispositivo.')
+    },
+
+    /**
+     * Reintenta el registro cuando el permiso ya está concedido pero el backend no tiene la fila.
+     */
+    on_retry() {
+      this.register('Listo: este dispositivo quedó registrado.')
+    },
+
+    /**
+     * Registro del device, compartido por el alta y el reintento.
+     *
+     * @param {string} success_text Mensaje a mostrar si sale bien.
+     */
+    register(success_text) {
       var self = this
       self.working = true
       self.success_message = ''
       self.error_message = ''
       enable_push_notifications()
-        .then(function (subscribed) {
-          // Refresca el estado del permiso (granted/denied) tras la respuesta del navegador.
-          self.status = push_permission_status()
-          if (subscribed) {
-            self.success_message = 'Notificaciones activadas en este dispositivo.'
-          } else if (self.status === 'denied') {
-            self.error_message = 'Rechazaste el permiso de notificaciones en el navegador.'
-          } else {
-            self.error_message = 'No se pudieron activar las notificaciones en este navegador.'
-          }
+        .then(function () {
+          self.success_message = success_text
         })
-        .catch(function () {
-          self.status = push_permission_status()
-          self.error_message = 'Ocurrió un error al activar las notificaciones. Probá de nuevo.'
+        .catch(function (error) {
+          self.error_message = self.message_for_error(error)
         })
         .then(function () {
+          // El estado se recalcula siempre, haya salido bien o mal: es la única forma de
+          // que lo que se muestra sea lo que efectivamente quedó guardado.
+          return self.refresh_state()
+        })
+        .then(function () {
+          // Si el registro dijo que salió bien pero el estado real no lo confirma, gana el
+          // estado real: mostrar "listo" arriba del cartel de atención es la misma clase de
+          // mentira que este cambio vino a sacar.
+          if (self.success_message && self.state !== 'registered') {
+            self.success_message = ''
+            self.error_message = 'El registro no quedó confirmado por el servidor. Probá de nuevo.'
+          }
           self.working = false
         })
+    },
+
+    /**
+     * Traduce el error de registro a un mensaje que diga EN QUÉ PASO falló.
+     *
+     * @param {Error} error Error lanzado por enable_push_notifications.
+     * @returns {string}
+     */
+    message_for_error(error) {
+      var step = error && error.step ? error.step : ''
+
+      if (step === PUSH_STEPS.UNSUPPORTED) {
+        return 'Este navegador no soporta notificaciones push.'
+      }
+      if (step === PUSH_STEPS.PERMISSION) {
+        return 'No se activaron: falta el permiso de notificaciones del navegador. ' +
+          'Si lo rechazaste, habilitalo desde la configuración del sitio y recargá.'
+      }
+      if (step === PUSH_STEPS.SUBSCRIPTION) {
+        return 'El navegador no pudo crear la suscripción de este dispositivo. ' +
+          'En iPhone hace falta tener la app instalada como PWA desde la pantalla de inicio.'
+      }
+      if (step === PUSH_STEPS.BACKEND) {
+        return 'El permiso quedó dado, pero el servidor no pudo guardar este dispositivo. ' +
+          'Probá de nuevo; si sigue fallando, avisale al equipo de sistemas.'
+      }
+      return 'Ocurrió un error al activar las notificaciones. Probá de nuevo.'
     },
 
     /**
@@ -126,6 +227,9 @@ export default {
         })
         .catch(function () {
           self.error_message = 'No se pudo desactivar la suscripción. Probá de nuevo.'
+        })
+        .then(function () {
+          return self.refresh_state()
         })
         .then(function () {
           self.working = false
