@@ -653,13 +653,23 @@
 //    apaisado), y existe porque el requisito es "el que más ocupa manda": si no
 //    entran los dos, se achica el VIDEO, nunca se recorta el mensaje.
 //
-// De dónde salen los 230px de reserva, medidos contra el más alto de los cinco
-// estados de BotonAcceso -- que NO es el que uno esperaría: es `activo` con el
-// mensaje de error visible (139px), un pelo más que `antes` con su cuenta
-// regresiva (138px). Más hasta 40px del gap de la sección y 48px de su padding
-// vertical: 227. Los 3px que sobran son el colchón, y es poco a propósito -- este
-// tope sólo entra a jugar por debajo de 411px de alto de viewport, donde de todas
-// formas lo que manda es el ancho.
+// De dónde sale la reserva, medida contra el más alto de los cinco estados de
+// BotonAcceso -- que NO es el que uno esperaría: es `activo` con el mensaje de
+// error visible (139px con el tamaño de texto por defecto), un pelo más que
+// `antes` con su cuenta regresiva (138px). Más hasta 40px del gap de la sección
+// y 48px de su padding vertical: 227.
+//
+// 🔴 VA EN `rem`, NO EN PÍXELES, y esto no es preciosismo: el bloque del turno es
+// TEXTO, así que su alto crece con el tamaño de fuente base del navegador. Con la
+// reserva en píxeles fijos, un lead que tenga el navegador configurado en "texto
+// grande" (24px de base, un ajuste de accesibilidad común y que NO cambia `vh`,
+// a diferencia del zoom) se encontraba con el mensaje cortado por abajo y el
+// video sin achicarse ni un píxel -- exactamente al revés de lo que esta regla
+// existe para garantizar. Medido a 844x390 y a 1024x600, que son dos de los
+// tamaños que la propia misión pedía probar.
+//
+// 14.375rem son los mismos 230px con la base de 16px por defecto, así que a
+// tamaño normal nada cambia; a 24px de base la reserva pasa a 345px sola.
 // Es una reserva fija a propósito: medir el bloque en JS para devolverle los
 // píxeles sobrantes al video cambiaría el tamaño del video según el estado del
 // turno, y un video que cambia de tamaño entre visitas se lee como un error.
@@ -679,10 +689,10 @@
 		// respaldo va primero a propósito -- un navegador con soporte de dvh se queda
 		// con la segunda, que es la buena, y uno sin soporte la descarta entera y
 		// conserva la primera. Mismo patrón que el resto de la página.
-		width: min(100%, calc(min(56vh, calc(100vh - 230px)) * 16 / 9));
-		width: min(100%, calc(min(56vh, calc(100dvh - 230px)) * 16 / 9));
-		max-height: min(56vh, calc(100vh - 230px));
-		max-height: min(56vh, calc(100dvh - 230px));
+		width: min(100%, calc(min(56vh, calc(100vh - 14.375rem)) * 16 / 9));
+		width: min(100%, calc(min(56vh, calc(100dvh - 14.375rem)) * 16 / 9));
+		max-height: min(56vh, calc(100vh - 14.375rem));
+		max-height: min(56vh, calc(100dvh - 14.375rem));
 	}
 }
 

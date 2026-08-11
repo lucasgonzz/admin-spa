@@ -141,6 +141,9 @@ import BotonAcceso from '@/components/demo/BotonAcceso.vue'
 import MarcoDispositivo from '@/components/demo/MarcoDispositivo.vue'
 import PiezaMultimedia from '@/components/demo/PiezaMultimedia.vue'
 import crear_avance_guiado from '@/components/demo/avance-guiado'
+/* Con alias porque el computed de abajo se llama igual: acá se necesita la función
+   compartida, no la propiedad del componente. */
+import { hay_bloque_de_turno as turno_tiene_bloque } from '@/components/demo/estados-turno'
 /* Los dos tiempos de la secuencia de confirmación vienen del mismo módulo que usa
    ConfirmacionArmandoDemo.vue (grupo 370, correctivo 8, prompt 06). Antes cada archivo
    declaraba su propio número "sincronizado a mano" por comentario, y se desincronizaron:
@@ -332,19 +335,20 @@ export default {
 
     /**
      * true cuando BotonAcceso va a renderizar algo debajo del video (misión 12,
-     * pieza 4). Es la condición de ese componente, no una propia: allá el
-     * `<section>` entero está bajo `v-if="estado !== 'sin_turno'"`, y `estado`
-     * cae a 'sin_turno' también cuando el turno todavía no llegó.
+     * pieza 4). No es una condición propia: es LA MISMA función que usa ese
+     * componente para decidir si se muestra (`estados-turno.js`), así que las dos
+     * no se pueden desincronizar. Antes cada archivo tenía su copia escrita a
+     * mano y un estado desconocido del backend achicaba el video para dejarle
+     * lugar a un bloque que no se renderizaba.
      *
-     * Se calcula acá, y no con `:has()` en el CSS, porque el tamaño del video
+     * Se calcula en JS, y no con `:has()` en el CSS, porque el tamaño del video
      * depende de si hay bloque debajo y esa es información que la vista ya
      * tiene: preguntarle al DOM sería adivinar dos veces lo mismo.
      *
      * @returns {boolean}
      */
     hay_bloque_de_turno() {
-      const estado = (this.turno && this.turno.estado) || 'sin_turno'
-      return estado !== 'sin_turno'
+      return turno_tiene_bloque(this.turno)
     },
   },
 

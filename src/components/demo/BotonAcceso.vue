@@ -1,7 +1,10 @@
 <template>
   <!-- Sin turno asignado: no se muestra ningún bloque (tabla de estados,
-       demo_pagina.md §4 + contexto/demo_experiencia.md §3.14) -->
-  <section v-if="estado !== 'sin_turno'" class="demo-boton-acceso">
+       demo_pagina.md §4 + contexto/demo_experiencia.md §3.14). La condición sale de
+       estados-turno.js y no está escrita acá porque ExperienciaDemo.vue necesita la
+       misma respuesta para saber si achicarle el sitio al video: ver el comentario
+       de ese módulo. -->
+  <section v-if="muestra_bloque" class="demo-boton-acceso">
     <!-- a) Antes del turno: hora reservada + cuenta regresiva + recordatorio de
          entrar desde una computadora. Texto de demo_pagina.md §4 a) -->
     <div v-if="estado === 'antes'" class="demo-boton-acceso__bloque">
@@ -56,6 +59,8 @@
 </template>
 
 <script>
+import { hay_bloque_de_turno } from './estados-turno'
+
 /**
  * Botón de acceso a la demo (Grupo 300 · pagina-inmersiva-demo, prompt 05).
  * Cuatro estados, con los textos de contexto/demo_pagina.md §4 -- se
@@ -135,6 +140,18 @@ export default {
      */
     estado() {
       return (this.turno && this.turno.estado) || 'sin_turno'
+    },
+
+    /**
+     * true si este componente tiene algo que mostrar para el estado actual. Un estado
+     * que el backend agregue mañana y que los `v-else-if` de abajo no contemplen cae
+     * acá en false: mejor no mostrar nada que una caja vacía (y que el contenedor le
+     * achique el video para hacerle lugar).
+     *
+     * @returns {boolean}
+     */
+    muestra_bloque() {
+      return hay_bloque_de_turno(this.turno)
     },
 
     /**
