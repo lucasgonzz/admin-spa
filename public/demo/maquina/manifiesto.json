@@ -1,0 +1,21 @@
+{
+  "generado_por": "scripts/generar-cuadros-maquina/generar.mjs",
+  "duracion_s": 12,
+  "aspecto": 1.65306,
+  "perfiles": [
+    {
+      "nombre": "escritorio",
+      "ancho": 640,
+      "alto": 387,
+      "fps": 10,
+      "cuadros": 120
+    },
+    {
+      "nombre": "telefono",
+      "ancho": 320,
+      "alto": 194,
+      "fps": 10,
+      "cuadros": 120
+    }
+  ]
+}

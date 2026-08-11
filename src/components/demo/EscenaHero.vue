@@ -81,9 +81,9 @@
     <div class="hero-escena__core">
       <div class="hero-escena__core-anchor">
         <div class="hero-escena__core-glow" aria-hidden="true"></div>
-        <!-- El canvas se monta siempre; si no hay WebGL queda vacío y en su lugar se ve
-             el isotipo estático de abajo (ver `sin_webgl`). -->
-        <canvas v-if="!sin_webgl" ref="canvas" class="hero-escena__canvas" aria-hidden="true"></canvas>
+        <!-- El canvas se monta siempre; si la máquina no se puede reproducir queda
+             vacío y en su lugar se ve el isotipo estático de abajo (ver `sin_maquina`). -->
+        <canvas v-if="!sin_maquina" ref="canvas" class="hero-escena__canvas" aria-hidden="true"></canvas>
         <img
           v-else
           src="../../assets/isotipo-comerciocity.svg"
@@ -159,6 +159,7 @@
 
 <script>
 import { crear_coreografia } from './escena-coreografia'
+import { precargar_cuadros, crear_reproductor, soltar_cuadros } from './maquina-cuadros'
 
 /**
  * Copy de las trece tarjetas, transcrito de contexto/demo_pagina.md (sección del
@@ -234,12 +235,16 @@ const SOLUCIONES = [
  * en `marca/animacion-hero/` del repo de conocimiento, con un README que explica qué NO
  * se copia tal cual.
  *
- * 🔴 THREE.JS ENTRA POR UN IMPORT DINÁMICO Y ESO NO ES UN DETALLE DE ESTILO. Esta es una
- * página PÚBLICA que la mayoría de los leads abre desde el teléfono, y hoy el bundle del
- * admin no carga three en absoluto. `import('./escena-maquina')` hace que Vite se lleve
- * three y la escena 3D a un chunk aparte, que se pide recién cuando este componente se
- * monta. Si algún día alguien cambia esto por un import estático, la primera pantalla de
- * la demo pasa a pesar cientos de KB más.
+ * 🔴 LA MÁQUINA YA NO SE RENDERIZA EN VIVO (misión 12, piezas 1 y 2). Era una escena
+ * de three.js que llegaba por un `import()` dinámico, y andaba lenta en la máquina de
+ * Lucas. Ahora es una secuencia de cuadros WebP pre-renderizados que se dibujan en un
+ * canvas 2D (`maquina-cuadros.js`), y `three` se borró del proyecto entero.
+ *
+ * Por eso el import de la máquina pasó a ser ESTÁTICO: el motivo del dinámico era no
+ * arrastrar three al bundle inicial de una página pública que la mayoría de los leads
+ * abre desde el teléfono. El módulo nuevo son unos pocos KB y lo pesado -- la tira de
+ * imágenes -- no está en el bundle: se pide por red cuando el lead entra al primer
+ * bloque de dolor, cuatro pantallas antes de llegar acá.
  */
 export default {
   name: 'EscenaHero',
@@ -269,13 +274,14 @@ export default {
       problemas: PROBLEMAS,
       soluciones: SOLUCIONES,
       /**
-       * true si no se pudo crear el contexto WebGL, o si el sistema pide reduced-motion.
+       * true si la máquina no se puede reproducir (la tira de cuadros no cargó, o el
+       * navegador no tiene con qué decodificarla), o si el sistema pide reduced-motion.
        * En los dos casos la escena muestra el isotipo estático en el centro y las
        * tarjetas quedan legibles: es una página pública, un hueco negro o un error en
        * consola no son opciones.
        */
-      sin_webgl: false,
-      /** Lo que devuelve crear_maquina(), o null. */
+      sin_maquina: false,
+      /** Lo que devuelve crear_reproductor(), o null. */
       maquina: null,
       /** Lo que devuelve crear_coreografia(), o null. */
       coreografia: null,
@@ -327,7 +333,7 @@ export default {
       /* Ni canvas ni bucle: estado estático. El CSS de este archivo deja las trece
          tarjetas visibles y legibles bajo esta preferencia, así que la escena sigue
          contando lo mismo sin moverse. */
-      this.sin_webgl = true
+      this.sin_maquina = true
       return
     }
 
@@ -366,16 +372,20 @@ export default {
 
   methods: {
     /**
-     * Pide el chunk de la escena 3D recién cuando la sección se acerca, no al montar.
+     * Monta la máquina recién cuando la sección se acerca, no al montar el componente.
      *
-     * 🔴 El chunk son 538 kB y esta es una página pública que la mayoría de los leads abre
-     * desde el teléfono. Que viaje aparte del bundle inicial (import dinámico) evita que
-     * BLOQUEE la primera pantalla, pero no evita que se descargue junto con ella: este
-     * componente vive dentro del slot de una sección que se renderiza siempre, así que
-     * arrancar en el `mounted()` pedía el medio megabyte de entrada -- lo marcó el checker
-     * del prompt 05, y es el objetivo de fondo del §1 de ese prompt, no sólo su criterio.
-     * Con un margen de una pantalla entera, la escena ya está lista bastante antes de que
-     * el lead llegue.
+     * 🔴 Lo que se está difiriendo cambió de naturaleza (misión 12, pieza 1) pero el
+     * motivo es el mismo. Antes era un chunk de 538 kB con three adentro; ahora es una
+     * tira de imágenes de ~1,3 MB. Esta es una página pública que la mayoría de los
+     * leads abre desde el teléfono, y este componente vive dentro del slot de una
+     * sección que se renderiza siempre: pedir eso en el `mounted()` sería pedirlo junto
+     * con la primera pantalla.
+     *
+     * La diferencia con antes es que ahora la descarga arranca ANTES de este punto, no
+     * acá: la dispara ScrollDolor cuando el lead entra al primer bloque de dolor, con
+     * cuatro pantallas por delante. `precargar_cuadros()` es idempotente, así que esta
+     * llamada normalmente se engancha a esa descarga en curso en vez de empezar otra.
+     * Sigue haciendo falta igual para el lead que llega con la escena ya a la vista.
      *
      * Si no hay IntersectionObserver, se arranca de una: es preferible el comportamiento
      * de antes a no tener escena.
@@ -405,26 +415,27 @@ export default {
     },
 
     /**
-     * Carga la escena 3D y arranca la coreografía.
+     * Espera a que la tira de cuadros esté decodificada, monta el reproductor y arranca
+     * la coreografía.
      *
-     * El `import()` es la ÚNICA excepción al "prohibido async/await" del workspace que se
-     * permite acá, y se resuelve con `.then()`/`.catch()` justamente para no traer
-     * `async` a un componente de la SPA. Si el chunk no carga (red del lead, caché
-     * envenenada), se cae al estado estático sin ruido.
+     * `precargar_cuadros()` nunca rechaza -- devuelve null si no pudo -- así que el
+     * `.catch()` es sólo la red de seguridad de un error inesperado. Se resuelve con
+     * `.then()`/`.catch()` y no con async/await por la regla del workspace.
      *
      * @returns {void}
      */
     arrancar() {
       const self = this
-      import('./escena-maquina')
-        .then(function (modulo) {
+      precargar_cuadros()
+        .then(function (tira) {
           if (self.desmontado || !self.$refs.canvas) {
             return
           }
-          self.maquina = modulo.crear_maquina(self.$refs.canvas)
+          self.maquina = crear_reproductor(self.$refs.canvas, tira)
           if (!self.maquina) {
-            /* Sin contexto WebGL: el canvas se retira y queda el isotipo estático. */
-            self.sin_webgl = true
+            /* Sin cuadros que reproducir: el canvas se retira y queda el isotipo
+               estático. */
+            self.sin_maquina = true
           }
           self.arrancar_coreografia()
         })
@@ -432,9 +443,9 @@ export default {
           if (self.desmontado) {
             return
           }
-          self.sin_webgl = true
-          /* La coreografía de las tarjetas no depende de three: se arranca igual, así que
-             la escena sigue teniendo su movimiento aunque el 3D no cargue. */
+          self.sin_maquina = true
+          /* La coreografía de las tarjetas no depende de la máquina: se arranca igual,
+             así que la escena sigue teniendo su movimiento aunque la tira no cargue. */
           self.arrancar_coreografia()
         })
     },
@@ -444,15 +455,14 @@ export default {
      */
     arrancar_coreografia() {
       const self = this
-      /* En nextTick: si sin_webgl acaba de cambiar, el canvas se retiró del DOM y las
+      /* En nextTick: si sin_maquina acaba de cambiar, el canvas se retiró del DOM y las
          medidas de la coreografía tienen que tomarse sobre el layout ya actualizado. */
       this.$nextTick(function () {
         if (self.desmontado || !self.$refs.raiz || self.coreografia) {
           return
         }
-        /* Import estático a propósito (ver el import de arriba): la coreografía es JS
-           propio de unos pocos KB y no arrastra three. Lo único que va al chunk dinámico
-           es la escena 3D. */
+        /* La coreografía es JS propio de unos pocos KB, igual que el reproductor de la
+           máquina: desde la misión 12 no queda nada pesado en el bundle de esta escena. */
         self.coreografia = crear_coreografia(self.$refs.raiz, self.maquina, self.eje)
         self.aplicar_progreso(self.progreso)
         self.arrancar_observador_visibilidad()
@@ -462,7 +472,7 @@ export default {
     /**
      * Prende el vigía permanente de viewport (grupo 370, correctivo 8, prompt 04,
      * criterio b). Se arranca acá (no en `mounted()`) porque recién acá existen
-     * `coreografia` y (si hay WebGL) `maquina`, que son a quienes hay que pausar.
+     * `coreografia` y (si la tira cargó) `maquina`, que son a quienes hay que pausar.
      *
      * Mismo margen generoso que `arrancar_cuando_se_acerque()` (una pantalla entera):
      * así los bucles ya están corriendo de nuevo antes de que la escena vuelva a
@@ -545,9 +555,14 @@ export default {
     },
 
     /**
-     * Apaga todo: el bucle de la coreografía, el de la máquina, sus listeners de resize y
-     * el contexto WebGL. Sin esto, cada entrada a la página deja un contexto vivo y el
-     * navegador termina matando los viejos a la fuerza.
+     * Apaga todo: el bucle de la coreografía, el del reproductor de la máquina y sus
+     * listeners de resize, y suelta los cuadros decodificados.
+     *
+     * Antes lo que había que soltar acá era el contexto WebGL, porque el navegador tiene
+     * un tope por pestaña y terminaba matando los viejos a la fuerza. Ese problema ya no
+     * existe, pero el de fondo sí y es del mismo tipo: los ImageBitmap de la tira son
+     * ~120 MB de píxeles crudos, y sin este `destruir()` se quedarían vivos después de
+     * que el lead se fue de la página.
      *
      * @returns {void}
      */
@@ -559,7 +574,14 @@ export default {
       if (this.maquina) {
         this.maquina.destruir()
         this.maquina = null
+        return
       }
+
+      /* Sin reproductor montado y con la página yéndose: puede haber una precarga en
+         vuelo que nadie va a reclamar (el lead entró a los bloques de dolor, la descarga
+         arrancó, y se fue antes de llegar hasta acá). `destruir()` no cubre ese caso
+         porque nunca hubo qué destruir. */
+      soltar_cuadros()
     },
   },
 }
@@ -969,8 +991,8 @@ export default {
   height: 100%;
 }
 
-/* Respaldo sin WebGL y bajo reduced-motion: el isotipo quieto en el centro, del tamaño
-   que ocuparía la máquina. */
+/* Respaldo cuando la máquina no se puede reproducir y bajo reduced-motion: el isotipo
+   quieto en el centro, del tamaño que ocuparía la máquina. */
 .hero-escena__isotipo-respaldo {
   position: relative;
   width: min(46%, 180px);

@@ -1,0 +1,89 @@
+{
+  "duracion_s": 12,
+  "calidad": 0.82,
+  "aspecto": 1.65306,
+  "perfiles": [
+    {
+      "nombre": "escritorio",
+      "ancho": 640,
+      "alto": 387,
+      "fps": 10,
+      "cuadros": 120,
+      "peso_kb": 1352,
+      "presupuesto_kb": 2048,
+      "cierre_en_el_render": {
+        "distintos": 0,
+        "total": 247680,
+        "porcentaje": 0,
+        "maxima": 0,
+        "control_media_vuelta": {
+          "distintos": 83793,
+          "total": 247680,
+          "porcentaje": 33.8312,
+          "maxima": 255
+        }
+      },
+      "cierre_en_los_archivos": {
+        "cierre": 21.3,
+        "consecutivos_min": 17.81,
+        "consecutivos_mediana": 20.29,
+        "consecutivos_max": 22.88,
+        "percentil_del_cierre": 86,
+        "pares_medidos": 119
+      },
+      "frecuencias": {
+        "rotacion_y": 0.5235987755982988,
+        "rotacion_x": 0.5235987755982988,
+        "posicion_y": 0.5235987755982988,
+        "leds": 4.1887902047863905,
+        "aro_salida": 4.1887902047863905,
+        "luz_azul": 2.617993877991494,
+        "engranajes": [
+          0.2945243112740431,
+          -0.39269908169872414
+        ]
+      }
+    },
+    {
+      "nombre": "telefono",
+      "ancho": 320,
+      "alto": 194,
+      "fps": 10,
+      "cuadros": 120,
+      "peso_kb": 673,
+      "presupuesto_kb": 800,
+      "cierre_en_el_render": {
+        "distintos": 0,
+        "total": 62080,
+        "porcentaje": 0,
+        "maxima": 0,
+        "control_media_vuelta": {
+          "distintos": 21359,
+          "total": 62080,
+          "porcentaje": 34.4056,
+          "maxima": 255
+        }
+      },
+      "cierre_en_los_archivos": {
+        "cierre": 30.51,
+        "consecutivos_min": 25.84,
+        "consecutivos_mediana": 29.11,
+        "consecutivos_max": 31.46,
+        "percentil_del_cierre": 85,
+        "pares_medidos": 119
+      },
+      "frecuencias": {
+        "rotacion_y": 0.5235987755982988,
+        "rotacion_x": 0.5235987755982988,
+        "posicion_y": 0.5235987755982988,
+        "leds": 4.1887902047863905,
+        "aro_salida": 4.1887902047863905,
+        "luz_azul": 2.617993877991494,
+        "engranajes": [
+          0.2945243112740431,
+          -0.39269908169872414
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "generar-cuadros-maquina",
+  "private": true,
+  "type": "module",
+  "description": "Herramienta de generacion, NO es parte del build de admin-spa. Sus dependencias viven acá a propósito: three y playwright no tienen por qué estar en el package.json de la SPA, que desde la misión 12 no renderiza nada en 3D.",
+  "dependencies": {
+    "playwright": "^1.62.1",
+    "three": "0.184.0"
+  }
+}

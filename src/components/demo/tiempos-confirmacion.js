@@ -27,18 +27,25 @@ export const RETRASO_INVITACION_MS = 3000
 
 /**
  * Cuánto se le da al lead para leer la invitación antes de moverle la página
- * (grupo 370, correctivo 8, prompt 06). Es el pedido textual de Lucas del 6/8/2026:
+ * (grupo 370, correctivo 8, prompt 06). Era el pedido textual de Lucas del 6/8/2026:
  * "quiero que desde que aparece ese segundo subtítulo transcurran al menos 3 segundos
  * antes de que se haga el scroll hacia el video".
  *
+ * 10/8/2026 (misión 12, pieza 3): pasa de 3000 a 4000. Lucas: "quiero que agrandes la
+ * espera hasta ejecutar el scroll automático un segundo más de lo que ya está",
+ * aclarando que el momento en que aparece el subtítulo está bien -- por eso se mueve
+ * ESTE número y no RETRASO_INVITACION_MS. El anterior no se borra: la historia de por
+ * qué un número es el que es vale más que el número.
+ *
  * @type {number}
  */
-export const LECTURA_INVITACION_MS = 3000
+export const LECTURA_INVITACION_MS = 4000
 
 /**
  * Momento del scroll automático al video, contado desde el mismo instante que la
  * invitación. Derivado, no declarado: mover RETRASO_INVITACION_MS arrastra este
- * número solo y los 3 segundos de lectura se mantienen.
+ * número solo y los segundos de lectura declarados arriba se mantienen. Hoy da 7000
+ * (3000 + 4000).
  *
  * @type {number}
  */

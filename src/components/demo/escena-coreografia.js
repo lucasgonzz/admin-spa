@@ -103,7 +103,8 @@ function centro_de(el) {
  * Arranca la coreografía dentro de `raiz` (el elemento raíz del componente).
  *
  * @param {Element} raiz
- * @param {object|null} maquina Lo que devuelve crear_maquina(), o null si no hay WebGL.
+ * @param {object|null} maquina Lo que devuelve crear_reproductor() de maquina-cuadros.js,
+ *                              o null si la tira de cuadros no se pudo cargar.
  * @param {string} eje 'h' horizontal (desktop) | 'v' vertical (teléfono).
  * @returns {{set_progreso: function, relayout: function, destruir: function}}
  */

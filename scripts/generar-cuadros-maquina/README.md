@@ -1,0 +1,79 @@
+# Generador de los cuadros de la máquina
+
+La máquina que se ve en el centro de la escena hero de `/experiencia/:uuid` **no se
+renderiza en vivo**: son cuadros WebP pre-renderizados que se reproducen en un canvas 2D.
+Acá se generan.
+
+Esto **no es parte del build de la SPA**. Se corre a mano, cuando cambia el diseño de la
+máquina, y su salida (`public/demo/maquina/`) se versiona.
+
+```bash
+cd scripts/generar-cuadros-maquina
+npm install                 # playwright + three, sólo para esto
+npx playwright install chromium
+
+cd ../..
+node scripts/generar-cuadros-maquina/generar.mjs
+```
+
+## Por qué existe
+
+Lucas, 7/8/2026: *"sigue andando bastante lento… lo que quedaría hacer es o hacer que se
+precargue mientras estoy viendo los dolores, o directamente montarlo como un video en
+loop o como un GIF"*, y *"no me importa sacrificar el funcionamiento del scroll con tal
+de que fluya y se aprecie bien"*.
+
+La escena en vivo era WebGL con antialias, cuatro luces, geometrías extruidas con
+`curveSegments: 22` y dos texturas, sesenta veces por segundo. Lo que quedó es dibujar
+una imagen ya decodificada: órdenes de magnitud menos trabajo, y la fluidez deja de
+depender de la máquina del lead.
+
+Se perdió la reacción de la máquina al scroll (`power` y `suck`), a propósito. Se
+conservó el resplandor del centro, que es CSS.
+
+## Qué hay acá
+
+| Archivo | Qué es |
+|---|---|
+| `escena-determinista.js` | La escena. **Es la última copia viva de la geometría**: el módulo que la renderizaba en la SPA se borró. El diseño original sigue en `marca/animacion-hero/machine.js` del repo de conocimiento. |
+| `generar.mjs` | Abre la escena en Chromium, le fija el reloj a mano de a pasos, guarda cada cuadro como WebP y escribe el manifiesto. |
+| `comparar-con-el-original.mjs` | Mide cuánto se aparta el pre-render de la escena que había antes. Evidencia, no herramienta de uso diario. |
+| `ultimo-reporte.json` | Lo que devolvió la última corrida de `generar.mjs`. |
+
+## Las dos cosas que hay que entender antes de tocar esto
+
+**1. El loop tiene que cerrar.** La escena mezcla senos de frecuencias que no son
+múltiplos entre sí y engranajes que acumulan rotación, así que el último cuadro no
+empalma con el primero por sí solo. El generador cuantiza cada frecuencia al armónico
+entero del loop más cercano y le da a cada engranaje un número entero de pasos de diente.
+
+Eso se verifica con **dos mediciones distintas, y hacen falta las dos**:
+
+| Medición | Qué compara | Última corrida |
+|---|---|---|
+| `cierre_en_el_render` | Los píxeles del render en `t = 0` contra `t = T`, en memoria, antes de comprimir. Prueba que la **cuantización** cierra. | **0 % de píxeles distintos** en las dos tiras (control contra la mitad del loop: 34 %, así que el cero no es una medición rota) |
+| `cierre_en_los_archivos` | Los WebP **ya escritos**, decodificados como los va a decodificar el navegador: el salto `0119 → 0000` contra la distribución de los 119 saltos consecutivos. Prueba que **no se ve** el empalme. | escritorio: salto de 21,3 % contra un rango normal de 17,8-22,9 % → **percentil 86**. Teléfono: 30,5 % contra 25,8-31,5 % → percentil 85. |
+
+Por qué las dos: el 0 % del render **no dice nada sobre lo que se ve**. Con la compresión
+WebP en el medio, dos cuadros consecutivos cualesquiera difieren en un 18-23 % de sus
+píxeles — o sea que un 21 % en el empalme no es un salto, es un cuadro más. Leer solo el
+0 % daría una falsa sensación de exactitud bit a bit que no existe; leer solo el 21 %
+sonaría a que el loop no cierra. Lo que importa es que el salto del cierre **se confunda
+con los demás**, y eso es lo que dice el percentil.
+
+**2. El aspecto de las tiras no es arbitrario.** Es el punto exacto donde la escena
+original dejaba de alejar la cámara (1,6531), lo que hace que dibujar la tira con
+`contain` reproduzca el encuadre viejo en cualquier tamaño de pantalla. El porqué
+completo está en el comentario `ENCUADRE` de `escena-determinista.js`. Cambiarlo sin leer
+eso deja la máquina de otro tamaño respecto del resto de la escena, y nada avisa.
+
+## Presupuesto
+
+| Perfil | Tamaño | Cuadros | Peso | Presupuesto |
+|---|---|---|---|---|
+| escritorio | 640x387 | 120 @ 10 fps | 1352 kB | 2048 kB |
+| teléfono | 320x194 | 120 @ 10 fps | 673 kB | 800 kB |
+
+Si una tira se pasa del presupuesto, el generador **baja los cuadros por segundo, no la
+calidad**: el movimiento es lento y tolera mejor menos cuadros que compresión sucia. Los
+candidatos están en `FPS_CANDIDATOS` y gana el primero que entre.

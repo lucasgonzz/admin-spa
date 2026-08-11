@@ -78,15 +78,31 @@
              va directo al tope de la página (grupo 348, prompt 07). -->
         <confirmacion-armando-demo :turno="turno" />
 
-        <!-- Video de introducción: pieza "intro" del catálogo. A diferencia de
-             los clips del scroll, va con controles y sonido, sin autoplay (son
-             5 minutos y el lead lo mira, no lo ojea). Sin URL cargada todavía
-             (se graba post-merge), PiezaMultimedia muestra el placeholder de
-             marca con las proporciones reales dentro del mismo marco. ref
-             video_intro: destino del scroll automático al cerrarse la
-             confirmación de arriba. -->
+        <!-- Video de introducción + bloque del turno, EN LA MISMA PANTALLA
+             (misión 12, pieza 4). Lucas, 10/8/2026: "quiero que en esa misma
+             pantalla aparezca el video junto con el mensaje del turno, junto
+             con los botones... Sería cuestión de achicar un poco el video."
+             Antes el botón de acceso venía después en flujo, así que el scroll
+             automático llevaba al video y el turno quedaba fuera de cuadro.
+
+             Video: pieza "intro" del catálogo. A diferencia de los clips del
+             scroll, va con controles y sonido, sin autoplay (son 5 minutos y
+             el lead lo mira, no lo ojea). Sin URL cargada todavía (se graba
+             post-merge), PiezaMultimedia muestra el placeholder de marca con
+             las proporciones reales dentro del mismo marco. ref video_intro:
+             destino del scroll automático al cerrarse la confirmación de
+             arriba -- sigue apuntando acá, que ahora es la pantalla entera. -->
         <section ref="video_intro" class="demo-experiencia-page__video-intro">
-          <marco-dispositivo tipo="computadora" class="demo-marco--protagonista">
+          <!-- `demo-marco--con-turno` achica el video para dejarle sitio al
+               bloque de abajo. La condición es la MISMA que usa BotonAcceso
+               para decidir si renderiza algo (`estado !== 'sin_turno'`): si
+               allá se toca, acá también. Sin turno no hay bloque debajo y el
+               video recupera su tamaño grande, que es lo que pide la misión. -->
+          <marco-dispositivo
+            tipo="computadora"
+            class="demo-marco--protagonista"
+            :class="{ 'demo-marco--con-turno': hay_bloque_de_turno }"
+          >
             <pieza-multimedia
               slot_id="intro"
               titulo="Video de introducción (Lucas a cámara, 5:15)"
@@ -94,15 +110,21 @@
               :controles="true"
             />
           </marco-dispositivo>
-        </section>
 
-        <!-- Botón de acceso: el estado (sin_turno/antes/activo/vencido) lo
-             decide siempre el backend (turno.estado); este componente solo
-             agrega la cuenta regresiva visual, dispara el ingreso real
-             (prompt 01 de este grupo) y pide refrescar el payload
-             (cargar_experiencia) cuando esa cuenta llega a cero o el estado
-             quedó viejo. -->
-        <boton-acceso :turno="turno" :refrescar="cargar_experiencia" :ingresar="ingresar" />
+          <!-- Botón de acceso: el estado (sin_turno/antes/activo/vencido) lo
+               decide siempre el backend (turno.estado); este componente solo
+               agrega la cuenta regresiva visual, dispara el ingreso real
+               (prompt 01 de este grupo) y pide refrescar el payload
+               (cargar_experiencia) cuando esa cuenta llega a cero o el estado
+               quedó viejo. En `sin_turno` no renderiza ningún nodo, así que el
+               `gap` del contenedor tampoco deja hueco. -->
+          <boton-acceso
+            :turno="turno"
+            :refrescar="cargar_experiencia"
+            :ingresar="ingresar"
+            class="demo-experiencia-page__turno"
+          />
+        </section>
       </template>
     </template>
     </template>
@@ -306,6 +328,23 @@ export default {
      */
     recorrido_visible() {
       return !this.loading && !this.invalido && !this.intro_desbloqueada
+    },
+
+    /**
+     * true cuando BotonAcceso va a renderizar algo debajo del video (misión 12,
+     * pieza 4). Es la condición de ese componente, no una propia: allá el
+     * `<section>` entero está bajo `v-if="estado !== 'sin_turno'"`, y `estado`
+     * cae a 'sin_turno' también cuando el turno todavía no llegó.
+     *
+     * Se calcula acá, y no con `:has()` en el CSS, porque el tamaño del video
+     * depende de si hay bloque debajo y esa es información que la vista ya
+     * tiene: preguntarle al DOM sería adivinar dos veces lo mismo.
+     *
+     * @returns {boolean}
+     */
+    hay_bloque_de_turno() {
+      const estado = (this.turno && this.turno.estado) || 'sin_turno'
+      return estado !== 'sin_turno'
     },
   },
 
@@ -651,12 +690,17 @@ export default {
      *
      * GRUPO 370, CORRECTIVO 8 (grupo-370-correctivo-8-pagina-inmersiva-demo):
      * el retraso del scroll dejó de ser un número propio y pasa a DERIVARSE del
-     * de la invitación en tiempos-confirmacion.js (RETRASO_SCROLL_VIDEO_MS = 6s),
-     * para que entre la invitación y el scroll haya 3 segundos completos de
-     * lectura y para que no se puedan volver a desincronizar. El scroll
-     * del documento se libera a los 3s (justo cuando aparece la invitación),
-     * no a los 6s: el lead puede leer la invitación sin estar bloqueado,
+     * de la invitación en tiempos-confirmacion.js, para que entre la invitación
+     * y el scroll haya los segundos completos de lectura que Lucas pidió y para
+     * que no se puedan volver a desincronizar. El scroll del documento se libera
+     * a los 3s (justo cuando aparece la invitación), no cuando llega el
+     * desplazamiento: el lead puede leer la invitación sin estar bloqueado,
      * aunque la transición al video siga en curso.
+     *
+     * MISIÓN 12, PIEZA 3 (10/8/2026): la lectura pasó de 3s a 4s, así que el
+     * scroll cae a los 7s en vez de a los 6s. El bloqueo del scroll NO se
+     * alarga con eso -- son dos temporizadores distintos y el de la liberación
+     * sigue atado a RETRASO_INVITACION_MS (3s).
      *
      * Este método es el ÚNICO lugar donde vive la secuencia: lo llaman
      * enviar_formulario() (el lead acaba de confirmar) y cargar_experiencia()
@@ -839,15 +883,32 @@ export default {
    entraba en menos de la mitad del alto disponible. Ahora es una sección completa y
    el marco crece con la variante --protagonista (demo-experiencia.scss).
    100dvh preferido con 100vh de fallback, y el orden importa: un navegador sin
-   soporte de dvh ignora esa declaración entera y se queda con la de arriba. */
+   soporte de dvh ignora esa declaración entera y se queda con la de arriba.
+
+   MISIÓN 12, PIEZA 4 (10/8/2026): la sección pasa a COLUMNA -- video arriba, bloque
+   del turno debajo -- porque el scroll automático traía al lead hasta acá y el
+   turno le quedaba fuera de cuadro. Sigue siendo de pantalla completa; lo que
+   cambia es que adentro entran las dos cosas. El video se achica lo necesario para
+   eso (ver .demo-marco--con-turno en demo-experiencia.scss) y sigue siendo la pieza
+   más grande de la página, que era el punto de la variante --protagonista. */
 .demo-experiencia-page__video-intro {
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: clamp(20px, 4vh, 40px);
   padding: 24px 20px;
   box-sizing: border-box;
+}
+
+/* El padding inferior de 64px que trae .demo-boton-acceso existía porque el bloque
+   era el FINAL de la página. Acá vive dentro de la pantalla del video, donde ese
+   espacio lo da el padding de la sección y el centrado vertical: dejarlo empuja el
+   conjunto hacia arriba y desbalancea la pantalla. */
+.demo-experiencia-page__turno {
+  padding-bottom: 0;
 }
 
 /* El marco no tiene ancho propio (es un div en flujo): dentro del flex de arriba

@@ -639,6 +639,53 @@
 	}
 }
 
+// Variante "protagonista, pero compartiendo pantalla con el turno" (misión 12,
+// pieza 4). El video sigue siendo la pieza más grande de la página; lo que cambia
+// es que ahora abajo vive el bloque de BotonAcceso y las dos cosas tienen que
+// entrar juntas en 100dvh.
+//
+// El alto sale de dos topes y gana el más chico:
+//
+//  · 56vh -- "achicar un poco el video" (Lucas, 10/8/2026). Es el que manda en una
+//    pantalla de altura normal.
+//  · lo que quede de la pantalla después de reservarle sitio al turno. Ese es el
+//    tope que aparece en pantallas bajas (una notebook de 768px, un teléfono
+//    apaisado), y existe porque el requisito es "el que más ocupa manda": si no
+//    entran los dos, se achica el VIDEO, nunca se recorta el mensaje.
+//
+// De dónde salen los 230px de reserva, medidos contra el más alto de los cinco
+// estados de BotonAcceso -- que NO es el que uno esperaría: es `activo` con el
+// mensaje de error visible (139px), un pelo más que `antes` con su cuenta
+// regresiva (138px). Más hasta 40px del gap de la sección y 48px de su padding
+// vertical: 227. Los 3px que sobran son el colchón, y es poco a propósito -- este
+// tope sólo entra a jugar por debajo de 411px de alto de viewport, donde de todas
+// formas lo que manda es el ancho.
+// Es una reserva fija a propósito: medir el bloque en JS para devolverle los
+// píxeles sobrantes al video cambiaría el tamaño del video según el estado del
+// turno, y un video que cambia de tamaño entre visitas se lee como un error.
+//
+// El ancho se deriva del alto por la proporción, igual que la regla base, así que
+// la pieza nunca se deforma ni se recorta -- lo único que técnicamente cambia es
+// el ancho, y aspect-ratio sigue fijando la relación entre los dos ejes.
+//
+// 🔴 Esta regla tiene más especificidad que la del media query de teléfono de más
+// abajo, así que también manda ahí, y es lo que corresponde: en teléfono vertical
+// el que ata es el ancho (100%) y el resultado no cambia; en apaisado el tope de
+// la reserva entra a jugar y es justo donde hace falta. Lo que la regla de móvil
+// aporta y NO se pisa acá es el full-bleed (border-radius y padding lateral en 0).
+.demo-marco--protagonista.demo-marco--con-turno {
+	.demo-marco__pantalla-compu {
+		// Cada medida va DOS veces: primero con 100vh y después con 100dvh. El
+		// respaldo va primero a propósito -- un navegador con soporte de dvh se queda
+		// con la segunda, que es la buena, y uno sin soporte la descarta entera y
+		// conserva la primera. Mismo patrón que el resto de la página.
+		width: min(100%, calc(min(56vh, calc(100vh - 230px)) * 16 / 9));
+		width: min(100%, calc(min(56vh, calc(100dvh - 230px)) * 16 / 9));
+		max-height: min(56vh, calc(100vh - 230px));
+		max-height: min(56vh, calc(100dvh - 230px));
+	}
+}
+
 // Mobile apilado (mismo breakpoint que ScrollDolor.vue: grid-template-columns
 // pasa a 1fr): el texto tiene que seguir siendo lo primero, así que la pieza
 // se acota más (45vh en vez de 62vh) para no ocupar más de media pantalla
