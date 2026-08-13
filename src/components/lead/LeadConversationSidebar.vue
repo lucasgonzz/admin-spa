@@ -29,6 +29,16 @@
         </button>
       </div>
 
+      <!-- Recorrido de la demo (misión 49): va ARRIBA de los otros controles de demo porque es
+           lo primero que hay que mirar al abrir un lead que está en demo — dice por dónde va.
+           Solo se monta si el lead tiene el plan congelado; el propio componente resuelve el
+           caso "todavía no completó el formulario" con una línea, así que se le pasa el lead y
+           él decide qué mostrar. -->
+      <demo-roadmap
+        v-if="lead"
+        :lead="lead"
+      />
+
       <!-- Acceso a la demo: link directo, reemitir y revocar (grupo 233, prompt 06).
            Se muestra junto a la información de la demo agendada, antes del cuerpo de la
            conversación, y solo si el lead tiene demo asignada (un lead sin demo no debe
@@ -65,6 +75,7 @@
 import LeadConversationView from '@/views/LeadConversationView.vue'
 import DemoAccesoControl from '@/components/lead/DemoAccesoControl.vue'
 import DemoExperienciaControl from '@/components/lead/DemoExperienciaControl.vue'
+import DemoRoadmap from '@/components/lead/demo-roadmap/Index.vue'
 
 /**
  * Panel lateral deslizable que muestra la conversación WhatsApp de un lead
@@ -83,7 +94,7 @@ import DemoExperienciaControl from '@/components/lead/DemoExperienciaControl.vue
 export default {
   name: 'LeadConversationSidebar',
 
-  components: { LeadConversationView, DemoAccesoControl, DemoExperienciaControl },
+  components: { LeadConversationView, DemoAccesoControl, DemoExperienciaControl, DemoRoadmap },
 
   props: {
     /**
