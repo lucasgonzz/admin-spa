@@ -28,8 +28,10 @@
     <!-- Estado: payload cargado -- arma la secuencia completa definida en
          contexto/demo_experiencia.md §3.16 A: scroll -> formulario -> video de
          introducción -> botón de acceso. Una sola carga de payload al abrir
-         (cargar_experiencia) y un refresco después de enviar el formulario
-         (enviar_formulario) o al vencer la cuenta regresiva (BotonAcceso). -->
+         (cargar_experiencia), un refresco después de enviar el formulario
+         (enviar_formulario) y refrescos sin pantalla de carga mientras el lead
+         espera que se le habilite el ingreso (consultar_estado: el poleo, la
+         cuenta regresiva al llegar a cero, y cada reporte del video). -->
     <template v-else>
       <!-- El RECORRIDO (scroll de dolor + formulario) y la VISTA POSTERIOR
            (confirmación + video + botón) son excluyentes: las dos caras del
@@ -290,10 +292,13 @@ export default {
       carga_timeout: null,
       /**
        * true una vez que terminó la PRIMERA carga del payload. El piso de la
-       * pantalla de carga vale solo para esa: cargar_experiencia() también la llama
-       * BotonAcceso para refrescar el estado del turno, y ahí sostener la pantalla
-       * dos segundos sería una interrupción en medio de la experiencia, no una
-       * entrada.
+       * pantalla de carga vale solo para esa.
+       *
+       * Desde la misión 46 cargar_experiencia() se llama SOLO desde created(), así que
+       * hoy `es_carga_inicial` es siempre true: el refresco que pedía BotonAcceso pasó a
+       * ser consultar_estado(), justamente para no volver a prender `loading`. La rama se
+       * deja porque sigue siendo la correcta si alguien vuelve a llamar a este método
+       * desde otro lado.
        */
       carga_inicial_hecha: false,
       /**

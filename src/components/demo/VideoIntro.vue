@@ -11,7 +11,6 @@
     @loadedmetadata="on_loadedmetadata"
     @timeupdate="on_timeupdate"
     @seeking="on_seeking"
-    @seeked="on_seeked"
     @pause="on_pause"
     @ended="on_ended"
     @error="on_error"
@@ -35,6 +34,12 @@
  * que el botón ya estaba habilitado.
  */
 const ESPERA_CARGA_MS = 45000
+
+/** Cuántas veces se reintenta el reporte que libera el ingreso, incluido el primero. */
+const REINTENTOS_LIBERACION = 4
+
+/** Cuánto se espera entre reintentos de ese reporte. */
+const ESPERA_REINTENTO_MS = 8000
 
 /**
  * Reproductor del video de introducción de la página inmersiva (misión 46, pieza 4).
@@ -104,10 +109,10 @@ export default {
       ultimo_envio_ms: 0,
       /** true una vez fijada la velocidad: no se vuelve a tocar aunque el lead la cambie. */
       velocidad_fijada: false,
-      /** true mientras se está devolviendo el cursor hacia atrás, para no reentrar en `seeking`. */
-      corrigiendo_salto: false,
       /** Handle del timeout que libera el gate si el video nunca llega a cargar. */
       timeout_carga_id: null,
+      /** Handle del reintento del reporte de liberación, cuando el primero falla. */
+      reintento_liberacion_id: null,
       /** true una vez liberado el gate por un video que no carga: se hace una sola vez. */
       liberado_por_fallo: false,
     }
@@ -135,25 +140,34 @@ export default {
        Cubre además el caso en que el video SÍ carga pero su `duration` no sirve para
        calcular nada (Infinity en un stream, NaN con metadata rota): por eso la condición
        del callback es "¿hay duración válida?" y no "¿llegó loadedmetadata?". */
-    if (!this.url) {
-      return
-    }
-    const self = this
-    this.timeout_carga_id = window.setTimeout(function () {
-      self.timeout_carga_id = null
-      const video = self.$refs.video
-      /* Si para este momento hay duración, el video cargó: no hay nada que liberar. */
-      if (video && self.duracion_valida(video) !== null) {
-        return
+    this.armar_valvula()
+  },
+
+  watch: {
+    /**
+     * La URL puede aparecer con el componente ya montado: el video se graba después del
+     * merge y el contenedor refresca `media` en cada tick del poleo. Sin esto, ese caso se
+     * quedaba sin válvula — sólo lo cubría `@error`, que agarra un 404 o un codec no
+     * soportado pero no un servidor que abre la conexión y no manda nada.
+     *
+     * @param {string} nueva
+     * @returns {void}
+     */
+    url(nueva) {
+      if (nueva) {
+        this.armar_valvula()
       }
-      self.liberar_por_fallo('el video no cargó dentro del tiempo esperado')
-    }, ESPERA_CARGA_MS)
+    },
   },
 
   beforeUnmount() {
     if (this.timeout_carga_id) {
       window.clearTimeout(this.timeout_carga_id)
       this.timeout_carga_id = null
+    }
+    if (this.reintento_liberacion_id) {
+      window.clearTimeout(this.reintento_liberacion_id)
+      this.reintento_liberacion_id = null
     }
 
     /* Último reporte al salir: si el lead cierra la pestaña a mitad, lo que vio hasta
@@ -163,6 +177,31 @@ export default {
   },
 
   methods: {
+    /**
+     * Arma (una sola vez) el reloj que libera el ingreso si el video no llega a estar en
+     * condiciones de ser mirado. Idempotente y sin URL no hace nada.
+     *
+     * @returns {void}
+     */
+    armar_valvula() {
+      if (!this.url || this.timeout_carga_id || this.liberado_por_fallo) {
+        return
+      }
+
+      const self = this
+      this.timeout_carga_id = window.setTimeout(function () {
+        self.timeout_carga_id = null
+        const video = self.$refs.video
+        /* Si para este momento hay duración utilizable, el video se puede mirar y no hay
+           nada que liberar. La condición es "¿hay duración válida?" y no "¿cargó?": una
+           duración Infinity o NaN carga igual y deja el porcentaje trabado en 0. */
+        if (video && self.duracion_valida(video) !== null) {
+          return
+        }
+        self.liberar_por_fallo('el video no cargó dentro del tiempo esperado')
+      }, ESPERA_CARGA_MS)
+    },
+
     /**
      * Fija la velocidad de reproducción y ubica el cursor donde el lead había quedado.
      *
@@ -222,32 +261,28 @@ export default {
      * con saltos de fracciones de segundo durante la reproducción normal (buffering,
      * cambios de pista), y sin margen el video se trabaría solo.
      *
+     * 🔴 SIN FLAG DE REENTRADA, y las dos versiones que lo tenían eran peores. Asignar
+     * `currentTime` actualiza la posición de forma sincrónica, así que el `seeking` que
+     * dispara esa misma corrección llega con `currentTime === max_visto` y no cumple la
+     * condición: la reentrada se corta sola, por la comparación, sin necesidad de estado.
+     * Un flag, en cambio, abre una ventana donde los `seeking` que lleguen mientras está
+     * arriba pasan SIN clamp — y con un arrastre continuo de la barra eso es justo lo que
+     * pasa: corregir un salto puede tardar de 100ms a 2s si el destino no está
+     * buffereado, el lead sigue arrastrando, y el navegador termina honrando la posición
+     * nueva. Lo detectó la fase de verificación de la misión 46, midiendo que la variante
+     * con `seeked` dejaba una ventana MÁS grande que la de `setTimeout(0)`.
+     *
      * @returns {void}
      */
     on_seeking() {
       const video = this.$refs.video
-      if (!video || this.corrigiendo_salto) {
+      if (!video) {
         return
       }
 
       if (video.currentTime > this.max_visto + 0.5) {
-        this.corrigiendo_salto = true
         video.currentTime = this.max_visto
       }
-    },
-
-    /**
-     * Cierra la corrección de un salto. El flag se limpia acá y no con un `setTimeout(0)`:
-     * asignar `currentTime` dispara otro `seeking` —por eso el flag existe—, y el evento
-     * que garantiza que esa corrección terminó es `seeked`, no el paso de un tick. Con el
-     * timer, cualquier `seeking` que llegara mientras el flag estaba arriba pasaba sin
-     * clamp; acá la ventana se cierra exactamente cuando el navegador terminó de mover el
-     * cursor.
-     *
-     * @returns {void}
-     */
-    on_seeked() {
-      this.corrigiendo_salto = false
     },
 
     /**
@@ -278,7 +313,38 @@ export default {
       }
 
       console.warn('[demo-experiencia] intro liberado sin verse: ' + motivo)
-      this.reportar_progreso(100, true)
+      this.reportar_liberacion(1)
+    },
+
+    /**
+     * Manda el 100 de la liberación, reintentando si no sale.
+     *
+     * 🔴 El reintento no es de más: lo más probable que rompa el video es justamente una
+     * red caída, o sea la misma que puede voltear este POST. Sin reintentar, el lead se
+     * queda esperando un botón que ya se le tendría que haber habilitado, y la única
+     * salida sería que recargue la página — que es lo último que se le ocurre a alguien
+     * que está mirando un cartel que dice "esperá".
+     *
+     * @param {number} intento Número de intento, arrancando en 1.
+     * @returns {void}
+     */
+    reportar_liberacion(intento) {
+      const self = this
+
+      self
+        .reportar(100)
+        .then(function () {
+          self.ultimo_reportado = 100
+        })
+        .catch(function () {
+          if (intento >= REINTENTOS_LIBERACION) {
+            return
+          }
+          self.reintento_liberacion_id = window.setTimeout(function () {
+            self.reintento_liberacion_id = null
+            self.reportar_liberacion(intento + 1)
+          }, ESPERA_REINTENTO_MS)
+        })
     },
 
     /**

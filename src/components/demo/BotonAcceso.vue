@@ -329,11 +329,11 @@ export default {
           return
         }
 
-        // El payload se refrescó de punta a punta (llegada a cero de la cuenta
-        // regresiva, envío del formulario, o un ingreso que pidió refrescar
-        // porque el estado en pantalla había quedado viejo): se limpia
-        // cualquier estado de error del intento anterior.
-        this.mensaje_error = ''
+        // 🔴 El mensaje de error tampoco se borra acá. El camino `preparando` lo
+        // setea y pide un refresco dos líneas después, así que este watcher se lo
+        // comía al volver el GET —el lead veía "probá de nuevo en un minuto" por
+        // un instante y después nada—. El mensaje lo limpia `on_click` al empezar
+        // el intento siguiente, que es cuando deja de ser cierto.
       },
     },
   },
