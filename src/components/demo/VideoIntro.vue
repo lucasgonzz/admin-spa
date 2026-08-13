@@ -131,7 +131,10 @@ export default {
        -que es la otra salida- tampoco llega jamás.
        El criterio es el mismo que el de "sin URL cargada el intro no es obligatorio":
        ante un video que no se puede mirar, se libera el ingreso. Fallar hacia "el lead no
-       hace su demo" es el peor de los dos errores posibles. */
+       hace su demo" es el peor de los dos errores posibles.
+       Cubre además el caso en que el video SÍ carga pero su `duration` no sirve para
+       calcular nada (Infinity en un stream, NaN con metadata rota): por eso la condición
+       del callback es "¿hay duración válida?" y no "¿llegó loadedmetadata?". */
     if (!this.url) {
       return
     }
@@ -171,12 +174,12 @@ export default {
         return
       }
 
-      /* El video dio señales de vida: la válvula de escape ya no hace falta. */
-      if (this.timeout_carga_id) {
-        window.clearTimeout(this.timeout_carga_id)
-        this.timeout_carga_id = null
-      }
-
+      /* 🔴 La válvula de escape NO se cancela acá aunque el video haya dado señales de
+         vida. `loadedmetadata` puede llegar con una `duration` inútil —Infinity en un
+         stream, NaN con metadata rota—, y en ese caso el porcentaje no se puede calcular
+         nunca: el lead quedaría trabado igual, que es exactamente el defecto que la
+         válvula viene a cerrar. El callback ya decide solo: si para entonces hay duración
+         válida, no libera nada. */
       if (!this.velocidad_fijada) {
         video.playbackRate = 1.5
         this.velocidad_fijada = true
