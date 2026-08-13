@@ -79,11 +79,18 @@ export default {
          * Si por lo que sea no tenemos el estado actual, se cae al comportamiento anterior (null).
          */
         estado_sugerido: this.estado_sugerido || this.lead_status || null,
+        /* 🔴 `ventana_extendida` viaja acá aunque el panel no la edite (misión 47). Este computed
+           RECONSTRUYE el objeto clave por clave, y del otro lado el backend reemplaza
+           `agendar_demo` entero con lo que llega: cualquier clave que no se copie explícitamente
+           se pierde en silencio. Y como todo agendamiento pasa por este panel antes de enviarse,
+           perderla acá significa que la modalidad no llega nunca a la base — el lead recibe el
+           mensaje que le promete la ventana y el sistema le agenda una demo normal de una hora. */
         agendar_demo: this.agendar_demo && this.agendar_demo.demo_id
           ? {
             demo_id: this.agendar_demo.demo_id,
             demo_date: this.agendar_demo.demo_date || '',
             demo_start_time: this.agendar_demo.demo_start_time || '',
+            ventana_extendida: Boolean(this.agendar_demo.ventana_extendida),
           }
           : null,
         forzar_slot: Boolean(this.forzar_slot),
@@ -159,6 +166,9 @@ export default {
           demo_id: pending.agendar_demo.demo_id,
           demo_date: pending.agendar_demo.demo_date || '',
           demo_start_time: pending.agendar_demo.demo_start_time || '',
+          /* La modalidad que pidió el agente se conserva al precargar (misión 47): si se
+             perdiera acá, el computed de arriba la mandaría en false igual. */
+          ventana_extendida: Boolean(pending.agendar_demo.ventana_extendida),
         }
         : null
       this.forzar_slot = Boolean(pending.forzar_slot)
