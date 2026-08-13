@@ -20,6 +20,14 @@
         <span class="spinner-border spinner-border-sm text-secondary"></span>
       </div>
 
+      <!-- 🔴 No se pudo leer, y NUNCA se pudo: no se puede decir "este lead no completó el
+           formulario", porque eso sería afirmar algo sobre el lead cuando lo que falló fue la
+           consulta. Es el caso de la sesión vencida, que devuelve 401 en cada tick. -->
+      <p v-else-if="!cargo_alguna_vez" class="small text-muted mb-0">
+        <i class="bi bi-wifi-off me-1"></i>
+        No se pudo leer el recorrido. Si el problema sigue, recargá la página.
+      </p>
+
       <!-- Sin plan: una línea y nada más. Es el estado normal de casi todos los leads, así que no
            lleva spinner, ni tabla vacía, ni botón que invite a arreglar algo que no está roto. -->
       <p v-else-if="!tiene_plan" class="small text-muted mb-0">
@@ -39,7 +47,9 @@
         </div>
 
         <!-- Los hitos, en orden, agrupados por sección. -->
-        <div v-for="(grupo, gi) in grupos" :key="gi">
+        <!-- La clave es el id de sección más su posición, no el índice solo: si el número de
+             grupos cambia entre ticks, Vue reusaría nodos por posición. -->
+        <div v-for="(grupo, gi) in grupos" :key="(grupo.id || 'ingreso') + '-' + gi">
 
           <!-- Separador de sección. El hito de ingreso va suelto arriba, sin encabezado. -->
           <div
@@ -57,17 +67,21 @@
                    dato más útil de la pantalla (dice dónde se trabó el lead). -->
               <div class="flex-shrink-0 mt-1">
                 <i v-if="hito.estado === 'completo'" class="bi bi-check-circle-fill text-success"></i>
-                <i v-else-if="hito.estado === 'parcial'" class="bi bi-slash-circle text-warning"></i>
+                <i v-else-if="hito.estado === 'parcial'" class="bi bi-slash-circle demo-roadmap-parcial"></i>
                 <i v-else class="bi bi-circle text-muted"></i>
               </div>
 
               <div class="flex-grow-1 min-width-0">
+                <!-- El parcial usa `demo-roadmap-parcial` y no `text-warning` a secas: el
+                     amarillo de Bootstrap sobre fondo blanco no llega a contraste AA, y
+                     justamente éste es el estado que más se lee. Mismo criterio que
+                     DemoExperienciaControl, que ya usa la variable de énfasis. -->
                 <div
                   class="small fw-semibold demo-roadmap-titulo"
                   :class="{
-                    'text-success': hito.estado === 'completo',
-                    'text-warning': hito.estado === 'parcial',
-                    'text-muted':   hito.estado === 'pendiente',
+                    'text-success':        hito.estado === 'completo',
+                    'demo-roadmap-parcial': hito.estado === 'parcial',
+                    'text-muted':          hito.estado === 'pendiente',
                   }"
                 >{{ hito.titulo }}</div>
 
@@ -82,6 +96,13 @@
             </div>
           </div>
         </div>
+
+        <!-- Los datos siguen en pantalla pero son los del último tick bueno: se dice, en vez de
+             mostrarlos como si fueran de ahora. -->
+        <p v-if="hubo_error" class="small text-muted mb-0 mt-2">
+          <i class="bi bi-arrow-clockwise me-1"></i>
+          No se pudo actualizar; esto es lo último que se leyó.
+        </p>
 
         <!-- Cuando el poleo llegó a su tope, se para y se ofrece el refresco a mano. -->
         <div v-if="poleo_agotado" class="mt-2">
@@ -144,6 +165,11 @@ export default {
       // Estado de la vista.
       cargando: false,
       cargando_primera_vez: true,
+      // El último intento falló. No borra lo que está en pantalla: lo marca como viejo.
+      hubo_error: false,
+      // Alguna vez llegó una respuesta buena. Es lo que distingue "este lead no tiene plan" de
+      // "todavía no pudimos preguntar", que sin esto se veían igual.
+      cargo_alguna_vez: false,
 
       // Poleo: el id del intervalo y cuántos ticks quedan antes de parar.
       intervalo_id: null,
@@ -164,12 +190,21 @@ export default {
       let actual = null
 
       this.hitos.forEach(function (hito) {
-        // El nombre de sección se muestra sin el prefijo `S<n> - ` del catálogo: adentro de la
-        // tarjeta el orden ya lo da la posición, y el prefijo sólo gasta ancho en el teléfono.
-        const seccion = hito.seccion ? hito.seccion.replace(/^S\d+\s*-\s*/, '') : null
+        /* Se compara por el id COMPLETO de la sección (`S1 - Listado`) y no por el nombre corto
+         * que se muestra: si el catálogo tuviera dos secciones que colapsan al mismo nombre al
+         * sacarles el prefijo —"S1 - Ventas" y "S3 - Ventas"—, comparar por el corto las
+         * fusionaría en un grupo si vinieran pegadas, o dejaría dos encabezados idénticos si no.
+         * El prefijo que se saca para mostrar es justamente lo único que las distingue. */
+        const id = hito.seccion || null
 
-        if (actual === null || actual.seccion !== seccion) {
-          actual = { seccion: seccion, hitos: [] }
+        if (actual === null || actual.id !== id) {
+          actual = {
+            id: id,
+            // El nombre se muestra sin el prefijo `S<n> - `: adentro de la tarjeta el orden ya lo
+            // da la posición, y el prefijo sólo gasta ancho en el teléfono.
+            seccion: id ? id.replace(/^S\d+\s*-\s*/, '') : null,
+            hitos: [],
+          }
           grupos.push(actual)
         }
 
@@ -198,6 +233,22 @@ export default {
   },
 
   /**
+   * 🔴 `activated` / `deactivated` NO son opcionales acá, y esto es lo que casi se escapa:
+   * `App.vue` envuelve la vista de leads en `<keep-alive :include="['ViewLeads']">`, así que al
+   * navegar a otra sección del admin **sin cerrar el sidebar** Vue no desmonta nada — sólo
+   * desactiva. `beforeUnmount` no corre, el sidebar sigue montado con su `v-if` en true, y
+   * `document.hidden` es `false` porque la pestaña está a la vista: la guarda de visibilidad
+   * tampoco frena. Sin esto quedaban 540 requests en 90 minutos contra una tarjeta que nadie ve.
+   */
+  activated() {
+    this.iniciar_poleo()
+  },
+
+  deactivated() {
+    this.detener_poleo()
+  },
+
+  /**
    * 🔴 `beforeUnmount` y NO `beforeDestroy`: este repo es Vue 3, donde ese hook se renombró y el
    * nombre viejo no se ejecuta nunca — ni con un warning. Un intervalo que sobrevive al desmontaje
    * deja el panel pegándole a la API para siempre, y el modo de falla es silencioso.
@@ -219,7 +270,16 @@ export default {
       const self = this
       this.cargando = true
 
-      api.get('lead/' + this.lead.id + '/demo-roadmap')
+      /* `silent_error: true` y `timeout` no son adorno, son los dos que hacen que el poleo sea
+       * poleo y no una molestia:
+       *
+       *  - Sin `silent_error`, el interceptor global de axios emite un toast rojo por CADA error
+       *    que no sea 401. Con un 500 sostenido eso son 540 toasts en 90 minutos, apilados sobre
+       *    cualquier pantalla. El `.catch()` de acá abajo no lo evita: el interceptor corre antes.
+       *  - Sin `timeout`, el cliente no tiene ninguno (`axios.create` no lo configura), así que
+       *    una petición que nunca se asienta deja `cargando` en true para siempre y el poleo
+       *    queda mudo hasta que se agota el tope. */
+      api.get('lead/' + this.lead.id + '/demo-roadmap', { silent_error: true, timeout: 8000 })
         .then(function (response) {
           const data = response.data || {}
 
@@ -228,11 +288,14 @@ export default {
           self.hitos = data.hitos || []
           self.completos = data.progreso ? data.progreso.completos : 0
           self.total = data.progreso ? data.progreso.total : 0
+          self.hubo_error = false
+          self.cargo_alguna_vez = true
         })
         .catch(function () {
-          // Un error de red en un poleo no se le muestra al usuario: el próximo tick lo resuelve,
-          // y una alerta cada 10 segundos sería peor que el problema. Lo que sí se hace es no
-          // pisar los datos que ya estaban en pantalla.
+          // No se pisan los datos que ya estaban en pantalla: un tick fallido no tiene por qué
+          // borrar lo último bueno que se vio. Lo que sí se marca es que están desactualizados,
+          // para no afirmar algo falso sobre el lead (ver `hubo_error` en el template).
+          self.hubo_error = true
         })
         .then(function () {
           self.cargando = false
@@ -247,6 +310,13 @@ export default {
      * websocket es sobreingeniería (`demo_experiencia.md` §9 T4).
      */
     iniciar_poleo() {
+      /* Idempotente por diseño, como los otros cinco poleos del repo (que abren con
+       * `if (this.timer) return`): si `intervalo_id` se pisara sin limpiar el anterior, el
+       * intervalo viejo quedaría vivo y ya no habría forma de referenciarlo — ni `beforeUnmount`
+       * podría matarlo. Con `activated()` llamando acá, la secuencia mounted → activated es
+       * alcanzable de verdad. */
+      this.detener_poleo()
+
       this.cargar()
 
       this.poleo_agotado = false
@@ -266,6 +336,13 @@ export default {
           return
         }
 
+        // Un tick que no llega a pedir tampoco gasta presupuesto: si hay una petición todavía en
+        // vuelo, `cargar()` sale por su propio guard, y descontar acá haría que el tope de 90
+        // minutos se agotara sin haber consultado nunca.
+        if (self.cargando) {
+          return
+        }
+
         self.ticks_restantes--
 
         if (self.ticks_restantes <= 0) {
@@ -281,7 +358,8 @@ export default {
 
     /**
      * Corta el intervalo. Es idempotente: llamarlo dos veces no rompe nada, y por eso se lo puede
-     * invocar desde el watch, desde beforeDestroy y desde el propio tick sin coordinarlos.
+     * invocar desde el watch, desde `beforeUnmount`, desde `deactivated`, desde el arranque del
+     * propio poleo y desde el tick que agota el tope, sin coordinarlos entre sí.
      */
     detener_poleo() {
       if (this.intervalo_id !== null) {
@@ -311,6 +389,12 @@ export default {
 .demo-roadmap-seccion
 	font-size: .7rem
 	letter-spacing: .04em
+
+// Ámbar oscuro en vez del `text-warning` de Bootstrap (#ffc107), que sobre el fondo blanco de la
+// tarjeta da ~1.6:1 y no llega a AA. `parcial` es el estado que más se lee de los tres: es el que
+// dice dónde se trabó el lead. Misma variable que usa DemoExperienciaControl.
+.demo-roadmap-parcial
+	color: var(--bs-warning-text-emphasis, #997404)
 
 // El título de un clip puede ser largo y la tarjeta se abre desde el teléfono: se envuelve en vez
 // de desbordar, que es lo que empujaría el badge fuera del header.
