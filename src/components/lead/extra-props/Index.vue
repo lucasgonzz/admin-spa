@@ -359,10 +359,11 @@ export default {
           /* Completado cuando se cargó una fecha de demo en el lead. */
           status: r.demo_date ? 'completed' : 'pending',
           timestamp: null,
-          /* Detalle: muestra la fecha y hora acordada de la demo. */
-          detail: r.demo_date
-            ? (this.format_date(r.demo_date) + (r.demo_start_time ? ' a las ' + r.demo_start_time : ''))
-            : null,
+          /* Detalle: fecha y hora acordada, y si es una ventana extendida, hasta cuándo llega
+             (misión 47). `demo_flexible` no aparecía en una sola línea de admin-spa, así que un
+             horario ocupado hasta medianoche en el cálculo de disponibilidad no tenía explicación
+             visible en ningún lado. */
+          detail: this.format_demo_agendada_detail(r),
           action: null,
           action_label: null,
         },
@@ -805,6 +806,34 @@ export default {
       }
 
       return partes.length ? partes.join(' · ') : null
+    },
+    /**
+     * Arma el detalle de la etapa "Demo agendada" (misión 47).
+     *
+     * Cuando el lead tiene ventana extendida hay dos cosas que Lucas necesita ver de un vistazo:
+     * que la modalidad es esa, y hasta qué hora le quedó reservada la instancia — porque esa
+     * reserva es la que le saca disponibilidad a los demás leads durante horas.
+     *
+     * @param {Object} r El lead.
+     * @returns {string|null}
+     */
+    format_demo_agendada_detail(r) {
+      if (!r.demo_date) {
+        return null
+      }
+
+      let texto = this.format_date(r.demo_date)
+      if (r.demo_start_time) {
+        texto += ' a las ' + r.demo_start_time
+      }
+
+      if (r.demo_flexible) {
+        texto += r.demo_end_time
+          ? ' · Ventana extendida hasta las ' + r.demo_end_time
+          : ' · Ventana extendida'
+      }
+
+      return texto
     },
     /**
      * Formatea el origen de ejecución (manual / automático) para mostrar en UI.
