@@ -103,11 +103,15 @@
             class="demo-marco--protagonista"
             :class="{ 'demo-marco--con-turno': hay_bloque_de_turno }"
           >
-            <pieza-multimedia
-              slot_id="intro"
+            <!-- Reproductor propio del intro (misión 46, pieza 4): 1.5x, sin
+                 poder adelantar, y reportando el progreso al backend, que es
+                 quien decide si el botón se habilita. No es PiezaMultimedia:
+                 esa la comparten los clips en loop del scroll de dolor. -->
+            <video-intro
+              :url="url_intro"
               titulo="Video de introducción (Lucas a cámara, 5:15)"
-              :media="media"
-              :controles="true"
+              :visto_pct="intro.visto_pct || 0"
+              :reportar="reportar_intro"
             />
           </marco-dispositivo>
 
@@ -120,6 +124,9 @@
                `gap` del contenedor tampoco deja hueco. -->
           <boton-acceso
             :turno="turno"
+            :puede_ingresar="puede_ingresar"
+            :setup="setup"
+            :intro="intro"
             :refrescar="cargar_experiencia"
             :ingresar="ingresar"
             class="demo-experiencia-page__turno"
@@ -139,7 +146,7 @@ import ConfirmacionArmandoDemo from '@/components/demo/ConfirmacionArmandoDemo.v
 import PantallaCargaMarca from '@/components/demo/PantallaCargaMarca.vue'
 import BotonAcceso from '@/components/demo/BotonAcceso.vue'
 import MarcoDispositivo from '@/components/demo/MarcoDispositivo.vue'
-import PiezaMultimedia from '@/components/demo/PiezaMultimedia.vue'
+import VideoIntro from '@/components/demo/VideoIntro.vue'
 import crear_avance_guiado from '@/components/demo/avance-guiado'
 /* Con alias porque el computed de abajo se llama igual: acá se necesita la función
    compartida, no la propiedad del componente. */
@@ -167,6 +174,21 @@ import '@/assets/scss/demo-experiencia.scss'
  */
 const PISO_PANTALLA_CARGA_MS = 2000
 
+/**
+ * Cada cuánto se vuelve a pedir el payload mientras el lead espera que se le habilite el
+ * ingreso (misión 46, pieza 3). El demo setup tarda minutos y termina del lado del
+ * servidor: sin esto el lead se queda mirando un botón que nunca se prende hasta que
+ * recarga la página.
+ */
+const POLEO_INTERVALO_MS = 10000
+
+/**
+ * Tope del poleo. Si en 20 minutos la demo no se armó, algo falló de un modo que este
+ * poleo no va a resolver, y seguir pidiendo cada 10 segundos en una pestaña olvidada es
+ * carga al servidor sin ninguna chance de servir para algo.
+ */
+const POLEO_TOPE_MS = 20 * 60 * 1000
+
 
 /**
  * Página inmersiva de demo (Grupo 300 · pagina-inmersiva-demo, prompts 04 y
@@ -191,7 +213,7 @@ export default {
     PantallaCargaMarca,
     BotonAcceso,
     MarcoDispositivo,
-    PiezaMultimedia,
+    VideoIntro,
   },
 
   data() {
@@ -208,6 +230,21 @@ export default {
       formulario: {},
       /** Mapa { slot_id: url } de todas las piezas multimedia configuradas para este turno. */
       media: {},
+      /** { estado } del demo setup: pendiente | ejecutandose | exitoso | fallido (misión 46). */
+      setup: {},
+      /** { visto_pct, umbral_pct, obligatorio } del video de introducción (misión 46). */
+      intro: {},
+      /**
+       * 🔴 Lo calcula el backend y esta página no lo deriva ni lo recalcula (misión 46,
+       * pieza 3). Es la única puerta del botón de ingreso.
+       */
+      puede_ingresar: false,
+      /** true en entorno local: el backend no exige el video. Sólo informativo acá. */
+      modo_prueba: false,
+      /** Id del setInterval del poleo del payload; null cuando no hay poleo puesto. */
+      poleo_id: null,
+      /** Momento (ms) en que arrancó el poleo, para cortarlo a los POLEO_TOPE_MS. */
+      poleo_desde_ms: 0,
       /**
        * true cuando la carga inicial encontró el formulario ya completado y hay
        * que correr la secuencia de la confirmación al retirar la pantalla de
@@ -348,7 +385,34 @@ export default {
      * @returns {boolean}
      */
     hay_bloque_de_turno() {
-      return turno_tiene_bloque(this.turno)
+      return turno_tiene_bloque(this.turno, this.puede_ingresar)
+    },
+
+    /**
+     * URL del video de introducción, o cadena vacía si todavía no se cargó la pieza.
+     * Se resuelve acá y no adentro de VideoIntro para que ese componente no tenga que
+     * conocer la forma del mapa `media` ni el nombre del slot.
+     *
+     * @returns {string}
+     */
+    url_intro() {
+      return (this.media && this.media.intro) || ''
+    },
+
+    /**
+     * true mientras tiene sentido volver a preguntarle al backend si ya se puede entrar:
+     * el lead está en la pantalla del video, todavía no puede entrar, y el armado no
+     * falló (si falló, el bloque de BotonAcceso lo manda a WhatsApp y no hay nada que
+     * esperar).
+     *
+     * @returns {boolean}
+     */
+    debe_polear() {
+      return (
+        this.intro_desbloqueada &&
+        !this.puede_ingresar &&
+        (this.setup.estado || 'pendiente') !== 'fallido'
+      )
     },
   },
 
@@ -379,6 +443,27 @@ export default {
       }
       this.destruir_avance()
     },
+
+    /**
+     * El poleo se enciende y se apaga solo con la condición que lo justifica: no hace
+     * falta arrancarlo a mano desde cada lugar que refresca el payload.
+     *
+     * @param {boolean} debe
+     * @returns {void}
+     */
+    debe_polear: {
+      /* immediate por el lead que vuelve con el formulario ya completado: en ese caso la
+         condición puede nacer verdadera con el primer payload y un watcher común no
+         dispararía nunca. */
+      immediate: true,
+      handler: function (debe) {
+        if (debe) {
+          this.arrancar_poleo()
+          return
+        }
+        this.frenar_poleo()
+      },
+    },
   },
 
   mounted() {
@@ -403,6 +488,10 @@ export default {
 
   beforeUnmount() {
     this.desmontado = true
+
+    /* El poleo vive en un setInterval: si queda puesto, sigue pegándole al backend con la
+       página ya desmontada. */
+    this.frenar_poleo()
 
     /* Antes de soltar el scroller: los listeners del avance por gesto están puestos
        sobre él (y el de teclado sobre el documento). Si quedaran, el resto del admin
@@ -455,11 +544,7 @@ export default {
       api_public
         .get('/demo-experiencia/' + uuid)
         .then(function (response) {
-          const data = response.data || {}
-          self.lead = data.lead || {}
-          self.turno = data.turno || {}
-          self.formulario = data.formulario || {}
-          self.media = data.media || {}
+          self.aplicar_payload(response.data)
           // El backend ya resuelve si el lead completó el formulario en una
           // visita anterior (Lead::demo_form_completado_at, expuesto acá
           // como formulario.completado) -- si es así, no tiene sentido
@@ -663,14 +748,125 @@ export default {
       const uuid = self.$route.params.uuid
 
       return api_public.post('/demo-experiencia/' + uuid + '/formulario', respuestas).then(function (response) {
-        const data = response.data || {}
-        self.lead = data.lead || {}
-        self.turno = data.turno || {}
-        self.formulario = data.formulario || {}
-        self.media = data.media || {}
+        const data = self.aplicar_payload(response.data)
         self.mostrar_confirmacion_armando_demo()
         return data
       })
+    },
+
+    /**
+     * Vuelca un payload del backend sobre el estado de la página. Los cuatro endpoints
+     * públicos devuelven exactamente el mismo formato, así que hay un solo lugar donde
+     * se lee: mientras cada llamada asignaba sus campos a mano, agregar uno nuevo al
+     * payload (misión 46: setup, intro, modo_prueba, puede_ingresar) implicaba acordarse
+     * de los tres lugares, y el olvido no da error -- deja un campo viejo en pantalla.
+     *
+     * @param {object} data Payload de la respuesta.
+     * @returns {object} El mismo payload, para encadenar.
+     */
+    aplicar_payload(data) {
+      const payload = data || {}
+      this.lead = payload.lead || {}
+      this.turno = payload.turno || {}
+      this.formulario = payload.formulario || {}
+      this.media = payload.media || {}
+      this.setup = payload.setup || {}
+      this.intro = payload.intro || {}
+      this.modo_prueba = !!payload.modo_prueba
+      this.puede_ingresar = !!payload.puede_ingresar
+      return payload
+    },
+
+    /**
+     * Reporta al backend cuánto vio el lead del video de introducción y aplica el payload
+     * que devuelve. Ese payload es lo que prende el botón sin esperar al poleo: el
+     * endpoint responde con `puede_ingresar` ya recalculado.
+     *
+     * Sin catch acá a propósito: VideoIntro necesita que el rechazo le llegue para no dar
+     * por enviado un progreso que no salió (mismo patrón que enviar_formulario e ingresar).
+     *
+     * @param {number} pct Porcentaje visto.
+     * @returns {Promise<object>} El payload refrescado.
+     */
+    reportar_intro(pct) {
+      const self = this
+      const uuid = self.$route.params.uuid
+
+      return api_public
+        .post('/demo-experiencia/' + uuid + '/intro-progreso', { pct: pct })
+        .then(function (response) {
+          return self.aplicar_payload(response.data)
+        })
+    },
+
+    /**
+     * Arranca el poleo del payload mientras el lead espera que se le habilite el ingreso.
+     * Idempotente: si ya hay uno puesto, no monta un segundo.
+     *
+     * @returns {void}
+     */
+    arrancar_poleo() {
+      if (this.poleo_id) {
+        return
+      }
+
+      const self = this
+      self.poleo_desde_ms = Date.now()
+      self.poleo_id = window.setInterval(function () {
+        /* Tope duro: 20 minutos y se corta. */
+        if (Date.now() - self.poleo_desde_ms > POLEO_TOPE_MS) {
+          self.frenar_poleo()
+          return
+        }
+
+        /* Pestaña en segundo plano: se saltea el tick. El lead no está mirando, así que
+           el refresco no le sirve de nada y el navegador además castiga los timers de
+           las pestañas ocultas. Al volver, el siguiente tick trae el estado real. */
+        if (typeof document !== 'undefined' && document.hidden) {
+          return
+        }
+
+        self.consultar_estado()
+      }, POLEO_INTERVALO_MS)
+    },
+
+    /**
+     * Frena el poleo. Idempotente: se llama desde el watch y desde beforeUnmount.
+     *
+     * @returns {void}
+     */
+    frenar_poleo() {
+      if (!this.poleo_id) {
+        return
+      }
+      window.clearInterval(this.poleo_id)
+      this.poleo_id = null
+    },
+
+    /**
+     * Pide el payload y lo aplica, sin tocar la pantalla de carga ni la secuencia de la
+     * confirmación. Es el tick del poleo: cargar_experiencia() no sirve acá porque
+     * prende `loading` y taparía la pantalla cada diez segundos.
+     *
+     * @returns {void}
+     */
+    consultar_estado() {
+      const self = this
+      const uuid = self.$route.params.uuid
+
+      api_public
+        .get('/demo-experiencia/' + uuid)
+        .then(function (response) {
+          if (self.desmontado) {
+            return
+          }
+          self.aplicar_payload(response.data)
+        })
+        .catch(function () {
+          /* Un tick que falla no rompe nada: el siguiente vuelve a intentar. No se muestra
+             la pantalla de link inválido, que acá sería un falso positivo por un corte
+             momentáneo de red. */
+        })
     },
 
     /**

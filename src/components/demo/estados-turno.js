@@ -1,5 +1,5 @@
 /**
- * Qué estados de turno hacen que BotonAcceso muestre algo.
+ * Qué hace que BotonAcceso muestre algo.
  *
  * 🔴 POR QUÉ VIVE ACÁ Y NO EN CADA COMPONENTE (misión 12, tras la verificación): la
  * regla la necesitan DOS archivos y por motivos distintos. `BotonAcceso.vue` la usa para
@@ -14,12 +14,16 @@
  *
  * Es el mismo criterio que `tiempos-confirmacion.js`: si un número o una regla la
  * necesitan dos archivos, no se copia — se comparte, y no se pueden desincronizar.
+ *
+ * MISIÓN 46: el turno dejó de ser lo único que gobierna el bloque. Ahora `puede_ingresar`
+ * —que lo calcula el backend— puede habilitar el botón aunque el estado del turno no sea
+ * `activo`, así que la respuesta depende de las dos cosas.
  */
 
 /**
- * Los estados para los que BotonAcceso tiene algo que mostrar. `sin_turno` no está, y
- * cualquier valor que el backend invente tampoco: no mostrar nada es el respaldo
- * correcto para un estado que este front no sabe interpretar.
+ * Los estados de turno para los que BotonAcceso tiene algo que mostrar. `sin_turno` no está, y
+ * cualquier valor que el backend invente tampoco: no mostrar nada es el respaldo correcto para un
+ * estado que este front no sabe interpretar.
  *
  * @type {Array<string>}
  */
@@ -27,9 +31,16 @@ export const ESTADOS_CON_BLOQUE = ['antes', 'activo', 'vencido']
 
 /**
  * @param {object} turno El turno tal como llega del payload.
- * @returns {boolean} true si BotonAcceso va a renderizar algo para este turno.
+ * @param {boolean} [puede_ingresar] El flag del payload, calculado por el backend. Si es true hay
+ *   bloque sí o sí: el botón de entrar tiene que existir aunque el estado del turno sea uno que
+ *   este front no interprete — el backend ya dijo que se puede entrar y no le corresponde a la
+ *   página contradecirlo.
+ * @returns {boolean} true si BotonAcceso va a renderizar algo.
  */
-export function hay_bloque_de_turno(turno) {
+export function hay_bloque_de_turno(turno, puede_ingresar) {
+  if (puede_ingresar === true) {
+    return true
+  }
   const estado = (turno && turno.estado) || 'sin_turno'
   return ESTADOS_CON_BLOQUE.indexOf(estado) !== -1
 }

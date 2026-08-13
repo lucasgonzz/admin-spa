@@ -290,6 +290,28 @@
         </div>
       </div>
 
+      <!-- Umbral del video de introducción para habilitar el ingreso (misión 46, pieza 3) -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-5">
+          <label class="form-label small" for="demo_intro_umbral_pct">Porcentaje del video de introducción necesario para entrar a la demo</label>
+          <!-- Porcentaje, no minutos: rango propio 0-100 -->
+          <input
+            id="demo_intro_umbral_pct"
+            v-model.number="local.demo_intro_umbral_pct"
+            type="number"
+            class="form-control form-control-sm"
+            min="0"
+            max="100"
+            :disabled="saving"
+          />
+          <p class="text-muted small mb-0 mt-1">
+            El botón para entrar se habilita cuando la demo está lista <strong>y</strong> el lead vio
+            al menos este porcentaje del video. Si todavía no hay video cargado, el requisito no se
+            aplica.
+          </p>
+        </div>
+      </div>
+
       <!-- Horario laboral del closer: lunes a viernes -->
       <div class="row g-2 align-items-end mb-3">
         <div class="col-12">
@@ -563,8 +585,13 @@ export default {
         resumen_minutos_antes_fin: 10,
         /** Minutos que el closer necesita para atender al lead post-demo; bloquea la ventana en otras demos. */
         duracion_llamada_closer_minutos: 30,
-        /** Margen mínimo (minutos) para ofrecer un horario de HOY; solo dinámica nueva. */
-        demo_minimo_minutos_desde_ahora: 15,
+        /* Margen mínimo (minutos) para ofrecer un horario de HOY; solo dinámica nueva.
+           🔴 5 y no 15 desde la misión 46, y el número importa aunque sea un fallback: es lo que
+           se ve hasta que responde la API y, peor, lo que se guardaría si alguien apretara Guardar
+           antes de que llegue esa respuesta. */
+        demo_minimo_minutos_desde_ahora: 5,
+        /** Porcentaje del video de introducción necesario para entrar a la demo (misión 46). */
+        demo_intro_umbral_pct: 90,
         /** Hora de inicio de la franja de la demo lunes a viernes; solo dinámica nueva. */
         demo_lv_inicio: '00:00',
         /** Hora de fin de la franja de la demo lunes a viernes; solo dinámica nueva. */
@@ -617,8 +644,10 @@ export default {
         resumen_minutos_antes_fin: 10,
         /** Espejo del servidor para detectar si el campo fue modificado localmente. */
         duracion_llamada_closer_minutos: 30,
-        /** Espejo del servidor: margen mínimo para ofrecer un horario de hoy. */
-        demo_minimo_minutos_desde_ahora: 15,
+        /** Espejo del servidor: margen mínimo para ofrecer un horario de hoy (misión 46: 5). */
+        demo_minimo_minutos_desde_ahora: 5,
+        /** Espejo del servidor: umbral del video de introducción (misión 46). */
+        demo_intro_umbral_pct: 90,
         /** Espejo del servidor: franja de la demo lunes a viernes. */
         demo_lv_inicio: '00:00',
         demo_lv_fin: '23:59',
@@ -867,6 +896,7 @@ export default {
           resumen_minutos_antes_fin:           self.local.resumen_minutos_antes_fin,
           duracion_llamada_closer_minutos:     self.local.duracion_llamada_closer_minutos,
           demo_minimo_minutos_desde_ahora:     self.local.demo_minimo_minutos_desde_ahora,
+          demo_intro_umbral_pct:               self.local.demo_intro_umbral_pct,
           demo_horario_lunes_viernes:          self.build_horario_range(self.local.demo_lv_inicio, self.local.demo_lv_fin),
           demo_horario_sabado:                 self.build_horario_range(self.local.demo_sabado_inicio, self.local.demo_sabado_fin),
           demo_horario_domingo:                self.build_horario_range(self.local.demo_domingo_inicio, self.local.demo_domingo_fin),

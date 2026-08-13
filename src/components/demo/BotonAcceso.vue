@@ -5,9 +5,72 @@
        misma respuesta para saber si achicarle el sitio al video: ver el comentario
        de ese módulo. -->
   <section v-if="muestra_bloque" class="demo-boton-acceso">
-    <!-- a) Antes del turno: hora reservada + cuenta regresiva + recordatorio de
-         entrar desde una computadora. Texto de demo_pagina.md §4 a) -->
-    <div v-if="estado === 'antes'" class="demo-boton-acceso__bloque">
+    <!-- a) Se puede entrar: botón activo. La decisión NO es de este componente ni
+         del reloj del navegador -- es `puede_ingresar`, que calcula el backend
+         (misión 46, pieza 3). Antes esto dependía de `estado === 'activo'`, así
+         que un lead con la demo lista y el video visto tenía que esperar a la
+         hora en punto. El clic dispara el ingreso real (grupo 233 del lado de
+         empresa-api/empresa-spa). -->
+    <div v-if="puede_ingresar" class="demo-boton-acceso__bloque">
+      <button
+        type="button"
+        class="demo-boton-acceso__boton"
+        :disabled="cargando"
+        @click="on_click"
+      >
+        {{ cargando ? 'Entrando…' : 'Entrar a mi demo' }}
+      </button>
+      <p v-if="turno.hora_fin" class="demo-boton-acceso__nota">
+        <em>Reservada hasta las {{ turno.hora_fin }}.</em>
+      </p>
+      <p v-if="mensaje_error" class="demo-boton-acceso__error">{{ mensaje_error }}</p>
+    </div>
+
+    <!-- b) Vencido, con la demo ya hecha (turno.ingreso === true). Tono amable,
+         nada de urgencia fabricada. Texto de demo_pagina.md §4 c). Va antes que
+         los bloques de preparación: a un turno vencido no lo arregla mirar el
+         video. -->
+    <div v-else-if="estado === 'vencido' && turno.ingreso" class="demo-boton-acceso__bloque">
+      <p class="demo-boton-acceso__titulo"><strong>Tu turno terminó.</strong></p>
+      <p class="demo-boton-acceso__nota">
+        Si querés volver a recorrerla, escribinos y te reservamos otro.
+      </p>
+    </div>
+
+    <!-- c) Vencido, sin haber entrado nunca. El más delicado: ese lead sigue
+         siendo recuperable, la instancia no es escasa (§3.16 D). Texto de
+         demo_pagina.md §4 d). -->
+    <div v-else-if="estado === 'vencido'" class="demo-boton-acceso__bloque">
+      <p class="demo-boton-acceso__titulo"><strong>Tu turno venció.</strong></p>
+      <p class="demo-boton-acceso__nota">
+        Escribinos y coordinamos uno nuevo cuando te quede cómodo.
+      </p>
+    </div>
+
+    <!-- d) El armado de la instancia falló. Es el único caso donde el lead no
+         puede hacer nada por su cuenta, así que el texto lo manda a WhatsApp.
+         Copy de la misión 46, pieza 3: se transcribe, no se reescribe. -->
+    <div v-else-if="setup_fallido" class="demo-boton-acceso__bloque">
+      <p class="demo-boton-acceso__titulo"><strong>Se nos complicó preparar tu demo.</strong></p>
+      <p class="demo-boton-acceso__nota">
+        Escribinos por WhatsApp y la dejamos lista en un momento.
+      </p>
+    </div>
+
+    <!-- e) Falta terminar el video de introducción. Va ANTES del bloque de
+         "preparando" a propósito: mirar el video es lo único accionable, y
+         mientras tanto la demo se está armando sola por debajo. -->
+    <div v-else-if="intro_pendiente" class="demo-boton-acceso__bloque">
+      <p class="demo-boton-acceso__titulo"><strong>Mirá el video hasta el final.</strong></p>
+      <p class="demo-boton-acceso__nota">
+        El botón para entrar se te habilita cuando termine.
+      </p>
+    </div>
+
+    <!-- f) Turno para más adelante y el armado todavía ni arrancó: hora
+         reservada + cuenta regresiva + recordatorio de entrar desde una
+         computadora. Texto de demo_pagina.md §4 a). -->
+    <div v-else-if="estado === 'antes' && setup_estado === 'pendiente'" class="demo-boton-acceso__bloque">
       <p class="demo-boton-acceso__titulo">
         <strong>Tu demo está reservada para las {{ turno.hora_inicio }}.</strong>
       </p>
@@ -19,40 +82,12 @@
       </p>
     </div>
 
-    <!-- b) Durante el turno: botón activo con la hora hasta la que está reservada.
-         Texto de demo_pagina.md §4 b). El clic dispara el ingreso real (prompt 01
-         de este grupo, grupo 233 del lado de empresa-api/empresa-spa). -->
-    <div v-else-if="estado === 'activo'" class="demo-boton-acceso__bloque">
-      <button
-        type="button"
-        class="demo-boton-acceso__boton"
-        :disabled="cargando"
-        @click="on_click"
-      >
-        {{ cargando ? 'Entrando…' : 'Entrar a mi demo' }}
-      </button>
+    <!-- g) La instancia se está armando (o está por hacerlo) y el video ya no es
+         un obstáculo. Copy de la misión 46, pieza 3. -->
+    <div v-else class="demo-boton-acceso__bloque">
+      <p class="demo-boton-acceso__titulo"><strong>Estamos preparando tu demo.</strong></p>
       <p class="demo-boton-acceso__nota">
-        <em>Reservada hasta las {{ turno.hora_fin }}.</em>
-      </p>
-      <p v-if="mensaje_error" class="demo-boton-acceso__error">{{ mensaje_error }}</p>
-    </div>
-
-    <!-- c) Vencido, con la demo ya hecha (turno.ingreso === true). Tono amable,
-         nada de urgencia fabricada. Texto de demo_pagina.md §4 c). -->
-    <div v-else-if="estado === 'vencido' && turno.ingreso" class="demo-boton-acceso__bloque">
-      <p class="demo-boton-acceso__titulo"><strong>Tu turno terminó.</strong></p>
-      <p class="demo-boton-acceso__nota">
-        Si querés volver a recorrerla, escribinos y te reservamos otro.
-      </p>
-    </div>
-
-    <!-- d) Vencido, sin haber entrado nunca. El más delicado: ese lead sigue
-         siendo recuperable, la instancia no es escasa (§3.16 D). Texto de
-         demo_pagina.md §4 d). -->
-    <div v-else-if="estado === 'vencido'" class="demo-boton-acceso__bloque">
-      <p class="demo-boton-acceso__titulo"><strong>Tu turno venció.</strong></p>
-      <p class="demo-boton-acceso__nota">
-        Escribinos y coordinamos uno nuevo cuando te quede cómodo.
+        En un momento se habilita el ingreso.
       </p>
     </div>
   </section>
@@ -63,16 +98,24 @@ import { hay_bloque_de_turno } from './estados-turno'
 
 /**
  * Botón de acceso a la demo (Grupo 300 · pagina-inmersiva-demo, prompt 05).
- * Cuatro estados, con los textos de contexto/demo_pagina.md §4 -- se
- * transcribe, no se reescribe.
+ * Siete bloques excluyentes, con los textos de contexto/demo_pagina.md §4 y de
+ * la misión 46 -- se transcriben, no se reescriben.
  *
- * El estado SIEMPRE lo decide el backend (`turno.estado`, uno de
- * sin_turno|antes|activo|vencido, más `turno.ingreso` para distinguir los
- * dos casos de vencido). Este componente NUNCA calcula el estado con el
- * reloj del cliente -- solo usa la hora del cliente para la cuenta
- * regresiva visual del estado "antes", y al llegar a cero no habilita el
- * botón por su cuenta: vuelve a pedir el payload al backend (función
- * `refrescar` inyectada por el contenedor) y usa lo que responda.
+ * 🔴 QUIÉN DECIDE QUE SE PUEDE ENTRAR (misión 46, pieza 3): el flag
+ * `puede_ingresar` del payload, y sólo él. Lo calcula el backend en un único
+ * lugar (DemoExperienciaController::evaluar_ingreso) juntando tres cosas: que
+ * el demo setup haya terminado bien, que el turno no esté vencido, y que el
+ * lead haya visto el video de introducción (salvo en entorno local o si todavía
+ * no hay video cargado). Este componente NO lo deriva ni lo recalcula: si lo
+ * hiciera habría dos reglas para la misma puerta, y la del navegador sería la
+ * fácil de saltear.
+ *
+ * Hasta la misión 46 la puerta era `turno.estado === 'activo'`, o sea el reloj.
+ * Los demás campos del turno se siguen usando igual para los textos: la cuenta
+ * regresiva del estado "antes" y los dos casos de vencido. La cuenta regresiva
+ * es lo único que mira el reloj del cliente, y al llegar a cero no habilita
+ * nada por su cuenta: vuelve a pedir el payload (`refrescar`) y usa lo que
+ * responda.
  */
 export default {
   name: 'BotonAcceso',
@@ -80,6 +123,29 @@ export default {
   props: {
     /** { fecha, hora_inicio, hora_fin, estado, ingreso } del turno, tal como llega del payload. */
     turno: {
+      type: Object,
+      default: function () {
+        return {}
+      },
+    },
+    /**
+     * `puede_ingresar` del payload: lo calcula el backend y es lo único que
+     * habilita el botón. Default false -- mientras el payload no llegó, la
+     * puerta está cerrada.
+     */
+    puede_ingresar: {
+      type: Boolean,
+      default: false,
+    },
+    /** { estado } del demo setup: pendiente | ejecutandose | exitoso | fallido. */
+    setup: {
+      type: Object,
+      default: function () {
+        return {}
+      },
+    },
+    /** { visto_pct, umbral_pct, obligatorio } del video de introducción. */
+    intro: {
       type: Object,
       default: function () {
         return {}
@@ -143,15 +209,47 @@ export default {
     },
 
     /**
-     * true si este componente tiene algo que mostrar para el estado actual. Un estado
-     * que el backend agregue mañana y que los `v-else-if` de abajo no contemplen cae
-     * acá en false: mejor no mostrar nada que una caja vacía (y que el contenedor le
-     * achique el video para hacerle lugar).
+     * true si este componente tiene algo que mostrar. Un estado de turno que el backend
+     * agregue mañana y que los `v-else-if` de arriba no contemplen cae acá en false:
+     * mejor no mostrar nada que una caja vacía (y que el contenedor le achique el video
+     * para hacerle lugar). La excepción es `puede_ingresar`: si el backend dice que se
+     * puede entrar, el botón existe pase lo que pase con el estado.
      *
      * @returns {boolean}
      */
     muestra_bloque() {
-      return hay_bloque_de_turno(this.turno)
+      return hay_bloque_de_turno(this.turno, this.puede_ingresar)
+    },
+
+    /**
+     * Estado del demo setup. 'pendiente' si el payload todavía no llegó o no lo trae.
+     *
+     * @returns {string}
+     */
+    setup_estado() {
+      return (this.setup && this.setup.estado) || 'pendiente'
+    },
+
+    /**
+     * @returns {boolean} true si el armado de la instancia falló.
+     */
+    setup_fallido() {
+      return this.setup_estado === 'fallido'
+    },
+
+    /**
+     * true cuando lo que le falta al lead es terminar el video. No es una segunda
+     * versión de la regla del backend: `puede_ingresar` ya decidió que no se puede
+     * entrar, y esto sólo elige QUÉ texto mostrarle. Si el video no es obligatorio
+     * (no hay URL cargada, o entorno de prueba) nunca es este el motivo.
+     *
+     * @returns {boolean}
+     */
+    intro_pendiente() {
+      if (!this.intro || !this.intro.obligatorio) {
+        return false
+      }
+      return Number(this.intro.visto_pct || 0) < Number(this.intro.umbral_pct || 0)
     },
 
     /**
@@ -303,30 +401,34 @@ export default {
           const motivo =
             error && error.response && error.response.data && error.response.data.motivo
 
+          // Se apaga siempre y acá: el watch de `turno` también lo hace, pero sólo si
+          // el payload refrescado trae algo distinto -- y con los motivos nuevos
+          // (misión 46) puede volver idéntico, dejando el botón en "Entrando…" para
+          // siempre.
+          self.cargando = false
+
           if (motivo === 'preparando') {
             self.mensaje_error = 'Estamos terminando de preparar tu demo. Probá de nuevo en un minuto.'
-            self.cargando = false
+            self.refrescar()
             return
           }
 
-          if (motivo === 'antes' || motivo === 'vencido' || motivo === 'sin_turno') {
+          if (motivo === 'vencido' || motivo === 'intro_pendiente' || motivo === 'setup_fallido') {
             // El estado que tiene esta pantalla quedó viejo (pestaña abierta
             // desde hace rato): se pide el payload real al backend en vez de
-            // reintroducir el reloj del navegador. El watch de `turno` limpia
-            // `cargando` cuando el refresco llega.
+            // reintroducir el reloj del navegador. Con el payload nuevo, el
+            // bloque que corresponde se renderiza solo.
             self.refrescar()
             return
           }
 
           if (motivo === 'token_invalido') {
             self.mensaje_error = 'Este acceso ya no está disponible. Escribinos por WhatsApp y te lo reactivamos.'
-            self.cargando = false
             return
           }
 
           // sin_instancia, error de red, o 500: mensaje genérico sin detalles técnicos.
           self.mensaje_error = 'No pudimos abrir la demo. Probá de nuevo.'
-          self.cargando = false
         })
     },
   },

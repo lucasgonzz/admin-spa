@@ -377,8 +377,13 @@ export default {
               : r.demo_setup_status === 'fallido'
                 ? 'failed'
                 : 'pending',
-          /* Detalle: mensaje de error si el setup falló. */
-          detail: r.demo_setup_last_error || null,
+          /* Detalle: estado del armado, progreso del lead sobre el video de introducción, y el
+             mensaje de error si el setup falló (misión 46, pieza 5). Los dos primeros son
+             exactamente lo que hay que mirar cuando un lead dice que no puede entrar: desde la
+             misión 46 el botón depende de esas dos cosas y de ninguna más. El porcentaje del
+             intro es además la señal de temperatura del lead de demo_experiencia.md §3.15 — el
+             primer dato real de comportamiento que tenemos antes de la demo. */
+          detail: this.format_demo_setup_detail(r),
           action: 'run_demo_setup',
           action_label: 'Correr demo setup ahora',
           action_label_repeat: 'Volver a correr demo setup',
@@ -762,6 +767,44 @@ export default {
         return stage.action_label_repeat
       }
       return stage.action_label || ''
+    },
+    /**
+     * Arma el detalle de la etapa "Demo setup corrido" (misión 46, pieza 5).
+     *
+     * Junta las dos cosas de las que depende el botón de ingreso de la página inmersiva —el
+     * estado del armado y cuánto vio el lead del video de introducción— más el error si el
+     * setup falló. Sin esto no hay forma de responder desde el panel por qué un lead no
+     * puede entrar, que es exactamente la pregunta que aparece.
+     *
+     * @param {Object} r El lead.
+     * @returns {string|null} Una línea, o null si no hay nada que decir.
+     */
+    format_demo_setup_detail(r) {
+      const partes = []
+
+      if (r.demo_setup_status) {
+        partes.push('Estado: ' + r.demo_setup_status)
+      }
+
+      /* El porcentaje se muestra siempre que haya algo mirado, y también cuando ya terminó
+         el video: un 100% sin la fecha no distingue "lo terminó recién" de "lo terminó la
+         semana pasada". */
+      const pct = Number(r.intro_visto_pct || 0)
+      if (pct > 0) {
+        let texto_intro = 'Video de introducción: ' + pct + '% visto'
+        if (r.intro_visto_at) {
+          texto_intro += ' (completo el ' + this.format_datetime(r.intro_visto_at) + ')'
+        }
+        partes.push(texto_intro)
+      } else {
+        partes.push('Video de introducción: sin empezar')
+      }
+
+      if (r.demo_setup_last_error) {
+        partes.push('Error: ' + r.demo_setup_last_error)
+      }
+
+      return partes.length ? partes.join(' · ') : null
     },
     /**
      * Formatea el origen de ejecución (manual / automático) para mostrar en UI.
