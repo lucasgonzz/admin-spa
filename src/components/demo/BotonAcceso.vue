@@ -316,11 +316,23 @@ export default {
       deep: true,
       handler: function () {
         this.ya_refresco = false
+
+        // 🔴 Con un POST de ingreso en vuelo no se toca nada (corregido en la
+        // verificación de la misión 46). Desde que existe el poleo, este watcher
+        // corre cada 10 segundos —y en cada reporte de progreso del video—,
+        // porque el contenedor asigna un objeto `turno` nuevo cada vez. Limpiar
+        // `cargando` acá anulaba la guarda de doble clic justo mientras el lead
+        // esperaba la redirección, y le borraba el mensaje de error a los pocos
+        // segundos de aparecer. El `catch` del propio ingreso ya apaga
+        // `cargando`, así que este camino no hace falta para eso.
+        if (this.cargando) {
+          return
+        }
+
         // El payload se refrescó de punta a punta (llegada a cero de la cuenta
         // regresiva, envío del formulario, o un ingreso que pidió refrescar
         // porque el estado en pantalla había quedado viejo): se limpia
-        // cualquier estado de carga/error del intento anterior.
-        this.cargando = false
+        // cualquier estado de error del intento anterior.
         this.mensaje_error = ''
       },
     },

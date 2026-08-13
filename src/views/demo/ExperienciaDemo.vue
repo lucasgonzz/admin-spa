@@ -115,19 +115,28 @@
             />
           </marco-dispositivo>
 
-          <!-- Botón de acceso: el estado (sin_turno/antes/activo/vencido) lo
-               decide siempre el backend (turno.estado); este componente solo
-               agrega la cuenta regresiva visual, dispara el ingreso real
-               (prompt 01 de este grupo) y pide refrescar el payload
-               (cargar_experiencia) cuando esa cuenta llega a cero o el estado
-               quedó viejo. En `sin_turno` no renderiza ningún nodo, así que el
-               `gap` del contenedor tampoco deja hueco. -->
+          <!-- Botón de acceso: la puerta la decide siempre el backend
+               (`puede_ingresar`); este componente solo agrega la cuenta
+               regresiva visual, dispara el ingreso real y pide refrescar el
+               payload cuando esa cuenta llega a cero o el estado quedó viejo.
+               En `sin_turno` no renderiza ningún nodo, así que el `gap` del
+               contenedor tampoco deja hueco.
+
+               🔴 `refrescar` es `consultar_estado` y NO `cargar_experiencia`
+               (corregido en la verificación de la misión 46). `cargar_experiencia`
+               prende `loading`, y todo el contenido cuelga de `v-if="!loading"`:
+               desmontaba el `<video>` del intro y lo volvía a montar, o sea que
+               le cortaba la reproducción al lead en el medio y lo obligaba a
+               darle play de nuevo. Y lo dispara la cuenta regresiva al llegar a
+               cero, que con el mínimo bajado a 5 minutos cae justo en la mitad
+               del video obligatorio. `consultar_estado` trae el mismo payload
+               sin tocar `loading`. -->
           <boton-acceso
             :turno="turno"
             :puede_ingresar="puede_ingresar"
             :setup="setup"
             :intro="intro"
-            :refrescar="cargar_experiencia"
+            :refrescar="consultar_estado"
             :ingresar="ingresar"
             class="demo-experiencia-page__turno"
           />
@@ -795,6 +804,12 @@ export default {
       return api_public
         .post('/demo-experiencia/' + uuid + '/intro-progreso', { pct: pct })
         .then(function (response) {
+          /* El último reporte lo manda VideoIntro desde su beforeUnmount, así que la
+             respuesta puede llegar con esta vista ya desmontada. Misma guarda que
+             consultar_estado(). */
+          if (self.desmontado) {
+            return response.data || {}
+          }
           return self.aplicar_payload(response.data)
         })
     },

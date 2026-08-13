@@ -11,8 +11,10 @@
     @loadedmetadata="on_loadedmetadata"
     @timeupdate="on_timeupdate"
     @seeking="on_seeking"
+    @seeked="on_seeked"
     @pause="on_pause"
     @ended="on_ended"
+    @error="on_error"
   />
 
   <!-- Sin URL: mismo placeholder de marca que el resto de las piezas, con las
@@ -26,6 +28,14 @@
 </template>
 
 <script>
+/**
+ * Cuánto se espera a que el video dé señales de vida antes de dar por hecho que no va a
+ * cargar y liberar el ingreso. Generoso a propósito: un lead con la conexión mala tiene
+ * que poder mirarlo. Si carga después, no se pierde nada — el lead lo mira igual, sólo
+ * que el botón ya estaba habilitado.
+ */
+const ESPERA_CARGA_MS = 45000
+
 /**
  * Reproductor del video de introducción de la página inmersiva (misión 46, pieza 4).
  *
@@ -96,6 +106,10 @@ export default {
       velocidad_fijada: false,
       /** true mientras se está devolviendo el cursor hacia atrás, para no reentrar en `seeking`. */
       corrigiendo_salto: false,
+      /** Handle del timeout que libera el gate si el video nunca llega a cargar. */
+      timeout_carga_id: null,
+      /** true una vez liberado el gate por un video que no carga: se hace una sola vez. */
+      liberado_por_fallo: false,
     }
   },
 
@@ -107,7 +121,38 @@ export default {
     this.ultimo_reportado = Number(this.visto_pct) || 0
   },
 
+  mounted() {
+    /* 🔴 Válvula de escape por reloj, y no es defensiva de más: sin esto, un video que no
+       carga deja al lead afuera de su demo PARA SIEMPRE, y si lo que se rompe es la URL
+       del catálogo, le pasa a todos los leads a la vez. El backend sólo verifica que haya
+       una URL cargada, no que el archivo exista: un 404, un codec que ese navegador no
+       soporta, CORS o mixed content dan el mismo resultado -- `loadedmetadata` no dispara
+       nunca, la duración no se puede calcular, el porcentaje se queda en 0, y `ended`
+       -que es la otra salida- tampoco llega jamás.
+       El criterio es el mismo que el de "sin URL cargada el intro no es obligatorio":
+       ante un video que no se puede mirar, se libera el ingreso. Fallar hacia "el lead no
+       hace su demo" es el peor de los dos errores posibles. */
+    if (!this.url) {
+      return
+    }
+    const self = this
+    this.timeout_carga_id = window.setTimeout(function () {
+      self.timeout_carga_id = null
+      const video = self.$refs.video
+      /* Si para este momento hay duración, el video cargó: no hay nada que liberar. */
+      if (video && self.duracion_valida(video) !== null) {
+        return
+      }
+      self.liberar_por_fallo('el video no cargó dentro del tiempo esperado')
+    }, ESPERA_CARGA_MS)
+  },
+
   beforeUnmount() {
+    if (this.timeout_carga_id) {
+      window.clearTimeout(this.timeout_carga_id)
+      this.timeout_carga_id = null
+    }
+
     /* Último reporte al salir: si el lead cierra la pestaña a mitad, lo que vio hasta
        acá no se pierde. Es best-effort -- si la request no llega a salir, el peor caso
        es que la próxima visita arranque desde el último reporte periódico. */
@@ -124,6 +169,12 @@ export default {
       const video = this.$refs.video
       if (!video) {
         return
+      }
+
+      /* El video dio señales de vida: la válvula de escape ya no hace falta. */
+      if (this.timeout_carga_id) {
+        window.clearTimeout(this.timeout_carga_id)
+        this.timeout_carga_id = null
       }
 
       if (!this.velocidad_fijada) {
@@ -179,13 +230,52 @@ export default {
       if (video.currentTime > this.max_visto + 0.5) {
         this.corrigiendo_salto = true
         video.currentTime = this.max_visto
-        /* El flag se limpia en el próximo tick del navegador: asignar currentTime dispara
-           otro `seeking`, y sin esto la corrección se llamaría a sí misma. */
-        const self = this
-        window.setTimeout(function () {
-          self.corrigiendo_salto = false
-        }, 0)
       }
+    },
+
+    /**
+     * Cierra la corrección de un salto. El flag se limpia acá y no con un `setTimeout(0)`:
+     * asignar `currentTime` dispara otro `seeking` —por eso el flag existe—, y el evento
+     * que garantiza que esa corrección terminó es `seeked`, no el paso de un tick. Con el
+     * timer, cualquier `seeking` que llegara mientras el flag estaba arriba pasaba sin
+     * clamp; acá la ventana se cierra exactamente cuando el navegador terminó de mover el
+     * cursor.
+     *
+     * @returns {void}
+     */
+    on_seeked() {
+      this.corrigiendo_salto = false
+    },
+
+    /**
+     * El medio falló (404, codec no soportado, CORS, mixed content). Se libera el ingreso:
+     * ver el comentario largo del `mounted()`.
+     *
+     * @returns {void}
+     */
+    on_error() {
+      this.liberar_por_fallo('el video no se pudo cargar')
+    },
+
+    /**
+     * Libera el gate reportando 100 cuando el video no se puede mirar. Una sola vez.
+     *
+     * @param {string} motivo Para el log; el lead no ve nada de esto.
+     * @returns {void}
+     */
+    liberar_por_fallo(motivo) {
+      if (this.liberado_por_fallo) {
+        return
+      }
+      this.liberado_por_fallo = true
+
+      if (this.timeout_carga_id) {
+        window.clearTimeout(this.timeout_carga_id)
+        this.timeout_carga_id = null
+      }
+
+      console.warn('[demo-experiencia] intro liberado sin verse: ' + motivo)
+      this.reportar_progreso(100, true)
     },
 
     /**
