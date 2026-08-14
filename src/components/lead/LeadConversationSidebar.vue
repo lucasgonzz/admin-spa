@@ -29,15 +29,13 @@
         </button>
       </div>
 
-      <!-- Recorrido de la demo (misión 49): va ARRIBA de los otros controles de demo porque es
-           lo primero que hay que mirar al abrir un lead que está en demo — dice por dónde va.
-           Solo se monta si el lead tiene el plan congelado; el propio componente resuelve el
-           caso "todavía no completó el formulario" con una línea, así que se le pasa el lead y
-           él decide qué mostrar. -->
-      <demo-roadmap
-        v-if="lead"
-        :lead="lead"
-      />
+      <!-- 🔴 El recorrido de la demo NO va acá (misión 58). Estuvo montado arriba de todo desde la
+           misión 49, y con 21 hitos y sin tope de alto se comía el panel entero: empujaba los dos
+           controles de abajo al fondo y la conversación no entraba en pantalla, que es justo para
+           lo que existe este panel. Vive en la pestaña Operaciones del modal del lead
+           (`components/lead/extra-props/Index.vue`), debajo del pipeline, que es donde ya estaba
+           el resto de la información de la demo. Los dos controles que siguen son cortos y no
+           tapan nada: esos sí se quedan. -->
 
       <!-- Acceso a la demo: link directo, reemitir y revocar (grupo 233, prompt 06).
            Se muestra junto a la información de la demo agendada, antes del cuerpo de la
@@ -75,7 +73,6 @@
 import LeadConversationView from '@/views/LeadConversationView.vue'
 import DemoAccesoControl from '@/components/lead/DemoAccesoControl.vue'
 import DemoExperienciaControl from '@/components/lead/DemoExperienciaControl.vue'
-import DemoRoadmap from '@/components/lead/demo-roadmap/Index.vue'
 
 /**
  * Panel lateral deslizable que muestra la conversación WhatsApp de un lead
@@ -94,7 +91,7 @@ import DemoRoadmap from '@/components/lead/demo-roadmap/Index.vue'
 export default {
   name: 'LeadConversationSidebar',
 
-  components: { LeadConversationView, DemoAccesoControl, DemoExperienciaControl, DemoRoadmap },
+  components: { LeadConversationView, DemoAccesoControl, DemoExperienciaControl },
 
   props: {
     /**

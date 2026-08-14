@@ -120,6 +120,16 @@
       </div>
     </div>
 
+    <!-- Recorrido de la demo (misión 58): venía del panel lateral de WhatsApp, donde con 21 hitos
+         tapaba la conversación. Va acá, pegado abajo del pipeline, porque son la misma pregunta
+         ("¿por dónde va esto?") y porque en esta pestaña ya viven las etapas "Demo agendada" y
+         "Demo setup corrido".
+         El componente ya trae su propia card (`card border-secondary border-opacity-25 mb-3`), así
+         que NO se lo envuelve en otra: quedaría una card adentro de una card.
+         Se le pasa `record`, que es el lead de esta pestaña; él resuelve solo el caso del lead sin
+         plan congelado con una línea. -->
+    <demo-roadmap :lead="record" />
+
     <!-- Acciones manuales: botones del flujo principal (mail demo, followup, promover, user setup) -->
     <div class="card border-secondary border-opacity-25 mb-3">
       <div class="card-header bg-light py-2">
@@ -249,6 +259,7 @@
 
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
+import DemoRoadmap from '@/components/lead/demo-roadmap/Index.vue'
 
 /**
  * Panel de pipeline del lead en el tab Operaciones.
@@ -259,6 +270,7 @@ import api, { resolve_error_message } from '@/utils/axios'
  */
 export default {
   name: 'LeadExtraProps',
+  components: { DemoRoadmap },
   props: {
     /**
      * Lead en edición: en el modal CRUD es el borrador (`draft`) del ModelModal,
