@@ -175,6 +175,12 @@ export default {
       intervalo_id: null,
       ticks_restantes: 0,
       poleo_agotado: false,
+
+      /* ¿La tarjeta está a la vista? Arranca en `true` a propósito: si el navegador no
+       * tiene `IntersectionObserver` o la raíz no es un elemento, no se puede medir, y el
+       * repliegue correcto es poleár como se hacía antes — no quedarse mudo. */
+      visible: true,
+      observador_visibilidad: null,
     }
   },
 
@@ -229,6 +235,11 @@ export default {
   },
 
   mounted() {
+    /* El observador avisa de forma ASÍNCRONA: su primer aviso llega después de este turno,
+     * así que sin esta medición sincrónica la carga inicial de `iniciar_poleo` saldría igual
+     * con la tarjeta oculta, que es justo lo que se quiere evitar. */
+    this.visible = this.tiene_layout()
+    this.observar_visibilidad()
     this.iniciar_poleo()
   },
 
@@ -245,7 +256,20 @@ export default {
   },
 
   deactivated() {
-    this.detener_poleo()
+    /* 🔴 Y acá está el matiz que trajo la mudanza al modal (misión 58): "la vista se desactivó"
+     * dejó de ser sinónimo de "esta tarjeta ya no se ve". `BaseModal` teleporta el diálogo a
+     * `body`, y keep-alive **no** se lleva el contenido teleportado a su contenedor oculto: si
+     * el operador navega a otra sección con el modal abierto, el modal queda arriba de la
+     * pantalla nueva, visible y usable. Frenar el poleo ahí dejaba el recorrido congelado en el
+     * último tick, a la vista, y sin ninguno de los dos avisos que tiene la tarjeta para
+     * decirlo (`hubo_error` y `poleo_agotado` siguen en false: no falló nada ni se agotó nada).
+     *
+     * Entonces se pregunta por lo que de verdad importa —¿sigue teniendo caja de layout?— en
+     * vez de asumirlo. En el caso del sidebar, keep-alive ya movió su DOM fuera del documento
+     * cuando corre este hook, así que `offsetParent` es `null` y se frena igual que antes. */
+    if (!this.tiene_layout()) {
+      this.detener_poleo()
+    }
   },
 
   /**
@@ -255,9 +279,91 @@ export default {
    */
   beforeUnmount() {
     this.detener_poleo()
+    this.dejar_de_observar_visibilidad()
   },
 
   methods: {
+    /**
+     * 🔴 Empieza a mirar si la tarjeta está efectivamente en pantalla (misión 58).
+     *
+     * Desde que la tarjeta vive en la pestaña Operaciones del modal del lead, estar MONTADA
+     * dejó de significar estar a la vista: el modal renderiza los paneles de sus pestañas con
+     * `v-show` (`common-vue/components/model/Index.vue`), así que la tarjeta se monta apenas
+     * se abre el modal —y la pestaña que abre por default es Resumen, no Operaciones—. Sin
+     * esto, abrir un lead para corregirle el teléfono arrancaba el poleo igual, y encima le
+     * comía el presupuesto de 90 minutos a una tarjeta que nadie estaba mirando.
+     *
+     * Es el mismo criterio que la guarda de `document.hidden` que ya tenía el tick, un nivel
+     * más abajo: aquella pregunta si la PESTAÑA DEL NAVEGADOR está a la vista; ésta, si lo
+     * está la tarjeta dentro de la página.
+     *
+     * @returns {void}
+     */
+    observar_visibilidad() {
+      const el = this.$el
+
+      /* `nodeType !== 1` es el caso del `v-if` de la raíz en false: ahí Vue deja un nodo
+       * comentario, que no tiene layout ni se puede observar. */
+      if (typeof IntersectionObserver === 'undefined' || !el || el.nodeType !== 1) {
+        /* No se puede medir: se vuelve al comportamiento de antes en vez de quedarse mudo
+         * para siempre, que es el modo de falla caro (una tarjeta que nunca carga y nadie
+         * sabe por qué). */
+        this.visible = true
+
+        return
+      }
+
+      const self = this
+
+      this.observador_visibilidad = new IntersectionObserver(function (entradas) {
+        const estaba_oculta = !self.visible
+        self.visible = entradas[entradas.length - 1].isIntersecting
+
+        /* Recién aparece: se pide en el acto en vez de esperar al próximo tick. Sin esto, el
+         * operador que entra a Operaciones se come hasta 10 segundos de spinner. */
+        if (self.visible && estaba_oculta) {
+          self.cargar()
+        }
+      }, {
+        /* Margen para que la tarjeta llegue cargada al momento en que entra en pantalla: en
+         * el modal está debajo de un pipeline largo, así que se la alcanza scrolleando. */
+        rootMargin: '200px',
+      })
+
+      this.observador_visibilidad.observe(el)
+    },
+
+    /**
+     * ¿La raíz de la tarjeta tiene caja de layout en este instante?
+     *
+     * `offsetParent` da `null` cuando un ancestro tiene `display: none`, que es exactamente
+     * lo que hace el `v-show` de la pestaña inactiva. Sirve para la única pregunta que el
+     * observador no puede contestar todavía: la del primer turno.
+     *
+     * @returns {boolean}
+     */
+    tiene_layout() {
+      const el = this.$el
+
+      if (!el || el.nodeType !== 1) {
+        return true
+      }
+
+      return el.offsetParent !== null
+    },
+
+    /**
+     * Corta la observación. Idempotente, igual que `detener_poleo`.
+     *
+     * @returns {void}
+     */
+    dejar_de_observar_visibilidad() {
+      if (this.observador_visibilidad !== null) {
+        this.observador_visibilidad.disconnect()
+        this.observador_visibilidad = null
+      }
+    },
+
     /**
      * Trae el recorrido del lead. No pisa lo que ya está en pantalla mientras carga: el poleo
      * corre cada 10 segundos y un parpadeo por tick haría la tarjeta ilegible.
@@ -317,7 +423,12 @@ export default {
        * alcanzable de verdad. */
       this.detener_poleo()
 
-      this.cargar()
+      /* La carga de arranque también respeta la visibilidad: si la tarjeta está oculta, el
+       * intervalo igual queda armado y el observador dispara la primera lectura recién cuando
+       * aparece. */
+      if (this.visible) {
+        this.cargar()
+      }
 
       this.poleo_agotado = false
       // 90 minutos a 10 segundos por tick.
@@ -333,6 +444,14 @@ export default {
          * presupuesto, y al volver a primer plano tiene que seguir actualizándose — si el tope
          * corriera igual, el panel aparecería congelado justo cuando alguien lo mira. */
         if (document.hidden) {
+          return
+        }
+
+        /* Y la tarjeta oculta tampoco: el modal la mantiene montada con `v-show` mientras
+         * el operador está en otra pestaña del lead (ver `observar_visibilidad`). Va con el
+         * mismo criterio que la guarda de arriba —antes de descontar el tick—, porque el
+         * tope de 90 minutos mide poleo efectivo y no reloj de pared. */
+        if (!self.visible) {
           return
         }
 
