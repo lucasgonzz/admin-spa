@@ -223,9 +223,13 @@ export default {
 
   watch: {
     /**
-     * Cambio de lead sin desmontar el componente (pasa en el panel lateral, que se reusa entre
-     * leads): se reinicia todo, incluido el poleo. Sin esto el intervalo seguiría pidiendo el
-     * recorrido del lead anterior.
+     * Cambio de lead sin desmontar el componente: se reinicia todo, incluido el poleo. Sin esto
+     * el intervalo seguiría pidiendo el recorrido del lead anterior.
+     *
+     * Nació para el panel lateral, que se reusaba entre leads. Hoy la tarjeta vive adentro del
+     * modal, que re-keyea la pestaña por el id del lead y la remonta entera, así que este watch
+     * quedó como red: no se saca porque el día que la tarjeta se monte en otro lado vuelve a ser
+     * lo único que evita el poleo apuntado al lead equivocado.
      */
     'lead.id': function () {
       this.detener_poleo()
@@ -241,30 +245,37 @@ export default {
   },
 
   mounted() {
-    /* El observador avisa de forma ASÍNCRONA: su primer aviso llega después de este turno, así
-     * que sin esta medición sincrónica la carga inicial saldría igual con la tarjeta oculta,
-     * que es justo lo que se quiere evitar. */
-    this.visible = this.tiene_layout()
     this.observar_visibilidad()
 
-    if (this.visible) {
+    /* Con observador no se arranca nada acá: su primer aviso llega solo —la especificación
+     * garantiza uno por cada target apenas se lo observa, haya cruce o no— y ese aviso decide.
+     * Adelantarse con una medición sincrónica de layout parecía más prolijo y era peor: el modal
+     * recuerda la última pestaña abierta, así que al operador que trabaja en Operaciones se le
+     * abre directo ahí, la tarjeta tiene caja de layout pero está debajo del pliegue, y salía un
+     * GET al vacío más un intervalo que el observador apagaba un frame después. */
+    if (this.observador_visibilidad === null) {
       this.iniciar_poleo()
     }
   },
 
   /**
-   * 🔴 `activated` / `deactivated` NO son opcionales acá, y esto es lo que casi se escapa:
-   * `App.vue` envuelve la vista de leads en `<keep-alive :include="['ViewLeads']">`, así que al
-   * navegar a otra sección del admin **sin cerrar el sidebar** Vue no desmonta nada — sólo
-   * desactiva. `beforeUnmount` no corre, el sidebar sigue montado con su `v-if` en true, y
-   * `document.hidden` es `false` porque la pestaña está a la vista: la guarda de visibilidad
-   * tampoco frena. Sin esto quedaban 540 requests en 90 minutos contra una tarjeta que nadie ve.
+   * 🔴 Por qué hay hooks de keep-alive acá: `App.vue` envuelve la vista de leads en
+   * `<keep-alive :include="['ViewLeads']">`, así que al navegar a otra sección del admin Vue no
+   * desmonta nada — sólo desactiva. `beforeUnmount` no corre y `document.hidden` es `false`
+   * porque la pestaña del navegador sigue a la vista. Cuando esta tarjeta vivía en el panel
+   * lateral (misión 49), sin estos dos hooks quedaban 540 requests en 90 minutos contra algo que
+   * nadie estaba mirando.
+   *
+   * Desde la misión 58 el que decide es el observador de visibilidad, y estos hooks pasaron a
+   * ocuparse de lo poco que él no puede: reanudar cuando la vista vuelve sin que la visibilidad
+   * haya cambiado, y frenar en el repliegue donde no hay observador.
    */
   activated() {
-    /* Sólo si se la ve: al reactivarse la vista la tarjeta puede seguir tapada por la pestaña
-     * inactiva del modal, y ahí no hay nada que actualizar. Si está oculta, el que la va a
-     * despertar es el observador, en cuanto aparezca. */
-    if (this.visible) {
+    /* Simétrico con `deactivated`: con observador no hay nada que reanudar. O la tarjeta siguió
+     * a la vista —y entonces el intervalo nunca paró, así que reiniciarlo sólo serviría para
+     * mandar un GET fuera de cadencia, resetear el tope y hacer desaparecer solo el botón
+     * "Actualizar"— o está tapada, y la despierta el observador cuando aparezca. */
+    if (this.observador_visibilidad === null) {
       this.iniciar_poleo()
     }
   },
@@ -278,11 +289,13 @@ export default {
      * último tick, a la vista, y sin ninguno de los dos avisos que tiene la tarjeta para
      * decirlo (`hubo_error` y `poleo_agotado` siguen en false: no falló nada ni se agotó nada).
      *
-     * Con observador no hace falta hacer nada: cuando keep-alive saca el DOM del documento la
-     * tarjeta deja de intersectar y el poleo se frena solo; y cuando queda a la vista dentro
-     * del modal teleportado, sigue —que es lo que corresponde—. Este hook queda entonces sólo
-     * como red del repliegue sin observador, donde nadie más mide. */
-    if (this.observador_visibilidad === null) {
+     * Entonces se pregunta por lo que de verdad importa —¿le queda caja de layout?— en vez de
+     * asumirlo, y la pregunta se hace SIEMPRE, con observador o sin él: `offsetParent` mide la
+     * cosa real y no depende de que exista `IntersectionObserver`. Si se guardara esto detrás de
+     * "no hay observador", el repliegue volvería a frenar el poleo con la tarjeta a la vista, o
+     * sea justo el defecto que este hook viene a evitar. Con observador es redundante y no
+     * molesta: cuando keep-alive saca el DOM del documento, los dos coinciden en frenar. */
+    if (!this.tiene_layout()) {
       this.detener_poleo()
     }
   },
@@ -328,11 +341,17 @@ export default {
         return
       }
 
+      /* Se arranca en `false` y lo corrige el primer aviso, que llega en el próximo frame. Al
+       * revés —arrancar en `true`— la ventana entre el montaje y ese aviso alcanza para que el
+       * watch del lead dispare una lectura de algo que nadie está mirando. */
+      this.visible = false
+
       const self = this
 
       /* 🔴 El observador no "avisa" nada más: **prende y apaga el poleo**. La invariante que
-       * deja es la que hace fácil razonar todo lo demás — *el intervalo existe si y sólo si la
-       * tarjeta está a la vista*.
+       * deja es la que hace fácil razonar todo lo demás — *con observador, el intervalo existe
+       * si y sólo si la tarjeta está a la vista*. (En el repliegue no rige ninguna invariante
+       * nueva: ahí se poléa como antes de esta misión.)
        *
        * La primera versión de esto (misión 58) sólo llamaba a `cargar()` y dejaba que un guard
        * adentro del tick saltease los ticks invisibles. Se veía más chiquito y tenía un agujero:
@@ -366,9 +385,14 @@ export default {
     /**
      * ¿La raíz de la tarjeta tiene caja de layout en este instante?
      *
-     * `offsetParent` da `null` cuando un ancestro tiene `display: none`, que es exactamente
-     * lo que hace el `v-show` de la pestaña inactiva. Sirve para la única pregunta que el
-     * observador no puede contestar todavía: la del primer turno.
+     * `offsetParent` da `null` cuando un ancestro tiene `display: none` —lo que hace el `v-show`
+     * de la pestaña inactiva— y también cuando el elemento salió del documento, que es lo que
+     * keep-alive le hace a lo que NO está teleportado. Las dos cosas que necesita saber
+     * `deactivated`, su único llamador, y sin depender de `IntersectionObserver`.
+     *
+     * Un nodo que no es elemento (la raíz con su `v-if` en false) devuelve `false` porque es la
+     * verdad —un comentario no tiene caja— y porque para el que pregunta es además el default
+     * seguro: ante la duda, frenar.
      *
      * @returns {boolean}
      */
@@ -376,7 +400,7 @@ export default {
       const el = this.$el
 
       if (!el || el.nodeType !== 1) {
-        return true
+        return false
       }
 
       return el.offsetParent !== null
@@ -472,9 +496,10 @@ export default {
           return
         }
 
-        /* Acá NO va una guarda por tarjeta oculta, y vale decir por qué: mientras la tarjeta no
-         * se ve, este intervalo directamente no existe — lo apaga el observador y lo vuelve a
-         * prender cuando reaparece (ver `observar_visibilidad`). */
+        /* Acá NO va una guarda por tarjeta oculta, y vale decir por qué: con observador, mientras
+         * la tarjeta no se ve este intervalo directamente no existe — lo apaga él y lo vuelve a
+         * prender cuando reaparece (ver `observar_visibilidad`). En el repliegue no hay a quién
+         * preguntarle, así que se poléa como antes. */
 
         // Un tick que no llega a pedir tampoco gasta presupuesto: si hay una petición todavía en
         // vuelo, `cargar()` sale por su propio guard, y descontar acá haría que el tope de 90
