@@ -230,17 +230,26 @@ export default {
     'lead.id': function () {
       this.detener_poleo()
       this.cargando_primera_vez = true
-      this.iniciar_poleo()
+
+      /* Misma regla que en todos lados: si la tarjeta está tapada, el lead nuevo se lee recién
+       * cuando aparezca. El observador no dispara solo en este caso, porque la visibilidad no
+       * cambió — lo que cambió es el lead. */
+      if (this.visible) {
+        this.iniciar_poleo()
+      }
     },
   },
 
   mounted() {
-    /* El observador avisa de forma ASÍNCRONA: su primer aviso llega después de este turno,
-     * así que sin esta medición sincrónica la carga inicial de `iniciar_poleo` saldría igual
-     * con la tarjeta oculta, que es justo lo que se quiere evitar. */
+    /* El observador avisa de forma ASÍNCRONA: su primer aviso llega después de este turno, así
+     * que sin esta medición sincrónica la carga inicial saldría igual con la tarjeta oculta,
+     * que es justo lo que se quiere evitar. */
     this.visible = this.tiene_layout()
     this.observar_visibilidad()
-    this.iniciar_poleo()
+
+    if (this.visible) {
+      this.iniciar_poleo()
+    }
   },
 
   /**
@@ -252,11 +261,16 @@ export default {
    * tampoco frena. Sin esto quedaban 540 requests en 90 minutos contra una tarjeta que nadie ve.
    */
   activated() {
-    this.iniciar_poleo()
+    /* Sólo si se la ve: al reactivarse la vista la tarjeta puede seguir tapada por la pestaña
+     * inactiva del modal, y ahí no hay nada que actualizar. Si está oculta, el que la va a
+     * despertar es el observador, en cuanto aparezca. */
+    if (this.visible) {
+      this.iniciar_poleo()
+    }
   },
 
   deactivated() {
-    /* 🔴 Y acá está el matiz que trajo la mudanza al modal (misión 58): "la vista se desactivó"
+    /* 🔴 Acá está el matiz que trajo la mudanza al modal (misión 58): "la vista se desactivó"
      * dejó de ser sinónimo de "esta tarjeta ya no se ve". `BaseModal` teleporta el diálogo a
      * `body`, y keep-alive **no** se lleva el contenido teleportado a su contenedor oculto: si
      * el operador navega a otra sección con el modal abierto, el modal queda arriba de la
@@ -264,10 +278,11 @@ export default {
      * último tick, a la vista, y sin ninguno de los dos avisos que tiene la tarjeta para
      * decirlo (`hubo_error` y `poleo_agotado` siguen en false: no falló nada ni se agotó nada).
      *
-     * Entonces se pregunta por lo que de verdad importa —¿sigue teniendo caja de layout?— en
-     * vez de asumirlo. En el caso del sidebar, keep-alive ya movió su DOM fuera del documento
-     * cuando corre este hook, así que `offsetParent` es `null` y se frena igual que antes. */
-    if (!this.tiene_layout()) {
+     * Con observador no hace falta hacer nada: cuando keep-alive saca el DOM del documento la
+     * tarjeta deja de intersectar y el poleo se frena solo; y cuando queda a la vista dentro
+     * del modal teleportado, sigue —que es lo que corresponde—. Este hook queda entonces sólo
+     * como red del repliegue sin observador, donde nadie más mide. */
+    if (this.observador_visibilidad === null) {
       this.detener_poleo()
     }
   },
@@ -315,19 +330,34 @@ export default {
 
       const self = this
 
+      /* 🔴 El observador no "avisa" nada más: **prende y apaga el poleo**. La invariante que
+       * deja es la que hace fácil razonar todo lo demás — *el intervalo existe si y sólo si la
+       * tarjeta está a la vista*.
+       *
+       * La primera versión de esto (misión 58) sólo llamaba a `cargar()` y dejaba que un guard
+       * adentro del tick saltease los ticks invisibles. Se veía más chiquito y tenía un agujero:
+       * si el intervalo estaba detenido —porque se agotó el tope, o porque lo frenó el hook de
+       * desactivación— reaparecer disparaba UNA lectura y nada más, y la tarjeta quedaba
+       * congelada a la vista sin ninguno de sus dos avisos. Que es exactamente el defecto que
+       * esta misión vino a cerrar. */
       this.observador_visibilidad = new IntersectionObserver(function (entradas) {
-        const estaba_oculta = !self.visible
-        self.visible = entradas[entradas.length - 1].isIntersecting
+        const ahora_visible = entradas[entradas.length - 1].isIntersecting
 
-        /* Recién aparece: se pide en el acto en vez de esperar al próximo tick. Sin esto, el
-         * operador que entra a Operaciones se come hasta 10 segundos de spinner. */
-        if (self.visible && estaba_oculta) {
-          self.cargar()
+        if (ahora_visible === self.visible) {
+          return
         }
-      }, {
-        /* Margen para que la tarjeta llegue cargada al momento en que entra en pantalla: en
-         * el modal está debajo de un pipeline largo, así que se la alcanza scrolleando. */
-        rootMargin: '200px',
+
+        self.visible = ahora_visible
+
+        if (ahora_visible) {
+          /* `iniciar_poleo` ya trae la lectura inmediata, así que el operador que llega
+           * scrolleando no se come un spinner de hasta diez segundos. */
+          self.iniciar_poleo()
+
+          return
+        }
+
+        self.detener_poleo()
       })
 
       this.observador_visibilidad.observe(el)
@@ -423,12 +453,7 @@ export default {
        * alcanzable de verdad. */
       this.detener_poleo()
 
-      /* La carga de arranque también respeta la visibilidad: si la tarjeta está oculta, el
-       * intervalo igual queda armado y el observador dispara la primera lectura recién cuando
-       * aparece. */
-      if (this.visible) {
-        this.cargar()
-      }
+      this.cargar()
 
       this.poleo_agotado = false
       // 90 minutos a 10 segundos por tick.
@@ -447,13 +472,9 @@ export default {
           return
         }
 
-        /* Y la tarjeta oculta tampoco: el modal la mantiene montada con `v-show` mientras
-         * el operador está en otra pestaña del lead (ver `observar_visibilidad`). Va con el
-         * mismo criterio que la guarda de arriba —antes de descontar el tick—, porque el
-         * tope de 90 minutos mide poleo efectivo y no reloj de pared. */
-        if (!self.visible) {
-          return
-        }
+        /* Acá NO va una guarda por tarjeta oculta, y vale decir por qué: mientras la tarjeta no
+         * se ve, este intervalo directamente no existe — lo apaga el observador y lo vuelve a
+         * prender cuando reaparece (ver `observar_visibilidad`). */
 
         // Un tick que no llega a pedir tampoco gasta presupuesto: si hay una petición todavía en
         // vuelo, `cargar()` sale por su propio guard, y descontar acá haría que el tope de 90
