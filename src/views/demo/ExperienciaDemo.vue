@@ -415,18 +415,33 @@ export default {
 
     /**
      * true mientras tiene sentido volver a preguntarle al backend si ya se puede entrar:
-     * el lead está en la pantalla del video, todavía no puede entrar, y el armado no
-     * falló (si falló, el bloque de BotonAcceso lo manda a WhatsApp y no hay nada que
-     * esperar).
+     * el lead está en la pantalla del video y todavía no puede entrar.
+     *
+     * 🔴 `fallido` NO corta el poleo, y esto es un cambio deliberado sobre lo que había.
+     *
+     * Antes la condición incluía `setup.estado !== 'fallido'`, con el argumento de que un
+     * armado fallido manda al lead a WhatsApp y no hay nada que esperar. Esa premisa dejó
+     * de ser cierta: hoy `fallido` es un estado del que se SALE solo, por dos caminos
+     * distintos que el backend ya recorre sin que la página se entere.
+     *
+     *  - El evento `demo.setup.completado` que emite la instancia al terminar. Existe
+     *    justamente para el caso en que el POST del setup se cortó por red con el armado
+     *    terminando bien del otro lado: admin marcó `fallido` y el evento lo corrige a
+     *    `exitoso` segundos después.
+     *  - El reintento automático de la misión 60, que también arranca desde `fallido`.
+     *
+     * Con la condición vieja, los dos arreglos morían acá: el backend corregía el estado y
+     * la página ya había dejado de preguntar, así que el lead se quedaba mirando el cartel
+     * de error con su demo lista y sin ninguna forma de enterarse salvo recargar a mano. O
+     * sea que el caso que el evento viene a resolver no llegaba nunca a la pantalla.
+     *
+     * No hay riesgo de poleo infinito: `arrancar_poleo()` ya tiene tope duro de 20 minutos
+     * y saltea los ticks con la pestaña en segundo plano.
      *
      * @returns {boolean}
      */
     debe_polear() {
-      return (
-        this.intro_desbloqueada &&
-        !this.puede_ingresar &&
-        (this.setup.estado || 'pendiente') !== 'fallido'
-      )
+      return this.intro_desbloqueada && !this.puede_ingresar
     },
   },
 
