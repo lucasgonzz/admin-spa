@@ -136,6 +136,17 @@
       </div>
     </template>
   </base-modal>
+
+  <!-- Modal: confirmación del rango de versiones a aplicar (paso previo a la creación) -->
+  <update-version-range-modal
+    :show="show_version_range_modal"
+    :candidates="version_range_candidates"
+    :from_version="version_range_from"
+    :to_version="version_range_to"
+    :loading="version_range_loading"
+    @confirm="on_version_range_confirm"
+    @cancel="on_version_range_cancel"
+  />
   </div>
 </template>
 
@@ -144,6 +155,7 @@ import { markRaw } from 'vue'
 import ResourceView from '@/common-vue/components/view/Index.vue'
 import UpdatesTimeline from '@/components/update/UpdatesTimeline.vue'
 import UpdateExtraProps from '@/components/update/extra-props/Index.vue'
+import UpdateVersionRangeModal from '@/components/update/UpdateVersionRangeModal.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import api from '@/utils/axios'
 
@@ -160,7 +172,7 @@ const update_model_extra_tabs = [
 
 export default {
   name: 'ViewUpdates',
-  components: { ResourceView, UpdatesTimeline, UpdateExtraProps, BaseModal },
+  components: { ResourceView, UpdatesTimeline, UpdateExtraProps, BaseModal, UpdateVersionRangeModal },
   data() {
     return {
       /** true = vista timeline; false = tabla clásica del ResourceView. */
@@ -207,6 +219,47 @@ export default {
        * @type {Object|null}
        */
       env_diff_pending_draft: null,
+
+      /** Controla la visibilidad del modal de confirmación del rango de versiones. */
+      show_version_range_modal: false,
+
+      /** Candidatas del rango (from, to], tal como las devuelve `POST /update/preview`. */
+      version_range_candidates: [],
+
+      /** Versión actual del cliente (o null si es instalación nueva), para el encabezado del modal. */
+      version_range_from: null,
+
+      /** Versión destino elegida, para el encabezado del modal. */
+      version_range_to: null,
+
+      /** true mientras se está calculando el rango en el backend. */
+      version_range_loading: false,
+
+      /**
+       * Resolver de la Promise de confirm_version_range. Al llamarlo, se permite
+       * continuar con el resto del hook before_create (chequeo de diff .env).
+       *
+       * @type {Function|null}
+       */
+      version_range_resolve: null,
+
+      /**
+       * Rejecter de la Promise de confirm_version_range. Al llamarlo, se cancela
+       * la creación del upgrade.
+       *
+       * @type {Function|null}
+       */
+      version_range_reject: null,
+
+      /**
+       * Draft/payload pendiente de confirmación de rango. Se muta in-place con
+       * `confirmed_version_ids` al confirmar (ver on_version_range_confirm):
+       * el ModelModal postea la misma referencia que recibe before_create_hook
+       * (verificado en common-vue/components/model/Index.vue:982/1013/1016).
+       *
+       * @type {Object|null}
+       */
+      version_range_pending_payload: null,
     }
   },
   computed: {
@@ -300,8 +353,90 @@ export default {
     /**
      * Hook before_create para el ResourceView/ModelModal de updates.
      *
-     * Se ejecuta antes de crear un ClientVersionUpgrade (POST /update).
-     * Verifica si hay variables .env del cliente que difieren del template base.
+     * Se ejecuta antes de crear un ClientVersionUpgrade (POST /update), encadenando
+     * dos confirmaciones en orden: primero el rango de versiones (barato, local,
+     * decide QUÉ se aplica), y solo si esa promesa resuelve, el chequeo de diff
+     * .env que ya existía (SSH, más lento, decide si hay que tocar variables antes).
+     *
+     * @param {Object} payload  Datos del formulario del upgrade (draft serializado).
+     * @returns {Promise<void>}
+     */
+    before_create_hook(payload) {
+      const self = this
+      return self.confirm_version_range(payload).then(function () {
+        return self.check_env_diff(payload)
+      })
+    },
+
+    /**
+     * Confirmación del rango de versiones a aplicar (paso previo, bloqueante).
+     *
+     * Flujo:
+     * 1. Si no hay client_id o to_version_id → resuelve inmediatamente (nada que confirmar).
+     * 2. Llama a `POST /update/preview` para calcular las candidatas del rango.
+     * 3. Sin candidatas → resuelve directo, sin abrir modal.
+     * 4. Con candidatas → guarda resolve/reject y abre el modal de confirmación.
+     * 5. Al confirmar: muta `payload.confirmed_version_ids` in-place (es lo que
+     *    termina viajando en el POST final, ver ModelModal) y resuelve.
+     * 6. Al cancelar: rechaza (cancela la creación del upgrade).
+     * 7. Si el preview falla (red/servidor): rechaza, NO resuelve — a diferencia
+     *    del chequeo de diff .env (no bloqueante), acá SÍ es bloqueante: crear la
+     *    actualización sin haber podido confirmar el rango es el bug que se arregla.
+     *    El interceptor de axios ya muestra el toast de error.
+     *
+     * @param {Object} payload  Datos del formulario del upgrade (draft serializado).
+     * @returns {Promise<void>}
+     */
+    confirm_version_range(payload) {
+      const self = this
+
+      const client_id     = payload.client_id
+      const to_version_id = payload.to_version_id
+
+      if (!client_id || !to_version_id) {
+        return Promise.resolve()
+      }
+
+      return new Promise(function (resolve, reject) {
+        self.version_range_loading = true
+
+        api.post('/update/preview', { client_id: client_id, to_version_id: to_version_id })
+          .then(function (res) {
+            self.version_range_loading = false
+
+            const data       = res.data || {}
+            const candidates = data.candidates || []
+
+            /* Sin candidatas en el rango: nada que confirmar, continuar directo. */
+            if (candidates.length === 0) {
+              resolve()
+              return
+            }
+
+            self.version_range_candidates      = candidates
+            self.version_range_from            = data.from_version || null
+            self.version_range_to              = data.to_version || null
+            self.version_range_pending_payload = payload
+
+            /* Guarda los callbacks para resolver/rechazar desde los botones del modal. */
+            self.version_range_resolve = resolve
+            self.version_range_reject  = reject
+
+            self.show_version_range_modal = true
+          })
+          .catch(function () {
+            /* Bloqueante: sin poder confirmar el rango, no se deja crear la actualización. */
+            self.version_range_loading = false
+            reject()
+          })
+      })
+    },
+
+    /**
+     * Chequeo de variables .env del cliente que difieren del template base.
+     *
+     * Extraído tal cual del antiguo cuerpo de before_create_hook (mismo comportamiento,
+     * solo cambia de método para poder encadenarse detrás de confirm_version_range).
      *
      * Flujo:
      * 1. Si no hay client_id o target_client_api_id → resuelve inmediatamente.
@@ -313,7 +448,7 @@ export default {
      * @param {Object} payload  Datos del formulario del upgrade (draft serializado).
      * @returns {Promise<void>}
      */
-    before_create_hook(payload) {
+    check_env_diff(payload) {
       const self = this
 
       /* Sin client_id o target_client_api_id, no hay nada que comparar. */
@@ -476,6 +611,53 @@ export default {
       this.env_diff_reject         = null
       this.env_diff_pending_draft  = null
       this.applying_env_diff       = false
+    },
+
+    /**
+     * "Confirmar y crear" del modal de rango: muta el payload pendiente in-place con
+     * los ids finales (esto es lo que hace que el POST de creación lleve el campo,
+     * ver ModelModal/model/Index.vue) y resuelve el hook para seguir con el diff .env.
+     *
+     * @param {number[]} ids  Ids de Version confirmados (incluye siempre la destino).
+     * @returns {void}
+     */
+    on_version_range_confirm(ids) {
+      if (this.version_range_pending_payload) {
+        this.version_range_pending_payload.confirmed_version_ids = ids
+      }
+      if (typeof this.version_range_resolve === 'function') {
+        this.version_range_resolve()
+      }
+      this.close_version_range_modal()
+    },
+
+    /**
+     * "Cancelar" del modal de rango (o cierre por backdrop/Escape): cancela la
+     * creación de la actualización, igual que "cancelar" en el modal de diff .env.
+     *
+     * @returns {void}
+     */
+    on_version_range_cancel() {
+      if (typeof this.version_range_reject === 'function') {
+        this.version_range_reject()
+      }
+      this.close_version_range_modal()
+    },
+
+    /**
+     * Limpia el estado del modal de rango y lo cierra.
+     *
+     * @returns {void}
+     */
+    close_version_range_modal() {
+      this.show_version_range_modal      = false
+      this.version_range_candidates      = []
+      this.version_range_from            = null
+      this.version_range_to              = null
+      this.version_range_loading         = false
+      this.version_range_resolve         = null
+      this.version_range_reject          = null
+      this.version_range_pending_payload = null
     },
   },
 }
