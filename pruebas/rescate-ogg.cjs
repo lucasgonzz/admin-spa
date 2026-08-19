@@ -27,8 +27,8 @@ let preludio = texto.slice(0, corte)
 preludio = preludio.replace(/^import .*$/gm, '') // sacar los imports ESM
 
 const modulo = {}
-new Function('exports', preludio + '\nexports.crc_ogg = crc_ogg; exports.marcar_fin_de_stream = marcar_fin_de_stream;')(modulo)
-const { crc_ogg, marcar_fin_de_stream } = modulo
+new Function('exports', preludio + '\nexports.crc_ogg = crc_ogg; exports.marcar_fin_de_stream = marcar_fin_de_stream; exports.pagina_con_audio = pagina_con_audio;')(modulo)
+const { crc_ogg, marcar_fin_de_stream, pagina_con_audio } = modulo
 
 /* ---- oráculo: CRC de Ogg bit a bit, sin tabla ---- */
 function crc_oraculo(bytes) {
@@ -50,8 +50,11 @@ function pagina_ogg(opciones) {
   pagina[0] = 0x4f; pagina[1] = 0x67; pagina[2] = 0x67; pagina[3] = 0x53 // "OggS"
   pagina[4] = 0                       // version
   pagina[5] = opciones.flags || 0     // header_type
-  // 6..13 granule, 14..17 serial, 18..21 numero de pagina -- se dejan con datos cualquiera
-  for (let i = 6; i < 22; i++) { pagina[i] = (i * 7) & 0xff }
+  // 14..21: serial y numero de pagina, con datos cualquiera
+  for (let i = 14; i < 22; i++) { pagina[i] = (i * 7) & 0xff }
+  // 6..13: granule position, little-endian. 0 = pagina de cabecera, > 0 = pagina con audio.
+  const granulo = opciones.granulo || 0
+  for (let i = 0; i < 8; i++) { pagina[6 + i] = i < 4 ? (granulo >>> (8 * i)) & 0xff : 0 }
   pagina[22] = 0; pagina[23] = 0; pagina[24] = 0; pagina[25] = 0 // CRC en cero para calcular
   pagina[26] = segmentos
   let resto = carga.length
@@ -144,10 +147,10 @@ console.log('\n6. el rescate concatena y marca SOLO la última página')
 {
   /* Réplica del armado de _rescatar_lo_grabado(), para chequear que el subarray apunta bien. */
   const paginas = [
-    pagina_ogg({ carga: carga_cualquiera(19, 11), flags: 0x02 }), // OpusHead
-    pagina_ogg({ carga: carga_cualquiera(40, 12), flags: 0 }),    // OpusTags
-    pagina_ogg({ carga: carga_cualquiera(900, 13), flags: 0 }),
-    pagina_ogg({ carga: carga_cualquiera(800, 14), flags: 0 }),
+    pagina_ogg({ carga: carga_cualquiera(19, 11), flags: 0x02, granulo: 0 }), // OpusHead
+    pagina_ogg({ carga: carga_cualquiera(40, 12), flags: 0, granulo: 0 }),    // OpusTags
+    pagina_ogg({ carga: carga_cualquiera(900, 13), flags: 0, granulo: 12800 }),
+    pagina_ogg({ carga: carga_cualquiera(800, 14), flags: 0, granulo: 25600 }),
   ]
   const total = paginas.reduce(function (a, p) { return a + p.length }, 0)
   const salida = new Uint8Array(total)
@@ -178,6 +181,53 @@ console.log('\n6. el rescate concatena y marca SOLO la última página')
     arranque += paginas[i].length
   }
   comprobar('el blob mide lo que suman las páginas', salida.length === total)
+}
+
+console.log('\n' + '7. pagina_con_audio: distingue cabecera de datos')
+{
+  const cabecera_head = pagina_ogg({ carga: carga_cualquiera(19, 21), flags: 0x02, granulo: 0 })
+  const cabecera_tags = pagina_ogg({ carga: carga_cualquiera(40, 22), flags: 0, granulo: 0 })
+  const datos = pagina_ogg({ carga: carga_cualquiera(700, 23), flags: 0, granulo: 12800 })
+
+  comprobar('OpusHead (granulo 0): false', pagina_con_audio(cabecera_head) === false)
+  comprobar('OpusTags (granulo 0): false', pagina_con_audio(cabecera_tags) === false)
+  comprobar('pagina de datos (granulo 12800): true', pagina_con_audio(datos) === true)
+  comprobar('granulo 1, el minimo posible: true',
+    pagina_con_audio(pagina_ogg({ carga: carga_cualquiera(10, 24), granulo: 1 })) === true)
+  comprobar('basura que no es Ogg: false', pagina_con_audio(new Uint8Array(60)) === false)
+  comprobar('mas corta que una cabecera: false', pagina_con_audio(new Uint8Array(10)) === false)
+  comprobar('null: false', pagina_con_audio(null) === false)
+}
+
+console.log('\n' + '8. el rescate se niega cuando solo hay cabeceras (nota de cero segundos)')
+{
+  /*
+    Es el caso peligroso. Apenas arranca la grabacion, opus-recorder pide getHeaderPages y el
+    encoder deja DOS paginas de cabecera en recordedPages, sin un solo frame de audio. Un rescate
+    que solo mire "hay paginas?" armaria un .ogg de cien bytes vacio y se lo mandaria al lead como
+    si fuera una nota de voz. Es peor que el bug original: ese al menos se notaba.
+  */
+  const HOJAS_DE_CABECERA = 2
+  function rescate_sirve(paginas) {
+    return paginas.length > HOJAS_DE_CABECERA && pagina_con_audio(paginas[paginas.length - 1])
+  }
+
+  const solo_cabeceras = [
+    pagina_ogg({ carga: carga_cualquiera(19, 31), flags: 0x02, granulo: 0 }),
+    pagina_ogg({ carga: carga_cualquiera(40, 32), flags: 0, granulo: 0 }),
+  ]
+  comprobar('con solo las dos cabeceras NO se rescata', rescate_sirve(solo_cabeceras) === false)
+
+  const con_datos = solo_cabeceras.concat([
+    pagina_ogg({ carga: carga_cualquiera(900, 33), flags: 0, granulo: 12800 }),
+  ])
+  comprobar('con una pagina de datos SI se rescata', rescate_sirve(con_datos) === true)
+
+  const tres_pero_sin_audio = solo_cabeceras.concat([
+    pagina_ogg({ carga: carga_cualquiera(50, 34), flags: 0, granulo: 0 }),
+  ])
+  comprobar('tres paginas pero la ultima sin granulo: NO se rescata',
+    rescate_sirve(tres_pero_sin_audio) === false)
 }
 
 console.log('\n' + (mal === 0 ? 'TODO VERDE' : 'HAY ' + mal + ' EN ROJO') + ' — ' + ok + ' comprobaciones ok, ' + mal + ' mal\n')

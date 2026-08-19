@@ -222,8 +222,9 @@
             aria-hidden="true"
           ></span>
           <span class="text-danger small">{{ audio_closing ? 'Cerrando…' : audio_elapsed_label }}</span>
+          <!-- Cancelar NO se esconde mientras cierra: es la única salida que tiene la pantalla si
+               el grabador se queda colgado. Ver el mismo comentario en LeadConversationView.vue. -->
           <button
-            v-if="!audio_closing"
             type="button"
             class="btn btn-sm btn-link text-muted ms-auto"
             @click="cancel_audio_recording"

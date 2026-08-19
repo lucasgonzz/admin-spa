@@ -38,7 +38,9 @@ const MAX_RECORDING_SECONDS = 300
  * cuánto duró el gesto -- nunca antes de empezar a grabar.
  *
  * Contrato con el componente que adopta este mixin:
- * - on_audio_blob(blob) -- OBLIGATORIO. Se llama con el Blob 'audio/ogg' listo para enviar.
+ * - on_audio_blob(blob, origen) -- OBLIGATORIO. Se llama con el Blob 'audio/ogg' listo para
+ *   enviar. origen es 'normal' o 'rescate'; en el segundo caso la nota puede estar cortada al
+ *   final y el mixin ya lo dejó anotado en la consola.
  * - can_record_audio() -- opcional. Si el componente lo define y devuelve false, el mixin no
  *   arranca a grabar. Si no lo define, se asume true.
  * - on_audio_error(message, fase) -- opcional. fase es 'arranque' o 'cierre'. Si no lo define,
@@ -82,6 +84,7 @@ export default {
     this._audio_last_touch_at = 0
     this._audio_pending_toggle_stop = false
     this._audio_pending_stop_timer = null
+    this._audio_gesto_de_corte = false
     this._audio_hold_mode = false
     this._audio_hold_timer_id = null
     this._audio_tick_id = null
@@ -110,6 +113,15 @@ export default {
       this._audio_last_touch_at = Date.now()
 
       if (this.audio_recording) {
+        /*
+          Este toque es el que corta, no el que arranca: se marca para que el touchend no lo mida
+          como si fuera un "mantener pulsado". Sin esta marca, un touchend que llega tarde --
+          después de que la red de contención ya cortó -- calcularía la duración contra la marca
+          del toque que EMPEZÓ la grabación, y para una nota de diez segundos daría diez segundos
+          de gesto. Hoy no hace daño porque el corte es idempotente, pero es una medición que
+          miente y está a un refactor de morder.
+        */
+        this._audio_gesto_de_corte = true
         this._audio_pending_toggle_stop = true
         /*
           RED DE CONTENCIÓN -- no la saques.
@@ -136,6 +148,7 @@ export default {
       }
 
       this._audio_touch_started_at = Date.now()
+      this._audio_gesto_de_corte = false
       this._audio_hold_mode = false
       /*
         Arranca SINCRONICAMENTE, adentro del gesto -- no se puede diferir con
@@ -162,11 +175,18 @@ export default {
 
       if (this._audio_pending_toggle_stop) {
         this._audio_pending_toggle_stop = false
+        this._audio_gesto_de_corte = false
         this._clear_pending_stop_timer()
         this.stop_and_send_audio()
         return
       }
       this._clear_pending_stop_timer()
+
+      if (this._audio_gesto_de_corte) {
+        /* La red de contención ya cortó por este mismo toque: no medirlo como un walkie-talkie. */
+        this._audio_gesto_de_corte = false
+        return
+      }
 
       const duracion = Date.now() - this._audio_touch_started_at
       if (duracion >= HOLD_THRESHOLD_MS) {
@@ -190,6 +210,7 @@ export default {
     on_audio_touchcancel(event) {
       this._audio_last_touch_at = Date.now()
       this._audio_pending_toggle_stop = false
+      this._audio_gesto_de_corte = false
       this._clear_pending_stop_timer()
       if (this.audio_recording) {
         this.stop_and_send_audio()
@@ -276,12 +297,25 @@ export default {
       }
 
       const recorder = new OggOpusRecorder({
-        onData: function (blob) {
+        onData: function (blob, origen) {
           self.stop_audio_tick()
           self.audio_recording = false
           self.audio_closing = false
           self.audio_recorder = null
-          self.on_audio_blob(blob)
+          if (origen === 'rescate') {
+            /*
+              Queda anotado a propósito, y fuerte. Una nota rescatada sale truncada al final (hasta
+              800 ms) y por lo demás es indistinguible de una entera: si el cuelgue del cierre
+              volviera a aparecer, sin este aviso el bug dejaría de verse y pasaría a ser una
+              degradación silenciosa que nadie reporta.
+            */
+            console.warn(
+              '[audio] la nota se entregó por el camino de rescate: el grabador no confirmó el ' +
+                'cierre y el archivo puede estar cortado al final. Si esto se repite, el cuelgue ' +
+                'del cierre sigue vivo.'
+            )
+          }
+          self.on_audio_blob(blob, origen)
         },
         onError: function (err, fase) {
           console.error('Error en la grabación de audio', err)
@@ -375,6 +409,7 @@ export default {
         this._audio_hold_timer_id = null
       }
       this._audio_pending_toggle_stop = false
+      this._audio_gesto_de_corte = false
       this._clear_pending_stop_timer()
     },
 

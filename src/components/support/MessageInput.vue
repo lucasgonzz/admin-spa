@@ -106,10 +106,11 @@
               {{ audio_closing ? 'Cerrando…' : audio_elapsed_label }}
             </span>
           </button>
-          <!-- Sólo mientras graba y todavía no se pidió el corte: cancelar sin enviar
-               (grupo 323, prompt 04). Mientras cierra se esconde: el audio ya está en camino. -->
+          <!-- Sólo mientras graba: cancelar sin enviar (grupo 323, prompt 04). NO se esconde
+               mientras cierra: es la única salida que tiene la pantalla si el grabador se queda
+               colgado. Ver el comentario largo en LeadConversationView.vue. -->
           <button
-            v-if="audio_recording && !audio_closing"
+            v-if="audio_recording"
             type="button"
             class="btn btn-link btn-sm text-muted"
             title="Cancelar grabación"

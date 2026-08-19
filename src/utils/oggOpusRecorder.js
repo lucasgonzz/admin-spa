@@ -95,6 +95,31 @@ function marcar_fin_de_stream(pagina) {
 }
 
 /**
+ * ¿Esta página Ogg lleva audio, o es una de las dos cabeceras?
+ *
+ * La granule position son los bytes 6..13, little-endian. Vale 0 en las páginas de cabecera
+ * (OpusHead y OpusTags) y la cantidad de muestras acumuladas en las de datos. Se recorren los ocho
+ * bytes en vez de armar el número porque son 64 bits, que un entero de JavaScript no cubre exacto,
+ * y acá solo hace falta saber si es distinto de cero.
+ *
+ * @param {Uint8Array} pagina
+ * @returns {boolean}
+ */
+function pagina_con_audio(pagina) {
+  if (!pagina || pagina.length < 27) {
+    return false
+  }
+  if (pagina[0] !== 0x4f || pagina[1] !== 0x67 || pagina[2] !== 0x67 || pagina[3] !== 0x53) {
+    return false
+  }
+  let acumulado = 0
+  for (let i = 6; i <= 13; i++) {
+    acumulado = acumulado | pagina[i]
+  }
+  return acumulado !== 0
+}
+
+/**
  * Graba audio directamente a Ogg/Opus real usando WebAssembly (librería opus-recorder),
  * en lugar de depender de qué formato soporte el MediaRecorder nativo de cada navegador.
  *
@@ -121,10 +146,11 @@ function marcar_fin_de_stream(pagina) {
  *
  * Uso:
  *   const recorder = new OggOpusRecorder({
- *     onData: (blob) => { ... },        // blob tipo 'audio/ogg', se llama una vez al detener
- *     onError: (err, fase) => { ... },  // fase es 'arranque' o 'cierre'
- *     minDurationMs: 700,               // duración mínima real de grabación antes de cerrar
- *     stopTimeoutMs: 2000,              // cuánto se espera la confirmación de cierre
+ *     onData: (blob, origen) => { ... },  // origen es 'normal' o 'rescate' (nota truncada)
+ *     onError: (err, fase) => { ... },    // fase es 'arranque' o 'cierre'
+ *     minDurationMs: 700,                 // duración mínima real de grabación antes de cerrar
+ *     stopTimeoutMs: 4000,                // cuánto se espera la confirmación de cierre
+ *     startingTimeoutMs: 8000,            // cuánto se espera a que el micrófono arranque
  *   })
  *   recorder.start()  // DEBE llamarse desde un gesto de usuario (click/touch), si no falla en Safari
  *   recorder.stop()   // corta y guarda
@@ -137,12 +163,27 @@ export class OggOpusRecorder {
     this._on_error = opts.onError || function () {}
     this._min_duration_ms = typeof opts.minDurationMs === 'number' ? opts.minDurationMs : 700
     /*
-      2000 ms y no 4000: con el rescate de _rescatar_lo_grabado(), vencer el tope dejó de
-      significar perder la nota de voz, así que no hay ningún motivo para tener al usuario
-      cuatro segundos mirando un botón que parece muerto. Un flush normal del encoder tarda
-      milisegundos -- ya venía codificando durante toda la grabación.
+      Se quedan los 4000 ms de siempre, y NO se bajan.
+
+      La tentación es bajarlo ahora que el rescate entrega lo que haya: la espera se sentiría más
+      corta. Pero el rescate NO es gratis -- siempre pierde la cola de la nota, hasta 800 ms, que
+      es justo donde va el saludo del final. Bajar el tope a 2000 ms haría que un vaciado apenas
+      lento (un iPhone viejo, el hilo principal trabado en una conversación larga) se lleve por
+      delante un cierre que iba a terminar bien a los 2,5 s, y entregue truncado un audio que
+      estaba entero. El rescate es el último recurso, no una carrera contra el encoder.
+
+      Lo que sí cambió es que ahora la pantalla muestra "Cerrando…" durante esos segundos, así que
+      la espera dejó de leerse como "el botón no anda", que era el motivo real de la queja.
     */
-    this._stop_timeout_ms = typeof opts.stopTimeoutMs === 'number' ? opts.stopTimeoutMs : 2000
+    this._stop_timeout_ms = typeof opts.stopTimeoutMs === 'number' ? opts.stopTimeoutMs : 4000
+    /*
+      Tope aparte para el arranque: si se pidió cortar mientras el grabador todavía cargaba y ese
+      arranque nunca resuelve (una llamada entrante que se lleva el micrófono, otra app que lo
+      tiene tomado, el WASM del encoder colgado con mala señal), el pedido de corte queda anotado
+      esperando una promesa que no llega nunca y la interfaz no sale más de "grabando".
+    */
+    this._starting_timeout_ms =
+      typeof opts.startingTimeoutMs === 'number' ? opts.startingTimeoutMs : 8000
 
     this._recorder = null
     this._state = 'idle'
@@ -151,6 +192,7 @@ export class OggOpusRecorder {
     this._recording_since = 0
     this._min_duration_timer = null
     this._stop_timeout_timer = null
+    this._starting_timeout_timer = null
     this._sosten = null
   }
 
@@ -240,7 +282,7 @@ export class OggOpusRecorder {
       self._force_release()
       if (!era_descarte) {
         const blob = new Blob([typed_array], { type: 'audio/ogg' })
-        self._on_data(blob)
+        self._on_data(blob, 'normal')
       }
     }
 
@@ -291,9 +333,41 @@ export class OggOpusRecorder {
         Lo correcto es dejar la intencion anotada y ejecutarla cuando el start() resuelva.
       */
       this._stop_requested = true
+      this._armar_tope_de_arranque()
       return
     }
     this._begin_stop()
+  }
+
+  /**
+   * Arma el tope del estado 'starting': si el arranque no resuelve ni rechaza, el corte anotado
+   * nunca se ejecuta y la interfaz queda en "grabando" para siempre. Este reloj es la única cosa
+   * que puede sacarla de ahí, porque el resto de los topes se arman recién en _do_stop().
+   *
+   * No hay audio que rescatar en este caso: si el arranque no terminó, el micrófono nunca llegó
+   * a capturar nada.
+   *
+   * @returns {void}
+   */
+  _armar_tope_de_arranque() {
+    const self = this
+    if (this._starting_timeout_timer) {
+      return
+    }
+    this._starting_timeout_timer = setTimeout(function () {
+      self._starting_timeout_timer = null
+      if (self._state !== 'starting') {
+        return
+      }
+      const era_descarte = self._discard
+      self._force_release()
+      if (!era_descarte) {
+        self._on_error(
+          new Error('El micrófono no llegó a arrancar. Probá de nuevo.'),
+          'arranque'
+        )
+      }
+    }, this._starting_timeout_ms)
   }
 
   /**
@@ -323,6 +397,7 @@ export class OggOpusRecorder {
     }
     if (this._state === 'starting') {
       this._stop_requested = true
+      this._armar_tope_de_arranque()
       return
     }
     this._begin_stop()
@@ -369,28 +444,35 @@ export class OggOpusRecorder {
     const self = this
     const recorder = this._recorder
     if (!recorder) {
+      /*
+        Hoy esto es inalcanzable: los tres llamadores (_begin_stop directo, el timer del mínimo de
+        duración, y _begin_stop desde start().then()) llegan con el grabador puesto. Pero salir por
+        acá en silencio dejaría el wrapper en 'stopping' sin ningún timer armado y sin llamar a
+        ningún callback -- o sea, la interfaz colgada en "grabando" para siempre y sin una sola
+        traza. Es exactamente el bug que este archivo existe para evitar, así que se cierra bien.
+      */
+      this._force_release()
+      if (!this._discard) {
+        this._on_error(new Error('La grabación se perdió antes de poder cerrarla.'), 'cierre')
+      }
       return
     }
 
     /*
-      El sostén va SINCRÓNICO acá, no adentro del setTimeout de abajo: incluye un
-      audioContext.resume(), y en Safari eso solo se concede adentro de un gesto de usuario real.
-      Este método se llama desde el touchend; si el resume se difiere, se pierde el gesto.
+      El sostén va SINCRÓNICO acá, no adentro del setTimeout de abajo, porque incluye un
+      audioContext.resume() y en Safari eso solo se concede adentro de un gesto de usuario real.
+
+      Ojo: de los tres caminos que llegan a _do_stop(), solo uno viene del touchend. Los otros dos
+      -- el timer del mínimo de duración y el corte diferido desde start().then() -- corren fuera
+      de todo gesto, y ahí el resume() puede ser rechazado. No es un problema: en esos dos casos el
+      contexto ya venía andando, porque el micrófono estaba capturando. El resume() está para el
+      caso raro en que el sistema lo suspendió, y por eso conviene no desperdiciar el gesto cuando
+      lo hay.
     */
     this._sostener_contexto()
 
     this._stop_timeout_timer = setTimeout(function () {
-      const era_descarte = self._discard
-      const rescatado = era_descarte ? null : self._rescatar_lo_grabado()
-      self._force_release()
-      if (era_descarte) {
-        return
-      }
-      if (rescatado) {
-        self._on_data(rescatado)
-        return
-      }
-      self._on_error(new Error('La grabación no se pudo cerrar. Volvé a intentar.'), 'cierre')
+      self._cerrar_por_tope('El grabador no confirmó el cierre.')
     }, this._stop_timeout_ms)
 
     /*
@@ -411,13 +493,41 @@ export class OggOpusRecorder {
       try {
         recorder.stop()
       } catch (err) {
-        const era_descarte = self._discard
-        self._force_release()
-        if (!era_descarte) {
-          self._on_error(err, 'cierre')
-        }
+        /*
+          También acá se intenta rescatar antes de dar la nota por perdida. Si stop() tira -- por
+          ejemplo con el AudioContext ya cerrado por el sistema después de una interrupción de
+          iOS --, las páginas siguen enteras en memoria: mandar a regrabar un minuto que estaba
+          guardado es el mismo error que se acaba de arreglar en el camino del tope.
+        */
+        self._cerrar_por_tope(err && err.message ? err.message : 'No se pudo cerrar la grabación.')
       }
     }, 0)
+  }
+
+  /**
+   * Cierre de último recurso: entrega lo que el encoder haya dejado guardado, o avisa el error si
+   * no hay audio que valga la pena. Lo usan los dos caminos que pueden terminar mal -- el
+   * vencimiento del tope y la excepción de recorder.stop() -- para que los dos se comporten igual.
+   *
+   * El blob rescatado se entrega con origen 'rescate'. Ese dato importa: sin él, una nota truncada
+   * llega indistinguible de una entera, y si la causa de fondo del cuelgue no estuviera realmente
+   * resuelta, el síntoma pasaría de ser un bug ruidoso a una degradación silenciosa permanente.
+   *
+   * @param {string} motivo
+   * @returns {void}
+   */
+  _cerrar_por_tope(motivo) {
+    const era_descarte = this._discard
+    const rescatado = era_descarte ? null : this._rescatar_lo_grabado()
+    this._force_release()
+    if (era_descarte) {
+      return
+    }
+    if (rescatado) {
+      this._on_data(rescatado, 'rescate')
+      return
+    }
+    this._on_error(new Error(motivo), 'cierre')
   }
 
   /**
@@ -515,6 +625,27 @@ export class OggOpusRecorder {
         return null
       }
 
+      /*
+        🔴 No alcanza con "hay páginas": hay que exigir que haya AUDIO.
+
+        Apenas el arranque resuelve, opus-recorder pide getHeaderPages y el encoder responde con
+        dos páginas de cabecera (OpusHead y OpusTags) que entran a recordedPages igual que las de
+        datos. O sea que después de cualquier arranque exitoso ya hay dos páginas y totalLength > 0
+        SIN UN SOLO FRAME DE AUDIO. Si el cierre se cuelga antes de la primera página de datos --que
+        es lo que pasa con una nota de menos de 800 ms, y también si el hilo de render nunca
+        corrió-- un chequeo por cantidad de páginas daría por bueno un .ogg de cien bytes con puro
+        encabezado, y se le mandaría al lead una nota de voz vacía sin un solo aviso. Es peor que el
+        bug original: al menos ese se notaba.
+
+        Las páginas de cabecera llevan granule position 0; las de datos, la cantidad de muestras
+        decodificadas hasta ahí, que siempre es > 0. Por eso el corte se hace por granule position
+        de la última página, y no por contarlas.
+      */
+      const HOJAS_DE_CABECERA = 2 // OpusHead + OpusTags, siempre dos
+      if (paginas.length <= HOJAS_DE_CABECERA || !pagina_con_audio(paginas[paginas.length - 1])) {
+        return null
+      }
+
       /* Se copia cada página: marcar el fin de stream escribe sobre los bytes. */
       const salida = new Uint8Array(total)
       let posicion = 0
@@ -566,6 +697,10 @@ export class OggOpusRecorder {
     if (this._stop_timeout_timer) {
       clearTimeout(this._stop_timeout_timer)
       this._stop_timeout_timer = null
+    }
+    if (this._starting_timeout_timer) {
+      clearTimeout(this._starting_timeout_timer)
+      this._starting_timeout_timer = null
     }
   }
 }
