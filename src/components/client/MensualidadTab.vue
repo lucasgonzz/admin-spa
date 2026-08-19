@@ -235,7 +235,8 @@
       <!-- ============================================================ -->
       <!-- Bloque 2: Facturación. Independiente del guardado de arriba. -->
       <!-- Los datos fiscales viven en el mismo form y se persisten con -->
-      <!-- el botón Guardar del bloque 1 (mismo PUT del backend).       -->
+      <!-- cualquiera de los dos botones Guardar (mismo PUT, mismo      -->
+      <!-- método guardar() y mismo flag saving compartido).            -->
       <!-- ============================================================ -->
       <div class="card">
         <div class="card-header bg-white">
@@ -266,6 +267,15 @@
               <label class="form-label small mb-1 fw-semibold">Domicilio</label>
               <input v-model="form.afip_domicilio" type="text" class="form-control" />
             </div>
+          </div>
+
+          <!-- Guardado propio de la tarjeta Facturación: misma acción que el botón de
+               Mensualidad (mismo guardar(), mismo PUT), para que estos datos no dependan
+               visualmente del botón de la otra tarjeta. -->
+          <div class="d-flex justify-content-end mt-3">
+            <button type="button" class="btn btn-primary btn-sm" :disabled="saving" @click="guardar">
+              {{ saving ? 'Guardando...' : 'Guardar' }}
+            </button>
           </div>
 
           <hr class="my-3" />
