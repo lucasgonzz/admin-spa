@@ -233,10 +233,11 @@
       </div>
 
       <!-- ============================================================ -->
-      <!-- Bloque 2: Facturación. Independiente del guardado de arriba. -->
-      <!-- Los datos fiscales viven en el mismo form y se persisten con -->
-      <!-- cualquiera de los dos botones Guardar (mismo PUT, mismo      -->
-      <!-- método guardar() y mismo flag saving compartido).            -->
+      <!-- Bloque 2: Facturación. Tiene su propio botón Guardar (más    -->
+      <!-- abajo) que dispara la misma acción que el de la tarjeta      -->
+      <!-- Mensualidad: los datos fiscales viven en el mismo form y     -->
+      <!-- viajan en el mismo PUT (mismo método guardar(), mismo flag   -->
+      <!-- saving compartido) — no depende del botón de la otra tarjeta.-->
       <!-- ============================================================ -->
       <div class="card">
         <div class="card-header bg-white">
@@ -390,11 +391,16 @@ import api, { admin_api_origin } from '@/utils/axios'
 /**
  * Pestaña "Mensualidad" del detalle del cliente (admin-spa).
  *
- * Dos bloques independientes (a pedido de Lucas, sin unir sus acciones):
+ * Dos bloques con acciones propias, sobre un mismo formulario:
  *  1. Mensualidad: formulario con desglose reactivo calculado en el front,
  *     que se guarda vía PUT admin/client/{id}/mensualidad (el total final
- *     lo confirma siempre el backend, en `ClientMensualidadService`).
- *  2. Facturación: emite la Factura C vía POST admin/client/{id}/emitir-factura
+ *     lo confirma siempre el backend, en `ClientMensualidadService`). Tiene
+ *     su propio botón Guardar.
+ *  2. Facturación: los datos fiscales (CUIT, razón social, condición IVA,
+ *     domicilio) viven en el mismo `form` y viajan en el mismo PUT, así que
+ *     tiene su propio botón Guardar que dispara exactamente `guardar()` —
+ *     no depende de que el usuario apriete el botón de la otra tarjeta.
+ *     Además emite la Factura C vía POST admin/client/{id}/emitir-factura
  *     (AfipFacturacionService) y permite descargar el PDF ya autorizado.
  *
  * Es autónoma: no llama a la empresa-api del cliente (esa sincronización
@@ -691,7 +697,7 @@ export default {
           self.saving = false
           window.dispatchEvent(new CustomEvent('admin-spa-toast', {
             detail: {
-              message: 'Mensualidad guardada. Total confirmado: $' + self.format_numero(self.record_total_mensualidad),
+              message: 'Datos guardados. Total confirmado: $' + self.format_numero(self.record_total_mensualidad),
               variant: 'success',
             },
           }))
