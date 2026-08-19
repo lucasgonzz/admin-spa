@@ -196,13 +196,32 @@ export class OggOpusRecorder {
     this._stop_requested = false
     this._discard = false
 
-    const recorder = new Recorder({
-      encoderPath: encoderPath,
-      numberOfChannels: 1,
-      encoderSampleRate: 16000, // igual a lo que ya usaba la conversion ffmpeg para notas de voz
-      encoderApplication: 2048, // 2048 = optimizado para voz (vs 2049 audio general)
-      encoderBitRate: 32000,
-    })
+    /*
+      El constructor va adentro de un try, y no es paranoia: `new Recorder()` corre
+      initAudioContext(), que hace `new AudioContext()`, y Safari en iOS limita cuántos
+      AudioContext puede tener viva una página. Como acá se crea uno por grabación, después de
+      varias notas seguidas el constructor puede tirar SINCRÓNICAMENTE.
+
+      Sin este try, esa excepción se escapa por afuera de la promesa -- o sea que el .catch() del
+      consumidor nunca la ve --, sale disparada del handler del toque, y deja el wrapper en
+      'starting' con audio_recording ya en true y sin ningún grabador atrás: la interfaz queda
+      diciendo "grabando" para siempre y el botón de cortar no puede hacer nada, porque no hay
+      nada que cortar. Es exactamente el síntoma que se está arreglando, por otra puerta.
+    */
+    let recorder = null
+    try {
+      recorder = new Recorder({
+        encoderPath: encoderPath,
+        numberOfChannels: 1,
+        encoderSampleRate: 16000, // igual a lo que ya usaba la conversion ffmpeg para notas de voz
+        encoderApplication: 2048, // 2048 = optimizado para voz (vs 2049 audio general)
+        encoderBitRate: 32000,
+      })
+    } catch (err) {
+      this._state = 'idle'
+      this._on_error(err, 'arranque')
+      return Promise.resolve()
+    }
 
     recorder.ondataavailable = function (typed_array) {
       // Guarda contra una confirmacion tardia: si el encoder tarda mas que
