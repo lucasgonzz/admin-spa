@@ -1,0 +1,835 @@
+<title>Banco de Notas de Voz</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  /* Paleta: gris levemente frío (sesgado hacia el azul de señal), no gris puro.
+     Verde/ámbar/rojo son estado semántico y no se usan como acento decorativo. */
+  :root {
+    --ground:  #eef1f5;
+    --paper:   #ffffff;
+    --hueco:   #f7f9fb;
+    --linea:   #dbe1e9;
+    --linea-fuerte: #c3ccd8;
+    --tinta:   #10171f;
+    --tenue:   #5d6b7d;
+    --senal:   #1d4ed8;
+    --ok:      #10714f;
+    --ok-piso: rgba(16, 113, 79, 0.10);
+    --mal:     #b91c34;
+    --mal-piso: rgba(185, 28, 52, 0.10);
+    --espera:  #8a5a06;
+    --espera-piso: rgba(138, 90, 6, 0.11);
+    --consola-piso: #0d141c;
+    --consola-tinta: #c8d5e2;
+    --sombra: 0 1px 2px rgba(16, 23, 31, 0.05), 0 6px 18px -10px rgba(16, 23, 31, 0.22);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:  #0b1016;
+      --paper:   #151c25;
+      --hueco:   #101720;
+      --linea:   #26303c;
+      --linea-fuerte: #384555;
+      --tinta:   #e6ecf3;
+      --tenue:   #93a3b6;
+      --senal:   #7aa5ff;
+      --ok:      #4ecfa0;
+      --ok-piso: rgba(78, 207, 160, 0.12);
+      --mal:     #ff8093;
+      --mal-piso: rgba(255, 128, 147, 0.12);
+      --espera:  #f0b429;
+      --espera-piso: rgba(240, 180, 41, 0.12);
+      --consola-piso: #070b10;
+      --consola-tinta: #c8d5e2;
+      --sombra: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 22px -12px rgba(0, 0, 0, 0.7);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:  #0b1016;
+    --paper:   #151c25;
+    --hueco:   #101720;
+    --linea:   #26303c;
+    --linea-fuerte: #384555;
+    --tinta:   #e6ecf3;
+    --tenue:   #93a3b6;
+    --senal:   #7aa5ff;
+    --ok:      #4ecfa0;
+    --ok-piso: rgba(78, 207, 160, 0.12);
+    --mal:     #ff8093;
+    --mal-piso: rgba(255, 128, 147, 0.12);
+    --espera:  #f0b429;
+    --espera-piso: rgba(240, 180, 41, 0.12);
+    --consola-piso: #070b10;
+    --consola-tinta: #c8d5e2;
+    --sombra: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 22px -12px rgba(0, 0, 0, 0.7);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--tinta);
+    font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  :focus-visible { outline: 2px solid var(--senal); outline-offset: 2px; border-radius: 6px; }
+
+  .envoltorio {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 22px 16px 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .encabezado { display: flex; flex-direction: column; gap: 6px; }
+  .marca {
+    font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    font-size: 0.68rem; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--senal);
+  }
+  h1 {
+    font-size: clamp(1.35rem, 5vw, 1.75rem);
+    font-weight: 700; letter-spacing: -0.02em; margin: 0; text-wrap: balance;
+  }
+  .bajada { color: var(--tenue); font-size: 0.92rem; margin: 0; max-width: 60ch; }
+
+  .tarjeta {
+    background: var(--paper);
+    border: 1px solid var(--linea);
+    border-radius: 14px;
+    padding: 15px;
+    box-shadow: var(--sombra);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  /* El número no es adorno: la página es un procedimiento y se hace en ese orden. */
+  .tarjeta h2 {
+    display: flex; align-items: baseline; gap: 8px;
+    font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    font-size: 0.72rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--tenue); margin: 0;
+  }
+  .tarjeta h2 .paso { color: var(--senal); font-variant-numeric: tabular-nums; }
+
+  .modos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .modo {
+    border: 1px solid var(--linea); background: var(--hueco); color: inherit;
+    border-radius: 10px; padding: 10px 11px; text-align: left; font: inherit; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .modo[aria-pressed="true"] {
+    border-color: var(--senal); background: var(--paper);
+    box-shadow: inset 0 0 0 1px var(--senal);
+  }
+  .modo b {
+    display: block; font-size: 0.9rem; font-weight: 600;
+    font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  }
+  .modo span { display: block; font-size: 0.75rem; color: var(--tenue); margin-top: 3px; line-height: 1.35; }
+
+  .fila-boton { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  #mic {
+    width: 78px; height: 78px; border-radius: 50%; flex-shrink: 0;
+    border: 2px solid var(--linea-fuerte); background: var(--hueco); color: var(--tenue);
+    font-size: 28px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+    user-select: none; -webkit-user-select: none;
+    transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+  }
+  #mic.grabando {
+    color: #fff; background: var(--mal); border-color: var(--mal);
+    animation: latido 1.1s ease-in-out infinite;
+  }
+  @keyframes latido { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+  @media (prefers-reduced-motion: reduce) {
+    #mic.grabando { animation: none; }
+    * { transition-duration: 0.01ms !important; }
+  }
+
+  #estado-vivo { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  #reloj {
+    font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    font-size: 1.7rem; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+  }
+  #sub { font-size: 0.82rem; color: var(--tenue); line-height: 1.35; }
+
+  .botonera { display: flex; gap: 8px; flex-wrap: wrap; }
+  button.accion {
+    border: 1px solid var(--linea-fuerte); background: var(--hueco); color: var(--tinta);
+    border-radius: 9px; padding: 9px 13px; font: inherit; font-size: 0.86rem; font-weight: 500;
+    -webkit-tap-highlight-color: transparent; cursor: pointer;
+  }
+  button.accion.primaria { background: var(--senal); border-color: var(--senal); color: #fff; }
+  button.accion:disabled { opacity: 0.45; }
+
+  .nota { font-size: 0.79rem; color: var(--tenue); margin: 0; line-height: 1.45; }
+
+  .veredicto {
+    display: none; border-radius: 10px; padding: 11px 12px; font-size: 0.88rem; line-height: 1.45;
+    border: 1px solid transparent;
+  }
+  .veredicto.ok     { display: block; background: var(--ok-piso);     border-color: var(--ok);     color: var(--tinta); }
+  .veredicto.mal    { display: block; background: var(--mal-piso);    border-color: var(--mal);    color: var(--tinta); }
+  .veredicto.espera { display: block; background: var(--espera-piso); border-color: var(--espera); color: var(--tinta); }
+
+  .tabla-envoltorio { overflow-x: auto; }
+  table.medidas { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+  table.medidas td { padding: 7px 0; border-bottom: 1px solid var(--linea); vertical-align: top; }
+  table.medidas td:first-child { color: var(--tenue); padding-right: 14px; }
+  table.medidas td:last-child {
+    text-align: right; font-variant-numeric: tabular-nums; font-weight: 500;
+    font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  }
+  table.medidas tr:last-child td { border-bottom: 0; }
+
+  pre#log {
+    background: var(--consola-piso); color: var(--consola-tinta);
+    border-radius: 10px; padding: 12px; margin: 0;
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px; line-height: 1.5;
+    max-height: 46vh; overflow: auto; -webkit-overflow-scrolling: touch;
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+
+  ol.protocolo { margin: 0; padding-left: 1.15rem; display: flex; flex-direction: column; gap: 9px; }
+  ol.protocolo li { font-size: 0.85rem; line-height: 1.45; }
+  ol.protocolo li::marker { color: var(--senal); font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-weight: 600; }
+
+  audio { width: 100%; }
+</style>
+
+<div class="envoltorio">
+  <header class="encabezado">
+    <div class="marca">Admin ComercioCity · diagnóstico</div>
+    <h1>Banco de notas de voz</h1>
+    <p class="bajada">Graba con el mismo motor que la conversación de leads: opus-recorder 8.0.5 hacia Ogg/Opus.
+    <b>No manda nada a nadie</b> — el audio se queda en el teléfono.</p>
+  </header>
+
+  <div class="tarjeta">
+    <h2><span class="paso">00</span> Las cuatro corridas que necesito</h2>
+    <ol class="protocolo">
+      <li><b>Modo A · larga a dedo.</b> Tocá el botón, hablá 8 segundos, tocá el rojo para cortar.
+      Esta es la que tiene que fallar: si falla, el banco reproduce el bug.</li>
+      <li><b>Modo A · «Auto 15 s».</b> Sin tocar la pantalla. Si el corte automático anda y el
+      de arriba no, el problema es el gesto; si fallan los dos, es el cierre del grabador.</li>
+      <li><b>Modo A · corta a dedo.</b> Tocá y volvé a tocar enseguida, sin llegar al segundo.
+      Esta tiene que andar, como te anda hoy en el admin.</li>
+      <li><b>Modo D · larga a dedo.</b> Igual que la primera, pero con el arreglo propuesto.
+      Esta tiene que andar.</li>
+    </ol>
+    <p class="nota">Después tocá <b>Copiar bitácora</b> y pegámela en el chat. Con eso cierro el arreglo
+    sin que tengas que arriesgar un audio real.</p>
+  </div>
+
+  <div class="tarjeta">
+    <h2><span class="paso">01</span> Modo de corte</h2>
+    <div class="modos">
+      <button class="modo" data-modo="actual" aria-pressed="true">
+        <b>A · Actual</b><span>El código que está hoy en el admin.</span>
+      </button>
+      <button class="modo" data-modo="diferido" aria-pressed="false">
+        <b>B · Diferido</b><span>Cierra fuera del gesto táctil.</span>
+      </button>
+      <button class="modo" data-modo="vivo" aria-pressed="false">
+        <b>C · Contexto vivo</b><span>Sostiene el audio prendido al cerrar.</span>
+      </button>
+      <button class="modo" data-modo="propuesto" aria-pressed="false">
+        <b>D · Propuesto</b><span>El arreglo que se va a desplegar.</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="tarjeta">
+    <h2><span class="paso">02</span> Grabar</h2>
+    <div class="fila-boton">
+      <button id="mic" aria-label="Grabar">&#9679;</button>
+      <div id="estado-vivo">
+        <div class="grande" id="reloj">0:00</div>
+        <div class="chico" id="sub">Tocá para empezar. Tocá de nuevo para cortar.</div>
+      </div>
+    </div>
+    <div class="botonera">
+      <button class="accion" data-auto="1">Auto 1 s</button>
+      <button class="accion" data-auto="5">Auto 5 s</button>
+      <button class="accion" data-auto="15">Auto 15 s</button>
+      <button class="accion" data-auto="60">Auto 60 s</button>
+    </div>
+    <p class="nota">Los botones «Auto» graban y cortan solos, sin tocar la pantalla. Si el corte automático anda
+    y el corte a dedo no, el problema es el gesto; si fallan los dos, es el cierre del grabador.</p>
+    <div class="veredicto" id="veredicto"></div>
+    <audio id="reproductor" controls hidden></audio>
+  </div>
+
+  <div class="tarjeta">
+    <h2><span class="paso">03</span> Medidas de la última prueba</h2>
+    <div class="tabla-envoltorio">
+    <table class="medidas">
+      <tr><td>Arranque (pedido &rarr; grabando)</td><td id="m-arranque">—</td></tr>
+      <tr><td>Estado al pedir el corte</td><td id="m-estado">—</td></tr>
+      <tr><td>Cierre (corte &rarr; archivo)</td><td id="m-cierre">—</td></tr>
+      <tr><td>Duración grabada</td><td id="m-duracion">—</td></tr>
+      <tr><td>Tamaño del archivo</td><td id="m-peso">—</td></tr>
+      <tr><td>Páginas del encoder</td><td id="m-paginas">—</td></tr>
+      <tr><td>Camino del encoder</td><td id="m-camino">—</td></tr>
+      <tr><td>AudioContext</td><td id="m-contexto">—</td></tr>
+    </table>
+    </div>
+  </div>
+
+  <div class="tarjeta">
+    <h2><span class="paso">04</span> Bitácora</h2>
+    <pre id="log">Esperando la primera prueba.</pre>
+    <div class="botonera">
+      <button class="accion primaria" id="copiar">Copiar bitácora</button>
+      <button class="accion" id="limpiar">Limpiar</button>
+    </div>
+    <p class="nota">Copiala y pegámela en el chat. Ahí está todo lo que necesito para cerrar el arreglo.</p>
+  </div>
+</div>
+
+<script>window.__ENCODER_B64__ = "/*ENCODER_B64*/";</script>
+<script>/*RECORDER_JS*/</script>
+<script>
+(function () {
+  'use strict'
+
+  /* ------------------------------------------------------------------ */
+  /* Bitácora                                                            */
+  /* ------------------------------------------------------------------ */
+  var log_el = document.getElementById('log')
+  var lineas = []
+  var t0 = Date.now()
+
+  function marca() {
+    var ms = Date.now() - t0
+    var s = Math.floor(ms / 1000)
+    var r = ms % 1000
+    return ('   ' + s).slice(-4) + '.' + ('00' + r).slice(-3)
+  }
+
+  function log(texto) {
+    lineas.push(marca() + '  ' + texto)
+    if (lineas.length > 400) { lineas.shift() }
+    log_el.textContent = lineas.join('\n')
+    log_el.scrollTop = log_el.scrollHeight
+  }
+
+  /*
+    Cada renglón del encabezado va en su propio try: si uno tira, los demás igual se escriben.
+    Sin esto, un solo acceso que falla se lleva puesto todo el diagnóstico -- pasó al probarlo:
+    leer AudioContext.prototype.audioWorklet invoca el getter sobre el prototipo y tira
+    "Illegal invocation", y se perdían las tres líneas siguientes, que son las importantes.
+  */
+  function renglon(etiqueta, fn) {
+    try { log(etiqueta + ': ' + fn()) } catch (e) { log(etiqueta + ' TIRÓ: ' + e) }
+  }
+
+  function cabecera() {
+    log('--- entorno ---')
+    renglon('UA', function () { return navigator.userAgent })
+    renglon('PWA instalada', function () {
+      return (window.navigator.standalone === true) +
+        ' | display-mode standalone: ' + window.matchMedia('(display-mode: standalone)').matches
+    })
+    renglon('Pantalla', function () {
+      return window.innerWidth + 'x' + window.innerHeight + ' dpr ' + (window.devicePixelRatio || 1)
+    })
+    renglon('isSecureContext', function () { return window.isSecureContext })
+    renglon('AudioWorklet disponible', function () {
+      var C = window.AudioContext || window.webkitAudioContext
+      return !!C && ('audioWorklet' in C.prototype)
+    })
+    renglon('Recorder cargado', function () {
+      return (typeof Recorder !== 'undefined') + (typeof Recorder !== 'undefined' ? ' v' + Recorder.version : '')
+    })
+    renglon('Recorder.isRecordingSupported()', function () { return !!Recorder.isRecordingSupported() })
+    renglon('Worker del encoder embebido', function () {
+      return encoder_url ? 'armado' : ('FALLÓ: ' + encoder_url_error)
+    })
+    log('---------------')
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* El worker del encoder, embebido: la página tiene que andar sola     */
+  /* ------------------------------------------------------------------ */
+  var encoder_url = null
+  var encoder_url_error = null
+  try {
+    var bin = atob(window.__ENCODER_B64__)
+    var bytes = new Uint8Array(bin.length)
+    for (var i = 0; i < bin.length; i++) { bytes[i] = bin.charCodeAt(i) }
+    encoder_url = URL.createObjectURL(new Blob([bytes], { type: 'text/javascript' }))
+  } catch (e) {
+    encoder_url_error = e
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Modo de corte elegido                                               */
+  /* ------------------------------------------------------------------ */
+  var modo = 'actual'
+  var botones_modo = [].slice.call(document.querySelectorAll('.modo'))
+  botones_modo.forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (grabador && grabador.esta_activo()) { return }
+      modo = b.getAttribute('data-modo')
+      botones_modo.forEach(function (o) { o.setAttribute('aria-pressed', String(o === b)) })
+      log('Modo de corte: ' + modo.toUpperCase())
+    })
+  })
+
+  function usa_diferido() { return modo === 'diferido' || modo === 'propuesto' }
+  function usa_contexto_vivo() { return modo === 'vivo' || modo === 'propuesto' }
+  function usa_rescate() { return modo === 'propuesto' }
+
+  /* ------------------------------------------------------------------ */
+  /* Grabador instrumentado -- misma máquina de estados que el admin     */
+  /* ------------------------------------------------------------------ */
+  var TOPE_CIERRE_MS = 4000
+  var MINIMO_MS = 700
+
+  function GrabadorInstrumentado(opciones) {
+    this._on_data = opciones.onData
+    this._on_error = opciones.onError
+    this._estado = 'idle'
+    this._stop_pedido = false
+    this._descartar = false
+    this._grabando_desde = 0
+    this._timer_minimo = null
+    this._timer_tope = null
+    this._recorder = null
+    this._nodo_vivo = null
+    /* medidas */
+    this.t_pedido_start = 0
+    this.t_grabando = 0
+    this.t_pedido_stop = 0
+    this.estado_al_cortar = ''
+  }
+
+  GrabadorInstrumentado.prototype.esta_activo = function () { return this._estado !== 'idle' }
+  GrabadorInstrumentado.prototype.estado = function () { return this._estado }
+
+  GrabadorInstrumentado.prototype.start = function () {
+    var self = this
+    if (this._estado !== 'idle') { return }
+    if (encoder_url_error) {
+      log('ERROR: no se pudo armar el worker del encoder: ' + encoder_url_error)
+      this._on_error(new Error('El navegador bloqueó el worker del encoder.'))
+      return
+    }
+    this._estado = 'starting'
+    this._stop_pedido = false
+    this._descartar = false
+    this.t_pedido_start = Date.now()
+    log('start() pedido — estado wrapper: starting')
+
+    var recorder
+    try {
+      recorder = new Recorder({
+        encoderPath: encoder_url,
+        numberOfChannels: 1,
+        encoderSampleRate: 16000,
+        encoderApplication: 2048,
+        encoderBitRate: 32000
+      })
+    } catch (e) {
+      log('ERROR: new Recorder() tiró: ' + e)
+      this._estado = 'idle'
+      this._on_error(e)
+      return
+    }
+
+    log('AudioContext creado — state=' + recorder.audioContext.state +
+        ' sampleRate=' + recorder.audioContext.sampleRate)
+    medida('m-contexto', recorder.audioContext.state + ' @ ' + recorder.audioContext.sampleRate + ' Hz')
+
+    recorder.ondataavailable = function (arr) {
+      if (self._recorder !== recorder) {
+        log('ondataavailable de una grabación vieja — ignorado')
+        return
+      }
+      var ms = Date.now() - self.t_pedido_stop
+      log('ondataavailable — ' + arr.length + ' bytes, ' + ms + ' ms después del corte')
+      medida('m-cierre', ms + ' ms')
+      var descarte = self._descartar
+      self._liberar()
+      if (!descarte) { self._on_data(new Blob([arr], { type: 'audio/ogg' })) }
+    }
+
+    this._recorder = recorder
+    recorder.start().then(function () {
+      self.t_grabando = Date.now()
+      var arranque = self.t_grabando - self.t_pedido_start
+      log('start() RESUELTO en ' + arranque + ' ms — opus-recorder.state=' + recorder.state)
+      log('Camino del encoder: ' + (recorder.encoderNode && recorder.encoderNode.port ? 'AudioWorklet' : 'ScriptProcessor'))
+      medida('m-arranque', arranque + ' ms')
+      medida('m-camino', recorder.encoderNode && recorder.encoderNode.port ? 'AudioWorklet' : 'ScriptProcessor')
+      self._grabando_desde = self.t_grabando
+      if (self._stop_pedido) {
+        log('Había un corte pendiente de la ventana de carga — se ejecuta ahora')
+        self._stop_pedido = false
+        self._empezar_corte()
+        return
+      }
+      self._estado = 'recording'
+    }).catch(function (err) {
+      log('start() FALLÓ: ' + err)
+      self._liberar()
+      self._on_error(err)
+    })
+  }
+
+  GrabadorInstrumentado.prototype.stop = function () {
+    this.t_pedido_stop = Date.now()
+    this.estado_al_cortar = this._estado
+    log('stop() pedido — estado wrapper: ' + this._estado +
+        ' | opus-recorder.state: ' + (this._recorder ? this._recorder.state : 'sin recorder'))
+    medida('m-estado', this._estado === 'starting'
+      ? 'todavía cargando (camino diferido)'
+      : 'grabando (camino directo)')
+    if (this._estado === 'idle' || this._estado === 'stopping') { return }
+    if (this._estado === 'starting') {
+      log('El grabador todavía carga: el corte queda anotado')
+      this._stop_pedido = true
+      return
+    }
+    this._empezar_corte()
+  }
+
+  GrabadorInstrumentado.prototype.cancelar = function () {
+    if (this._estado === 'idle' || this._estado === 'stopping') { return }
+    this._descartar = true
+    this.t_pedido_stop = Date.now()
+    if (this._estado === 'starting') { this._stop_pedido = true; return }
+    this._empezar_corte()
+  }
+
+  GrabadorInstrumentado.prototype._empezar_corte = function () {
+    var self = this
+    this._estado = 'stopping'
+    if (this._descartar) { this._cortar(); return }
+    var transcurrido = Date.now() - this._grabando_desde
+    var falta = MINIMO_MS - transcurrido
+    if (falta > 0) {
+      log('Grabó ' + transcurrido + ' ms, falta llegar al mínimo de ' + MINIMO_MS + ' ms — espera ' + falta + ' ms')
+      this._timer_minimo = setTimeout(function () { self._timer_minimo = null; self._cortar() }, falta)
+      return
+    }
+    this._cortar()
+  }
+
+  GrabadorInstrumentado.prototype._cortar = function () {
+    var self = this
+    if (usa_contexto_vivo()) { this._prender_nodo_vivo() }
+    if (usa_diferido()) {
+      log('Modo diferido: el cierre sale del gesto (setTimeout 0)')
+      setTimeout(function () { self._cortar_ya() }, 0)
+      return
+    }
+    this._cortar_ya()
+  }
+
+  /*
+    Sostén del AudioContext mientras se cierra. opus-recorder.stop() desconecta el
+    monitorGainNode -- que es el ÚNICO nodo enchufado a destination -- y apaga los tracks
+    del micrófono en el mismo renglón. Sin nada conectado a la salida, WebKit puede dejar
+    de renderizar el grafo, y el AudioWorkletProcessor del encoder corre en ese hilo: si el
+    hilo se frena, el mensaje 'done' nunca se procesa y el archivo nunca sale.
+  */
+  GrabadorInstrumentado.prototype._prender_nodo_vivo = function () {
+    try {
+      var ctx = this._recorder.audioContext
+      var g = ctx.createGain()
+      g.gain.value = 0
+      var osc = ctx.createOscillator()
+      osc.connect(g)
+      g.connect(ctx.destination)
+      osc.start()
+      this._nodo_vivo = { osc: osc, gain: g }
+      log('Nodo de sostén prendido (oscilador mudo hacia destination)')
+    } catch (e) {
+      log('No se pudo prender el nodo de sostén: ' + e)
+    }
+  }
+
+  GrabadorInstrumentado.prototype._apagar_nodo_vivo = function () {
+    if (!this._nodo_vivo) { return }
+    try { this._nodo_vivo.osc.stop() } catch (e) { /* noop */ }
+    try { this._nodo_vivo.osc.disconnect() } catch (e) { /* noop */ }
+    try { this._nodo_vivo.gain.disconnect() } catch (e) { /* noop */ }
+    this._nodo_vivo = null
+  }
+
+  GrabadorInstrumentado.prototype._cortar_ya = function () {
+    var self = this
+    var rec = this._recorder
+    if (!rec) { return }
+
+    var avisos = [1000, 2000, 4000]
+    avisos.forEach(function (ms) {
+      setTimeout(function () {
+        if (self._recorder !== rec) { return }
+        log('... ' + ms + ' ms sin respuesta del encoder — audioContext.state=' + rec.audioContext.state +
+            ' páginas=' + (rec.recordedPages ? rec.recordedPages.length : '?'))
+      }, ms)
+    })
+
+    this._timer_tope = setTimeout(function () {
+      if (self._recorder !== rec) { return }
+      log('TOPE de ' + TOPE_CIERRE_MS + ' ms: el encoder nunca confirmó el cierre')
+      if (usa_rescate()) {
+        var salvado = self._rescatar(rec)
+        if (salvado) {
+          var descarte = self._descartar
+          self._liberar()
+          if (!descarte) { self._on_data(salvado) }
+          return
+        }
+      }
+      var era_descarte = self._descartar
+      self._liberar()
+      if (!era_descarte) { self._on_error(new Error('El grabador no confirmó el cierre.')) }
+    }, TOPE_CIERRE_MS)
+
+    log('Llamando a opus-recorder.stop() — state previo: ' + rec.state +
+        ' | audioContext: ' + rec.audioContext.state)
+    try {
+      rec.stop()
+      log('opus-recorder.stop() volvió — state ahora: ' + rec.state)
+    } catch (e) {
+      log('opus-recorder.stop() TIRÓ: ' + e)
+      var d = self._descartar
+      self._liberar()
+      if (!d) { self._on_error(e) }
+    }
+  }
+
+  /*
+    Rescate: opus-recorder va guardando las páginas Ogg ya terminadas en recordedPages.
+    Si el 'done' nunca vuelve, esas páginas siguen ahí y forman un Ogg válido -- se pierde
+    como mucho la última página incompleta (hasta 800 ms). Perder el final es infinitamente
+    mejor que perder el audio entero.
+  */
+  /** granule position (bytes 6..13): 0 en las cabeceras, > 0 en las páginas con audio. */
+  function pagina_con_audio(pagina) {
+    if (!pagina || pagina.length < 27) { return false }
+    if (pagina[0] !== 0x4f || pagina[1] !== 0x67 || pagina[2] !== 0x67 || pagina[3] !== 0x53) { return false }
+    var acumulado = 0
+    for (var i = 6; i <= 13; i++) { acumulado = acumulado | pagina[i] }
+    return acumulado !== 0
+  }
+
+  GrabadorInstrumentado.prototype._rescatar = function (rec) {
+    try {
+      var paginas = rec.recordedPages || []
+      if (!paginas.length) { log('Rescate: no hay páginas guardadas, no hay nada que salvar'); return null }
+      /*
+        Mismo guard que el grabador de producción: apenas arranca la grabación el encoder ya deja
+        DOS páginas de cabecera sin audio. Sin este corte, el rescate entregaría un .ogg vacío de
+        cien bytes y la prueba diría que salió todo bien.
+      */
+      if (paginas.length <= 2 || !pagina_con_audio(paginas[paginas.length - 1])) {
+        log('Rescate: solo hay cabeceras, no hay audio que salvar (' + paginas.length + ' páginas)')
+        return null
+      }
+      var total = rec.totalLength || 0
+      var salida = new Uint8Array(total)
+      var pos = 0
+      for (var i = 0; i < paginas.length; i++) { salida.set(paginas[i], pos); pos += paginas[i].length }
+      log('RESCATE: ' + paginas.length + ' páginas, ' + total + ' bytes recuperados sin el "done"')
+      return new Blob([salida], { type: 'audio/ogg' })
+    } catch (e) {
+      log('Rescate falló: ' + e)
+      return null
+    }
+  }
+
+  GrabadorInstrumentado.prototype._liberar = function () {
+    if (this._recorder) {
+      medida('m-paginas', String((this._recorder.recordedPages || []).length))
+      try { this._recorder.close() } catch (e) { log('close() tiró: ' + e) }
+    }
+    this._apagar_nodo_vivo()
+    this._recorder = null
+    this._estado = 'idle'
+    this._grabando_desde = 0
+    if (this._timer_minimo) { clearTimeout(this._timer_minimo); this._timer_minimo = null }
+    if (this._timer_tope) { clearTimeout(this._timer_tope); this._timer_tope = null }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Interfaz                                                            */
+  /* ------------------------------------------------------------------ */
+  var mic = document.getElementById('mic')
+  var reloj = document.getElementById('reloj')
+  var sub = document.getElementById('sub')
+  var veredicto = document.getElementById('veredicto')
+  var reproductor = document.getElementById('reproductor')
+
+  var grabando = false
+  var segundos = 0
+  var tick = null
+  var toque_pendiente = false
+  var ultimo_toque = 0
+  var auto_timer = null
+
+  var grabador = new GrabadorInstrumentado({
+    onData: function (blob) {
+      apagar_ui()
+      log('LISTO: blob de ' + blob.size + ' bytes, tipo ' + blob.type)
+      medida('m-peso', (blob.size / 1024).toFixed(1) + ' KB')
+      var url = URL.createObjectURL(blob)
+      reproductor.src = url
+      reproductor.hidden = false
+      reproductor.addEventListener('loadedmetadata', function una() {
+        reproductor.removeEventListener('loadedmetadata', una)
+        var d = reproductor.duration
+        if (isFinite(d)) {
+          log('Duración del archivo: ' + d.toFixed(2) + ' s')
+          medida('m-duracion', d.toFixed(2) + ' s')
+        }
+      })
+      poner_veredicto('ok', 'Salió bien. Se grabó y se cerró: ' + (blob.size / 1024).toFixed(1) +
+        ' KB. Escuchalo acá abajo para confirmar que se oye.')
+    },
+    onError: function (err) {
+      apagar_ui()
+      log('FALLÓ: ' + (err && err.message ? err.message : err))
+      poner_veredicto('mal', 'Falló: ' + (err && err.message ? err.message : err) +
+        '. Copiá la bitácora y mandámela.')
+    }
+  })
+
+  function medida(id, valor) { var el = document.getElementById(id); if (el) { el.textContent = valor } }
+
+  function poner_veredicto(clase, texto) {
+    veredicto.className = 'veredicto ' + clase
+    veredicto.textContent = texto
+  }
+
+  function prender_ui() {
+    grabando = true
+    segundos = 0
+    mic.classList.add('grabando')
+    mic.innerHTML = '&#9632;'
+    reloj.textContent = '0:00'
+    sub.textContent = 'Grabando. Tocá el botón rojo para cortar y guardar.'
+    reproductor.hidden = true
+    poner_veredicto('espera', 'Grabando…')
+    tick = setInterval(function () {
+      segundos += 1
+      reloj.textContent = Math.floor(segundos / 60) + ':' + ('0' + (segundos % 60)).slice(-2)
+    }, 1000)
+  }
+
+  function apagar_ui() {
+    grabando = false
+    mic.classList.remove('grabando')
+    mic.innerHTML = '&#9679;'
+    sub.textContent = 'Tocá para empezar. Tocá de nuevo para cortar.'
+    if (tick) { clearInterval(tick); tick = null }
+    if (auto_timer) { clearTimeout(auto_timer); auto_timer = null }
+  }
+
+  function arrancar() {
+    if (grabando) { return }
+    limpiar_medidas()
+    log('===== PRUEBA NUEVA — modo ' + modo.toUpperCase() + ' =====')
+    prender_ui()
+    grabador.start()
+  }
+
+  function cortar() {
+    if (!grabando) { return }
+    sub.textContent = 'Cerrando el archivo…'
+    poner_veredicto('espera', 'Cortando. Si en 4 segundos no aparece nada, quedó colgado — eso es justo el bug.')
+    grabador.stop()
+  }
+
+  function limpiar_medidas() {
+    ;['m-arranque', 'm-estado', 'm-cierre', 'm-duracion', 'm-peso', 'm-paginas', 'm-camino', 'm-contexto']
+      .forEach(function (id) { medida(id, '—') })
+  }
+
+  /* Gestos: mismo cableado que el admin (touchstart/touchend con preventDefault). */
+  mic.addEventListener('touchstart', function (e) {
+    e.preventDefault()
+    ultimo_toque = Date.now()
+    log('[gesto] touchstart — grabando=' + grabando)
+    if (grabando) { toque_pendiente = true; return }
+    arrancar()
+  }, { passive: false })
+
+  mic.addEventListener('touchend', function (e) {
+    e.preventDefault()
+    ultimo_toque = Date.now()
+    log('[gesto] touchend — pendiente=' + toque_pendiente)
+    if (toque_pendiente) { toque_pendiente = false; cortar() }
+  }, { passive: false })
+
+  mic.addEventListener('touchcancel', function () {
+    log('[gesto] touchcancel')
+    ultimo_toque = Date.now()
+    toque_pendiente = false
+    if (grabando) { cortar() }
+  })
+
+  mic.addEventListener('click', function () {
+    if (Date.now() - ultimo_toque < 800) { log('[gesto] click fantasma ignorado'); return }
+    log('[gesto] click real')
+    if (grabando) { cortar() } else { arrancar() }
+  })
+
+  ;[].slice.call(document.querySelectorAll('[data-auto]')).forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (grabando) { return }
+      var seg = parseInt(b.getAttribute('data-auto'), 10)
+      log('AUTO: grabar ' + seg + ' s y cortar sin tocar la pantalla')
+      arrancar()
+      auto_timer = setTimeout(function () {
+        auto_timer = null
+        log('AUTO: se cumplieron los ' + seg + ' s, cortando')
+        cortar()
+      }, seg * 1000)
+    })
+  })
+
+  document.getElementById('copiar').addEventListener('click', function () {
+    var texto = lineas.join('\n')
+    var boton = this
+    function ok() { boton.textContent = 'Copiado'; setTimeout(function () { boton.textContent = 'Copiar bitácora' }, 1600) }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(texto).then(ok, function () { seleccionar() })
+    } else { seleccionar() }
+    function seleccionar() {
+      var r = document.createRange()
+      r.selectNodeContents(log_el)
+      var s = window.getSelection()
+      s.removeAllRanges()
+      s.addRange(r)
+      boton.textContent = 'Seleccionado: copiá a mano'
+    }
+  })
+
+  document.getElementById('limpiar').addEventListener('click', function () {
+    lineas = []
+    t0 = Date.now()
+    log_el.textContent = ''
+    cabecera()
+  })
+
+  cabecera()
+  if (encoder_url_error) {
+    poner_veredicto('mal', 'El navegador bloqueó la carga del encoder. Avisame y te paso otra vía.')
+  }
+})()
+</script>

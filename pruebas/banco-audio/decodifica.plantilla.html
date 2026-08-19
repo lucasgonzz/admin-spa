@@ -1,0 +1,187 @@
+<title>Prueba del rescate en navegador</title>
+<style>
+  body { font: 14px/1.5 ui-monospace, Menlo, monospace; background: #0d141c; color: #c8d5e2; margin: 0; padding: 16px; }
+  pre { white-space: pre-wrap; margin: 0; }
+  .ok { color: #4ecfa0; }
+  .mal { color: #ff8093; }
+</style>
+<pre id="log">arrancando…</pre>
+<script>window.__ENCODER_B64__ = "/*ENCODER_B64*/";</script>
+<script>/*RECORDER_JS*/</script>
+<script>/*RESCATE_JS*/</script>
+<script>
+/*
+  Prueba de integración del rescate, en un navegador de verdad y SIN micrófono.
+
+  opus-recorder acepta `sourceNode` en su config: si se lo pasás, no llama a getUserMedia y usa
+  ese nodo como fuente (ver initSourceNode / initAudioContext en recorder.min.js). Con un
+  oscilador alcanza para producir un Ogg/Opus real, y así se puede probar el camino completo en
+  un entorno sin permisos de micrófono.
+
+  Lo que decide la prueba: que el blob que arma el rescate -- concatenando recordedPages y
+  marcándole el fin de stream con el CRC recalculado -- sea un archivo que decodeAudioData()
+  abre de verdad. Eso es lo único del arreglo que no se puede verificar leyendo el código.
+*/
+(function () {
+  var log_el = document.getElementById('log')
+  var lineas = []
+  var fallos = 0
+
+  function log(t, clase) {
+    lineas.push(clase ? '<span class="' + clase + '">' + t + '</span>' : t)
+    log_el.innerHTML = lineas.join('\n')
+  }
+  function comprobar(nombre, condicion, detalle) {
+    if (condicion) { log('  ok   ' + nombre, 'ok') }
+    else { fallos++; log('  MAL  ' + nombre + (detalle ? ' -- ' + detalle : ''), 'mal') }
+  }
+
+  var bin = atob(window.__ENCODER_B64__)
+  var bytes = new Uint8Array(bin.length)
+  for (var i = 0; i < bin.length; i++) { bytes[i] = bin.charCodeAt(i) }
+  var encoder_url = URL.createObjectURL(new Blob([bytes], { type: 'text/javascript' }))
+
+  var CONFIG = {
+    encoderPath: encoder_url,
+    numberOfChannels: 1,
+    encoderSampleRate: 16000,
+    encoderApplication: 2048,
+    encoderBitRate: 32000
+  }
+
+  /** Arma un grabador alimentado por un oscilador, sin tocar el micrófono. */
+  function grabador_sintetico() {
+    var ctx = new (window.AudioContext || window.webkitAudioContext)()
+    var osc = ctx.createOscillator()
+    osc.type = 'sine'
+    osc.frequency.value = 440
+    osc.start()
+    var rec = new Recorder(Object.assign({}, CONFIG, { sourceNode: osc }))
+    return { ctx: ctx, osc: osc, rec: rec }
+  }
+
+  function esperar(ms) {
+    return new Promise(function (r) { setTimeout(r, ms) })
+  }
+
+  /** Concatena las páginas y marca el fin de stream: MISMO algoritmo que _rescatar_lo_grabado(). */
+  function rescatar(rec) {
+    var paginas = rec.recordedPages || []
+    var total = rec.totalLength || 0
+    if (!paginas.length || !total) { return null }
+    // mismo guard que el grabador: hacen falta paginas de datos, no solo las dos cabeceras
+    if (paginas.length <= 2 || !pagina_con_audio(paginas[paginas.length - 1])) {
+      return { rechazado: true, paginas: paginas.length }
+    }
+    var salida = new Uint8Array(total)
+    var pos = 0
+    var ultima_desde = 0
+    for (var i = 0; i < paginas.length; i++) {
+      ultima_desde = pos
+      salida.set(paginas[i], pos)
+      pos += paginas[i].length
+    }
+    var marcada = marcar_fin_de_stream(salida.subarray(ultima_desde, pos))
+    return { blob: new Blob([salida], { type: 'audio/ogg' }), marcada: marcada, paginas: paginas.length }
+  }
+
+  function decodificar(blob) {
+    return blob.arrayBuffer().then(function (buf) {
+      var ctx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 1024, 48000)
+      return ctx.decodeAudioData(buf)
+    })
+  }
+
+  function correr() {
+    log('=== 1. cierre normal: grabar 3 s y esperar el done ===')
+    var a = grabador_sintetico()
+    var blob_normal = null
+
+    return new Promise(function (resolver) {
+      a.rec.ondataavailable = function (arr) {
+        blob_normal = new Blob([arr], { type: 'audio/ogg' })
+        resolver()
+      }
+      a.rec.start().then(function () {
+        log('  grabando (sampleRate del contexto: ' + a.ctx.sampleRate + ')')
+        return esperar(3000)
+      }).then(function () {
+        log('  páginas acumuladas antes del stop: ' + a.rec.recordedPages.length)
+        a.rec.stop()
+      }).catch(function (e) { log('  start() falló: ' + e, 'mal'); fallos++; resolver() })
+    }).then(function () {
+      comprobar('salió un blob por el camino normal', !!blob_normal && blob_normal.size > 0,
+        blob_normal ? blob_normal.size + ' bytes' : 'no salió')
+      if (!blob_normal) { return null }
+      return decodificar(blob_normal).then(function (audio) {
+        comprobar('el archivo normal decodifica', true)
+        log('       duración ' + audio.duration.toFixed(2) + ' s, ' + audio.sampleRate + ' Hz')
+      }, function (e) {
+        comprobar('el archivo normal decodifica', false, String(e))
+      })
+    }).then(function () {
+      try { a.rec.close() } catch (e) { /* noop */ }
+
+      log('')
+      log('=== 2. rescate: grabar 3 s y armar el archivo SIN esperar el done ===')
+      log('    (es exactamente lo que hace el grabador cuando el encoder no confirma el cierre)')
+      var b = grabador_sintetico()
+      var rescate = null
+
+      return b.rec.start().then(function () {
+        return esperar(3000)
+      }).then(function () {
+        /* No se llama a stop(): se lee lo que el encoder ya dejó guardado, como en el tope. */
+        rescate = rescatar(b.rec)
+        comprobar('el guard acepta el rescate (hay páginas de datos)', !!rescate && !rescate.rechazado,
+          rescate ? rescate.paginas + ' páginas' : 'ninguna')
+        if (!rescate || rescate.rechazado) { return null }
+        comprobar('se marcó el fin de stream en la última página', rescate.marcada === true)
+        comprobar('el blob rescatado no está vacío', rescate.blob.size > 0, rescate.blob.size + ' bytes')
+        return decodificar(rescate.blob).then(function (audio) {
+          comprobar('EL ARCHIVO RESCATADO DECODIFICA', true)
+          log('       duración ' + audio.duration.toFixed(2) + ' s, ' + audio.sampleRate + ' Hz')
+          comprobar('dura más de 2 s (no se perdió la grabación)', audio.duration > 2,
+            audio.duration.toFixed(2) + ' s')
+        }, function (e) {
+          comprobar('EL ARCHIVO RESCATADO DECODIFICA', false, String(e))
+        })
+      }).then(function () {
+        try { b.rec.close() } catch (e) { /* noop */ }
+      }).catch(function (e) {
+        log('  falló: ' + e, 'mal'); fallos++
+      })
+    }).then(function () {
+      log('')
+      log('=== 3. rescate sin marcar el fin de stream (control) ===')
+      log('    Sirve para saber si el marcado suma o si daba igual.')
+      var c = grabador_sintetico()
+      return c.rec.start().then(function () {
+        return esperar(2500)
+      }).then(function () {
+        var paginas = c.rec.recordedPages
+        var total = c.rec.totalLength
+        var salida = new Uint8Array(total)
+        var pos = 0
+        for (var i = 0; i < paginas.length; i++) { salida.set(paginas[i], pos); pos += paginas[i].length }
+        var crudo = new Blob([salida], { type: 'audio/ogg' })
+        return decodificar(crudo).then(function (audio) {
+          log('  sin marcar: decodifica igual, ' + audio.duration.toFixed(2) + ' s')
+        }, function (e) {
+          log('  sin marcar: NO decodifica (' + e.name + ') -- o sea que el marcado es necesario')
+        })
+      }).then(function () {
+        try { c.rec.close() } catch (e) { /* noop */ }
+      }).catch(function (e) { log('  falló: ' + e, 'mal'); fallos++ })
+    }).then(function () {
+      log('')
+      log(fallos === 0 ? 'TODO VERDE' : 'HAY ' + fallos + ' EN ROJO', fallos === 0 ? 'ok' : 'mal')
+      window.__RESULTADO__ = { fallos: fallos, texto: lineas.join('\n').replace(/<[^>]+>/g, '') }
+    })
+  }
+
+  lineas = []
+  log_el.innerHTML = ''
+  correr()
+})()
+</script>
