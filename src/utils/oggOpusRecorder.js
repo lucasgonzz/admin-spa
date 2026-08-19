@@ -353,6 +353,11 @@ export class OggOpusRecorder {
       return
     }
 
+    /*
+      El sostén va SINCRÓNICO acá, no adentro del setTimeout de abajo: incluye un
+      audioContext.resume(), y en Safari eso solo se concede adentro de un gesto de usuario real.
+      Este método se llama desde el touchend; si el resume se difiere, se pierde el gesto.
+    */
     this._sostener_contexto()
 
     this._stop_timeout_timer = setTimeout(function () {
@@ -369,15 +374,31 @@ export class OggOpusRecorder {
       self._on_error(new Error('La grabación no se pudo cerrar. Volvé a intentar.'), 'cierre')
     }, this._stop_timeout_ms)
 
-    try {
-      recorder.stop()
-    } catch (err) {
-      const era_descarte = self._discard
-      self._force_release()
-      if (!era_descarte) {
-        self._on_error(err, 'cierre')
+    /*
+      El pedido de cierre sale del gesto táctil, en su propia tarea.
+
+      POR QUÉ: de los dos caminos de corte que tiene este wrapper, el único que se sabía que
+      funcionaba en iPhone era el diferido -- el que se ejecuta desde el setTimeout del mínimo de
+      duración cuando el corte llegó durante el arranque. El camino directo, que corría
+      sincrónicamente adentro del touchend, era el que se colgaba. Poner los dos a correr desde su
+      propia tarea los iguala, y no cuesta nada: son cuatro milisegundos y nada de lo que hace
+      recorder.stop() (apagar los tracks, mandarle 'done' al encoder) necesita el gesto.
+    */
+    setTimeout(function () {
+      if (self._recorder !== recorder) {
+        /* se liberó entre medio: este cierre ya no le pertenece a nadie */
+        return
       }
-    }
+      try {
+        recorder.stop()
+      } catch (err) {
+        const era_descarte = self._discard
+        self._force_release()
+        if (!era_descarte) {
+          self._on_error(err, 'cierre')
+        }
+      }
+    }, 0)
   }
 
   /**
