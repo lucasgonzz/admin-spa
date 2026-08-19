@@ -357,11 +357,22 @@
           @paste="on_paste"
         />
         <!-- Mientras graba: franja compacta con el punto que late, el cronómetro y Cancelar,
-             en lugar del textarea -- misma paleta que el resto (text-danger, text-muted). -->
+             en lugar del textarea -- misma paleta que el resto (text-danger, text-muted).
+             Mientras cierra: el punto deja de latir y el cronómetro pasa a "Cerrando…", así el
+             usuario ve que su toque se registró en vez de mirar un botón que parece muerto. -->
         <div v-else class="audio-recording-strip d-flex align-items-center gap-2">
-          <span class="audio-recording-dot audio-recording-pulse" aria-hidden="true"></span>
-          <span class="text-danger small">{{ audio_elapsed_label }}</span>
-          <button type="button" class="btn btn-sm btn-link text-muted ms-auto" @click="cancel_audio_recording">
+          <span
+            class="audio-recording-dot"
+            :class="{ 'audio-recording-pulse': !audio_closing }"
+            aria-hidden="true"
+          ></span>
+          <span class="text-danger small">{{ audio_closing ? 'Cerrando…' : audio_elapsed_label }}</span>
+          <button
+            v-if="!audio_closing"
+            type="button"
+            class="btn btn-sm btn-link text-muted ms-auto"
+            @click="cancel_audio_recording"
+          >
             Cancelar
           </button>
         </div>
@@ -371,11 +382,15 @@
           v-if="!has_mensaje_directo && !pending_attachment"
           type="button"
           class="icon-btn flex-shrink-0"
-          :class="audio_recording ? 'text-danger audio-recording-pulse' : 'text-muted'"
+          :class="audio_recording
+            ? (audio_closing ? 'text-danger' : 'text-danger audio-recording-pulse')
+            : 'text-muted'"
           :disabled="enviando_audio || !whatsapp_window_open"
-          :title="audio_recording
-            ? 'Grabando ' + audio_elapsed_label + '. Tocá para enviar'
-            : 'Tocá para grabar, o mantené pulsado para grabar mientras apretás'"
+          :title="audio_closing
+            ? 'Cerrando la grabación…'
+            : (audio_recording
+              ? 'Grabando ' + audio_elapsed_label + '. Tocá para enviar'
+              : 'Tocá para grabar, o mantené pulsado para grabar mientras apretás')"
           @click="on_audio_click"
           @mousedown="on_audio_mousedown"
           @mouseup="on_audio_mouseup_or_leave"
@@ -384,7 +399,12 @@
           @touchend.prevent="on_audio_touchend"
           @touchcancel.prevent="on_audio_touchcancel"
         >
-          <span v-if="enviando_audio" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+          <span
+            v-if="enviando_audio || audio_closing"
+            class="spinner-border spinner-border-sm"
+            role="status"
+            aria-hidden="true"
+          />
           <i v-else class="bi" :class="audio_recording ? 'bi-stop-circle-fill' : 'bi-mic'" aria-hidden="true" />
         </button>
 

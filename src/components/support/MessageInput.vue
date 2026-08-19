@@ -82,8 +82,12 @@
               audio_recording ? 'btn-danger support-input-icon-btn--recording' : 'btn-outline-secondary',
             ]"
             :disabled="!can_send"
-            :title="audio_recording ? ('Detener grabación (' + audio_elapsed_label + ')') : 'Grabar audio'"
-            :aria-label="audio_recording ? ('Detener grabación (' + audio_elapsed_label + ')') : 'Grabar audio'"
+            :title="audio_closing
+              ? 'Cerrando la grabación…'
+              : (audio_recording ? ('Detener grabación (' + audio_elapsed_label + ')') : 'Grabar audio')"
+            :aria-label="audio_closing
+              ? 'Cerrando la grabación…'
+              : (audio_recording ? ('Detener grabación (' + audio_elapsed_label + ')') : 'Grabar audio')"
             @click="on_audio_click"
             @mousedown="on_audio_mousedown"
             @mouseup="on_audio_mouseup_or_leave"
@@ -91,13 +95,21 @@
             @touchstart.prevent="on_audio_touchstart"
             @touchend.prevent="on_audio_touchend"
             @touchcancel.prevent="on_audio_touchcancel">
-            <i v-if="audio_recording" class="bi bi-stop-fill" aria-hidden="true" />
+            <span
+              v-if="audio_closing"
+              class="spinner-border spinner-border-sm"
+              role="status"
+              aria-hidden="true" />
+            <i v-else-if="audio_recording" class="bi bi-stop-fill" aria-hidden="true" />
             <i v-else class="bi bi-mic" aria-hidden="true" />
-            <span v-if="audio_recording" class="support-input-recording-time">{{ audio_elapsed_label }}</span>
+            <span v-if="audio_recording" class="support-input-recording-time">
+              {{ audio_closing ? 'Cerrando…' : audio_elapsed_label }}
+            </span>
           </button>
-          <!-- Sólo mientras graba: cancelar sin enviar (grupo 323, prompt 04) -->
+          <!-- Sólo mientras graba y todavía no se pidió el corte: cancelar sin enviar
+               (grupo 323, prompt 04). Mientras cierra se esconde: el audio ya está en camino. -->
           <button
-            v-if="audio_recording"
+            v-if="audio_recording && !audio_closing"
             type="button"
             class="btn btn-link btn-sm text-muted"
             title="Cancelar grabación"
@@ -407,15 +419,21 @@ export default {
     },
 
     /**
-     * Hook del contrato de audio_recorder_button: mismo comportamiento que tenía antes.
+     * Hook del contrato de audio_recorder_button.
+     *
+     * El cartel depende de la fase: mandar a alguien a revisar los permisos del micrófono cuando
+     * el micrófono anduvo bien y lo que falló fue el cierre es peor que no decirle nada.
      *
      * @param {string} message
+     * @param {'arranque'|'cierre'} fase
      * @returns {void}
      */
-    on_audio_error(message) {
+    on_audio_error(message, fase) {
       console.warn('[SupportChat] error al grabar audio:', message)
       this.mic_error = true
-      this.mic_error_message = 'Sin acceso al micrófono. Verificá los permisos del navegador o usá Adjuntar.'
+      this.mic_error_message = fase === 'cierre'
+        ? 'No se pudo cerrar la grabación. Probá de nuevo o usá Adjuntar.'
+        : 'Sin acceso al micrófono. Verificá los permisos del navegador o usá Adjuntar.'
     },
     /**
      * Solicita sugerencia IA al backend y completa el textarea.

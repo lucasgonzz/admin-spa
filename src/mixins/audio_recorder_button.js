@@ -10,6 +10,12 @@ const HOLD_THRESHOLD_MS = 400
  */
 const GHOST_CLICK_MS = 800
 
+/**
+ * Cuánto se espera el touchend del toque que corta antes de cortar igual. Ver
+ * on_audio_touchstart: el corte no puede quedar colgado de que llegue un segundo evento.
+ */
+const PENDING_STOP_FALLBACK_MS = 600
+
 /** Tope duro de la grabación: al llegar, corta y envía sola. */
 const MAX_RECORDING_SECONDS = 300
 
@@ -21,6 +27,7 @@ const MAX_RECORDING_SECONDS = 300
  * - Mantener pulsado (>= HOLD_THRESHOLD_MS) -> walkie-talkie: graba mientras el dedo/mouse está
  *   apoyado y corta y envía al soltar.
  * - Mientras graba: cronómetro visible y botón para cancelar sin enviar.
+ * - Mientras cierra: audio_closing en true, para que la interfaz lo muestre.
  * - Tope de MAX_RECORDING_SECONDS: corta y envía sola.
  *
  * La grabación arranca SIEMPRE sincrónicamente dentro del touchstart/mousedown, nunca diferida
@@ -34,13 +41,16 @@ const MAX_RECORDING_SECONDS = 300
  * - on_audio_blob(blob) -- OBLIGATORIO. Se llama con el Blob 'audio/ogg' listo para enviar.
  * - can_record_audio() -- opcional. Si el componente lo define y devuelve false, el mixin no
  *   arranca a grabar. Si no lo define, se asume true.
- * - on_audio_error(message) -- opcional. Si no lo define, el mixin hace alert(message).
+ * - on_audio_error(message, fase) -- opcional. fase es 'arranque' o 'cierre'. Si no lo define,
+ *   el mixin hace alert(message).
  */
 export default {
   data() {
     return {
       /** true mientras el micrófono está grabando. */
       audio_recording: false,
+      /** true desde que se pidió el corte hasta que sale el archivo (o falla). */
+      audio_closing: false,
       /** Instancia OggOpusRecorder activa (null cuando no graba). */
       audio_recorder: null,
       /** Segundos transcurridos de la grabación en curso. */
@@ -71,33 +81,57 @@ export default {
     this._audio_touch_started_at = 0
     this._audio_last_touch_at = 0
     this._audio_pending_toggle_stop = false
+    this._audio_pending_stop_timer = null
     this._audio_hold_mode = false
     this._audio_hold_timer_id = null
     this._audio_tick_id = null
   },
 
   beforeUnmount() {
-    /* cancel_audio_recording() ya limpia los dos temporizadores (tick y hold)
-       vía stop_audio_tick(): ninguna vista que use este mixin puede dejar el
-       micrófono abierto al desmontarse. */
+    /* cancel_audio_recording() ya limpia los temporizadores (tick, hold y el
+       del corte pendiente) vía stop_audio_tick(): ninguna vista que use este
+       mixin puede dejar el micrófono abierto al desmontarse. */
     this.cancel_audio_recording()
   },
 
   methods: {
     /**
      * TouchStart: arranca la grabación siempre, sincrónicamente. Si ya estaba
-     * grabando, este toque es el que corta (el corte real se hace en el
-     * touchend, no acá, para que el mismo toque no dispare dos veces).
+     * grabando, este toque es el que corta: el corte real se hace en el
+     * touchend (para que el mismo toque no dispare dos veces), pero con una red
+     * de contención por si ese touchend nunca llega.
      *
      * @param {TouchEvent} event
      * @returns {void}
      */
     on_audio_touchstart(event) {
+      const self = this
       event.preventDefault()
       this._audio_last_touch_at = Date.now()
 
       if (this.audio_recording) {
         this._audio_pending_toggle_stop = true
+        /*
+          RED DE CONTENCIÓN -- no la saques.
+
+          El corte se ejecuta en el touchend para que un mismo toque no dispare dos veces. Pero
+          si ese touchend nunca llega al botón, el corte anotado acá se pierde y no hay segunda
+          oportunidad: el usuario toca el botón rojo y no pasa absolutamente nada, para siempre.
+          Y hay motivos reales para que no llegue: el botón se vuelve a dibujar cada segundo por
+          el cronómetro, iOS puede mandar touchcancel a mitad de camino, o el dedo puede terminar
+          sobre otro elemento. Con esto, el peor caso es que el corte salga PENDING_STOP_FALLBACK_MS
+          más tarde en vez de nunca. stop() del grabador es idempotente por estado, así que si
+          después llega el touchend no hace daño.
+        */
+        this._clear_pending_stop_timer()
+        this._audio_pending_stop_timer = setTimeout(function () {
+          self._audio_pending_stop_timer = null
+          if (!self._audio_pending_toggle_stop) {
+            return
+          }
+          self._audio_pending_toggle_stop = false
+          self.stop_and_send_audio()
+        }, PENDING_STOP_FALLBACK_MS)
         return
       }
 
@@ -128,9 +162,11 @@ export default {
 
       if (this._audio_pending_toggle_stop) {
         this._audio_pending_toggle_stop = false
+        this._clear_pending_stop_timer()
         this.stop_and_send_audio()
         return
       }
+      this._clear_pending_stop_timer()
 
       const duracion = Date.now() - this._audio_touch_started_at
       if (duracion >= HOLD_THRESHOLD_MS) {
@@ -154,6 +190,7 @@ export default {
     on_audio_touchcancel(event) {
       this._audio_last_touch_at = Date.now()
       this._audio_pending_toggle_stop = false
+      this._clear_pending_stop_timer()
       if (this.audio_recording) {
         this.stop_and_send_audio()
       }
@@ -234,11 +271,7 @@ export default {
         return
       }
       if (!OggOpusRecorder.isSupported()) {
-        if (typeof this.on_audio_error === 'function') {
-          this.on_audio_error('Tu navegador no soporta grabación de audio.')
-        } else {
-          alert('Tu navegador no soporta grabación de audio.')
-        }
+        this.avisar_error_de_audio('Tu navegador no soporta grabación de audio.', 'arranque')
         return
       }
 
@@ -246,24 +279,36 @@ export default {
         onData: function (blob) {
           self.stop_audio_tick()
           self.audio_recording = false
+          self.audio_closing = false
           self.audio_recorder = null
           self.on_audio_blob(blob)
         },
-        onError: function (err) {
+        onError: function (err, fase) {
           console.error('Error en la grabación de audio', err)
           self.stop_audio_tick()
           self.audio_recording = false
+          self.audio_closing = false
           self.audio_recorder = null
-          if (typeof self.on_audio_error === 'function') {
-            self.on_audio_error('No se pudo acceder al micrófono. Verificá los permisos del navegador.')
+          /*
+            El mensaje depende de la fase. Antes, cualquier fallo decía "No se pudo acceder al
+            micrófono. Verificá los permisos" -- incluso cuando el micrófono había andado
+            perfecto y lo que falló fue el cierre. Mandar a alguien a revisar permisos que están
+            bien es peor que no decir nada.
+          */
+          if (fase === 'cierre') {
+            self.avisar_error_de_audio('No se pudo cerrar la grabación. Probá de nuevo.', 'cierre')
           } else {
-            alert('No se pudo acceder al micrófono. Verificá los permisos del navegador.')
+            self.avisar_error_de_audio(
+              'No se pudo acceder al micrófono. Verificá los permisos del navegador.',
+              'arranque'
+            )
           }
         },
       })
 
       self.audio_recorder = recorder
       self.audio_recording = true
+      self.audio_closing = false
       self.audio_elapsed_seconds = 0
       self._audio_tick_id = setInterval(function () {
         self.audio_elapsed_seconds += 1
@@ -278,10 +323,15 @@ export default {
     },
 
     /**
-     * Detiene la grabación activa y la envía. No toca audio_recording acá: el grabador del
-     * prompt 01 garantiza que siempre va a llegar onData o onError, y son esos callbacks los que
+     * Detiene la grabación activa y la envía. No toca audio_recording acá: el grabador
+     * garantiza que siempre va a llegar onData o onError, y son esos callbacks los que
      * apagan la interfaz. Poner un audio_recording = false optimista acá desincroniza el estado
      * -- el botón mostraría "no grabando" mientras el grabador todavía está cerrando de verdad.
+     *
+     * Lo que sí se prende es audio_closing, para que la interfaz muestre que el toque se
+     * registró. Sin eso, entre el toque y el archivo no cambia NADA en pantalla, y el usuario
+     * no tiene forma de distinguir "está cerrando" de "el botón no anda" -- que es exactamente
+     * como se reportó este bug.
      *
      * @returns {void}
      */
@@ -289,6 +339,7 @@ export default {
       if (!this.audio_recording || !this.audio_recorder) {
         return
       }
+      this.audio_closing = true
       this.audio_recorder.stop()
     },
 
@@ -304,12 +355,13 @@ export default {
       }
       this.stop_audio_tick()
       this.audio_recording = false
+      this.audio_closing = false
       this.audio_recorder = null
     },
 
     /**
-     * Limpia el cronómetro (setInterval) y el temporizador del gesto de mouse (setTimeout de
-     * mousedown), si están corriendo.
+     * Limpia el cronómetro (setInterval), el temporizador del gesto de mouse (setTimeout de
+     * mousedown) y el del corte pendiente, si están corriendo.
      *
      * @returns {void}
      */
@@ -322,6 +374,33 @@ export default {
         clearTimeout(this._audio_hold_timer_id)
         this._audio_hold_timer_id = null
       }
+      this._audio_pending_toggle_stop = false
+      this._clear_pending_stop_timer()
+    },
+
+    /**
+     * @returns {void}
+     */
+    _clear_pending_stop_timer() {
+      if (this._audio_pending_stop_timer) {
+        clearTimeout(this._audio_pending_stop_timer)
+        this._audio_pending_stop_timer = null
+      }
+    },
+
+    /**
+     * Avisa un error de audio por el hook del componente, o con alert() si no lo definió.
+     *
+     * @param {string} mensaje
+     * @param {'arranque'|'cierre'} fase
+     * @returns {void}
+     */
+    avisar_error_de_audio(mensaje, fase) {
+      if (typeof this.on_audio_error === 'function') {
+        this.on_audio_error(mensaje, fase)
+        return
+      }
+      alert(mensaje)
     },
   },
 }
