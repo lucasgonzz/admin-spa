@@ -300,8 +300,20 @@ export class OggOpusRecorder {
         self._state = 'recording'
       })
       .catch(function (err) {
+        /*
+          Se consulta el descarte, igual que los otros tres caminos de error. Si el usuario ya tocó
+          Cancelar --o si la vista se desmontó, que llama a cancel_audio_recording()-- mientras el
+          micrófono todavía arrancaba, y recién después el arranque falla, avisarle "no se pudo
+          acceder al micrófono" es hablarle de algo que ya había abandonado.
+
+          Venía así desde antes de este arreglo; se cierra ahora porque es el único de los cuatro
+          caminos de error del wrapper que no respetaba el descarte.
+        */
+        const era_descarte = self._discard
         self._force_release()
-        self._on_error(err, 'arranque')
+        if (!era_descarte) {
+          self._on_error(err, 'arranque')
+        }
         throw err
       })
   }
@@ -371,9 +383,15 @@ export class OggOpusRecorder {
   }
 
   /**
-   * Detiene la grabación activa y DESCARTA lo grabado -- nunca llama a onData. Ignora
-   * minDurationMs (cancelar tiene que liberar el micrófono ya, no esperar el mínimo). Mismo
-   * cuidado que stop() durante 'starting': no toca this._recorder ni suelta la referencia
+   * Detiene la grabación activa y DESCARTA lo grabado -- nunca llama a onData.
+   *
+   * Saltea la espera de minDurationMs cuando se cancela desde 'recording': ahí no tiene sentido
+   * retener el micrófono para completar un mínimo de un audio que se va a tirar. Ojo con el otro
+   * caso: si ya había un stop() esperando el temporizador del mínimo, cancel() solo marca el
+   * descarte y sale, así que el micrófono se libera cuando ese temporizador vence -- hasta 700 ms
+   * más tarde. Se respeta el descarte igual; lo que no se acorta es la espera.
+   *
+   * Mismo cuidado que stop() durante 'starting': no toca this._recorder ni suelta la referencia
    * hasta que start() resuelva.
    *
    * @returns {void}
