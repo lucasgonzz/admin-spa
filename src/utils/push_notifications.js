@@ -7,6 +7,7 @@ import api from './axios'
  */
 export const PUSH_STEPS = {
   UNSUPPORTED: 'unsupported',
+  VAPID: 'vapid',
   PERMISSION: 'permission',
   SUBSCRIPTION: 'subscription',
   BACKEND: 'backend',
@@ -26,7 +27,34 @@ export class PushRegistrationError extends Error {
     this.name = 'PushRegistrationError'
     this.step = step
     this.cause = cause
+    /*
+      El detalle técnico viaja con el error, no solo a la consola.
+
+      POR QUÉ: este bug se reporta desde un iPhone, donde no hay forma de abrir la consola. Sin el
+      nombre y el mensaje del error del navegador acá adentro, la interfaz solo puede mostrar una
+      frase escrita de antemano -- que es exactamente lo que hizo que durante semanas el cartel
+      dijera "instalá la PWA" a alguien que ya la tenía instalada.
+    */
+    this.detail = describir_error(cause)
   }
+}
+
+/**
+ * Arma una descripción corta y legible de un error del navegador.
+ *
+ * @param {*} error
+ * @returns {string} vacío si no hay nada que describir.
+ */
+function describir_error(error) {
+  if (!error) {
+    return ''
+  }
+  const nombre = error.name || ''
+  const mensaje = error.message || String(error)
+  if (nombre && mensaje && nombre !== mensaje) {
+    return nombre + ': ' + mensaje
+  }
+  return mensaje || nombre || String(error)
 }
 
 /**
@@ -36,6 +64,34 @@ export class PushRegistrationError extends Error {
  */
 export function push_is_supported() {
   return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+}
+
+/**
+ * ¿La app está corriendo instalada (PWA en la pantalla de inicio / ventana propia)?
+ *
+ * En iOS lo dice `navigator.standalone`; el resto de los navegadores, el media query
+ * `display-mode: standalone`. Se consultan los dos porque ninguno cubre a todos.
+ *
+ * Existe para que la interfaz DEJE de afirmar que hay que instalar la app sin haberlo comprobado:
+ * ese cartel se le mostró a Lucas teniéndola instalada, y lo mandó a resolver algo que ya estaba
+ * hecho mientras el problema real quedaba tapado.
+ *
+ * @returns {boolean}
+ */
+export function running_as_installed_app() {
+  if (window.navigator && window.navigator.standalone === true) {
+    return true
+  }
+  if (typeof window.matchMedia === 'function') {
+    /* minimal-ui y fullscreen también son modos instalados, no solo standalone. */
+    const modos = ['standalone', 'minimal-ui', 'fullscreen']
+    for (let i = 0; i < modos.length; i++) {
+      if (window.matchMedia('(display-mode: ' + modos[i] + ')').matches) {
+        return true
+      }
+    }
+  }
+  return false
 }
 
 /**
@@ -56,6 +112,25 @@ export async function enable_push_notifications() {
     )
   }
 
+  /*
+    🔴 El pedido de la clave VAPID se DISPARA acá pero NO se espera todavía. No lo conviertas en
+    un `await`: rompe la activación del gesto.
+
+    En iOS, Notification.requestPermission() solo se concede si se llama adentro del gesto del
+    usuario. Cualquier `await` que se complete antes -- y un pedido de red es el peor caso --
+    consume la activación transitoria, y el diálogo de permiso deja de aparecer. Eso rompería
+    justamente el camino que hoy funciona: la primera activación, cuando el permiso todavía es
+    'default'.
+
+    Disparándolo sin esperar, el pedido viaja mientras el usuario decide el permiso, y para cuando
+    hace falta la clave ya llegó. Se paga un precio chico y consciente: si el servidor no tiene la
+    clave configurada, el permiso se pide igual antes de darse cuenta. Preferible a no poder
+    activar nunca las notificaciones en un iPhone.
+  */
+  const promesa_clave = traer_clave_vapid()
+  /* Sin esto, si el permiso falla primero, la promesa queda como rechazo sin manejar. */
+  promesa_clave.catch(function () {})
+
   // Solicita el permiso nativo de notificaciones; si el usuario no lo otorga, abortamos.
   let permission
   try {
@@ -74,10 +149,13 @@ export async function enable_push_notifications() {
     )
   }
 
+  // Recién ahora se espera la clave: ya viajó en paralelo con el diálogo del permiso.
+  const clave_vapid = await promesa_clave
+
   // Suscribe el navegador al push service y obtiene el endpoint + claves del device.
   let subscription
   try {
-    subscription = await subscribe_in_browser()
+    subscription = await subscribe_in_browser(null, clave_vapid)
   } catch (e) {
     throw new PushRegistrationError(
       PUSH_STEPS.SUBSCRIPTION,
@@ -209,13 +287,17 @@ export async function ensure_push_registration() {
   }
 
   const registration = await navigator.serviceWorker.ready
-  let subscription = await registration.pushManager.getSubscription()
+  const clave_vapid = await traer_clave_vapid()
 
-  // Sin suscripción en el navegador (caducó o se limpió el sitio): volver a crearla.
-  // El permiso ya está concedido, así que subscribe() no abre ningún diálogo.
-  if (!subscription) {
-    subscription = await subscribe_in_browser(registration)
-  }
+  /*
+    Pasa siempre por subscribe_in_browser(), incluso si getSubscription() devuelve algo.
+
+    Antes esta función solo suscribía cuando NO había suscripción, así que una suscripción vieja
+    creada con otra clave VAPID sobrevivía para siempre: el arranque la daba por buena, el backend
+    nunca la reconocía, y el usuario se quedaba sin notificaciones sin que nada lo denunciara.
+    subscribe_in_browser() ahora compara la clave y la reemplaza si hace falta.
+  */
+  const subscription = await subscribe_in_browser(registration, clave_vapid)
 
   // POST idempotente por endpoint_hash: crea la fila si no está y refresca last_used_at si está.
   await api.post('/push/subscribe', subscription.toJSON())
@@ -223,22 +305,209 @@ export async function ensure_push_registration() {
 }
 
 /**
+ * Trae la clave pública VAPID del backend, ya validada.
+ *
+ * Va en su propio paso (PUSH_STEPS.VAPID) y no adentro del try de la suscripción: que se caiga la
+ * red, que la sesión esté vencida o que el servidor no tenga la clave cargada son problemas del
+ * servidor, y reportarlos como "el navegador no pudo crear la suscripción" manda a buscar el
+ * problema al lado equivocado.
+ *
+ * @returns {Promise<string>}
+ */
+async function traer_clave_vapid() {
+  let data
+  try {
+    const respuesta = await api.get('/push/vapid-public-key')
+    data = respuesta.data
+  } catch (e) {
+    const error = new PushRegistrationError(
+      PUSH_STEPS.VAPID,
+      'No se pudo pedirle al servidor la clave de notificaciones.',
+      e
+    )
+    /* El servidor no contestó: puede ser el servidor, pero también el teléfono sin red o en un
+       WiFi cautivo. No se puede afirmar de quién es la culpa, así que no se afirma. */
+    error.vapid_reason = 'sin_respuesta'
+    throw error
+  }
+
+  const clave = data && data.public_key ? String(data.public_key).trim() : ''
+  if (!clave) {
+    /*
+      El servidor contestó bien pero sin clave: VAPID_PUBLIC_KEY vacía en el .env. Sin este guard,
+      url_base64_to_uint8array() revienta con un TypeError adentro del try de la suscripción y el
+      usuario termina leyendo que su navegador no puede suscribirse -- cuando el navegador nunca
+      llegó a intentarlo.
+    */
+    const error = new PushRegistrationError(
+      PUSH_STEPS.VAPID,
+      'El servidor no tiene configurada la clave de notificaciones push (VAPID).'
+    )
+    /* Acá sí se sabe: el servidor contestó 200 y vino sin clave. No es el teléfono. */
+    error.vapid_reason = 'clave_vacia'
+    throw error
+  }
+  return clave
+}
+
+/**
  * Crea la suscripción del navegador contra el push service, con la clave VAPID del backend.
  *
+ * Regla de oro: **nunca se destruye una suscripción existente por las dudas.** Solo se da de baja
+ * cuando se sabe que la clave es otra, o cuando el propio navegador dice que estorba.
+ *
+ * POR QUÉ (no lo simplifiques a un subscribe() a secas ni a un unsubscribe() preventivo):
+ *
+ * - pushManager.subscribe() tira InvalidStateError si el device ya tiene una suscripción con otra
+ *   applicationServerKey, y lo tira SIEMPRE. Ese es el pozo del que "Reintentar registro" no salía
+ *   nunca en el iPhone de Lucas: cada intento repetía el mismo error.
+ * - Pero dar de baja la vieja ANTES de saber si hace falta es peor. Si después subscribe() falla
+ *   (el push service caído, sin red), el device queda sin ninguna suscripción: se rompió algo que
+ *   funcionaba. Y como esto también corre solo en cada arranque, un navegador que no exponga
+ *   `options` haría que se destruya y recree la suscripción en cada boot, dejando una fila muerta
+ *   por vez en el backend y una ventana sin notificaciones cada vez.
+ *
  * @param {ServiceWorkerRegistration} [registration] Registro ya resuelto, para no volver a esperarlo.
+ * @param {string} clave_vapid Clave pública VAPID ya validada.
  * @returns {Promise<PushSubscription>}
  */
-async function subscribe_in_browser(registration) {
+async function subscribe_in_browser(registration, clave_vapid) {
   // Service Worker ya registrado y activo (lo registra vite-plugin-pwa).
   const sw_registration = registration || (await navigator.serviceWorker.ready)
+  const clave = url_base64_to_uint8array(clave_vapid)
+  const pedido = { userVisibleOnly: true, applicationServerKey: clave }
 
-  // Clave pública VAPID que el backend usa para firmar las notificaciones de este servidor.
-  const { data } = await api.get('/push/vapid-public-key')
+  const existente = await sw_registration.pushManager.getSubscription()
+  if (existente) {
+    const veredicto = misma_clave(existente, clave)
 
-  return sw_registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: url_base64_to_uint8array(data.public_key),
-  })
+    if (veredicto === true) {
+      /* Sirve tal cual: no se molesta al push service al pedo. */
+      return existente
+    }
+
+    if (veredicto === null) {
+      /*
+        El navegador no expone con qué clave se creó, así que NO se sabe si sirve. Se intenta
+        suscribir sin tocar nada: por especificación, si la clave coincide subscribe() devuelve la
+        misma suscripción sin tirar. Solo si el navegador se queja por conflicto de clave se pasa a
+        reemplazarla -- que es cuando ya está confirmado que estorba.
+      */
+      try {
+        return await sw_registration.pushManager.subscribe(pedido)
+      } catch (e) {
+        if (!es_conflicto_de_clave(e)) {
+          throw e
+        }
+      }
+    }
+
+    await dar_de_baja(existente)
+  }
+
+  return sw_registration.pushManager.subscribe(pedido)
+}
+
+/**
+ * ¿Este error del navegador dice que ya hay una suscripción con otra clave?
+ *
+ * Se mira el nombre y, además, el texto: el nombre está en la especificación, pero cada navegador
+ * redacta el mensaje a su manera y no todos usan el mismo `name`.
+ *
+ * @param {*} error
+ * @returns {boolean}
+ */
+function es_conflicto_de_clave(error) {
+  if (!error) {
+    return false
+  }
+  /*
+    Deliberadamente estricto: solo el nombre que fija la especificación, o un mensaje que nombre
+    la propia applicationServerKey.
+
+    La tentación es aflojarlo con textos como "already exists" o "different key" por si algún
+    navegador redacta distinto. No se hace: dar un falso positivo acá significa dar de baja una
+    suscripción que funcionaba, que es exactamente lo que esta función existe para evitar. Un falso
+    negativo, en cambio, solo deja el error a la vista del usuario -- molesto, pero no destruye
+    nada. Ante la duda, el error se muestra; no se rompe.
+  */
+  if (error.name === 'InvalidStateError') {
+    return true
+  }
+  return /applicationServerKey/i.test(String(error.message || ''))
+}
+
+/**
+ * Da de baja una suscripción que ya no sirve, avisándole primero al backend.
+ *
+ * El orden importa y es el mismo que usa disable_push_notifications(): se borra la fila del
+ * servidor ANTES de desuscribir en el navegador, porque después de desuscribir el endpoint se
+ * pierde y la fila queda huérfana apuntando a un destino muerto para siempre.
+ *
+ * Ninguno de los dos pasos frena el registro si falla: son limpieza, no el objetivo.
+ *
+ * @param {PushSubscription} subscription
+ * @returns {Promise<void>}
+ */
+async function dar_de_baja(subscription) {
+  try {
+    await api.post('/push/unsubscribe', { endpoint: subscription.endpoint })
+  } catch (e) {
+    console.warn('[push] no se pudo borrar del servidor la suscripción vieja', e)
+  }
+  try {
+    await subscription.unsubscribe()
+  } catch (e) {
+    /* Se registra el motivo: si después subscribe() entra en el bucle de InvalidStateError,
+       este es justo el dato que explica por qué. */
+    console.warn('[push] no se pudo dar de baja la suscripción vieja en el navegador', e)
+  }
+}
+
+/**
+ * ¿La suscripción existente fue creada con esta misma clave VAPID?
+ *
+ * Devuelve **tres** valores a propósito, no dos:
+ *   true  -> es la misma clave
+ *   false -> es otra clave
+ *   null  -> el navegador no lo dice, no se puede saber
+ *
+ * El `null` no es un detalle: juntarlo con `false` fue el bug que encontró la verificación. Un
+ * navegador que no exponga `options.applicationServerKey` haría que el mantenimiento del arranque
+ * diera "clave distinta" en cada boot y destruyera la suscripción una y otra vez.
+ *
+ * @param {PushSubscription} subscription
+ * @param {Uint8Array} clave
+ * @returns {boolean|null}
+ */
+function misma_clave(subscription, clave) {
+  const opciones = subscription.options
+  if (!opciones || !opciones.applicationServerKey) {
+    return null
+  }
+  const cruda = opciones.applicationServerKey
+  /*
+    Por especificación es un ArrayBuffer, pero si algún navegador devolviera otra cosa --un string
+    base64, por ejemplo-- `new Uint8Array(string)` da longitud 0, la comparación diría "otra clave"
+    y se destruiría una suscripción que servía. Ante un tipo que no se entiende, el valor honesto
+    es "no se puede saber", igual que cuando no viene nada.
+  */
+  const es_buffer =
+    (typeof ArrayBuffer !== 'undefined' && cruda instanceof ArrayBuffer) ||
+    ArrayBuffer.isView(cruda)
+  if (!es_buffer) {
+    return null
+  }
+  const actual = new Uint8Array(ArrayBuffer.isView(cruda) ? cruda.buffer : cruda)
+  if (actual.length !== clave.length) {
+    return false
+  }
+  for (let i = 0; i < actual.length; i++) {
+    if (actual[i] !== clave[i]) {
+      return false
+    }
+  }
+  return true
 }
 
 /**
