@@ -13,10 +13,20 @@
       Verificando el estado de las notificaciones…
     </div>
 
-    <!-- El navegador no soporta Web Push (navegador viejo o contexto inseguro/HTTP). -->
+    <!-- El navegador no soporta Web Push (navegador viejo o contexto inseguro/HTTP).
+         El consejo depende de si la app YA está instalada: mandar a instalarla a alguien que la
+         tiene en la pantalla de inicio es el mismo error que este trabajo vino a corregir. -->
     <div v-else-if="state === 'unsupported'" class="alert alert-secondary small mb-0">
-      Este navegador no soporta notificaciones push. Probá instalando la app como PWA o usando
-      un navegador actualizado sobre HTTPS.
+      <template v-if="installed_app">
+        Este navegador no soporta notificaciones push, aun con la app instalada. Suele pasar con
+        versiones viejas de iOS: hacen falta iOS 16.4 o superior. Fijate si tenés actualizaciones
+        pendientes.
+      </template>
+      <template v-else>
+        Este navegador no soporta notificaciones push. En el teléfono hace falta agregar la app a
+        la pantalla de inicio y abrirla desde ahí; en la computadora, un navegador actualizado
+        sobre HTTPS.
+      </template>
     </div>
 
     <template v-else>
@@ -95,6 +105,8 @@ import {
   enable_push_notifications,
   disable_push_notifications,
   push_registration_status,
+  push_permission_status,
+  running_as_installed_app,
   PUSH_STEPS,
 } from '@/utils/push_notifications'
 
@@ -117,6 +129,8 @@ export default {
       state: 'default',
       /** Permiso del navegador tal cual, para que los carteles no lo adivinen. */
       permission: 'default',
+      /** ¿La app corre instalada? Comprobado, no supuesto. */
+      installed_app: false,
       /** true mientras se consulta el estado real al montar o después de una acción. */
       loading: true,
       /** Indica una operación de suscripción/desuscripción en curso. */
@@ -130,6 +144,8 @@ export default {
     }
   },
   mounted() {
+    // Se comprueba de verdad si corre instalada, en vez de suponerlo en los carteles.
+    this.installed_app = running_as_installed_app()
     // Consulta el estado real para decidir qué control mostrar.
     this.refresh_state()
   },
@@ -204,6 +220,15 @@ export default {
             self.success_message = ''
             self.error_message = 'El registro no quedó confirmado por el servidor. Probá de nuevo.'
           }
+          /*
+            Con el permiso bloqueado, el template ya muestra su propio bloque explicando qué hacer.
+            Dejar además el cartel de error del intento deja DOS textos distintos en pantalla al
+            mismo tiempo, y el de arriba quedó viejo apenas el usuario contestó el diálogo.
+          */
+          if (self.state === 'denied') {
+            self.error_message = ''
+            self.error_detail = ''
+          }
           self.working = false
         })
     },
@@ -231,8 +256,17 @@ export default {
         return 'Este navegador no soporta notificaciones push.'
       }
       if (step === PUSH_STEPS.PERMISSION) {
-        /* 'denied' y 'default' son cosas distintas: en 'default' no hay nada que ir a habilitar. */
-        if (this.permission === 'denied') {
+        /*
+          Se lee el permiso VIVO del navegador, no this.permission.
+
+          this.permission es lo que dejó el último refresh_state(), o sea el valor de ANTES de que
+          el usuario contestara el diálogo. Si venía en 'default' y el usuario acaba de tocar "No
+          permitir", el cacheado sigue diciendo 'default' y el cartel le pediría tocar el botón de
+          nuevo y aceptar -- pero con el permiso ya en 'denied' ese botón no muestra ningún diálogo.
+          Otra instrucción imposible de cumplir, que es la falla exacta que este trabajo vino a
+          matar. 'denied' y 'default' son cosas distintas: en 'default' no hay nada que habilitar.
+        */
+        if (push_permission_status() === 'denied') {
           return 'No se activaron: bloqueaste las notificaciones para este sitio. ' +
             'Habilitalas desde la configuración del navegador y volvé a entrar.'
         }

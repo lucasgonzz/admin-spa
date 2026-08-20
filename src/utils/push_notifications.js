@@ -485,7 +485,20 @@ function misma_clave(subscription, clave) {
   if (!opciones || !opciones.applicationServerKey) {
     return null
   }
-  const actual = new Uint8Array(opciones.applicationServerKey)
+  const cruda = opciones.applicationServerKey
+  /*
+    Por especificación es un ArrayBuffer, pero si algún navegador devolviera otra cosa --un string
+    base64, por ejemplo-- `new Uint8Array(string)` da longitud 0, la comparación diría "otra clave"
+    y se destruiría una suscripción que servía. Ante un tipo que no se entiende, el valor honesto
+    es "no se puede saber", igual que cuando no viene nada.
+  */
+  const es_buffer =
+    (typeof ArrayBuffer !== 'undefined' && cruda instanceof ArrayBuffer) ||
+    ArrayBuffer.isView(cruda)
+  if (!es_buffer) {
+    return null
+  }
+  const actual = new Uint8Array(ArrayBuffer.isView(cruda) ? cruda.buffer : cruda)
   if (actual.length !== clave.length) {
     return false
   }

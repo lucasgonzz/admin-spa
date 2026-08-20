@@ -50,22 +50,38 @@ function cargar_modulo(entorno) {
 const CLAVE_A = 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U'
 const CLAVE_B = 'BAyxvQK2eTgWfCa1i1PxdQZFsAeIWm3xCLxlJoJ8x9GmS4YgOe0AGVvOOtjqCBGa9lOF9zBk5XhkuJ0Fd1KfE7w'
 
+/** Traduce el Uint8Array del pedido de vuelta al texto de la clave, para comparar. */
+function clave_del_pedido(config) {
+  const bytes = new Uint8Array(config.applicationServerKey)
+  const texto = Buffer.from(bytes).toString('base64')
+  return texto.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
 function base64_a_bytes(texto) {
   const relleno = '='.repeat((4 - (texto.length % 4)) % 4)
   const base64 = (texto + relleno).replace(/-/g, '+').replace(/_/g, '/')
   return new Uint8Array(Buffer.from(base64, 'base64'))
 }
 
-/** PushSubscription simulada. */
+/**
+ * PushSubscription simulada.
+ *
+ * `_clave_real` guarda con qué clave se creó **aunque `options` no la exponga**: un navegador
+ * siempre lo sabe internamente, aunque no se lo cuente a la página. Sin eso, la simulación no
+ * puede reproducir el comportamiento que fija la especificación —subscribe() con la misma clave
+ * devuelve la MISMA suscripción— y las pruebas terminan midiendo el mock en vez del código.
+ */
 function suscripcion_falsa(endpoint, clave_texto, registro) {
   return {
     endpoint: endpoint,
+    _clave_real: clave_texto,
     options: clave_texto === null ? {} : { applicationServerKey: base64_a_bytes(clave_texto).buffer },
     toJSON: function () {
       return { endpoint: endpoint, keys: { p256dh: 'p256dh-' + endpoint, auth: 'auth-' + endpoint } }
     },
     unsubscribe: function () {
       registro.bajas.push(endpoint)
+      if (registro.al_dar_de_baja) { registro.al_dar_de_baja(endpoint) }
       return Promise.resolve(true)
     },
   }
@@ -99,6 +115,11 @@ function armar_entorno(opciones) {
     actual.options = undefined
   }
 
+  /* Al dar de baja, el device queda sin suscripción -- como en un navegador de verdad. */
+  registro.al_dar_de_baja = function (endpoint) {
+    if (actual && actual.endpoint === endpoint) { actual = null }
+  }
+
   const push_manager = {
     getSubscription: function () {
       return Promise.resolve(actual)
@@ -111,12 +132,33 @@ function armar_entorno(opciones) {
           return Promise.reject(opciones.subscribe_tira)
         }
       }
-      const nueva = suscripcion_falsa('https://push.apple.com/nuevo-' + registro.subscribe_llamadas.length, null, registro)
+      /*
+        Como un navegador de verdad: si ya hay una suscripción creada con ESTA misma clave,
+        subscribe() devuelve esa misma, sin crear nada nuevo (Push API, §subscribe). Solo si la
+        clave es otra hay conflicto.
+      */
+      const clave_pedida = clave_del_pedido(config)
+      if (actual) {
+        if (actual._clave_real === clave_pedida) {
+          return Promise.resolve(actual)
+        }
+        const conflicto = new Error(
+          'A subscription with a different applicationServerKey already exists'
+        )
+        conflicto.name = 'InvalidStateError'
+        return Promise.reject(conflicto)
+      }
+
+      const nueva = suscripcion_falsa(
+        'https://push.apple.com/nuevo-' + registro.subscribe_llamadas.length,
+        clave_pedida,
+        registro
+      )
       /* Un navegador que no expone `options` es el caso peligroso: la suscripción nueva tampoco
          lo expone, así que el arranque siguiente vuelve a no poder saber con qué clave se creó. */
-      nueva.options = opciones.sin_options
-        ? undefined
-        : { applicationServerKey: config.applicationServerKey.buffer }
+      if (opciones.sin_options) {
+        nueva.options = undefined
+      }
       actual = nueva
       return Promise.resolve(nueva)
     },
@@ -395,6 +437,14 @@ async function correr() {
       e.registro.bajas.length + ' bajas')
     comprobar('cinco subscribe (uno por arranque), no diez',
       e.registro.subscribe_llamadas.length === 5, e.registro.subscribe_llamadas.length + ' llamadas')
+    /* Lo que de verdad importa: que el backend reciba SIEMPRE el mismo endpoint. Contar bajas no
+       alcanza -- si cada arranque creara una suscripción nueva, serían cinco filas en la base. */
+    const endpoints = e.registro.posts
+      .filter(function (x) { return x.ruta === '/push/subscribe' })
+      .map(function (x) { return x.cuerpo.endpoint })
+    const unicos = endpoints.filter(function (v, i, a) { return a.indexOf(v) === i })
+    comprobar('los cinco POST mandaron el MISMO endpoint (una sola fila en la base)',
+      endpoints.length === 5 && unicos.length === 1, JSON.stringify(unicos))
   }
 
   console.log('\n14. si el navegador confirma el conflicto de clave, RECIÉN ahí se reemplaza')
@@ -477,6 +527,10 @@ async function correr() {
       e.modulo.misma_clave(s_sin, clave_a) === null)
     comprobar('sin options del todo: null, no false',
       e.modulo.misma_clave({}, clave_a) === null)
+    /* Fuera de spec, pero el valor honesto sigue siendo "no se puede saber": tratarlo como "otra
+       clave" destruiría una suscripción que servía. */
+    comprobar('applicationServerKey de un tipo inesperado: null, no false',
+      e.modulo.misma_clave({ options: { applicationServerKey: CLAVE_A } }, clave_a) === null)
   }
 
   console.log('\n' + (mal === 0 ? 'TODO VERDE' : 'HAY ' + mal + ' EN ROJO') +
