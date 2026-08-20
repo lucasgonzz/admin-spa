@@ -137,6 +137,66 @@
         </div>
       </div>
     </div>
+
+    <!--
+      Certificados de AFIP. No son solo los de ComercioCity: son los que se instalan en el
+      servidor de cada cliente cuando se instala o se actualiza su sistema, así que si acá
+      falta alguno, hay clientes que no pueden facturar.
+    -->
+    <div v-if="!loading && !load_error" class="card mt-4">
+      <div class="card-body">
+        <h3 class="h6 fw-semibold mb-1">Certificados de AFIP</h3>
+        <p class="form-text mt-0 mb-3">
+          Son los mismos que usa ComercioCity para facturar sus mensualidades. Se instalan solos en el
+          servidor de cada cliente al instalar o actualizar su sistema, y nunca pisan uno que el cliente
+          ya tenga. Se guardan fuera del directorio público: no son descargables por web.
+        </p>
+
+        <div v-if="cargando_certificados" class="text-muted small py-2">
+          Cargando estado de los certificados...
+        </div>
+
+        <div v-else>
+          <div v-if="faltan_certificados" class="alert alert-warning py-2 small">
+            Falta cargar {{ cantidad_faltantes }} de 4. Mientras tanto, las instalaciones nuevas van a
+            fallar en la verificación final y los clientes que actualicen no van a recibirlos.
+          </div>
+
+          <div v-for="certificado in certificados" :key="certificado.clave" class="border rounded p-3 mb-2">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+              <div>
+                <div class="fw-semibold small">{{ certificado.etiqueta }}</div>
+                <code class="text-muted" style="font-size: 0.75rem">{{ certificado.destino }}</code>
+              </div>
+              <span class="badge" :class="certificado.cargado ? 'bg-success' : 'bg-danger'">
+                {{ certificado.cargado ? 'Cargado' : 'Falta' }}
+              </span>
+            </div>
+
+            <div v-if="certificado.cargado" class="text-muted mt-1" style="font-size: 0.75rem">
+              {{ certificado.bytes }} bytes · actualizado el {{ formato_fecha(certificado.modificado_at) }}
+            </div>
+
+            <input
+              type="file"
+              class="form-control form-control-sm mt-2"
+              @change="on_certificado_file_change(certificado.clave, $event)"
+            />
+          </div>
+
+          <div class="d-flex justify-content-end mt-3">
+            <button
+              type="button"
+              class="btn btn-outline-secondary btn-sm"
+              :disabled="subiendo_certificados || !hay_certificados_elegidos"
+              @click="upload_certificados"
+            >
+              {{ subiendo_certificados ? 'Subiendo...' : 'Subir certificados' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -190,6 +250,22 @@ export default {
 
       /** true si el <img> del preview de logo falló al cargar (ni el logo default existe). */
       logo_load_error: false,
+
+      /**
+       * Estado de los cuatro certificados de AFIP en el servidor del admin, tal como lo devuelve
+       * GET /comerciocity-afip-config/certificados: clave, etiqueta, destino, cargado, bytes,
+       * modificado_at.
+       */
+      certificados: [],
+
+      /** true mientras se consulta el estado de los certificados. */
+      cargando_certificados: false,
+
+      /** Archivos elegidos pendientes de subir, por clave ({ cert_production: File, ... }). */
+      certificados_elegidos: {},
+
+      /** true mientras se suben los certificados elegidos. */
+      subiendo_certificados: false,
     }
   },
 
@@ -206,10 +282,40 @@ export default {
       const path = this.form.logo_path || '/afip/logo.jpg'
       return admin_api_origin() + path + '?v=' + (this.logo_updated_at || '')
     },
+
+    /**
+     * Cantidad de certificados que todavía no están cargados en el servidor del admin.
+     *
+     * @returns {number}
+     */
+    cantidad_faltantes() {
+      return this.certificados.filter(function (certificado) {
+        return !certificado.cargado
+      }).length
+    },
+
+    /**
+     * true si falta cargar al menos uno de los cuatro.
+     *
+     * @returns {boolean}
+     */
+    faltan_certificados() {
+      return this.cantidad_faltantes > 0
+    },
+
+    /**
+     * true si hay al menos un archivo elegido pendiente de subir.
+     *
+     * @returns {boolean}
+     */
+    hay_certificados_elegidos() {
+      return Object.keys(this.certificados_elegidos).length > 0
+    },
   },
 
   mounted() {
     this.load_config()
+    this.load_certificados()
   },
 
   methods: {
@@ -338,6 +444,138 @@ export default {
         window.dispatchEvent(new CustomEvent('admin-spa-toast', {
           detail: { message: 'No se pudo subir el logo.', variant: 'danger' },
         }))
+      })
+    },
+
+    /**
+     * Trae el estado de los cuatro certificados de AFIP desde el backend.
+     *
+     * @returns {void}
+     */
+    load_certificados() {
+      const self = this
+      self.cargando_certificados = true
+
+      api.get('/comerciocity-afip-config/certificados').then(function (res) {
+        self.certificados = (res.data && res.data.archivos) || []
+        self.cargando_certificados = false
+      }).catch(function () {
+        self.certificados = []
+        self.cargando_certificados = false
+
+        window.dispatchEvent(new CustomEvent('admin-spa-toast', {
+          detail: { message: 'No se pudo leer el estado de los certificados de AFIP.', variant: 'danger' },
+        }))
+      })
+    },
+
+    /**
+     * Handler del input de archivo de un certificado: lo deja pendiente de subir bajo su clave.
+     * Si el usuario cancela el selector, saca la clave de los pendientes.
+     *
+     * @param {string} clave - Clave del certificado (cert_production, key_production, ...).
+     * @param {Event} event - Evento `change` del `<input type="file">`.
+     * @returns {void}
+     */
+    on_certificado_file_change(clave, event) {
+      /** Archivo elegido por el usuario (undefined si canceló el selector). */
+      const selected_file = event.target.files && event.target.files[0]
+
+      if (selected_file) {
+        this.certificados_elegidos[clave] = selected_file
+      } else {
+        delete this.certificados_elegidos[clave]
+      }
+    },
+
+    /**
+     * Sube todos los certificados elegidos en un solo POST multipart. El backend acepta de a uno
+     * o los cuatro juntos, y devuelve el estado actualizado para refrescar la lista sin recargar.
+     *
+     * @returns {void}
+     */
+    upload_certificados() {
+      if (!this.hay_certificados_elegidos) {
+        return
+      }
+
+      const self = this
+      self.subiendo_certificados = true
+
+      /** FormData con cada archivo bajo su clave, tal como espera el backend. */
+      const form_data = new FormData()
+      Object.keys(self.certificados_elegidos).forEach(function (clave) {
+        form_data.append(clave, self.certificados_elegidos[clave])
+      })
+
+      api.post('/comerciocity-afip-config/certificados', form_data, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }).then(function (res) {
+        self.certificados = (res.data && res.data.archivos) || self.certificados
+        self.certificados_elegidos = {}
+        self.subiendo_certificados = false
+        self.limpiar_inputs_de_certificados()
+
+        window.dispatchEvent(new CustomEvent('admin-spa-toast', {
+          detail: { message: 'Certificados de AFIP actualizados.', variant: 'success' },
+        }))
+      }).catch(function (error) {
+        self.subiendo_certificados = false
+
+        /* El backend devuelve 422 con `rechazados` cuando un archivo no tiene forma de PEM: ese
+           detalle es el que le sirve al usuario para saber qué archivo eligió mal. */
+        const data = (error.response && error.response.data) || {}
+        if (data.archivos) {
+          self.certificados = data.archivos
+        }
+
+        const rechazados = data.rechazados || {}
+        const claves_rechazadas = Object.keys(rechazados)
+        const mensaje = claves_rechazadas.length > 0
+          ? 'No se guardaron: ' + claves_rechazadas.join(', ') + '. ' + rechazados[claves_rechazadas[0]]
+          : 'No se pudieron subir los certificados de AFIP.'
+
+        window.dispatchEvent(new CustomEvent('admin-spa-toast', {
+          detail: { message: mensaje, variant: 'danger' },
+        }))
+      })
+    },
+
+    /**
+     * Vacía los `<input type="file">` de los certificados después de una subida, para que no
+     * quede el nombre del archivo viejo colgado en pantalla.
+     *
+     * @returns {void}
+     */
+    limpiar_inputs_de_certificados() {
+      const inputs = this.$el ? this.$el.querySelectorAll('input[type="file"]') : []
+      inputs.forEach(function (input) {
+        input.value = ''
+      })
+    },
+
+    /**
+     * Formatea una fecha ISO a dd/mm/aaaa hh:mm para mostrarla en la lista de certificados.
+     *
+     * @param {string|null} iso - Fecha en formato ISO 8601.
+     * @returns {string}
+     */
+    formato_fecha(iso) {
+      if (!iso) {
+        return ''
+      }
+
+      const fecha = new Date(iso)
+      if (isNaN(fecha.getTime())) {
+        return ''
+      }
+
+      return fecha.toLocaleString('es-AR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
       })
     },
   },
