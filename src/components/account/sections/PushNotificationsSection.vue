@@ -95,7 +95,6 @@ import {
   enable_push_notifications,
   disable_push_notifications,
   push_registration_status,
-  running_as_installed_app,
   PUSH_STEPS,
 } from '@/utils/push_notifications'
 
@@ -116,6 +115,8 @@ export default {
     return {
       /** Estado real: 'unsupported' | 'denied' | 'default' | 'registered' | 'not_registered'. */
       state: 'default',
+      /** Permiso del navegador tal cual, para que los carteles no lo adivinen. */
+      permission: 'default',
       /** true mientras se consulta el estado real al montar o después de una acción. */
       loading: true,
       /** Indica una operación de suscripción/desuscripción en curso. */
@@ -144,6 +145,7 @@ export default {
       return push_registration_status()
         .then(function (status) {
           self.state = status.state
+          self.permission = status.permission
         })
         .catch(function () {
           // Si ni siquiera se pudo determinar el estado, mostrar el caso de atención:
@@ -215,28 +217,37 @@ export default {
     message_for_error(error) {
       var step = error && error.step ? error.step : ''
 
+      /*
+        🔴 Regla de esta función, y el motivo por el que existe este comentario: un cartel no puede
+        afirmar una causa que no se comprobó.
+
+        Acá vivía "En iPhone hace falta tener la app instalada como PWA", fija para cualquier fallo
+        de suscripción. Se le mostró a Lucas teniéndola en la pantalla de inicio del iPhone: lo
+        mandó a resolver algo que ya estaba hecho y tapó el problema real todo ese tiempo. Peor
+        todavía, en iOS ese caso es imposible: sin la app instalada no existe window.PushManager,
+        así que ni siquiera se llega a esta pantalla. El cartel era imposible de ser cierto.
+      */
       if (step === PUSH_STEPS.UNSUPPORTED) {
         return 'Este navegador no soporta notificaciones push.'
       }
       if (step === PUSH_STEPS.PERMISSION) {
-        return 'No se activaron: falta el permiso de notificaciones del navegador. ' +
-          'Si lo rechazaste, habilitalo desde la configuración del sitio y recargá.'
+        /* 'denied' y 'default' son cosas distintas: en 'default' no hay nada que ir a habilitar. */
+        if (this.permission === 'denied') {
+          return 'No se activaron: bloqueaste las notificaciones para este sitio. ' +
+            'Habilitalas desde la configuración del navegador y volvé a entrar.'
+        }
+        return 'No se activaron: falta el permiso de notificaciones. ' +
+          'Tocá el botón de nuevo y aceptá el pedido del navegador.'
       }
       if (step === PUSH_STEPS.VAPID) {
-        return error.message + ' No es un problema de tu teléfono: avisale al equipo de sistemas.'
+        /* Dos causas bien distintas: que el servidor no tenga la clave, o que no haya contestado. */
+        if (error.vapid_reason === 'clave_vacia') {
+          return error.message + ' No es un problema de tu teléfono: avisale al equipo de sistemas.'
+        }
+        return 'No se pudo pedirle al servidor la clave de notificaciones. ' +
+          'Puede ser tu conexión o el servidor; probá de nuevo con buena señal.'
       }
       if (step === PUSH_STEPS.SUBSCRIPTION) {
-        /*
-          Acá vivía el cartel que mandaba a instalar la PWA SIN HABER COMPROBADO si ya estaba
-          instalada. Se le mostró a Lucas teniéndola en la pantalla de inicio del iPhone: lo mandó
-          a resolver algo que ya estaba hecho, y tapó el problema real durante todo ese tiempo.
-          Ahora la app lo comprueba, y solo lo dice cuando de verdad falta.
-        */
-        if (!running_as_installed_app()) {
-          return 'El navegador no pudo crear la suscripción de este dispositivo. ' +
-            'En iPhone hace falta abrir la app instalada desde la pantalla de inicio, ' +
-            'no desde el navegador.'
-        }
         return 'El navegador rechazó la suscripción de este dispositivo. ' +
           'Probá de nuevo; si vuelve a fallar, abrí el detalle técnico y pasáselo al equipo.'
       }

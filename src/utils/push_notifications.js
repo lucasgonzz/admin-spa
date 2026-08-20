@@ -320,11 +320,15 @@ async function traer_clave_vapid() {
     const respuesta = await api.get('/push/vapid-public-key')
     data = respuesta.data
   } catch (e) {
-    throw new PushRegistrationError(
+    const error = new PushRegistrationError(
       PUSH_STEPS.VAPID,
       'No se pudo pedirle al servidor la clave de notificaciones.',
       e
     )
+    /* El servidor no contestó: puede ser el servidor, pero también el teléfono sin red o en un
+       WiFi cautivo. No se puede afirmar de quién es la culpa, así que no se afirma. */
+    error.vapid_reason = 'sin_respuesta'
+    throw error
   }
 
   const clave = data && data.public_key ? String(data.public_key).trim() : ''
@@ -335,10 +339,13 @@ async function traer_clave_vapid() {
       usuario termina leyendo que su navegador no puede suscribirse -- cuando el navegador nunca
       llegó a intentarlo.
     */
-    throw new PushRegistrationError(
+    const error = new PushRegistrationError(
       PUSH_STEPS.VAPID,
       'El servidor no tiene configurada la clave de notificaciones push (VAPID).'
     )
+    /* Acá sí se sabe: el servidor contestó 200 y vino sin clave. No es el teléfono. */
+    error.vapid_reason = 'clave_vacia'
+    throw error
   }
   return clave
 }
@@ -346,13 +353,19 @@ async function traer_clave_vapid() {
 /**
  * Crea la suscripción del navegador contra el push service, con la clave VAPID del backend.
  *
- * Si ya hay una suscripción en este device, se reusa cuando fue creada con la MISMA clave, y se
- * reemplaza cuando fue creada con otra.
+ * Regla de oro: **nunca se destruye una suscripción existente por las dudas.** Solo se da de baja
+ * cuando se sabe que la clave es otra, o cuando el propio navegador dice que estorba.
  *
- * POR QUÉ eso importa (no lo simplifiques a un subscribe() a secas): pushManager.subscribe() tira
- * InvalidStateError si el device ya tiene una suscripción con otra applicationServerKey. Y lo tira
- * SIEMPRE, así que el botón "Reintentar registro" no puede salir nunca de ese pozo por más veces
- * que se toque: cada intento repite el mismo error. Es el caso que reportó Lucas desde el iPhone.
+ * POR QUÉ (no lo simplifiques a un subscribe() a secas ni a un unsubscribe() preventivo):
+ *
+ * - pushManager.subscribe() tira InvalidStateError si el device ya tiene una suscripción con otra
+ *   applicationServerKey, y lo tira SIEMPRE. Ese es el pozo del que "Reintentar registro" no salía
+ *   nunca en el iPhone de Lucas: cada intento repetía el mismo error.
+ * - Pero dar de baja la vieja ANTES de saber si hace falta es peor. Si después subscribe() falla
+ *   (el push service caído, sin red), el device queda sin ninguna suscripción: se rompió algo que
+ *   funcionaba. Y como esto también corre solo en cada arranque, un navegador que no exponga
+ *   `options` haría que se destruya y recree la suscripción en cada boot, dejando una fila muerta
+ *   por vez en el backend y una ventana sin notificaciones cada vez.
  *
  * @param {ServiceWorkerRegistration} [registration] Registro ya resuelto, para no volver a esperarlo.
  * @param {string} clave_vapid Clave pública VAPID ya validada.
@@ -362,45 +375,106 @@ async function subscribe_in_browser(registration, clave_vapid) {
   // Service Worker ya registrado y activo (lo registra vite-plugin-pwa).
   const sw_registration = registration || (await navigator.serviceWorker.ready)
   const clave = url_base64_to_uint8array(clave_vapid)
+  const pedido = { userVisibleOnly: true, applicationServerKey: clave }
 
   const existente = await sw_registration.pushManager.getSubscription()
   if (existente) {
-    if (misma_clave(existente, clave)) {
-      /* Sirve tal cual: no se pide una nueva al push service al pedo. */
+    const veredicto = misma_clave(existente, clave)
+
+    if (veredicto === true) {
+      /* Sirve tal cual: no se molesta al push service al pedo. */
       return existente
     }
-    /*
-      Quedó de una clave VAPID anterior. Hay que darla de baja ANTES de suscribir: con la vieja
-      viva, subscribe() con la clave nueva tira InvalidStateError.
-    */
-    try {
-      await existente.unsubscribe()
-    } catch (e) {
-      /* Si no se deja dar de baja, igual se intenta suscribir: que hable el navegador. */
+
+    if (veredicto === null) {
+      /*
+        El navegador no expone con qué clave se creó, así que NO se sabe si sirve. Se intenta
+        suscribir sin tocar nada: por especificación, si la clave coincide subscribe() devuelve la
+        misma suscripción sin tirar. Solo si el navegador se queja por conflicto de clave se pasa a
+        reemplazarla -- que es cuando ya está confirmado que estorba.
+      */
+      try {
+        return await sw_registration.pushManager.subscribe(pedido)
+      } catch (e) {
+        if (!es_conflicto_de_clave(e)) {
+          throw e
+        }
+      }
     }
+
+    await dar_de_baja(existente)
   }
 
-  return sw_registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: clave,
-  })
+  return sw_registration.pushManager.subscribe(pedido)
+}
+
+/**
+ * ¿Este error del navegador dice que ya hay una suscripción con otra clave?
+ *
+ * Se mira el nombre y, además, el texto: el nombre está en la especificación, pero cada navegador
+ * redacta el mensaje a su manera y no todos usan el mismo `name`.
+ *
+ * @param {*} error
+ * @returns {boolean}
+ */
+function es_conflicto_de_clave(error) {
+  if (!error) {
+    return false
+  }
+  if (error.name === 'InvalidStateError') {
+    return true
+  }
+  const texto = String(error.message || '')
+  return /applicationServerKey|different\s+key|already\s+exists/i.test(texto)
+}
+
+/**
+ * Da de baja una suscripción que ya no sirve, avisándole primero al backend.
+ *
+ * El orden importa y es el mismo que usa disable_push_notifications(): se borra la fila del
+ * servidor ANTES de desuscribir en el navegador, porque después de desuscribir el endpoint se
+ * pierde y la fila queda huérfana apuntando a un destino muerto para siempre.
+ *
+ * Ninguno de los dos pasos frena el registro si falla: son limpieza, no el objetivo.
+ *
+ * @param {PushSubscription} subscription
+ * @returns {Promise<void>}
+ */
+async function dar_de_baja(subscription) {
+  try {
+    await api.post('/push/unsubscribe', { endpoint: subscription.endpoint })
+  } catch (e) {
+    console.warn('[push] no se pudo borrar del servidor la suscripción vieja', e)
+  }
+  try {
+    await subscription.unsubscribe()
+  } catch (e) {
+    /* Se registra el motivo: si después subscribe() entra en el bucle de InvalidStateError,
+       este es justo el dato que explica por qué. */
+    console.warn('[push] no se pudo dar de baja la suscripción vieja en el navegador', e)
+  }
 }
 
 /**
  * ¿La suscripción existente fue creada con esta misma clave VAPID?
  *
- * `options.applicationServerKey` es un ArrayBuffer con la clave con la que se creó. Si el navegador
- * no expone `options` (soporte parcial), se devuelve false: reemplazarla de más cuesta una
- * suscripción nueva; darla por buena de más deja al usuario sin notificaciones y sin aviso.
+ * Devuelve **tres** valores a propósito, no dos:
+ *   true  -> es la misma clave
+ *   false -> es otra clave
+ *   null  -> el navegador no lo dice, no se puede saber
+ *
+ * El `null` no es un detalle: juntarlo con `false` fue el bug que encontró la verificación. Un
+ * navegador que no exponga `options.applicationServerKey` haría que el mantenimiento del arranque
+ * diera "clave distinta" en cada boot y destruyera la suscripción una y otra vez.
  *
  * @param {PushSubscription} subscription
  * @param {Uint8Array} clave
- * @returns {boolean}
+ * @returns {boolean|null}
  */
 function misma_clave(subscription, clave) {
   const opciones = subscription.options
   if (!opciones || !opciones.applicationServerKey) {
-    return false
+    return null
   }
   const actual = new Uint8Array(opciones.applicationServerKey)
   if (actual.length !== clave.length) {

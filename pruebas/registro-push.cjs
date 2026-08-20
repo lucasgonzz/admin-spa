@@ -95,6 +95,9 @@ function armar_entorno(opciones) {
   let actual = opciones.suscripcion_previa
     ? suscripcion_falsa(opciones.suscripcion_previa.endpoint, opciones.suscripcion_previa.clave, registro)
     : null
+  if (actual && opciones.sin_options) {
+    actual.options = undefined
+  }
 
   const push_manager = {
     getSubscription: function () {
@@ -103,10 +106,17 @@ function armar_entorno(opciones) {
     subscribe: function (config) {
       registro.subscribe_llamadas.push(config)
       if (opciones.subscribe_tira) {
-        return Promise.reject(opciones.subscribe_tira)
+        const solo_la_primera = opciones.subscribe_tira_solo_la_primera
+        if (!solo_la_primera || registro.subscribe_llamadas.length === 1) {
+          return Promise.reject(opciones.subscribe_tira)
+        }
       }
-      const nueva = suscripcion_falsa('https://push.apple.com/nuevo', null, registro)
-      nueva.options = { applicationServerKey: config.applicationServerKey.buffer }
+      const nueva = suscripcion_falsa('https://push.apple.com/nuevo-' + registro.subscribe_llamadas.length, null, registro)
+      /* Un navegador que no expone `options` es el caso peligroso: la suscripción nueva tampoco
+         lo expone, así que el arranque siguiente vuelve a no poder saber con qué clave se creó. */
+      nueva.options = opciones.sin_options
+        ? undefined
+        : { applicationServerKey: config.applicationServerKey.buffer }
       actual = nueva
       return Promise.resolve(nueva)
     },
@@ -154,8 +164,10 @@ function armar_entorno(opciones) {
     },
     navigator: navegador,
     matchMedia: function (consulta) {
-      const coincide =
-        opciones.instalada === 'display-mode' && consulta.indexOf('standalone') !== -1
+      /* `instalada` puede pedir un modo puntual: 'display-mode' (standalone), 'minimal-ui' o
+         'fullscreen'. Así se ejercen los tres del loop, no solo el primero. */
+      const modo = opciones.instalada === 'display-mode' ? 'standalone' : opciones.instalada
+      const coincide = !!modo && consulta.indexOf('(display-mode: ' + modo + ')') !== -1
       return { matches: coincide }
     },
   }
@@ -303,6 +315,10 @@ async function correr() {
       armar_entorno({ instalada: 'ios' }).modulo.running_as_installed_app() === true)
     comprobar('display-mode standalone: true',
       armar_entorno({ instalada: 'display-mode' }).modulo.running_as_installed_app() === true)
+    comprobar('display-mode minimal-ui: true',
+      armar_entorno({ instalada: 'minimal-ui' }).modulo.running_as_installed_app() === true)
+    comprobar('display-mode fullscreen: true',
+      armar_entorno({ instalada: 'fullscreen' }).modulo.running_as_installed_app() === true)
     comprobar('en el navegador comun: false',
       armar_entorno({ instalada: false }).modulo.running_as_installed_app() === false)
   }
@@ -324,9 +340,12 @@ async function correr() {
   console.log('\n11. el permiso se pide SIN esperar la red (activación del gesto en iOS)')
   {
     /*
-      En iOS, requestPermission() solo se concede adentro del gesto del usuario: un await de red
-      que se complete antes consume la activación y el diálogo no aparece nunca. Se prueba con una
-      clave VAPID que tarda: si el código la esperara, requestPermission() no se llamaría jamás.
+      Candado de regresión del ORDEN de las llamadas, no de la activación transitoria.
+
+      Esta prueba comprueba que requestPermission() se llame antes de que la clave VAPID llegue: si
+      alguien vuelve a poner un `await` delante, se pone en rojo. Lo que NO puede comprobar es la
+      activación del gesto en sí -- eso lo decide WebKit en el aparato y no hay forma de simularlo.
+      El riesgo real solo lo cierra una prueba en el iPhone.
     */
     const e = armar_entorno({ clave_lenta: true })
     const promesa = e.modulo.enable_push_notifications()
@@ -343,7 +362,81 @@ async function correr() {
       r.ok ? '' : String(r.error && r.error.message))
   }
 
-  console.log('\n12. misma_clave compara byte por byte')
+  console.log('\n12. navegador que NO expone options: no se destruye nada por las dudas')
+  {
+    /*
+      El bloqueante que encontró la verificación. Si "no se puede saber con qué clave se creó" se
+      trata igual que "es otra clave", el mantenimiento del arranque destruye y recrea la
+      suscripción en CADA boot: filas muertas acumulándose en el backend y una ventana sin
+      notificaciones cada vez.
+    */
+    const e = armar_entorno({
+      sin_options: true,
+      suscripcion_previa: { endpoint: 'https://push.apple.com/viejo', clave: CLAVE_A },
+    })
+    const r = await atrapar(e.modulo.enable_push_notifications())
+
+    comprobar('el registro sale bien', r.ok === true, r.ok ? '' : String(r.error && r.error.message))
+    comprobar('NO se dio de baja la suscripción existente', e.registro.bajas.length === 0,
+      JSON.stringify(e.registro.bajas))
+    comprobar('se intentó suscribir directamente', e.registro.subscribe_llamadas.length === 1)
+  }
+
+  console.log('\n13. cinco arranques seguidos con ese mismo navegador: sin churn')
+  {
+    const e = armar_entorno({
+      sin_options: true,
+      suscripcion_previa: { endpoint: 'https://push.apple.com/viejo', clave: CLAVE_A },
+    })
+    for (let i = 0; i < 5; i++) {
+      await atrapar(e.modulo.ensure_push_registration())
+    }
+    comprobar('cero suscripciones destruidas en cinco arranques', e.registro.bajas.length === 0,
+      e.registro.bajas.length + ' bajas')
+    comprobar('cinco subscribe (uno por arranque), no diez',
+      e.registro.subscribe_llamadas.length === 5, e.registro.subscribe_llamadas.length + ' llamadas')
+  }
+
+  console.log('\n14. si el navegador confirma el conflicto de clave, RECIÉN ahí se reemplaza')
+  {
+    const conflicto = new Error('A subscription with a different applicationServerKey already exists')
+    conflicto.name = 'InvalidStateError'
+    const e = armar_entorno({
+      sin_options: true,
+      suscripcion_previa: { endpoint: 'https://push.apple.com/viejo', clave: CLAVE_B },
+      subscribe_tira: conflicto,
+      subscribe_tira_solo_la_primera: true,
+    })
+    const r = await atrapar(e.modulo.enable_push_notifications())
+
+    comprobar('el registro termina bien', r.ok === true, r.ok ? '' : String(r.error && r.error.message))
+    comprobar('se intentó primero sin tocar nada, y se reintentó después',
+      e.registro.subscribe_llamadas.length === 2, e.registro.subscribe_llamadas.length + ' llamadas')
+    comprobar('se dio de baja la vieja recién en el segundo intento', e.registro.bajas.length === 1)
+    comprobar('se le avisó al backend de la baja',
+      e.registro.posts.filter(function (p) { return p.ruta === '/push/unsubscribe' }).length === 1)
+  }
+
+  console.log('\n15. si subscribe falla después de dar de baja, el backend no queda con basura')
+  {
+    const caido = new Error('Push service unavailable')
+    caido.name = 'AbortError'
+    const e = armar_entorno({
+      suscripcion_previa: { endpoint: 'https://push.apple.com/viejo', clave: CLAVE_B },
+      subscribe_tira: caido,
+    })
+    const r = await atrapar(e.modulo.enable_push_notifications())
+
+    comprobar('falla con paso SUBSCRIPTION', r.ok === false && r.error.step === 'subscription',
+      r.error ? r.error.step : '')
+    comprobar('la fila vieja del backend se borró y no quedó huérfana',
+      e.registro.posts.filter(function (p) { return p.ruta === '/push/unsubscribe' }).length === 1,
+      JSON.stringify(e.registro.posts.map(function (p) { return p.ruta })))
+    comprobar('el detalle técnico llega al usuario',
+      !!r.error && r.error.detail.indexOf('AbortError') === 0, r.error && r.error.detail)
+  }
+
+  console.log('\n16. misma_clave distingue "otra clave" de "no se puede saber"')
   {
     const e = armar_entorno({})
     const clave_a = e.modulo.url_base64_to_uint8array(CLAVE_A)
@@ -353,8 +446,10 @@ async function correr() {
 
     comprobar('misma clave: true', e.modulo.misma_clave(s_a, clave_a) === true)
     comprobar('otra clave: false', e.modulo.misma_clave(s_b, clave_a) === false)
-    comprobar('sin options.applicationServerKey: false (ante la duda, reemplazar)',
-      e.modulo.misma_clave(s_sin, clave_a) === false)
+    comprobar('options sin applicationServerKey: null, no false',
+      e.modulo.misma_clave(s_sin, clave_a) === null)
+    comprobar('sin options del todo: null, no false',
+      e.modulo.misma_clave({}, clave_a) === null)
   }
 
   console.log('\n' + (mal === 0 ? 'TODO VERDE' : 'HAY ' + mal + ' EN ROJO') +
