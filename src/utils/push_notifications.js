@@ -113,16 +113,23 @@ export async function enable_push_notifications() {
   }
 
   /*
-    La clave VAPID se trae PRIMERO, antes de pedir el permiso, por dos motivos.
+    🔴 El pedido de la clave VAPID se DISPARA acá pero NO se espera todavía. No lo conviertas en
+    un `await`: rompe la activación del gesto.
 
-    Uno: si el servidor no la tiene configurada, o el pedido falla, se corta acá con un error que
-    dice eso -- y no se le pide al usuario un permiso que no va a servir para nada.
+    En iOS, Notification.requestPermission() solo se concede si se llama adentro del gesto del
+    usuario. Cualquier `await` que se complete antes -- y un pedido de red es el peor caso --
+    consume la activación transitoria, y el diálogo de permiso deja de aparecer. Eso rompería
+    justamente el camino que hoy funciona: la primera activación, cuando el permiso todavía es
+    'default'.
 
-    Dos: Safari es estricto con la activación transitoria del gesto. Cuanto menos haya entre el
-    toque del usuario y el pushManager.subscribe(), menos chances de que el navegador lo rechace
-    por estar fuera del gesto. Antes este pedido de red estaba EN EL MEDIO de los dos.
+    Disparándolo sin esperar, el pedido viaja mientras el usuario decide el permiso, y para cuando
+    hace falta la clave ya llegó. Se paga un precio chico y consciente: si el servidor no tiene la
+    clave configurada, el permiso se pide igual antes de darse cuenta. Preferible a no poder
+    activar nunca las notificaciones en un iPhone.
   */
-  const clave_vapid = await traer_clave_vapid()
+  const promesa_clave = traer_clave_vapid()
+  /* Sin esto, si el permiso falla primero, la promesa queda como rechazo sin manejar. */
+  promesa_clave.catch(function () {})
 
   // Solicita el permiso nativo de notificaciones; si el usuario no lo otorga, abortamos.
   let permission
@@ -141,6 +148,9 @@ export async function enable_push_notifications() {
       'No diste el permiso de notificaciones en el navegador.'
     )
   }
+
+  // Recién ahora se espera la clave: ya viajó en paralelo con el diálogo del permiso.
+  const clave_vapid = await promesa_clave
 
   // Suscribe el navegador al push service y obtiene el endpoint + claves del device.
   let subscription

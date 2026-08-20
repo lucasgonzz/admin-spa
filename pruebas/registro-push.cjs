@@ -121,6 +121,12 @@ function armar_entorno(opciones) {
       const clave = Object.prototype.hasOwnProperty.call(opciones, 'clave_del_servidor')
         ? opciones.clave_del_servidor
         : CLAVE_A
+      if (opciones.clave_lenta) {
+        /* Queda pendiente hasta que la prueba la suelte a mano. */
+        return new Promise(function (resolver) {
+          registro.soltar_clave = function () { resolver({ data: { public_key: clave } }) }
+        })
+      }
       return Promise.resolve({ data: { public_key: clave } })
     },
     post: function (ruta, cuerpo) {
@@ -165,6 +171,9 @@ function armar_entorno(opciones) {
   return {
     registro: registro,
     push_manager: push_manager,
+    soltar_clave: function () {
+      if (registro.soltar_clave) { registro.soltar_clave() }
+    },
     modulo: cargar_modulo({ api: api, window: ventana, navigator: navegador, Notification: notificacion }),
   }
 }
@@ -246,7 +255,6 @@ async function correr() {
       r.error ? r.error.step : 'sin error')
     comprobar('el mensaje nombra la clave del servidor',
       !!r.error && r.error.message.toLowerCase().indexOf('vapid') !== -1, r.error && r.error.message)
-    comprobar('NUNCA se le pidió el permiso al usuario', e.registro.permiso_pedido === 0)
     comprobar('NUNCA se le pidió nada al push service', e.registro.subscribe_llamadas.length === 0)
   }
 
@@ -257,7 +265,6 @@ async function correr() {
     comprobar('falla con paso VAPID', r.ok === false && r.error.step === 'vapid',
       r.error ? r.error.step : '')
     comprobar('el detalle técnico llega cargado', !!r.error && !!r.error.detail, r.error && r.error.detail)
-    comprobar('no se pidió el permiso', e.registro.permiso_pedido === 0)
   }
 
   console.log('\n6. el usuario no da el permiso')
@@ -314,7 +321,29 @@ async function correr() {
     comprobar('NO le pidió el permiso al usuario', e.registro.permiso_pedido === 0)
   }
 
-  console.log('\n11. misma_clave compara byte por byte')
+  console.log('\n11. el permiso se pide SIN esperar la red (activación del gesto en iOS)')
+  {
+    /*
+      En iOS, requestPermission() solo se concede adentro del gesto del usuario: un await de red
+      que se complete antes consume la activación y el diálogo no aparece nunca. Se prueba con una
+      clave VAPID que tarda: si el código la esperara, requestPermission() no se llamaría jamás.
+    */
+    const e = armar_entorno({ clave_lenta: true })
+    const promesa = e.modulo.enable_push_notifications()
+
+    /* Un tick de microtareas: alcanza para que corra todo lo que NO espera la red. */
+    await Promise.resolve()
+    await Promise.resolve()
+    comprobar('se pidió el permiso antes de que llegara la clave', e.registro.permiso_pedido === 1,
+      'permiso_pedido=' + e.registro.permiso_pedido)
+
+    e.soltar_clave()
+    const r = await atrapar(promesa)
+    comprobar('y después el registro termina bien', r.ok === true,
+      r.ok ? '' : String(r.error && r.error.message))
+  }
+
+  console.log('\n12. misma_clave compara byte por byte')
   {
     const e = armar_entorno({})
     const clave_a = e.modulo.url_base64_to_uint8array(CLAVE_A)
