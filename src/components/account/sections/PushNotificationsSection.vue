@@ -71,7 +71,21 @@
 
       <!-- Mensajes de resultado. -->
       <p v-if="success_message" class="text-success small mt-3 mb-0">{{ success_message }}</p>
-      <p v-if="error_message" class="text-danger small mt-3 mb-0">{{ error_message }}</p>
+      <div v-if="error_message" class="mt-3">
+        <p class="text-danger small mb-1">{{ error_message }}</p>
+        <!--
+          El detalle técnico va en pantalla, no solo en la consola: esto se reporta desde un
+          iPhone, donde no hay forma de abrir la consola. Sin esto, lo único que se puede leer
+          es una frase escrita de antemano — que fue justo lo que hizo que el cartel dijera
+          "instalá la PWA" a alguien que ya la tenía instalada.
+        -->
+        <details v-if="error_detail" class="small">
+          <summary class="text-muted" style="cursor: pointer;">Ver detalle técnico</summary>
+          <p class="text-muted font-monospace mt-1 mb-0" style="word-break: break-word;">
+            {{ error_detail }}
+          </p>
+        </details>
+      </div>
     </template>
   </div>
 </template>
@@ -81,6 +95,7 @@ import {
   enable_push_notifications,
   disable_push_notifications,
   push_registration_status,
+  running_as_installed_app,
   PUSH_STEPS,
 } from '@/utils/push_notifications'
 
@@ -109,6 +124,8 @@ export default {
       success_message: '',
       /** Mensaje de error mostrado bajo el botón. */
       error_message: '',
+      /** Detalle técnico del error (nombre y mensaje del navegador), desplegable. */
+      error_detail: '',
     }
   },
   mounted() {
@@ -162,12 +179,15 @@ export default {
       self.working = true
       self.success_message = ''
       self.error_message = ''
+      self.error_detail = ''
       enable_push_notifications()
         .then(function () {
           self.success_message = success_text
         })
         .catch(function (error) {
           self.error_message = self.message_for_error(error)
+          self.error_detail = (error && error.detail) ? error.detail : ''
+          console.warn('[push] falló el registro', error)
         })
         .then(function () {
           // El estado se recalcula siempre, haya salido bien o mal: es la única forma de
@@ -202,9 +222,23 @@ export default {
         return 'No se activaron: falta el permiso de notificaciones del navegador. ' +
           'Si lo rechazaste, habilitalo desde la configuración del sitio y recargá.'
       }
+      if (step === PUSH_STEPS.VAPID) {
+        return error.message + ' No es un problema de tu teléfono: avisale al equipo de sistemas.'
+      }
       if (step === PUSH_STEPS.SUBSCRIPTION) {
-        return 'El navegador no pudo crear la suscripción de este dispositivo. ' +
-          'En iPhone hace falta tener la app instalada como PWA desde la pantalla de inicio.'
+        /*
+          Acá vivía el cartel que mandaba a instalar la PWA SIN HABER COMPROBADO si ya estaba
+          instalada. Se le mostró a Lucas teniéndola en la pantalla de inicio del iPhone: lo mandó
+          a resolver algo que ya estaba hecho, y tapó el problema real durante todo ese tiempo.
+          Ahora la app lo comprueba, y solo lo dice cuando de verdad falta.
+        */
+        if (!running_as_installed_app()) {
+          return 'El navegador no pudo crear la suscripción de este dispositivo. ' +
+            'En iPhone hace falta abrir la app instalada desde la pantalla de inicio, ' +
+            'no desde el navegador.'
+        }
+        return 'El navegador rechazó la suscripción de este dispositivo. ' +
+          'Probá de nuevo; si vuelve a fallar, abrí el detalle técnico y pasáselo al equipo.'
       }
       if (step === PUSH_STEPS.BACKEND) {
         return 'El permiso quedó dado, pero el servidor no pudo guardar este dispositivo. ' +
@@ -221,6 +255,7 @@ export default {
       self.working = true
       self.success_message = ''
       self.error_message = ''
+      self.error_detail = ''
       disable_push_notifications()
         .then(function () {
           self.success_message = 'Notificaciones desactivadas en este dispositivo.'
