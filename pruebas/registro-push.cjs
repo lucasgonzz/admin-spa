@@ -436,7 +436,34 @@ async function correr() {
       !!r.error && r.error.detail.indexOf('AbortError') === 0, r.error && r.error.detail)
   }
 
-  console.log('\n16. misma_clave distingue "otra clave" de "no se puede saber"')
+  console.log('\n16. un error que NO es conflicto de clave no dispara el reemplazo')
+  {
+    /*
+      Candado de una decisión deliberada: es_conflicto_de_clave() es estricto a propósito. Aflojarlo
+      con textos sueltos ("already exists", "different key") haría que un error de otra familia
+      diera falso positivo y se diera de baja una suscripción que funcionaba -- justo lo que este
+      rediseño existe para evitar. Un falso negativo solo muestra el error; un falso positivo rompe.
+    */
+    const otro = new Error('Push service quota already exists for this origin')
+    otro.name = 'QuotaExceededError'
+    const e = armar_entorno({
+      sin_options: true,
+      suscripcion_previa: { endpoint: 'https://push.apple.com/vive', clave: CLAVE_A },
+      subscribe_tira: otro,
+    })
+    const r = await atrapar(e.modulo.enable_push_notifications())
+
+    comprobar('falla y muestra el error', r.ok === false && r.error.step === 'subscription',
+      r.error ? r.error.step : '')
+    comprobar('NO se dio de baja la suscripción que servía', e.registro.bajas.length === 0,
+      JSON.stringify(e.registro.bajas))
+    comprobar('NO se reintentó a ciegas', e.registro.subscribe_llamadas.length === 1,
+      e.registro.subscribe_llamadas.length + ' llamadas')
+    comprobar('el detalle nombra el error real',
+      !!r.error && r.error.detail.indexOf('QuotaExceededError') === 0, r.error && r.error.detail)
+  }
+
+  console.log('\n17. misma_clave distingue "otra clave" de "no se puede saber"')
   {
     const e = armar_entorno({})
     const clave_a = e.modulo.url_base64_to_uint8array(CLAVE_A)

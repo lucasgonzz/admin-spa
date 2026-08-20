@@ -421,11 +421,20 @@ function es_conflicto_de_clave(error) {
   if (!error) {
     return false
   }
+  /*
+    Deliberadamente estricto: solo el nombre que fija la especificación, o un mensaje que nombre
+    la propia applicationServerKey.
+
+    La tentación es aflojarlo con textos como "already exists" o "different key" por si algún
+    navegador redacta distinto. No se hace: dar un falso positivo acá significa dar de baja una
+    suscripción que funcionaba, que es exactamente lo que esta función existe para evitar. Un falso
+    negativo, en cambio, solo deja el error a la vista del usuario -- molesto, pero no destruye
+    nada. Ante la duda, el error se muestra; no se rompe.
+  */
   if (error.name === 'InvalidStateError') {
     return true
   }
-  const texto = String(error.message || '')
-  return /applicationServerKey|different\s+key|already\s+exists/i.test(texto)
+  return /applicationServerKey/i.test(String(error.message || ''))
 }
 
 /**
