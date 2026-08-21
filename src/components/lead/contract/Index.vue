@@ -168,6 +168,22 @@
       </select>
     </div>
 
+    <!--
+      El id va atado a record.id y no fijo: la pestaña se monta por lead, y dos labels con el
+      mismo `for` en el DOM hacen que el click en una tilde la casilla de la otra.
+    -->
+    <div class="form-check mb-2">
+      <input
+        :id="'incluir_firma_' + record.id"
+        v-model="incluir_firma"
+        class="form-check-input"
+        type="checkbox"
+      />
+      <label class="form-check-label" :for="'incluir_firma_' + record.id">
+        Incluir mi firma en el PDF
+      </label>
+    </div>
+
     <div class="d-flex flex-wrap gap-2">
       <button
         type="button"
@@ -212,6 +228,12 @@ export default {
       loading_pdf: false,
       /** Clave del template elegido en el selector; se resetea a '' tras agregar la clausula. */
       clausula_template_key: '',
+      /**
+       * Si el PDF sale con la firma del PRESTADOR estampada sobre la línea.
+       * Es una opción de ESTA generación, no un dato del contrato: no se guarda en el lead ni
+       * viaja en build_contract_payload(). Arranca en true porque el caso normal es firmarlo.
+       */
+      incluir_firma: true,
     }
   },
   computed: {
@@ -467,7 +489,11 @@ export default {
       }
       self.loading_pdf = true
       api
-        .post('/lead/' + self.record.id + '/generate-contract', {}, { responseType: 'blob' })
+        .post(
+          '/lead/' + self.record.id + '/generate-contract',
+          { incluir_firma: self.incluir_firma },
+          { responseType: 'blob' }
+        )
         .then(function (response) {
           const url = window.URL.createObjectURL(new Blob([response.data]))
           const link = document.createElement('a')
