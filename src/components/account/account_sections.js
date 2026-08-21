@@ -69,6 +69,11 @@ export const ACCOUNT_SECTIONS = [
     group: 'Leads y ventas',
   },
   {
+    id: 'contract-signature',
+    label: 'Firma del contrato',
+    group: 'Leads y ventas',
+  },
+  {
     id: 'task-templates',
     label: 'Plantillas de tareas',
     group: 'Operaciones',

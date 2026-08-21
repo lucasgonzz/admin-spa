@@ -269,6 +269,20 @@
           </div>
         </section>
 
+        <!-- Leads: firma del prestador en el PDF del contrato -->
+        <section
+          v-show="active_section === 'contract-signature'"
+          id="contract-signature"
+          class="account-section"
+        >
+          <div class="card account-config-card">
+            <div class="card-body">
+              <h2 class="h6 card-title">Firma del contrato</h2>
+              <contract-signature-section />
+            </div>
+          </div>
+        </section>
+
         <!-- Operaciones: plantillas de tareas -->
         <section
           v-show="active_section === 'task-templates'"
@@ -322,6 +336,7 @@ import LeadWhatsappOnboardingSection from '@/components/account/sections/LeadWha
 import ImplementationSettingsSection from '@/components/account/sections/ImplementationSettingsSection.vue'
 import AgentIdentitySection from '@/components/account/sections/AgentIdentitySection.vue'
 import AgentPromptSyncSection from '@/components/account/sections/AgentPromptSyncSection.vue'
+import ContractSignatureSection from '@/components/account/sections/ContractSignatureSection.vue'
 import LeadDemoSettingsSection from '@/components/account/sections/LeadDemoSettingsSection.vue'
 import PushNotificationsSection from '@/components/account/sections/PushNotificationsSection.vue'
 import PwaInstallSection from '@/components/account/sections/PwaInstallSection.vue'
@@ -344,6 +359,7 @@ export default {
     ImplementationSettingsSection,
     AgentIdentitySection,
     AgentPromptSyncSection,
+    ContractSignatureSection,
     LeadDemoSettingsSection,
     PushNotificationsSection,
     PwaInstallSection,
