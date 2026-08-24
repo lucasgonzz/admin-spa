@@ -167,7 +167,20 @@
             Este cliente no tiene ninguna API cargada. Cargale una API en su perfil antes de instalar.
           </div>
 
-          <div v-else class="api-targets border rounded">
+          <!--
+            Aviso cuando el cliente tiene más subdominios que los que entran en una instalación.
+            Sin esto el operador completaba el formulario entero y el POST fallaba siempre: el
+            backend acepta como mucho dos destinos.
+          -->
+          <div
+            v-else-if="selected_client_apis.length > max_apis_destino"
+            class="alert alert-warning py-2 small mb-2"
+          >
+            Este cliente tiene {{ selected_client_apis.length }} APIs cargadas. Una instalación
+            trabaja de a dos como mucho: destildá una si querés cambiar el par.
+          </div>
+
+          <div v-if="selected_client && selected_client_apis.length > 0" class="api-targets border rounded">
             <div
               v-for="client_api in selected_client_apis"
               :key="client_api.id"
@@ -179,7 +192,9 @@
                   class="form-check-input mt-0"
                   type="checkbox"
                   :checked="is_api_incluida(client_api.id)"
-                  @change="on_api_toggled(client_api.id, $event.target.checked)"
+                  :disabled="!is_api_incluida(client_api.id) && limite_de_apis_alcanzado"
+                  :title="!is_api_incluida(client_api.id) && limite_de_apis_alcanzado ? 'Ya hay dos APIs elegidas. Destildá una para poder elegir esta.' : ''"
+                  @change="on_api_toggled(client_api.id, $event)"
                 />
                 <label class="form-check-label small api-target-url" :for="'api-incluida-' + client_api.id">
                   {{ client_api.url }}<span
@@ -260,6 +275,24 @@
             </option>
           </select>
         </div>
+
+        <!--
+          Resumen de lo que se va a hacer, subdominio por subdominio. Va acá arriba del botón y no
+          en un modal de confirmación: no se agrega un paso, se dice lo que ya se eligió.
+        -->
+        <div v-if="can_create_installation" class="alert alert-light border py-2 small mb-0">
+          <div
+            v-for="destino in resumen_destinos"
+            :key="destino.client_api_id"
+            class="resumen-destino"
+          >
+            <code class="resumen-destino-url">{{ destino.url }}</code>
+            <span class="text-muted">— {{ destino.texto }}</span>
+          </div>
+          <div v-if="!hay_instalacion_real" class="text-muted mt-1">
+            Ningún subdominio va a quedar con el sistema instalado.
+          </div>
+        </div>
       </form>
 
       <!-- Footer con el botón de crear: deshabilitado si falta algún campo o mientras se crea -->
@@ -273,7 +306,7 @@
           :disabled="!can_create_installation || creating"
           @click="create_installation"
         >
-          {{ creating ? 'Creando…' : 'Crear instalación' }}
+          {{ create_button_label }}
         </button>
       </template>
     </base-modal>
@@ -285,6 +318,15 @@
 import api from '@/utils/axios'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import InstallationDetail from '@/components/installation/InstallationDetail.vue'
+
+/**
+ * Cuántas APIs destino entran en una instalación.
+ *
+ * No es un número elegido acá: el backend valida 'targets' => 'max:2' y un cliente puede tener
+ * tres o más client_apis cargadas (no hay tope de cardinalidad y hay endpoints vivos para agregar
+ * más). Tildándolas todas por default, ese cliente no podía crear nada: el POST fallaba siempre.
+ */
+const MAX_APIS_DESTINO = 2
 
 /**
  * Listado global de instalaciones iniciales (visible en el menú lateral).
@@ -352,6 +394,75 @@ export default {
 
   computed: {
     /**
+     * Tope de APIs destino, expuesto al template (una constante de módulo no se ve desde el HTML).
+     *
+     * @returns {number}
+     */
+    max_apis_destino() {
+      return MAX_APIS_DESTINO
+    },
+
+    /**
+     * ¿Ya se llegó al tope de APIs tildadas?
+     *
+     * @returns {boolean}
+     */
+    limite_de_apis_alcanzado() {
+      return this.new_installation.apis_incluidas.length >= MAX_APIS_DESTINO
+    },
+
+    /**
+     * ¿Hay una instalación real elegida y tildada?
+     *
+     * Es la misma condición que usa build_targets(): un radio apuntando a una API destildada no
+     * cuenta como instalación real, así que tampoco tiene que contar acá.
+     *
+     * @returns {boolean}
+     */
+    hay_instalacion_real() {
+      return this.is_api_incluida(this.new_installation.client_api_id_real)
+    },
+
+    /**
+     * Qué va a pasar con cada subdominio tildado, una línea por subdominio.
+     *
+     * El default del radio es "Ninguna" a propósito (la instalación real vacía el public_html del
+     * SPA del cliente), pero con los tres clicks de siempre —cliente, versión, Crear— eso da dos
+     * esqueletos y ningún sistema instalado, las dos filas en verde. Para un cliente nuevo eso se
+     * descubre recién cuando alguien abre el subdominio. Este resumen es el que lo hace imposible
+     * de no ver, sin sacar el default seguro ni agregar un modal de confirmación.
+     *
+     * @returns {Array<{client_api_id: number, url: string, texto: string}>}
+     */
+    resumen_destinos() {
+      const self = this
+      return self.build_targets().map(function (target) {
+        const client_api = self.selected_client_apis.find(function (a) {
+          return a.id === target.client_api_id
+        })
+        return {
+          client_api_id: target.client_api_id,
+          url: client_api ? client_api.url : ('API #' + target.client_api_id),
+          texto: target.kind === 'completa'
+            ? 'se instala el sistema completo y se reemplaza lo que haya'
+            : 'solo esqueleto: directorios, public/ y .env. El sistema no se instala',
+        }
+      })
+    },
+
+    /**
+     * Texto del botón de crear: dice lo que el formulario va a hacer de verdad.
+     *
+     * @returns {string}
+     */
+    create_button_label() {
+      if (this.creating) {
+        return 'Creando…'
+      }
+      return this.hay_instalacion_real ? 'Crear instalación' : 'Crear solo esqueleto'
+    },
+
+    /**
      * Cliente actualmente seleccionado en el formulario de creación (objeto completo,
      * con sus client_apis ya incluidas por withAll()).
      *
@@ -406,7 +517,8 @@ export default {
      */
     can_create_installation() {
       const form = this.new_installation
-      return !!(form.client_id && form.version_id && form.apis_incluidas.length > 0)
+      const cantidad = form.apis_incluidas.length
+      return !!(form.client_id && form.version_id && cantidad > 0 && cantidad <= MAX_APIS_DESTINO)
     },
   },
 
@@ -498,21 +610,36 @@ export default {
     },
 
     /**
-     * Al elegir un cliente, tilda TODAS sus APIs y deja la instalación real en "ninguna".
+     * Al elegir un cliente, tilda hasta DOS de sus APIs y deja la instalación real en "ninguna".
      *
-     * Tildar todo por default no es comodidad: el par de subdominios se piensa junto, y si una
-     * queda destildada sin querer, ese subdominio se queda sin esqueleto y el upgrade que venga
-     * después se corta a mitad de camino. Destildar es el gesto explícito, no tildar.
+     * Tildar por default no es comodidad: el par de subdominios se piensa junto, y si una queda
+     * destildada sin querer, ese subdominio se queda sin esqueleto y el upgrade que venga después
+     * se corta a mitad de camino. Destildar es el gesto explícito, no tildar.
+     *
+     * Pero se tildan DOS y no todas: el backend valida 'max:2' y hay clientes con tres o más
+     * client_apis, así que tildar todo dejaba el formulario armando un POST que fallaba siempre.
+     * El par elegido es la API activa del cliente más la primera que no sea ella: la activa es la
+     * que sirve producción hoy y la otra es la candidata a recibir la próxima actualización, que
+     * es exactamente la alternancia para la que existe esta pantalla. Tomar "las dos primeras" a
+     * secas podría dejar afuera justo a la activa si quedó tercera en la lista.
      * Si el cliente no tiene ninguna client_api, la lista queda vacía y el template ya se
      * encarga de mostrar el aviso correspondiente.
      *
      * @returns {void}
      */
     on_client_selected() {
-      this.new_installation.apis_incluidas = this.selected_client_apis.map(function (client_api) {
-        return client_api.id
+      const self = this
+      const active_id = self.selected_client_active_api_id
+      const ids = []
+      self.selected_client_apis.forEach(function (client_api) {
+        if (client_api.id === active_id) {
+          ids.unshift(client_api.id)
+        } else {
+          ids.push(client_api.id)
+        }
       })
-      this.new_installation.client_api_id_real = null
+      self.new_installation.apis_incluidas = ids.slice(0, MAX_APIS_DESTINO)
+      self.new_installation.client_api_id_real = null
     },
 
     /**
@@ -532,15 +659,25 @@ export default {
      * un destino elegido para el pipeline completo que no está en la lista de lo que se va a
      * tocar, y el backend rechazaría el POST con un 422 que en pantalla no se explica solo.
      *
+     * Recibe el evento y no el booleano porque cuando se rechaza un tercer tilde hay que volver
+     * atrás el checkbox a mano: el input está atado con :checked, así que si el valor del
+     * formulario no cambia, Vue no vuelve a pintarlo y el tilde queda puesto en pantalla mintiendo.
+     *
      * @param {number} client_api_id
-     * @param {boolean} incluida
+     * @param {Event} event
      * @returns {void}
      */
-    on_api_toggled(client_api_id, incluida) {
+    on_api_toggled(client_api_id, event) {
       const form = this.new_installation
+      const incluida = event.target.checked
       const index = form.apis_incluidas.indexOf(client_api_id)
       if (incluida) {
         if (index === -1) {
+          if (form.apis_incluidas.length >= MAX_APIS_DESTINO) {
+            /* El checkbox ya viene deshabilitado en este caso; esto es el cinturón. */
+            event.target.checked = false
+            return
+          }
           form.apis_incluidas.push(client_api_id)
         }
         return
@@ -790,5 +927,23 @@ export default {
 }
 .form-check-input {
   flex-shrink: 0;
+}
+/*
+  Resumen de lo que va a pasar con cada subdominio. Mismo problema que la lista de arriba: la URL
+  no tiene espacios donde partirse sola y el modal mide 500px, así que sin el overflow-wrap se sale
+  del cuadro en tablet. El flex-wrap hace que la explicación baje a la línea de abajo en teléfono
+  en vez de comprimir la URL.
+*/
+.resumen-destino {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.5rem;
+}
+.resumen-destino + .resumen-destino {
+  margin-top: 0.25rem;
+}
+.resumen-destino-url {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 </style>
