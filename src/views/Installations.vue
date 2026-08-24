@@ -37,6 +37,7 @@
           <tr>
             <th>#</th>
             <th>Cliente</th>
+            <th>Tipo</th>
             <th>Versión</th>
             <th>Estado</th>
             <th>Inicio</th>
@@ -53,6 +54,11 @@
           >
             <td>{{ installation.id }}</td>
             <td>{{ client_display_name(installation) }}</td>
+            <td>
+              <span class="badge" :class="kind_badge_class(installation.kind)">
+                {{ installation.kind || 'completa' }}
+              </span>
+            </td>
             <td>
               <span v-if="installation.version">
                 {{ installation.version.version }}
@@ -104,11 +110,12 @@
         v-if="selected_installation"
         :installation="selected_installation"
         @update:installation="on_modal_installation_updated"
+        @group-updated="on_modal_group_updated"
         @deleted="on_modal_installation_deleted"
       />
     </base-modal>
 
-    <!-- Modal de creación: elegir cliente, API destino y versión para instalar sin pasar por Clientes -->
+    <!-- Modal de creación: elegir cliente, APIs destino y versión para instalar sin pasar por Clientes -->
     <base-modal
       :show="show_create_modal"
       title="Nueva instalación"
@@ -139,30 +146,101 @@
           </select>
         </div>
 
-        <!-- Selección de API destino: deshabilitada hasta elegir cliente, preselecciona la activa -->
+        <!--
+          APIs destino. No es un select de una sola API: el cliente tiene dos subdominios y el
+          sistema alterna cuál sirve producción, así que la instalación se piensa sobre los dos
+          a la vez. Se tilda en cuáles se trabaja y el radio elige en cuál corre el pipeline
+          completo; en la otra tildada queda solo el esqueleto.
+        -->
         <div class="mb-3">
-          <label class="form-label small">API destino</label>
-          <select
-            v-model="new_installation.client_api_id"
-            class="form-select form-select-sm"
-            :disabled="!selected_client"
-          >
-            <option :value="null" disabled>Seleccioná una API…</option>
-            <option
-              v-for="client_api in selected_client_apis"
-              :key="client_api.id"
-              :value="client_api.id"
-            >
-              {{ client_api.url }}{{ client_api.id === selected_client_active_api_id ? ' (activa)' : '' }}
-            </option>
-          </select>
+          <label class="form-label small mb-1">APIs destino</label>
+
+          <div v-if="!selected_client" class="text-muted small">
+            Elegí un cliente para ver sus APIs.
+          </div>
+
           <!-- Aviso cuando el cliente elegido no tiene ninguna API cargada -->
           <div
-            v-if="selected_client && selected_client_apis.length === 0"
-            class="alert alert-warning py-2 small mt-2"
+            v-else-if="selected_client_apis.length === 0"
+            class="alert alert-warning py-2 small mb-0"
           >
             Este cliente no tiene ninguna API cargada. Cargale una API en su perfil antes de instalar.
           </div>
+
+          <div v-else class="api-targets border rounded">
+            <div
+              v-for="client_api in selected_client_apis"
+              :key="client_api.id"
+              class="api-target-row"
+            >
+              <div class="api-target-check">
+                <input
+                  :id="'api-incluida-' + client_api.id"
+                  class="form-check-input mt-0"
+                  type="checkbox"
+                  :checked="is_api_incluida(client_api.id)"
+                  @change="on_api_toggled(client_api.id, $event.target.checked)"
+                />
+                <label class="form-check-label small api-target-url" :for="'api-incluida-' + client_api.id">
+                  {{ client_api.url }}<span
+                    v-if="client_api.id === selected_client_active_api_id"
+                    class="text-muted"
+                  > (activa)</span>
+                </label>
+              </div>
+
+              <div class="api-target-real">
+                <input
+                  :id="'api-real-' + client_api.id"
+                  v-model="new_installation.client_api_id_real"
+                  class="form-check-input mt-0"
+                  type="radio"
+                  name="instalacion_real"
+                  :value="client_api.id"
+                  :disabled="!is_api_incluida(client_api.id)"
+                />
+                <label
+                  class="form-check-label small text-nowrap"
+                  :class="is_api_incluida(client_api.id) ? '' : 'text-muted'"
+                  :for="'api-real-' + client_api.id"
+                  :title="is_api_incluida(client_api.id) ? 'Acá corre el pipeline completo' : 'Tildá esta API para poder elegirla como instalación real'"
+                >
+                  instalación real
+                </label>
+              </div>
+            </div>
+
+            <!--
+              El default arranca acá, y es a propósito: la instalación real vacía el public_html
+              del SPA del cliente antes de subir el suyo. Un default que dispara eso con dos clicks
+              está mal, y además "ninguna" es el caso normal: los clientes que ya están instalados
+              en un subdominio solo necesitan que se les prepare el otro.
+            -->
+            <div class="api-target-row">
+              <div class="api-target-check">
+                <input
+                  id="api-real-ninguna"
+                  v-model="new_installation.client_api_id_real"
+                  class="form-check-input mt-0"
+                  type="radio"
+                  name="instalacion_real"
+                  :value="null"
+                />
+                <label class="form-check-label small" for="api-real-ninguna">
+                  Ninguna: solo esqueleto en las tildadas
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <p
+            v-if="selected_client && selected_client_apis.length > 0"
+            class="form-text small mt-2 mb-0"
+          >
+            En la API que elijas como instalación real corre el pipeline completo. En la otra
+            tildada se deja solo el esqueleto: los directorios, <code>public/</code> y el
+            <code>.env</code>, que es lo que el upgrade no repone solo.
+          </p>
         </div>
 
         <!-- Selección de versión: preselecciona la última publicada -->
@@ -255,11 +333,19 @@ export default {
       /** true mientras se está creando la instalación (POST /installations). */
       creating: false,
 
-      /** Formulario del modal de creación: los tres campos que pide el prompt, en orden. */
+      /**
+       * Formulario del modal de creación.
+       *
+       * apis_incluidas son los ids de las client_apis sobre las que se va a trabajar, y
+       * client_api_id_real es cuál de esas se instala de verdad (null = ninguna, solo esqueleto).
+       * Son dos campos y no uno porque son dos preguntas distintas: "¿la toco?" y "¿la instalo
+       * entera?". Con un solo campo no habría forma de pedir esqueleto en las dos.
+       */
       new_installation: {
         client_id: null,
-        client_api_id: null,
         version_id: null,
+        apis_incluidas: [],
+        client_api_id_real: null,
       },
     }
   },
@@ -310,13 +396,17 @@ export default {
     },
 
     /**
-     * Habilita el botón de crear solo cuando los tres campos están completos.
+     * Habilita el botón de crear.
+     *
+     * No exige que haya una instalación real elegida: crear solo esqueletos es un caso de uso
+     * válido y de hecho el más común (los clientes ya instalados en un subdominio necesitan que
+     * se les prepare el otro sin tocar el que anda).
      *
      * @returns {boolean}
      */
     can_create_installation() {
       const form = this.new_installation
-      return !!(form.client_id && form.client_api_id && form.version_id)
+      return !!(form.client_id && form.version_id && form.apis_incluidas.length > 0)
     },
   },
 
@@ -352,7 +442,12 @@ export default {
      * @returns {void}
      */
     open_create_modal() {
-      this.new_installation = { client_id: null, client_api_id: null, version_id: null }
+      this.new_installation = {
+        client_id: null,
+        version_id: null,
+        apis_incluidas: [],
+        client_api_id_real: null,
+      }
       this.show_create_modal = true
       if (!this.create_data_loaded) {
         this.load_create_data()
@@ -403,19 +498,88 @@ export default {
     },
 
     /**
-     * Al elegir un cliente, preselecciona automáticamente su API activa (si tiene una).
-     * Si el cliente no tiene ninguna client_api, el select queda vacío y el template
-     * ya se encarga de mostrar el aviso correspondiente.
+     * Al elegir un cliente, tilda TODAS sus APIs y deja la instalación real en "ninguna".
+     *
+     * Tildar todo por default no es comodidad: el par de subdominios se piensa junto, y si una
+     * queda destildada sin querer, ese subdominio se queda sin esqueleto y el upgrade que venga
+     * después se corta a mitad de camino. Destildar es el gesto explícito, no tildar.
+     * Si el cliente no tiene ninguna client_api, la lista queda vacía y el template ya se
+     * encarga de mostrar el aviso correspondiente.
      *
      * @returns {void}
      */
     on_client_selected() {
-      this.new_installation.client_api_id = this.selected_client_active_api_id || null
+      this.new_installation.apis_incluidas = this.selected_client_apis.map(function (client_api) {
+        return client_api.id
+      })
+      this.new_installation.client_api_id_real = null
+    },
+
+    /**
+     * ¿Esta client_api está tildada en el formulario?
+     *
+     * @param {number} client_api_id
+     * @returns {boolean}
+     */
+    is_api_incluida(client_api_id) {
+      return this.new_installation.apis_incluidas.indexOf(client_api_id) !== -1
+    },
+
+    /**
+     * Tilda o destilda una client_api.
+     *
+     * Destildar limpia el radio si la instalación real apuntaba justo a esa API: si no, quedaría
+     * un destino elegido para el pipeline completo que no está en la lista de lo que se va a
+     * tocar, y el backend rechazaría el POST con un 422 que en pantalla no se explica solo.
+     *
+     * @param {number} client_api_id
+     * @param {boolean} incluida
+     * @returns {void}
+     */
+    on_api_toggled(client_api_id, incluida) {
+      const form = this.new_installation
+      const index = form.apis_incluidas.indexOf(client_api_id)
+      if (incluida) {
+        if (index === -1) {
+          form.apis_incluidas.push(client_api_id)
+        }
+        return
+      }
+      if (index !== -1) {
+        form.apis_incluidas.splice(index, 1)
+      }
+      if (form.client_api_id_real === client_api_id) {
+        form.client_api_id_real = null
+      }
+    },
+
+    /**
+     * Arma los destinos del POST a partir del formulario, con la instalación real primero.
+     *
+     * El orden no es cosmético: el backend corre las filas del grupo en el orden en que llegan
+     * y la real tiene que ir antes que el esqueleto.
+     *
+     * @returns {Array<{client_api_id: number, kind: string}>}
+     */
+    build_targets() {
+      const form = this.new_installation
+      /* Si la real quedó destildada, no es un destino: manda lo tildado y nada más. */
+      const real_id = this.is_api_incluida(form.client_api_id_real) ? form.client_api_id_real : null
+      const targets = []
+      if (real_id !== null) {
+        targets.push({ client_api_id: real_id, kind: 'completa' })
+      }
+      form.apis_incluidas.forEach(function (client_api_id) {
+        if (client_api_id !== real_id) {
+          targets.push({ client_api_id: client_api_id, kind: 'esqueleto' })
+        }
+      })
+      return targets
     },
 
     /**
      * Crea la instalación (POST /installations) y, si sale bien, cierra el modal de creación,
-     * agrega la nueva instalación al principio de la tabla y abre de inmediato el modal de
+     * agrega las instalaciones creadas al principio de la tabla y abre de inmediato el modal de
      * gestión para que se completen las variables manuales y se pueda iniciar el pipeline.
      *
      * @returns {void}
@@ -425,14 +589,15 @@ export default {
       self.creating = true
       api.post('/installations', {
         client_id: self.new_installation.client_id,
-        client_api_id: self.new_installation.client_api_id,
         version_id: self.new_installation.version_id,
+        targets: self.build_targets(),
       })
         .then(function (res) {
-          const created = res.data.model
-          self.installations.unshift(created)
+          /* models trae las dos filas del par; el fallback a model es para una respuesta vieja. */
+          const created_rows = res.data.models || [res.data.model]
+          self.installations = created_rows.concat(self.installations)
           self.show_create_modal = false
-          self.open_manage_modal(created)
+          self.open_manage_modal(res.data.model)
         })
         .catch(function () {
           /* El interceptor de axios ya muestra el toast de error. */
@@ -454,6 +619,27 @@ export default {
       if (index !== -1) {
         this.installations.splice(index, 1, updated)
       }
+    },
+
+    /**
+     * Refleja en la tabla global el estado de TODAS las filas del par.
+     *
+     * Iniciar una instalación arranca las dos filas del grupo, pero el modal muestra una sola:
+     * sin esto la hermana se queda con el estado viejo en la tabla hasta que se recargue la
+     * vista. No toca selected_installation, que es dueño de on_modal_installation_updated.
+     *
+     * @param {Array<Object>} updated_rows
+     * @returns {void}
+     */
+    on_modal_group_updated(updated_rows) {
+      const self = this
+      const rows = updated_rows || []
+      rows.forEach(function (row) {
+        const index = self.installations.findIndex(function (i) { return i.id === row.id })
+        if (index !== -1) {
+          self.installations.splice(index, 1, row)
+        }
+      })
     },
 
     /**
@@ -521,6 +707,20 @@ export default {
     },
 
     /**
+     * Clase del badge según el tipo de instalación.
+     *
+     * El fallback a 'completa' es para las filas creadas antes de que existiera el campo: en la
+     * base quedaron con el default 'completa', pero una respuesta cacheada en el navegador puede
+     * venir sin la clave y no queremos una celda vacía.
+     *
+     * @param {string} kind
+     * @returns {string}
+     */
+    kind_badge_class(kind) {
+      return kind === 'esqueleto' ? 'text-bg-info' : 'text-bg-light border'
+    },
+
+    /**
      * Formatea fecha ISO para la tabla.
      *
      * @param {string|null} datetime
@@ -542,3 +742,53 @@ export default {
   },
 }
 </script>
+
+<style scoped>
+/* Lista de APIs destino del modal de creación. */
+.api-target-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.75rem;
+  padding: 0.5rem 0.75rem;
+}
+.api-target-row + .api-target-row {
+  border-top: 1px solid var(--bs-border-color);
+}
+.api-target-check,
+.api-target-real {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+/*
+  La URL es lo único elástico de la fila. El min-width: 0 es lo que hace falta de verdad: sin él
+  un item flex no baja de su tamaño de contenido, y un subdominio largo empuja el radio fuera del
+  modal en tablet, que es justo el ancho donde nadie mira. El overflow-wrap corta la URL, que no
+  tiene espacios donde partirse sola.
+*/
+.api-target-check {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.api-target-url {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.api-target-real {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+/*
+  En teléfono la fila se parte en dos líneas. El radio baja alineado con la URL en vez de quedar
+  pegado al borde derecho: contra el borde se lee como si perteneciera a la fila de abajo.
+*/
+@media (max-width: 575.98px) {
+  .api-target-real {
+    margin-left: 1.5rem;
+  }
+}
+.form-check-input {
+  flex-shrink: 0;
+}
+</style>
