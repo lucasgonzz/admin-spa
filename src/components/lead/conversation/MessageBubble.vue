@@ -780,7 +780,7 @@ export default {
      *
      * - lead: sin cambios (indica si es audio).
      * - setter: "Enviado por Claude" si el mensaje salió por los endpoints claude/*
-     *   (sent_by_claude); "Enviado por {admin}" si hay admin; "Enviado manualmente"
+     *   (sent_via === 'claude'); "Enviado por {admin}" si hay admin; "Enviado manualmente"
      *   si es historial importado (sin admin asociado).
      * - sistema (IA): si ya se envió, distingue auto-envío de la IA ("Enviado por
      *   la IA") de aprobación humana ("Sugerido por la IA · aprobado por {admin}");
