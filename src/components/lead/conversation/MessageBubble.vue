@@ -779,8 +779,9 @@ export default {
      * Etiqueta legible del emisor para la cabecera de la burbuja.
      *
      * - lead: sin cambios (indica si es audio).
-     * - setter: "Enviado por {admin}" si hay admin; "Enviado manualmente" si es
-     *   historial importado (sin admin asociado).
+     * - setter: "Enviado por Claude" si el mensaje salió por los endpoints claude/*
+     *   (sent_by_claude); "Enviado por {admin}" si hay admin; "Enviado manualmente"
+     *   si es historial importado (sin admin asociado).
      * - sistema (IA): si ya se envió, distingue auto-envío de la IA ("Enviado por
      *   la IA") de aprobación humana ("Sugerido por la IA · aprobado por {admin}");
      *   si sigue pendiente o fue rechazado, es una propuesta ("Sugerido por la IA").
@@ -801,6 +802,12 @@ export default {
 
       // Mensaje escrito y enviado por un admin desde el panel.
       if (s === 'setter') {
+        // Enviado por Claude desde los endpoints claude/* (sin admin detrás). Va antes que
+        // el chequeo de admin_name porque estos mensajes nunca traen sent_by_admin_id y si
+        // no, caerían en "Enviado manualmente", que es justo lo que hay que diferenciar.
+        if (this.message.sent_by_claude) {
+          return 'Enviado por Claude'
+        }
         if (admin_name !== '') {
           return 'Enviado por ' + admin_name
         }
