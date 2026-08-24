@@ -805,7 +805,7 @@ export default {
         // Enviado por Claude desde los endpoints claude/* (sin admin detrás). Va antes que
         // el chequeo de admin_name porque estos mensajes nunca traen sent_by_admin_id y si
         // no, caerían en "Enviado manualmente", que es justo lo que hay que diferenciar.
-        if (this.message.sent_by_claude) {
+        if (this.message.sent_via === 'claude') {
           return 'Enviado por Claude'
         }
         if (admin_name !== '') {
