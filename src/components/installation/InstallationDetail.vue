@@ -135,8 +135,9 @@ import OperationsPanel from '@/components/installation/extra-props/OperationsPan
  * global (Installations.vue, una sola instancia para la instalación seleccionada).
  *
  * Se hace cargo de: cargar variables manuales is_manual_on_create, guardar valores de env,
- * iniciar el pipeline, pollear estado/logs cada 3s mientras status='instalando' (GET
- * /client-installations/{id}, prompt 339), y eliminar la instalación (DELETE, prompt 339).
+ * iniciar el pipeline, pollear estado/logs cada 3s mientras alguna fila del par siga en
+ * 'instalando' (GET /client-installations/{id}, prompt 339), y eliminar la instalación (DELETE,
+ * prompt 339).
  *
  * Emite update:installation cada vez que cambia su copia (el padre es dueño de la lista real
  * y debe reemplazar el item correspondiente), group-updated con TODAS las filas del par cuando
@@ -175,6 +176,24 @@ export default {
 
       /** Timer de polling propio de esta instancia (una instalación). */
       polling_timer: null,
+
+      /**
+       * Últimas filas conocidas del par (incluida la propia), tal como vinieron en 'models'.
+       *
+       * Existe solo para decidir cuándo parar el polling. La fila que este componente muestra
+       * llega por prop y es del padre; esto es una foto de las hermanas, que en el listado global
+       * no las está mirando nadie.
+       */
+      group_rows: [],
+
+      /**
+       * true una vez desmontado el componente.
+       *
+       * Hace falta desde que poll_installation() puede ARRANCAR el timer y no solo pararlo: si el
+       * modal se cierra con un GET en vuelo, la respuesta llega después de beforeUnmount y
+       * levantaría un intervalo sobre un componente muerto que ya nadie apaga.
+       */
+      unmounted: false,
     }
   },
 
@@ -182,10 +201,21 @@ export default {
     this.load_templates()
     if (this.installation.status === 'instalando') {
       this.start_polling()
+      return
+    }
+    /*
+      Fila de un par que ya terminó lo suyo: la hermana puede seguir corriendo, porque el grupo
+      corre en secuencia (primero la real, después el esqueleto). Un GET suelto averigua cómo está
+      el par y arranca el polling si hace falta; abrir el modal sobre la real recién terminada no
+      puede dejar al esqueleto congelado en pantalla.
+    */
+    if (this.installation.group_uuid && this.installation.status !== 'pendiente') {
+      this.poll_installation()
     }
   },
 
   beforeUnmount() {
+    this.unmounted = true
     this.stop_polling()
   },
 
@@ -194,7 +224,14 @@ export default {
     'installation.status'(new_status) {
       if (new_status === 'instalando') {
         this.start_polling()
-      } else {
+        return
+      }
+      /*
+        Que esta fila haya terminado NO alcanza para parar: en un par la real termina primero y el
+        esqueleto arranca recién ahí. Si se cortaba acá, nadie volvía a preguntar por el esqueleto
+        y quedaba en 'instalando' para siempre en la tabla, aunque hubiera fallado.
+      */
+      if (!this.group_is_running(this.group_rows)) {
         this.stop_polling()
       }
     },
@@ -289,6 +326,9 @@ export default {
       self.starting = true
       api.post('/client-installations/' + self.installation.id + '/start')
         .then(function (res) {
+          /* Se guarda antes de emitir: el watcher de 'installation.status' corre con el cambio de
+             prop y necesita el par ya cargado para no parar el polling apenas termine esta fila. */
+          self.group_rows = res.data.models || [res.data.model]
           self.$emit('update:installation', res.data.model)
           if (res.data.models) {
             self.$emit('group-updated', res.data.models)
@@ -331,10 +371,13 @@ export default {
     /**
      * Inicia el polling propio de esta instancia cada 3 segundos.
      *
+     * Idempotente a propósito: created(), el watcher del estado y el propio poll pueden llamarlo
+     * en la misma vuelta y tiene que quedar un solo intervalo.
+     *
      * @returns {void}
      */
     start_polling() {
-      if (this.polling_timer !== null) {
+      if (this.polling_timer !== null || this.unmounted) {
         return
       }
       const self = this
@@ -356,8 +399,36 @@ export default {
     },
 
     /**
+     * ¿Queda alguna fila del par corriendo?
+     *
+     * Sin par (o sin datos del par todavía) la respuesta es simplemente si la única fila que hay
+     * está corriendo, que es el comportamiento de siempre para una instalación suelta.
+     *
+     * @param {Array<Object>} rows
+     * @returns {boolean}
+     */
+    group_is_running(rows) {
+      let alguna_corriendo = false
+      const filas = rows || []
+      filas.forEach(function (row) {
+        if (row && row.status === 'instalando') {
+          alguna_corriendo = true
+        }
+      })
+      return alguna_corriendo
+    },
+
+    /**
      * Refresca esta instalación puntual (GET /client-installations/{id}, prompt 339).
-     * Detiene el polling apenas deja de estar 'instalando'.
+     *
+     * El polling sigue vivo mientras CUALQUIER fila del par esté 'instalando', no solo la que se
+     * está mirando: el grupo corre en secuencia y la real termina bastante antes que el esqueleto.
+     * Mirando solo la propia fila, el modal quedaba en verde y el esqueleto congelado en
+     * 'instalando' en la tabla aunque hubiera fallado — y un esqueleto fallido recién se descubre
+     * en la próxima actualización, que es justo lo que hay que evitar.
+     *
+     * También arranca el timer si estaba apagado, así este mismo método sirve para el GET suelto
+     * de created() sin duplicar la decisión de "¿hay que seguir mirando?".
      *
      * @returns {void}
      */
@@ -366,12 +437,16 @@ export default {
       api.get('/client-installations/' + self.installation.id)
         .then(function (res) {
           const updated = res.data.model
+          /* Antes de emitir: el watcher de la prop lee group_rows para decidir si para. */
+          self.group_rows = res.data.models || [updated]
           self.$emit('update:installation', updated)
           /* La hermana viaja en el mismo GET: sin esto haría falta un segundo request por ciclo. */
           if (res.data.models) {
             self.$emit('group-updated', res.data.models)
           }
-          if (updated.status !== 'instalando') {
+          if (self.group_is_running(self.group_rows)) {
+            self.start_polling()
+          } else {
             self.stop_polling()
           }
         })
