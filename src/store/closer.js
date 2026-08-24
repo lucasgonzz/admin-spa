@@ -10,7 +10,7 @@ import api from '@/utils/axios'
  * @returns {{ section_key: string, lead_index: number, location: 'flat'|'call', call_index: number|null }|null}
  */
 function find_partner_location(state, partner_id) {
-  const sections = ['en_curso', 'agendadas', 'seguimiento']
+  const sections = ['agendadas', 'para_llamar', 'seguimiento']
   let s = 0
   for (s = 0; s < sections.length; s = s + 1) {
     const section_key = sections[s]
@@ -86,11 +86,11 @@ function mutate_partner_by_id(state, partner_id, updater) {
 export default {
   namespaced: true,
   state: {
-    /** Leads con demo en curso o recién finalizada. */
-    en_curso: [],
-    /** Leads con demo agendada o pidiendo disponibilidad. */
+    /** Columna 1: leads que agendaron la demo y todavía no la terminaron. */
     agendadas: [],
-    /** Leads en seguimiento post-llamada con resumen de Recall. */
+    /** Columna 2: terminaron la demo y todavía no tuvieron la llamada con el closer. */
+    para_llamar: [],
+    /** Columna 3: ya tuvieron al menos una llamada y todavía no cerraron. */
     seguimiento: [],
     /** Settings de timing de alertas (desde GET /closer/panel). */
     settings: {},
@@ -114,8 +114,8 @@ export default {
      * @returns {void}
      */
     set_panel(state, payload) {
-      state.en_curso = payload.en_curso || []
       state.agendadas = payload.agendadas || []
+      state.para_llamar = payload.para_llamar || []
       state.seguimiento = payload.seguimiento || []
       state.settings = payload.settings || {}
       state.last_fetched_at = new Date().toISOString()
@@ -256,11 +256,11 @@ export default {
       })
     },
     /**
-     * Unirse a Meet (columna Hoy): pide al backend la llamada pendiente del lead (la crea
-     * si hace falta, reutilizando el Meet del agendamiento la primera vez, o generando uno
-     * ad-hoc si no tiene) y manda el bot automáticamente si todavía no tenía uno asignado.
-     * Devuelve la llamada para que el componente abra el Meet en una pestaña nueva. Dispara
-     * además un refresh silencioso del panel (el lead puede salir de "Hoy" tras esta acción).
+     * Unirse a Meet: pide al backend la llamada pendiente del lead (la crea si hace falta,
+     * reutilizando el Meet del agendamiento la primera vez, o generando uno ad-hoc si no tiene)
+     * y manda el bot automáticamente si todavía no tenía uno asignado. Devuelve la llamada para
+     * que el componente abra el Meet en una pestaña nueva. Dispara además un refresh silencioso
+     * del panel: al arrancar la llamada el lead se mueve a "En seguimiento".
      *
      * @param {Object} context
      * @param {number|string} lead_id
@@ -275,8 +275,9 @@ export default {
       })
     },
     /**
-     * Nueva reunión (Seguimiento, ad-hoc): crea SIEMPRE una llamada nueva con evento para
-     * ahora + la duración configurada, manda el bot, y refresca el panel.
+     * Nueva reunión (ad-hoc): crea SIEMPRE una llamada nueva con evento para ahora + la
+     * duración configurada, manda el bot, y refresca el panel. Al quedar con `started_at`
+     * cargada, el lead pasa de "Listos para la llamada" a "En seguimiento".
      *
      * @param {Object} context
      * @param {number|string} lead_id

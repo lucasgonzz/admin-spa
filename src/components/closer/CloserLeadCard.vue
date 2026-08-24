@@ -12,9 +12,9 @@
             >
               {{ lead_display_name }}
             </button>
-            <!-- Pulso verde cuando la demo está en horario activo (sección en_curso) -->
+            <!-- Pulso verde cuando la demo está en horario activo (columna de demos agendadas) -->
             <span
-              v-if="section === 'en_curso' && demo_is_live"
+              v-if="section === 'agendadas' && demo_is_live"
               class="closer-live-badge badge bg-success"
               title="Demo en horario activo"
             >
@@ -48,19 +48,28 @@
 
       <!-- Meta contextual según sección -->
       <div class="small text-muted mb-2">
-        <template v-if="section === 'en_curso' || section === 'agendadas'">
+        <template v-if="section === 'agendadas' || section === 'para_llamar'">
           <i class="bi bi-clock me-1" aria-hidden="true" />
-          {{ demo_datetime_label }}
+          Demo: {{ demo_datetime_label }}
         </template>
         <template v-else-if="section === 'seguimiento'">
           <i class="bi bi-telephone me-1" aria-hidden="true" />
-          Llamada: {{ closer_called_label }}
+          Última llamada: {{ last_call_label }}
         </template>
       </div>
 
-      <!-- Resumen estructurado en agendadas (empresa + situación) -->
+      <!-- Llamada ya acordada por el agente: el closer tiene un horario que cumplir -->
       <div
-        v-if="section === 'agendadas' && demo_summary_preview"
+        v-if="section === 'para_llamar' && scheduled_call_label"
+        class="small mb-2 closer-scheduled-call"
+      >
+        <i class="bi bi-calendar-check me-1" aria-hidden="true" />
+        Llamada acordada: <span class="fw-semibold">{{ scheduled_call_label }}</span>
+      </div>
+
+      <!-- Resumen estructurado de la demo (empresa + situación) -->
+      <div
+        v-if="(section === 'agendadas' || section === 'para_llamar') && demo_summary_preview"
         class="small text-secondary mb-2 closer-summary-preview"
         :title="demo_summary_tooltip"
       >
@@ -114,12 +123,19 @@
 
       <!-- Acciones principales -->
       <div class="d-flex flex-wrap gap-2 mt-2">
+        <!--
+          Columna "Listos para la llamada". Dos casos distintos y un solo botón visible:
+          - El agente ya le agendó la llamada (grupo 307): esa llamada existe con su Meet, así
+            que se reusa con "Unirse a Meet" en vez de crear una segunda reunión al pedo.
+          - No tiene ninguna llamada: "Nueva reunión" crea el evento ad-hoc para ahora.
+          Las dos acciones estampan `started_at`, así que el lead pasa a "En seguimiento".
+        -->
         <button
-          v-if="section === 'en_curso'"
+          v-if="section === 'para_llamar' && pending_call"
           type="button"
           class="btn btn-sm btn-primary"
           :disabled="joining_meet"
-          title="Unirse a la llamada (crea el Meet si todavía no existe) y enviar bot de grabación"
+          title="Unirse a la llamada ya acordada y enviar el bot de grabación"
           @click="join_meet"
         >
           <span v-if="joining_meet" class="spinner-border spinner-border-sm me-1" aria-hidden="true" />
@@ -128,9 +144,34 @@
         </button>
 
         <button
+          v-if="section === 'para_llamar' && pending_call"
+          type="button"
+          class="btn btn-sm btn-outline-secondary"
+          :disabled="!pending_call.meet_url"
+          :title="pending_call.meet_url ? 'Mandar el bot de grabación a esta llamada' : 'Sin link de Meet disponible'"
+          @click="on_send_bot"
+        >
+          <i class="bi bi-robot me-1" aria-hidden="true" />
+          Mandar bot
+        </button>
+
+        <button
+          v-if="section === 'para_llamar' && !pending_call"
+          type="button"
+          class="btn btn-sm btn-primary"
+          :disabled="creating_call"
+          title="Crear la videollamada ahora, con Meet y bot de grabación"
+          @click="on_new_call"
+        >
+          <span v-if="creating_call" class="spinner-border spinner-border-sm me-1" aria-hidden="true" />
+          <i v-else class="bi bi-camera-video me-1" aria-hidden="true" />
+          Nueva reunión
+        </button>
+
+        <button
           type="button"
           class="btn btn-sm"
-          :class="section === 'en_curso' ? 'btn-outline-secondary' : 'btn-primary'"
+          :class="section === 'agendadas' ? 'btn-primary' : 'btn-outline-secondary'"
           @click="go_to_conversation"
         >
           <i class="bi bi-chat-dots me-1" aria-hidden="true" />
@@ -138,7 +179,7 @@
         </button>
 
         <a
-          v-if="section === 'seguimiento' && whatsapp_href"
+          v-if="section !== 'agendadas' && whatsapp_href"
           :href="whatsapp_href"
           target="_blank"
           rel="noopener noreferrer"
@@ -155,6 +196,24 @@
 <script>
 import CloserPartnerRow from './CloserPartnerRow.vue'
 import CloserCallRow from './CloserCallRow.vue'
+import { with_authuser } from '@/utils/meet'
+
+/**
+ * Etiquetas del badge en la columna "Listos para la llamada". Ahí el estado no interesa como
+ * dato del pipeline sino como respuesta a una sola pregunta: ¿este lead ya dijo que quiere la
+ * llamada? `closer_activo` es el que la confirmó; `demo_realizada` es el que terminó la demo y
+ * todavía no contestó (o al que nadie llegó a preguntarle).
+ */
+const PARA_LLAMAR_LABELS = {
+  closer_activo: 'Interesado',
+  demo_realizada: 'Sin confirmar',
+}
+
+/** Clases del badge en "Listos para la llamada" (verde = confirmó, gris = todavía no). */
+const PARA_LLAMAR_BADGE_CLASSES = {
+  closer_activo: 'bg-success',
+  demo_realizada: 'bg-secondary',
+}
 
 /** Etiquetas legibles de estados frecuentes en el panel del closer. */
 const STATUS_LABELS = {
@@ -182,7 +241,7 @@ const STATUS_BADGE_CLASSES = {
 
 /**
  * Tarjeta compacta de un lead dentro del panel del closer.
- * Adapta contenido y acciones según la sección (en_curso, agendadas, seguimiento).
+ * Adapta contenido y acciones según la sección (agendadas, para_llamar, seguimiento).
  */
 export default {
   name: 'CloserLeadCard',
@@ -205,7 +264,7 @@ export default {
       type: String,
       required: true,
       validator: function (value) {
-        return ['en_curso', 'agendadas', 'seguimiento'].indexOf(value) !== -1
+        return ['agendadas', 'para_llamar', 'seguimiento'].indexOf(value) !== -1
       },
     },
   },
@@ -241,12 +300,80 @@ export default {
      */
     status_badge() {
       const status = this.lead.status || ''
+      if (this.section === 'para_llamar' && PARA_LLAMAR_LABELS[status]) {
+        return {
+          label: PARA_LLAMAR_LABELS[status],
+          class_name: PARA_LLAMAR_BADGE_CLASSES[status] || 'bg-secondary',
+        }
+      }
       const label = STATUS_LABELS[status] || status.replace(/_/g, ' ')
       const class_name = STATUS_BADGE_CLASSES[status] || 'bg-secondary'
       return { label: label, class_name: class_name }
     },
     /**
-     * Texto de fecha y hora de demo para en_curso y agendadas.
+     * Cuenta de Google con la que se crean los eventos del closer; se usa para abrir el Meet
+     * forzando esa sesión y no la que el navegador tenga activa.
+     *
+     * @returns {string}
+     */
+    closer_google_account() {
+      const settings = this.$store.state.closer.settings || {}
+      return settings.closer_google_account || ''
+    },
+    /**
+     * Llamada del lead que todavía no arrancó (la que el agente le agendó al confirmar que
+     * quería avanzar), o null si no tiene ninguna. En "Listos para la llamada" ningún lead
+     * tiene llamadas iniciadas, así que cualquier fila que traiga es una llamada pendiente.
+     *
+     * @returns {Object|null}
+     */
+    pending_call() {
+      const calls = this.lead.calls || []
+      let i = 0
+      for (i = calls.length - 1; i >= 0; i = i - 1) {
+        if (!calls[i].started_at) {
+          return calls[i]
+        }
+      }
+      return null
+    },
+    /**
+     * Fecha y hora acordadas de la llamada pendiente, o cadena vacía si no hay horario.
+     *
+     * @returns {string}
+     */
+    scheduled_call_label() {
+      if (!this.pending_call || !this.pending_call.scheduled_at) {
+        return ''
+      }
+      return this.format_datetime(this.pending_call.scheduled_at)
+    },
+    /**
+     * Fecha y hora de la última llamada REALIZADA, con fallback a la columna vieja
+     * `closer_called_at` (que solo tienen los leads anteriores al refactor de múltiples
+     * llamadas y no se carga en las llamadas nuevas).
+     *
+     * @returns {string}
+     */
+    last_call_label() {
+      const calls = this.lead.calls || []
+      let latest = null
+      let i = 0
+      for (i = 0; i < calls.length; i = i + 1) {
+        if (!calls[i].started_at) {
+          continue
+        }
+        if (latest === null || new Date(calls[i].started_at) > new Date(latest)) {
+          latest = calls[i].started_at
+        }
+      }
+      if (latest) {
+        return this.format_datetime(latest)
+      }
+      return this.closer_called_label
+    },
+    /**
+     * Texto de fecha y hora de demo para las columnas de demo y de llamada pendiente.
      *
      * @returns {string}
      */
@@ -382,7 +509,7 @@ export default {
         .dispatch('closer/join_call', self.lead.id)
         .then(function (call) {
           if (call && call.meet_url) {
-            window.open(call.meet_url, '_blank', 'noopener,noreferrer')
+            window.open(with_authuser(call.meet_url, self.closer_google_account), '_blank', 'noopener,noreferrer')
           } else {
             window.alert('No se pudo obtener el link de Meet. Revisá que el closer tenga Google Calendar conectado.')
           }
@@ -409,6 +536,20 @@ export default {
         .finally(function () {
           self.creating_call = false
         })
+    },
+    /**
+     * Manda (o remanda) el bot de grabación a la llamada pendiente de este lead.
+     *
+     * @returns {void}
+     */
+    on_send_bot: function () {
+      if (!this.pending_call) {
+        return
+      }
+      this.$store.dispatch('closer/send_bot_for_call', {
+        lead_id: this.lead.id,
+        call_id: this.pending_call.id,
+      })
     },
     /**
      * Al clic en socio confirmado: abre WhatsApp si hay teléfono, sino alerta con datos.
@@ -566,6 +707,9 @@ export default {
 	&:hover
 		color: #0d6efd
 		text-decoration: underline
+
+.closer-scheduled-call
+	color: #0a58ca
 
 .closer-summary-preview
 	display: -webkit-box

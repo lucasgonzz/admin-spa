@@ -87,6 +87,7 @@
 <script>
 import CallSummaryPanel from '@/components/lead/resumen/CallSummaryPanel.vue'
 import CloserPartnerRow from './CloserPartnerRow.vue'
+import { with_authuser } from '@/utils/meet'
 
 /**
  * Fila de una llamada del closer con un lead, dentro de la sección "Seguimiento".
@@ -131,12 +132,16 @@ export default {
      * @returns {string}
      */
     started_at_label() {
-      if (!this.call.started_at) {
+      /* Una llamada agendada por el agente todavía no arrancó: no tiene `started_at` pero sí
+       * `scheduled_at`, y mostrar "Sin fecha" cuando hay un horario acordado es peor que no
+       * mostrar nada. */
+      const raw = this.call.started_at || this.call.scheduled_at
+      if (!raw) {
         return 'Sin fecha'
       }
-      const date = new Date(this.call.started_at)
+      const date = new Date(raw)
       if (isNaN(date.getTime())) {
-        return this.call.started_at
+        return raw
       }
       const day = String(date.getDate()).padStart(2, '0')
       const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -183,14 +188,21 @@ export default {
 
   methods: {
     /**
-     * Abre el Meet de esta llamada en una pestaña nueva.
+     * Abre el Meet de esta llamada en una pestaña nueva, forzando la cuenta de Google con la
+     * que se creó el evento (ver `utils/meet.js`: sin eso Google le pide al closer que el
+     * anfitrión lo admita, aunque el anfitrión sea él mismo).
      * @returns {void}
      */
     on_join_meet() {
       if (!this.call.meet_url) {
         return
       }
-      window.open(this.call.meet_url, '_blank', 'noopener,noreferrer')
+      const settings = this.$store.state.closer.settings || {}
+      window.open(
+        with_authuser(this.call.meet_url, settings.closer_google_account),
+        '_blank',
+        'noopener,noreferrer'
+      )
     },
     /**
      * Manda el bot manualmente a esta llamada puntual.

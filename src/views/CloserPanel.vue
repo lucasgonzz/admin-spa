@@ -8,6 +8,12 @@
         <p v-if="last_fetched_label" class="text-muted small mb-0 mt-1">
           Actualizado {{ last_fetched_label }}
         </p>
+        <!-- Cuenta con la que se crean los Meet: si el navegador está logueado con otra,
+             Google pide que el anfitrión te admita. Verla acá hace obvio el desajuste. -->
+        <p v-if="closer_google_account" class="text-muted small mb-0 mt-1">
+          <i class="bi bi-google me-1" aria-hidden="true" />
+          Entrás a los Meet como <span class="fw-semibold">{{ closer_google_account }}</span>
+        </p>
       </div>
       <button
         type="button"
@@ -117,6 +123,63 @@ import LeadConversationSidebar from '@/components/lead/LeadConversationSidebar.v
 const PANEL_POLL_MS = 60000
 
 /**
+ * Momento (en ms) de la llamada que el lead tiene AGENDADA y todavía no arrancó, o Infinity si
+ * no tiene ninguna. Se usa para ordenar "Listos para la llamada": los que tienen horario
+ * acordado con el agente van primero, del más próximo al más lejano.
+ *
+ * En esa columna ningún lead tiene llamadas iniciadas (es justamente su condición de entrada),
+ * así que cualquier fila de `calls` que traiga es una llamada agendada pendiente.
+ *
+ * @param {Object} lead
+ * @returns {number}
+ */
+function scheduled_at_of(lead) {
+  const calls = (lead && lead.calls) || []
+  let earliest = Infinity
+  let i = 0
+  for (i = 0; i < calls.length; i = i + 1) {
+    if (!calls[i].scheduled_at) {
+      continue
+    }
+    const at = new Date(calls[i].scheduled_at).getTime()
+    if (!isNaN(at) && at < earliest) {
+      earliest = at
+    }
+  }
+  return earliest
+}
+
+/**
+ * Momento (en ms) de la última llamada REALIZADA del lead, con fallback a `closer_called_at`.
+ *
+ * El fallback importa: `closer_called_at` es la columna vieja de `leads`, de cuando un lead tenía
+ * una sola llamada, y no se carga en las llamadas nuevas. Ordenar solo por ella hundía al fondo
+ * justo a los leads recién llamados.
+ *
+ * @param {Object} lead
+ * @returns {number}
+ */
+function last_call_at_of(lead) {
+  const calls = (lead && lead.calls) || []
+  let latest = 0
+  let i = 0
+  for (i = 0; i < calls.length; i = i + 1) {
+    if (!calls[i].started_at) {
+      continue
+    }
+    const at = new Date(calls[i].started_at).getTime()
+    if (!isNaN(at) && at > latest) {
+      latest = at
+    }
+  }
+  if (latest > 0) {
+    return latest
+  }
+  const fallback = new Date((lead && lead.closer_called_at) || 0).getTime()
+  return isNaN(fallback) ? 0 : fallback
+}
+
+/**
  * Vista dedicada del closer: tres secciones operativas con scroll independiente.
  * En desktop muestra tres columnas; en mobile usa tabs.
  */
@@ -131,7 +194,7 @@ export default {
   data() {
     return {
       /** Tab activa en viewport móvil. */
-      active_tab: 'en_curso',
+      active_tab: 'para_llamar',
       /** true cuando el viewport es menor a md (< 768px). */
       is_mobile: false,
       /** MediaQueryList para detectar cambios de viewport. */
@@ -187,9 +250,39 @@ export default {
       return this.$store.state.closer.followup_sort
     },
     /**
+     * Mail de la cuenta de Google conectada del closer (la que crea los eventos y los Meet).
+     *
+     * @returns {string}
+     */
+    closer_google_account() {
+      const settings = this.$store.state.closer.settings || {}
+      return settings.closer_google_account || ''
+    },
+    /**
+     * Leads listos para la llamada, con los que YA tienen horario acordado por el agente
+     * arriba (ordenados por ese horario, el más próximo primero) y el resto después, por
+     * fecha de demo descendente. El que tiene hora es el que tiene un compromiso que cumplir.
+     *
+     * @returns {Array<Object>}
+     */
+    sorted_para_llamar() {
+      const leads = (this.$store.state.closer.para_llamar || []).slice()
+      return leads.sort(function (a, b) {
+        var a_at = scheduled_at_of(a)
+        var b_at = scheduled_at_of(b)
+        if (a_at !== b_at) {
+          /* Los que no tienen horario acordado van al final (Infinity). */
+          return a_at - b_at
+        }
+        var a_demo = new Date(a.demo_date || 0).getTime()
+        var b_demo = new Date(b.demo_date || 0).getTime()
+        return b_demo - a_demo
+      })
+    },
+    /**
      * Lista de leads en seguimiento ordenada según el criterio activo.
      * - 'suggestion': primero los que tienen tiene_sugerencia_pendiente = true.
-     * - 'date': por closer_called_at descendente (más reciente primero).
+     * - 'date': por fecha de la última llamada realizada, más reciente primero.
      *
      * @returns {Array<Object>}
      */
@@ -203,17 +296,13 @@ export default {
           if (a_pending !== b_pending) {
             return a_pending - b_pending
           }
-          /* Dentro del mismo grupo: más reciente primero por closer_called_at. */
-          var a_date = new Date(a.closer_called_at || 0).getTime()
-          var b_date = new Date(b.closer_called_at || 0).getTime()
-          return b_date - a_date
+          /* Dentro del mismo grupo: más reciente primero. */
+          return last_call_at_of(b) - last_call_at_of(a)
         })
       }
       /* Orden por fecha: más reciente primero. */
       return leads.sort(function (a, b) {
-        var a_date = new Date(a.closer_called_at || 0).getTime()
-        var b_date = new Date(b.closer_called_at || 0).getTime()
-        return b_date - a_date
+        return last_call_at_of(b) - last_call_at_of(a)
       })
     },
     /**
@@ -225,18 +314,18 @@ export default {
       const state = this.$store.state.closer
       return [
         {
-          key: 'en_curso',
-          title: 'Hoy',
-          leads: state.en_curso || [],
-          count: (state.en_curso || []).length,
-          empty_message: 'No hay demos para hoy',
-        },
-        {
           key: 'agendadas',
           title: 'Demos agendadas',
           leads: state.agendadas || [],
           count: (state.agendadas || []).length,
-          empty_message: 'No hay demos agendadas',
+          empty_message: 'No hay demos agendadas sin terminar',
+        },
+        {
+          key: 'para_llamar',
+          title: 'Listos para la llamada',
+          leads: this.sorted_para_llamar,
+          count: this.sorted_para_llamar.length,
+          empty_message: 'No hay leads esperando la llamada',
         },
         {
           key: 'seguimiento',
