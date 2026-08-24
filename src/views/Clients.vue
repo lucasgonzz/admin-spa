@@ -11,6 +11,7 @@ import ResourceView from '@/common-vue/components/view/Index.vue'
 import ClientInstallationsTab from '@/components/client/InstallationsTab.vue'
 import EcommerceImplementationTab from '@/components/client/EcommerceImplementationTab.vue'
 import MensualidadTab from '@/components/client/MensualidadTab.vue'
+import ClientScheduleTab from '@/components/client/ScheduleTab.vue'
 
 /**
  * Vista principal de clientes.
@@ -42,6 +43,11 @@ export default {
           key: 'mensualidad',
           label: 'Mensualidad',
           component: markRaw(MensualidadTab),
+        },
+        {
+          key: 'horarios',
+          label: 'Horarios',
+          component: markRaw(ClientScheduleTab),
         },
       ],
     }
