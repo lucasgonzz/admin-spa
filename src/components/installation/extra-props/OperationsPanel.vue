@@ -42,15 +42,19 @@
     <div class="card border-primary border-opacity-25">
       <div class="card-header d-flex align-items-center gap-2 bg-primary bg-opacity-10">
         <i class="bi bi-hdd-stack text-primary"></i>
-        <h6 class="mb-0 fw-semibold">Instalación del sistema</h6>
+        <h6 class="mb-0 fw-semibold">{{ is_esqueleto ? 'Esqueleto del subdominio' : 'Instalación del sistema' }}</h6>
       </div>
       <div class="card-body">
-        <sub-task-item label="Compilar SPA" :status="get_step_status('compile_spa')" />
-        <sub-task-item label="Subir SPA al hosting" :status="get_step_status('upload_spa')" />
-        <sub-task-item label="Subir API al hosting" :status="get_step_status('upload_api')" />
-        <sub-task-item label="Instalar composer" :status="get_step_status('install_composer')" />
-        <sub-task-item label="Escribir .env" :status="get_step_status('write_env')" />
-        <sub-task-item label="Finalizar API" :status="get_step_status('finalize_api')" />
+        <!--
+          El checklist sale de checklist_items y no está escrito a mano: el esqueleto corre otras
+          etapas, y una lista fija dejaría cuatro ítems en gris para siempre en cada esqueleto.
+        -->
+        <sub-task-item
+          v-for="item in checklist_items"
+          :key="item.key"
+          :label="item.label"
+          :status="get_step_status(item.key)"
+        />
       </div>
     </div>
   </div>
@@ -60,10 +64,40 @@
 import SubTaskItem from '@/components/update/extra-props/operations/SubTaskItem.vue'
 
 /**
- * Orden real de las etapas del pipeline de instalación (ClientInstallation),
- * calcado de InstallationService::$steps en admin-api (prompt 396: sin run_user_setup).
+ * Orden real de las etapas del pipeline de instalación (ClientInstallation), calcado de
+ * InstallationService::$steps en admin-api (prompt 396: sin run_user_setup).
  */
-var LOG_STEPS_ORDER = ['compile_spa', 'upload_spa', 'upload_api', 'write_env', 'finalize_api']
+var LOG_STEPS_ORDER_COMPLETA = ['compile_spa', 'upload_spa', 'upload_api', 'write_env', 'finalize_api']
+
+/**
+ * Etapas del esqueleto, calcadas de InstallationService::$skeleton_steps. Son strings distintos
+ * a propósito salvo write_env, que es literalmente la misma etapa reutilizada por el esqueleto.
+ */
+var LOG_STEPS_ORDER_ESQUELETO = ['prepare_dirs', 'upload_public', 'write_env', 'finalize_skeleton']
+
+/**
+ * Ítems del checklist de una instalación completa. install_composer no es una etapa del backend
+ * (ver los marcadores de abajo), por eso está en esta lista y no en LOG_STEPS_ORDER_COMPLETA.
+ */
+var CHECKLIST_COMPLETA = [
+  { key: 'compile_spa', label: 'Compilar SPA' },
+  { key: 'upload_spa', label: 'Subir SPA al hosting' },
+  { key: 'upload_api', label: 'Subir API al hosting' },
+  { key: 'install_composer', label: 'Instalar composer' },
+  { key: 'write_env', label: 'Escribir .env' },
+  { key: 'finalize_api', label: 'Finalizar API' },
+]
+
+/**
+ * Ítems del checklist del esqueleto. Sin "Instalar composer": el esqueleto no sube el código de
+ * la API, así que no hay composer que correr.
+ */
+var CHECKLIST_ESQUELETO = [
+  { key: 'prepare_dirs', label: 'Preparar directorios' },
+  { key: 'upload_public', label: 'Subir public/' },
+  { key: 'write_env', label: 'Escribir .env' },
+  { key: 'finalize_skeleton', label: 'Verificar el esqueleto' },
+]
 
 /**
  * "Instalar composer" no es una etapa propia del backend: ocurre dentro del tag upload_api.
@@ -75,7 +109,8 @@ var COMPOSER_DONE_MARKER = 'API lista en el hosting'
 
 /**
  * Panel de operaciones de una instalación: log en vivo (colapsable, auto-scroll) +
- * checklist de las 6 etapas visibles del pipeline (SubTaskItem), con estado derivado
+ * checklist de las etapas visibles del pipeline que corresponde al kind de la fila
+ * (6 en una instalación completa, 4 en un esqueleto) vía SubTaskItem, con estado derivado
  * directamente del campo `step` de cada deployment_log (sin parsear texto con regex,
  * a diferencia del panel equivalente de actualización de la demo).
  */
@@ -101,6 +136,34 @@ export default {
      */
     log_lines() {
       return this.installation.deployment_logs || []
+    },
+
+    /**
+     * ¿Esta fila es un esqueleto? El fallback es 'completa' porque las filas creadas antes de
+     * que existiera el campo kind son todas completas.
+     *
+     * @returns {boolean}
+     */
+    is_esqueleto() {
+      return this.installation.kind === 'esqueleto'
+    },
+
+    /**
+     * Orden de las etapas del pipeline que corresponde a esta fila.
+     *
+     * @returns {Array<string>}
+     */
+    steps_order() {
+      return this.is_esqueleto ? LOG_STEPS_ORDER_ESQUELETO : LOG_STEPS_ORDER_COMPLETA
+    },
+
+    /**
+     * Ítems del checklist que corresponden a esta fila.
+     *
+     * @returns {Array<{key: string, label: string}>}
+     */
+    checklist_items() {
+      return this.is_esqueleto ? CHECKLIST_ESQUELETO : CHECKLIST_COMPLETA
     },
   },
   watch: {
@@ -162,16 +225,17 @@ export default {
     /**
      * Determina el estado visual de un ítem del checklist a partir de los deployment_logs.
      *
-     * @param {string} key - 'compile_spa' | 'upload_spa' | 'upload_api' | 'install_composer' | 'write_env' | 'finalize_api'
+     * @param {string} key - una key de CHECKLIST_COMPLETA o de CHECKLIST_ESQUELETO
      * @returns {string} - 'pending' | 'running' | 'completed' | 'failed'
      */
     get_step_status(key) {
-      // Instalación completa: las 6 etapas quedan en verde sin importar el detalle del log.
+      // Instalación completada: todas las etapas quedan en verde sin importar el detalle del log.
       if (this.installation.status === 'completada') {
         return 'completed'
       }
 
       // "Instalar composer" es un sub-paso derivado dentro de upload_api (ver marcadores arriba).
+      // Solo existe en una instalación completa: el esqueleto no sube el código de la API.
       if (key === 'install_composer') {
         if (this.composer_done()) return 'completed'
         if (this.composer_started()) {
@@ -190,18 +254,16 @@ export default {
         return 'pending'
       }
 
-      // finalize_api es la última etapa: no hay un step siguiente cuyos logs indiquen que
-      // terminó. El early-return de 'completada' ya cubre el caso feliz; acá sólo se
-      // distingue 'running' de 'failed' según el status general de la instalación.
-      if (key === 'finalize_api') {
-        if (!this.has_logs_for('finalize_api')) return 'pending'
-        return this.installation.status === 'fallida' ? 'failed' : 'running'
-      }
-
-      // compile_spa / upload_spa / write_env: se completan cuando el siguiente tag
-      // del pipeline ya tiene logs propios (señal de que el step actual terminó bien).
-      var idx = LOG_STEPS_ORDER.indexOf(key)
-      var next = LOG_STEPS_ORDER[idx + 1]
+      // El resto de las etapas se completa cuando el siguiente tag del pipeline ya tiene logs
+      // propios (señal de que el step actual terminó bien).
+      //
+      // La última etapa (finalize_api en una completa, finalize_skeleton en un esqueleto) no
+      // tiene un step siguiente que la confirme, así que cae sola en 'running'/'failed': el
+      // early-return de 'completada' de arriba es el que cubre su caso feliz. Por eso el
+      // recorrido es genérico y no hay un case por nombre de última etapa.
+      var order = this.steps_order
+      var idx = order.indexOf(key)
+      var next = idx !== -1 ? order[idx + 1] : null
       var next_has_logs = next ? this.has_logs_for(next) : false
       if (!this.has_logs_for(key)) return 'pending'
       if (next_has_logs) return 'completed'
