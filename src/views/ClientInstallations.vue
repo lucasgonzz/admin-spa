@@ -43,6 +43,7 @@
         :key="installation.id"
         :installation="installation"
         @update:installation="on_installation_updated"
+        @group-updated="on_group_updated"
         @deleted="on_installation_deleted"
       />
     </div>
@@ -154,6 +155,25 @@ export default {
       if (index !== -1) {
         this.installations.splice(index, 1, updated)
       }
+    },
+
+    /**
+     * Reemplaza de una vez todas las filas del par que emitió el detalle.
+     *
+     * Acá las dos filas del par están las dos en pantalla, una arriba de la otra. Iniciar desde
+     * cualquiera de las dos arranca las dos, pero solo la card que se tocó recibe
+     * update:installation: sin este handler la otra se queda en 'pendiente' hasta que alguien
+     * recargue, y las dos cards de la misma pantalla se contradicen.
+     *
+     * @param {Array<Object>} updated_rows
+     * @returns {void}
+     */
+    on_group_updated(updated_rows) {
+      const self = this
+      const rows = updated_rows || []
+      rows.forEach(function (row) {
+        self.on_installation_updated(row)
+      })
     },
 
     /**
