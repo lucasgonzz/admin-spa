@@ -442,19 +442,6 @@ export default {
      * @returns {void}
      */
     /**
-     * Completa el textarea con una sugerencia recibida por Pusher o al abrir el ticket.
-     *
-     * @param {string} suggestion_text Texto sugerido por Claude.
-     * @returns {void}
-     */
-    apply_pending_suggestion(suggestion_text) {
-      const text = String(suggestion_text || '').trim()
-      if (text) {
-        this.body = text
-        this.suggestion_error = ''
-      }
-    },
-    /**
      * Solicita sugerencia IA al backend y completa el textarea.
      *
      * @returns {void}

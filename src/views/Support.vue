@@ -54,7 +54,6 @@
       </div>
       <div class="support-right-bottom flex-shrink-0">
         <message-input
-          ref="message_input"
           :can_send="can_send_message"
           :ticket_id="selected_ticket_id"
           :ai_suggestion_send_at="selected_ticket_ai_send_at"
@@ -286,7 +285,14 @@ export default {
     this.now_tick_interval_id = window.setInterval(function () {
       self.now_tick = Date.now()
     }, 250)
+    /* El ticket del query param se resuelve DESPUÉS de que vuelve la bandeja. Los dos eran
+       requests sueltos y el puntual ganaba casi siempre: después llegaba el listado, pisaba el
+       array entero (set_models) y seleccionaba tickets[0], así que el link del WhatsApp de
+       escalado terminaba abriendo cualquier otro ticket. */
     this.$store.dispatch('support_ticket/get_models').then(function () {
+      if (self.abrir_ticket_del_query_param()) {
+        return
+      }
       if (self.tickets.length) {
         self.select_ticket(self.tickets[0].id)
       }
@@ -294,7 +300,6 @@ export default {
   },
   mounted() {
     window.addEventListener('support-ticket-alert', this.on_support_ticket_alert)
-    this.abrir_ticket_del_query_param()
   },
   beforeUnmount() {
     window.removeEventListener('support-ticket-alert', this.on_support_ticket_alert)
@@ -521,12 +526,6 @@ export default {
       }
     },
     /**
-     * Carga en el input la sugerencia IA pendiente del ticket activo.
-     *
-     * @param {string|null} suggestion_text Texto sugerido por Claude.
-     * @returns {void}
-     */
-    /**
      * Prende o apaga el agente para el ticket abierto.
      *
      * @returns {void}
@@ -600,7 +599,7 @@ export default {
           })
         })
         .catch(function (error) {
-          console.log(error)
+          self.mostrar_error_de_borrador(error, 'No se pudo enviar la sugerencia.')
         })
         .then(function () {
           self.draft_busy = false
@@ -629,11 +628,26 @@ export default {
           })
         })
         .catch(function (error) {
-          console.log(error)
+          self.mostrar_error_de_borrador(error, 'No se pudo descartar la sugerencia.')
         })
         .then(function () {
           self.draft_busy = false
         })
+    },
+    /**
+     * Muestra el motivo real que devolvió la API al fallar una acción sobre un borrador.
+     *
+     * Se comían con un console.log, así que el operador apretaba Enviar, los botones se
+     * reactivaban y no pasaba nada: ni el mensaje salía ni había forma de saber por qué.
+     *
+     * @param {Object} error    Error de axios.
+     * @param {string} fallback Texto si la API no mandó motivo.
+     * @returns {void}
+     */
+    mostrar_error_de_borrador(error, fallback) {
+      const respuesta = error && error.response
+      const detalle = respuesta && respuesta.data ? respuesta.data.error : null
+      window.alert(detalle || fallback)
     },
     /**
      * Abre el ticket que viene en ?ticket_id=, si lo hay.
@@ -643,12 +657,12 @@ export default {
      * ticket de otro—, así que si no aparece se lo trae con un GET puntual. Después se limpia
      * el query param para que un refresh no lo vuelva a abrir.
      *
-     * @returns {void}
+     * @returns {boolean} true si había un ticket que abrir (aunque el GET todavía esté en vuelo).
      */
     abrir_ticket_del_query_param() {
       const ticket_id = this.$route && this.$route.query ? this.$route.query.ticket_id : null
       if (!ticket_id) {
-        return
+        return false
       }
 
       const self = this
@@ -663,7 +677,8 @@ export default {
       if (ya_esta) {
         this.select_ticket(ticket_id)
         limpiar_query()
-        return
+
+        return true
       }
 
       api
@@ -678,8 +693,14 @@ export default {
         })
         .catch(function (error) {
           console.log(error)
+          /* Si no se pudo traer, al menos que no quede el panel vacío. */
+          if (self.tickets.length) {
+            self.select_ticket(self.tickets[0].id)
+          }
         })
         .then(limpiar_query)
+
+      return true
     },
     /**
      * Quita la selección: vacía el panel de conversación sin tocar el ticket en el servidor.
