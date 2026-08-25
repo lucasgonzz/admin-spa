@@ -152,6 +152,7 @@
 </template>
 
 <script>
+import moment from 'moment'
 import SearchField from '@/common-vue/components/search/Index.vue'
 import LeadPersonalizedDemoVideosEditor from '@/components/lead/PersonalizedDemoVideosEditor.vue'
 import ClientImplementationExtraProps from '@/components/client/extra-props/Index.vue'
@@ -174,6 +175,8 @@ import { store_catalog_relations } from '@/utils/store_catalog_relations'
  * Filas del meta solo con `group_title` (sin `key`) agrupan campos.
  * El tablist de navegación se renderiza en `model/Index.vue` y aquí se recibe el grupo activo.
  * `only_show`: etiqueta + valor como texto en `<p>` (sin input).
+ * `only_show` + `type: date`/`day`: la fecha se formatea a DD/MM/YYYY (con hora en `date`) en la
+ *   zona horaria del navegador, en vez de pintar el ISO crudo del backend.
  * `exclude_on_update` sin `only_show`: sigue como control deshabilitado o solo lectura.
  * `from_has_many`: select FK alimentado solo con hijos persistidos del has_many del draft padre.
  * `from_parent_field`: select FK cuyas opciones se cargan desde un recurso padre (ej. client_apis del client_id).
@@ -504,7 +507,37 @@ export default {
       if (raw == null || raw === '') {
         return '—'
       }
+      if (p.type === 'date' || p.type === 'day') {
+        return this.only_show_date_text(p, raw)
+      }
       return String(raw)
+    },
+    /**
+     * Texto de una fecha informativa (`only_show` de tipo `date` o `day`).
+     *
+     * Hasta el 25/8/2026 estos campos caían en el `String(raw)` de abajo y se pintaban con el
+     * ISO crudo que manda Laravel — `2026-08-25T17:51:48.000000Z` para el vencimiento del token
+     * de ingreso del lead, que fue el caso que lo destapó. No es solo feo: está en UTC, así que
+     * la hora que se leía no era la del reloj de quien la mira.
+     *
+     * `date` lleva hora (es un `datetime` del backend); `day` es solo el día. Va en la zona
+     * horaria del navegador, igual que `DemoAccesoControl.vue`, que es el otro lugar donde se
+     * muestra esta misma fecha. Si el valor no se puede parsear se devuelve tal cual vino, para
+     * no esconder un dato que existe detrás de un guión.
+     *
+     * @param {Object} p definición meta del campo
+     * @param {*} raw valor actual en el formulario
+     * @returns {string}
+     */
+    only_show_date_text(p, raw) {
+      const m = moment(raw)
+      if (!m.isValid()) {
+        return String(raw)
+      }
+      if (p.type === 'day') {
+        return m.format('DD/MM/YYYY')
+      }
+      return m.format('DD/MM/YYYY HH:mm')
     },
     /**
      * Grupo efectivo de un campo según el orden del meta y los separadores `group_title`.
