@@ -566,7 +566,7 @@ export default {
           }
         })
         .catch(function (error) {
-          console.log(error)
+          self.mostrar_error_de_borrador(error, 'No se pudo cambiar el interruptor del agente.')
         })
         .then(function () {
           self.saving_agent_controls = false
@@ -691,9 +691,9 @@ export default {
           self.$store.commit('support_ticket/upsert_from_broadcast', model)
           self.select_ticket(model.id)
         })
-        .catch(function (error) {
-          console.log(error)
-          /* Si no se pudo traer, al menos que no quede el panel vacío. */
+        .catch(function () {
+          /* Si no se pudo traer, al menos que no quede el panel vacío: se abre el primero de
+             la bandeja en vez de dejar la conversación en blanco sin explicación. */
           if (self.tickets.length) {
             self.select_ticket(self.tickets[0].id)
           }

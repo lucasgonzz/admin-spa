@@ -441,11 +441,6 @@ export default {
      *
      * @returns {void}
      */
-    /**
-     * Solicita sugerencia IA al backend y completa el textarea.
-     *
-     * @returns {void}
-     */
     request_suggestion() {
       const self = this
       if (!self.ticket_id || self.loading_suggestion) {

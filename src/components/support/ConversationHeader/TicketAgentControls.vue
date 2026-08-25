@@ -11,7 +11,7 @@
       :disabled="saving"
       :title="agent_title"
       @click="$emit('toggle-agent')">
-      <i class="bi" :class="agent_on ? 'bi-robot' : 'bi-robot'" aria-hidden="true" />
+      <i class="bi" :class="agent_on ? 'bi-robot' : 'bi-slash-circle'" aria-hidden="true" />
       {{ agent_on ? 'Agente' : 'Agente apagado' }}
     </button>
 
