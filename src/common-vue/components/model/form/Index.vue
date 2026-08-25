@@ -535,6 +535,18 @@ export default {
         return String(raw)
       }
       if (p.type === 'day') {
+        /*
+         * 🔴 `day` se lee de la cadena, sin pasar por la zona horaria del navegador. Un cast
+         * `date` de Laravel con la app en America/Argentina/Buenos_Aires se serializa como
+         * `2026-08-25T03:00:00.000000Z`; interpretarlo en local desde un huso más al oeste
+         * daría 24/08. Un día no tiene hora, así que no hay nada que convertir. Hoy ningún
+         * campo del admin es `only_show` + `day`, y esta rama existe para que el primero que
+         * lo sea no estrene el off-by-one.
+         */
+        const solo_dia = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})/)
+        if (solo_dia) {
+          return solo_dia[3] + '/' + solo_dia[2] + '/' + solo_dia[1]
+        }
         return m.format('DD/MM/YYYY')
       }
       return m.format('DD/MM/YYYY HH:mm')
