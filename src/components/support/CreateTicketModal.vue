@@ -436,7 +436,6 @@ export default {
     /**
      * Trae los teléfonos del cliente y el estado de la ventana de cada uno.
      *
-     * @param {number} client_id
      * @returns {void}
      */
     load_whatsapp_contacts() {
