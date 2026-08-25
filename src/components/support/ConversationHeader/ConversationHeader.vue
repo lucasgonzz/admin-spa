@@ -20,6 +20,13 @@
       :has_ticket="has_ticket"
       :ticket_status_draft="ticket_status_draft"
       @update:ticket_status_draft="on_update_status" />
+    <ticket-agent-controls
+      :has_ticket="has_ticket"
+      :agent_on="agent_on"
+      :verification_on="verification_on"
+      :saving="saving_agent_controls"
+      @toggle-agent="$emit('toggle-agent')"
+      @toggle-verification="$emit('toggle-verification')" />
     <div class="ms-auto d-flex align-items-center gap-2 flex-shrink-0 ticket-header-actions-end">
       <button
         type="button"
@@ -47,6 +54,7 @@ import TicketSourceBadge from './TicketSourceBadge.vue'
 import TicketAssigneeSelect from './TicketAssigneeSelect.vue'
 import TicketStatusSelect from './TicketStatusSelect.vue'
 import TicketConversationActions from './TicketConversationActions.vue'
+import TicketAgentControls from './TicketAgentControls.vue'
 
 /**
  * Agrupa controles del hilo y un único guardado HTTP para nombre, asignado y estado.
@@ -59,6 +67,7 @@ export default {
     TicketAssigneeSelect,
     TicketStatusSelect,
     TicketConversationActions,
+    TicketAgentControls,
   },
   /**
    * Vue 3: v-model:prop requiere emitir update:prop; se declara para evitar fallos de two-way.
@@ -70,6 +79,8 @@ export default {
     'save-header',
     'exit-ticket',
     'toggle-knowledge-panel',
+    'toggle-agent',
+    'toggle-verification',
   ],
   props: {
     /**
@@ -116,6 +127,13 @@ export default {
       type: Boolean,
       default: false,
     },
+    /**
+     * true mientras corre alguno de los dos toggles del agente.
+     */
+    saving_agent_controls: {
+      type: Boolean,
+      default: false,
+    },
   },
   computed: {
     /**
@@ -134,6 +152,29 @@ export default {
      */
     has_ticket() {
       return !!this.selected_ticket
+    },
+    /**
+     * Agente prendido para este ticket. Sin ticket, se asume prendido (no se muestra igual).
+     *
+     * @returns {boolean}
+     */
+    agent_on() {
+      if (!this.selected_ticket) {
+        return true
+      }
+      return this.selected_ticket.claude_auto_reply !== false && this.selected_ticket.claude_auto_reply !== 0
+    },
+    /**
+     * Verificación humana exigida para este ticket.
+     *
+     * @returns {boolean}
+     */
+    verification_on() {
+      if (!this.selected_ticket) {
+        return true
+      }
+      const value = this.selected_ticket.requiere_verificacion_mensajes
+      return value !== false && value !== 0
     },
     /**
      * true si el ticket en servidor ya tiene nombre (no vacío).

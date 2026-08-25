@@ -62,9 +62,15 @@
       consulta de inmediato tras el último mensaje.
     </p>
     <p v-if="local_suggestions_enabled" class="form-text small text-muted mb-2">
-      Tiempo de espera antes de enviar: 0 = Claude responde automáticamente sin intervención humana. Mayor a 0 = el
-      operador tiene ese tiempo para revisar y editar antes de que se envíe. Si el operador responde manualmente antes
-      de que se cumpla el tiempo, se cancela el envío automático.
+      Tiempo de espera antes de enviar: <strong>solo aplica a los tickets que tienen la verificación apagada</strong>.
+      0 = el agente le contesta al cliente de inmediato. Mayor a 0 = ese tiempo para revisar y editar antes de que
+      salga; si el operador responde a mano antes, se cancela el envío automático.
+    </p>
+    <p class="form-text small text-muted mb-2">
+      Este check es el corte maestro: apagado, el agente no genera nada en ningún ticket. Prendido, cada conversación
+      manda con sus dos botones propios, en el encabezado del ticket: uno prende o apaga el agente para ese cliente, y
+      el otro decide si sus respuestas necesitan tu aprobación antes de salir. Los tickets nuevos nacen
+      <strong>siempre con la verificación prendida</strong>.
     </p>
 
     <p v-if="loading" class="text-muted small mt-2 mb-0">Cargando…</p>

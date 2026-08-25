@@ -31,12 +31,15 @@
           :ticket_status_draft="ticket_status_draft"
           :admin_rows="admin_assign_options"
           :saving_header="saving_header"
+          :saving_agent_controls="saving_agent_controls"
           @update:ticket_name_draft="set_header_ticket_name_draft"
           @update:assigned_admin_id="set_header_assigned_admin_id"
           @update:ticket_status_draft="set_header_ticket_status_draft"
           @save-header="save_header"
           @exit-ticket="deselect_ticket"
-          @toggle-knowledge-panel="toggle_knowledge_panel" />
+          @toggle-knowledge-panel="toggle_knowledge_panel"
+          @toggle-agent="toggle_agent"
+          @toggle-verification="toggle_verification" />
       </div>
       <div class="support-right-middle flex-grow-1 min-h-0 d-flex flex-column overflow-hidden">
         <conversation
@@ -44,7 +47,10 @@
           :loading="messages_loading"
           :ticket_source="selected_ticket ? selected_ticket.source : null"
           :now_tick="now_tick"
-          @retry-message="on_retry_message" />
+          :draft_busy="draft_busy"
+          @retry-message="on_retry_message"
+          @send-draft="on_send_draft"
+          @discard-draft="on_discard_draft" />
       </div>
       <div class="support-right-bottom flex-shrink-0">
         <message-input
@@ -137,6 +143,10 @@ export default {
       ai_consult_timer: null,
       /** Ticket cuyo job está consultando a Claude en este momento. */
       ai_generating_ticket_id: null,
+      /** POST de alguno de los dos interruptores del agente en curso. */
+      saving_agent_controls: false,
+      /** POST de aprobar o descartar un borrador en curso. */
+      draft_busy: false,
       /** Modal de alta manual de ticket (select de cliente). */
       create_ticket_modal_visible: false,
     }
@@ -284,6 +294,7 @@ export default {
   },
   mounted() {
     window.addEventListener('support-ticket-alert', this.on_support_ticket_alert)
+    this.abrir_ticket_del_query_param()
   },
   beforeUnmount() {
     window.removeEventListener('support-ticket-alert', this.on_support_ticket_alert)
@@ -446,7 +457,9 @@ export default {
             return
           }
           self.ai_generating_ticket_id = null
-          self.sync_ai_pending_to_input(payload.ai_pending_suggestion)
+          /* Ya NO se vuelca la sugerencia al input: desde esta misión se aprueba, se edita o
+             se descarta desde la propia burbuja. Tenerla en los dos lados hacía ambiguo qué
+             se mandaba al apretar Enviar. */
         },
         on_ai_suggestion_scheduled(payload) {
           if (!payload || !payload.ticket_id) {
@@ -502,9 +515,6 @@ export default {
         this.assigned_admin_id = ticket.assigned_admin_id || this.current_admin_id
         this.ticket_name_draft = ticket.name == null ? '' : String(ticket.name)
         this.ticket_status_draft = ticket.status === 'closed' ? 'closed' : 'open'
-        this.$nextTick(function () {
-          self.sync_ai_pending_to_input(ticket.ai_pending_suggestion)
-        })
       } else {
         this.ticket_name_draft = ''
         this.ticket_status_draft = 'open'
@@ -516,12 +526,160 @@ export default {
      * @param {string|null} suggestion_text Texto sugerido por Claude.
      * @returns {void}
      */
-    sync_ai_pending_to_input(suggestion_text) {
-      const input = this.$refs.message_input
-      if (!input || !input.apply_pending_suggestion) {
+    /**
+     * Prende o apaga el agente para el ticket abierto.
+     *
+     * @returns {void}
+     */
+    toggle_agent() {
+      this.post_agent_toggle('toggle-claude-auto-reply')
+    },
+    /**
+     * Prende o apaga la verificación humana para el ticket abierto.
+     *
+     * @returns {void}
+     */
+    toggle_verification() {
+      this.post_agent_toggle('toggle-requiere-verificacion')
+    },
+    /**
+     * Manda uno de los dos toggles y refresca la fila del ticket con lo que devuelve la API.
+     *
+     * Se guarda al toque y no con el botón Guardar del header: ese botón agrupa nombre,
+     * asignado y estado, y estos dos son interruptores, no un formulario. Es además lo que
+     * hace la conversación de leads.
+     *
+     * @param {string} endpoint Sufijo de la ruta.
+     * @returns {void}
+     */
+    post_agent_toggle(endpoint) {
+      if (this.saving_agent_controls || !this.selected_ticket_id) {
         return
       }
-      input.apply_pending_suggestion(suggestion_text)
+      const self = this
+      this.saving_agent_controls = true
+      api
+        .post('/support-ticket/' + this.selected_ticket_id + '/' + endpoint)
+        .then(function (response) {
+          const model = response.data && response.data.model
+          if (model) {
+            self.$store.commit('support_ticket/upsert_from_broadcast', model)
+          }
+        })
+        .catch(function (error) {
+          console.log(error)
+        })
+        .then(function () {
+          self.saving_agent_controls = false
+        })
+    },
+    /**
+     * Aprueba un borrador del agente, con o sin ajustes, y lo manda al cliente.
+     *
+     * @param {Object} payload message y body (null si va sin ajustes).
+     * @returns {void}
+     */
+    on_send_draft(payload) {
+      if (this.draft_busy || !payload || !payload.message) {
+        return
+      }
+      const self = this
+      const cuerpo = payload.body === null ? {} : { body: payload.body }
+      this.draft_busy = true
+      api
+        .post('/support-message/' + payload.message.id + '/approve-ai-draft', cuerpo)
+        .then(function (response) {
+          const model = response.data && response.data.model
+          if (model) {
+            self.$store.commit('support_message/patch_message', model)
+          }
+          self.$store.commit('support_ticket/patch_ticket_ai_pending', {
+            ticket_id: self.selected_ticket_id,
+            ai_pending_suggestion: null,
+            ai_suggestion_send_at: null,
+          })
+        })
+        .catch(function (error) {
+          console.log(error)
+        })
+        .then(function () {
+          self.draft_busy = false
+        })
+    },
+    /**
+     * Descarta un borrador del agente sin mandarlo.
+     *
+     * @param {Object} message Borrador a descartar.
+     * @returns {void}
+     */
+    on_discard_draft(message) {
+      if (this.draft_busy || !message) {
+        return
+      }
+      const self = this
+      this.draft_busy = true
+      api
+        .post('/support-message/' + message.id + '/discard-ai-draft')
+        .then(function () {
+          self.$store.commit('support_message/remove_model_by_id', message.id)
+          self.$store.commit('support_ticket/patch_ticket_ai_pending', {
+            ticket_id: self.selected_ticket_id,
+            ai_pending_suggestion: null,
+            ai_suggestion_send_at: null,
+          })
+        })
+        .catch(function (error) {
+          console.log(error)
+        })
+        .then(function () {
+          self.draft_busy = false
+        })
+    },
+    /**
+     * Abre el ticket que viene en ?ticket_id=, si lo hay.
+     *
+     * Es lo que hace clickeable el link del WhatsApp de escalado. El ticket puede no estar en
+     * la bandeja cargada —el filtro por defecto es "míos" y el escalado bien puede ser de un
+     * ticket de otro—, así que si no aparece se lo trae con un GET puntual. Después se limpia
+     * el query param para que un refresh no lo vuelva a abrir.
+     *
+     * @returns {void}
+     */
+    abrir_ticket_del_query_param() {
+      const ticket_id = this.$route && this.$route.query ? this.$route.query.ticket_id : null
+      if (!ticket_id) {
+        return
+      }
+
+      const self = this
+      const limpiar_query = function () {
+        self.$router.replace({ query: {} }).catch(function () {})
+      }
+
+      const ya_esta = this.tickets.some(function (ticket) {
+        return String(ticket.id) === String(ticket_id)
+      })
+
+      if (ya_esta) {
+        this.select_ticket(ticket_id)
+        limpiar_query()
+        return
+      }
+
+      api
+        .get('/support-ticket/' + ticket_id)
+        .then(function (response) {
+          const model = response.data && response.data.model
+          if (!model) {
+            return
+          }
+          self.$store.commit('support_ticket/upsert_from_broadcast', model)
+          self.select_ticket(model.id)
+        })
+        .catch(function (error) {
+          console.log(error)
+        })
+        .then(limpiar_query)
     },
     /**
      * Quita la selección: vacía el panel de conversación sin tocar el ticket en el servidor.

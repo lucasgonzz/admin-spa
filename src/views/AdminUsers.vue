@@ -227,6 +227,22 @@
               </div>
             </div>
 
+            <!-- Campo: Notificar escalaciones de SOPORTE por WhatsApp -->
+            <div class="mb-3 form-check">
+              <input
+                v-model="form.notify_support_escalation_whatsapp"
+                type="checkbox"
+                class="form-check-input"
+                id="notify_support_escalation_check"
+              />
+              <label class="form-check-label" for="notify_support_escalation_check">
+                Notificar escalaciones de soporte por WhatsApp
+              </label>
+              <div class="form-text text-muted">
+                El de arriba es para leads; este es para clientes que ya compraron. Recibís un WhatsApp cuando el agente de soporte no encuentra la respuesta en la documentación y deja el ticket para que lo revises: llega el nombre del cliente, el motivo y un link directo al ticket. Necesitás tener cargado tu teléfono en este mismo formulario.
+              </div>
+            </div>
+
             <!-- Campo: Notificar demos agendadas por WhatsApp -->
             <div class="mb-3 form-check">
               <input
@@ -359,6 +375,7 @@ export default {
         phone_number: '',
         /* Flag para recibir WhatsApp cuando el agente escala una conversación de lead. */
         notify_lead_escalation_whatsapp: false,
+        notify_support_escalation_whatsapp: false,
         /* Flag para recibir WhatsApp cuando se agenda una demo. */
         notify_demo_scheduled_whatsapp: false,
         /* Flag para recibir WhatsApp cuando falla el envío automático de un mensaje del sistema. */
@@ -420,6 +437,7 @@ export default {
         is_default_task_assignee: false,
         phone_number: '',
         notify_lead_escalation_whatsapp: false,
+        notify_support_escalation_whatsapp: false,
         notify_demo_scheduled_whatsapp: false,
         notify_send_errors_whatsapp: false,
         notify_verificacion_whatsapp: false,
@@ -449,6 +467,7 @@ export default {
         phone_number: admin.phone_number || '',
         /* Cargar flags de notificación WhatsApp existentes. */
         notify_lead_escalation_whatsapp: !!admin.notify_lead_escalation_whatsapp,
+        notify_support_escalation_whatsapp: !!admin.notify_support_escalation_whatsapp,
         notify_demo_scheduled_whatsapp:  !!admin.notify_demo_scheduled_whatsapp,
         notify_send_errors_whatsapp:     !!admin.notify_send_errors_whatsapp,
         notify_verificacion_whatsapp:    !!admin.notify_verificacion_whatsapp,
@@ -490,6 +509,7 @@ export default {
         phone_number: self.form.phone_number,
         /* Flags de notificación WhatsApp; se envían siempre para permitir desactivarlos. */
         notify_lead_escalation_whatsapp: self.form.notify_lead_escalation_whatsapp,
+        notify_support_escalation_whatsapp: self.form.notify_support_escalation_whatsapp,
         notify_demo_scheduled_whatsapp:  self.form.notify_demo_scheduled_whatsapp,
         notify_send_errors_whatsapp:     self.form.notify_send_errors_whatsapp,
         notify_verificacion_whatsapp:    self.form.notify_verificacion_whatsapp,

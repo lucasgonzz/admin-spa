@@ -94,6 +94,63 @@
             </div>
             </div>
           </border-progress-wrap>
+
+          <!-- Borrador del agente esperando aprobación: se lee, se corrige y se manda acá.
+               Con ai_auto_send_at en null no hay contador, porque no se manda solo. -->
+          <div v-if="is_ai_draft_message(message)" class="support-ai-draft-actions">
+            <template v-if="editing_draft_id === message.id">
+              <textarea
+                v-model="draft_edit_text"
+                class="form-control form-control-sm support-ai-draft-textarea"
+                rows="4"
+                :disabled="draft_busy"></textarea>
+              <div class="support-ai-draft-buttons">
+                <button
+                  type="button"
+                  class="btn btn-sm btn-success"
+                  :disabled="draft_busy || !draft_edit_text.trim()"
+                  @click="send_draft(message, draft_edit_text)">
+                  Enviar con mis ajustes
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-secondary"
+                  :disabled="draft_busy"
+                  @click="cancel_draft_edit()">
+                  Cancelar
+                </button>
+              </div>
+            </template>
+            <template v-else>
+              <span class="support-ai-draft-label">
+                {{ is_ai_draft_auto_send_active(message) ? 'Se envía solo en unos segundos' : 'Esperando tu aprobación' }}
+              </span>
+              <div class="support-ai-draft-buttons">
+                <button
+                  type="button"
+                  class="btn btn-sm btn-success"
+                  :disabled="draft_busy"
+                  @click="send_draft(message, null)">
+                  Enviar
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-primary"
+                  :disabled="draft_busy"
+                  @click="start_draft_edit(message)">
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-danger"
+                  :disabled="draft_busy"
+                  @click="$emit('discard-draft', message)">
+                  Descartar
+                </button>
+              </div>
+            </template>
+          </div>
+
           <div
             v-if="is_mine(message) && has_delivery_error(message)"
             class="support-message-error-row">
@@ -162,6 +219,7 @@ export default {
     ImageLightbox,
     BorderProgressWrap,
   },
+  emits: ['retry-message', 'send-draft', 'discard-draft'],
   props: {
     messages: { type: Array, default: () => [] },
     /**
@@ -174,6 +232,8 @@ export default {
     ticket_source: { type: String, default: null },
     /** Timestamp reactivo para animaciones de auto-envío en borradores IA. */
     now_tick: { type: Number, default: 0 },
+    /** true mientras corre el POST de aprobar o descartar un borrador. */
+    draft_busy: { type: Boolean, default: false },
   },
   data() {
     return {
@@ -181,6 +241,10 @@ export default {
       image_preview_visible: false,
       /** URL de la imagen mostrada en el visor. */
       image_preview_url: '',
+      /** Id del borrador que se está editando, o null. */
+      editing_draft_id: null,
+      /** Texto en edición del borrador. El original no se toca hasta aprobar. */
+      draft_edit_text: '',
     }
   },
   /**
@@ -211,6 +275,41 @@ export default {
     },
   },
   methods: {
+    /**
+     * Abre la edición del borrador con el texto que propuso el agente.
+     *
+     * @param {Object} message
+     * @returns {void}
+     */
+    start_draft_edit(message) {
+      this.editing_draft_id = message.id
+      this.draft_edit_text = String(message.body || '')
+    },
+    /**
+     * Cierra la edición sin mandar nada. El borrador queda como estaba.
+     *
+     * @returns {void}
+     */
+    cancel_draft_edit() {
+      this.editing_draft_id = null
+      this.draft_edit_text = ''
+    },
+    /**
+     * Pide al padre que apruebe el borrador, con o sin ajustes.
+     *
+     * El texto editado NO se persiste hasta que se aprueba: así no existe el estado
+     * "borrador editado pero sin mandar", que es el que se vuelve ambiguo cuando el cliente
+     * escribe de nuevo y el borrador se descarta solo.
+     *
+     * @param {Object}      message
+     * @param {string|null} edited_body Texto final, o null para mandar el del agente.
+     * @returns {void}
+     */
+    send_draft(message, edited_body) {
+      const final_body = edited_body === null ? null : String(edited_body).trim()
+      this.$emit('send-draft', { message: message, body: final_body })
+      this.cancel_draft_edit()
+    },
     /**
      * Indica si el mensaje es borrador IA pendiente de envío automático.
      *
@@ -789,5 +888,25 @@ export default {
 
 .support-message-placeholder {
   font-size: 13px;
+}
+
+.support-ai-draft-actions {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-top: 6px;
+	max-width: 100%;
+}
+.support-ai-draft-label {
+	font-size: 11px;
+	color: var(--bs-secondary-color, #6c757d);
+}
+.support-ai-draft-buttons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.support-ai-draft-textarea {
+	font-size: 13px;
 }
 </style>
