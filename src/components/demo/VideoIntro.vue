@@ -42,6 +42,12 @@ const REINTENTOS_LIBERACION = 4
 const ESPERA_REINTENTO_MS = 8000
 
 /**
+ * Velocidad a la que arranca el video si la configurada no llegó o no sirve. Es la que estuvo
+ * hardcodeada acá hasta que se volvió configurable: el default no cambia nada.
+ */
+const VELOCIDAD_FALLBACK = 1.5
+
+/**
  * Reproductor del video de introducción de la página inmersiva (misión 46, pieza 4).
  *
  * 🔴 POR QUÉ ES UN COMPONENTE APARTE Y NO UN MODO MÁS DE PiezaMultimedia: esa pieza la
@@ -52,8 +58,9 @@ const ESPERA_REINTENTO_MS = 8000
  *
  * Lo que hace, y por qué cada cosa:
  *
- * - Arranca a 1.5x, UNA sola vez (al `loadedmetadata`). Si el lead lo cambia desde los
- *   controles nativos no se le pelea: es su decisión.
+ * - Arranca a la velocidad configurada en el panel (intro.velocidad, 1.5 por defecto), UNA sola
+ *   vez (al `loadedmetadata`). Si el lead la cambia desde los controles nativos no se le pelea:
+ *   es su decisión.
  * - No se puede adelantar. Se lleva `max_visto` (el mayor `currentTime` alcanzado
  *   reproduciendo) y en `seeking` se lo devuelve si intentó saltar hacia adelante.
  *   Atrasar, pausar y volumen quedan intactos: lo que se impide es saltearse el
@@ -85,6 +92,15 @@ export default {
     visto_pct: {
       type: Number,
       default: 0,
+    },
+    /**
+     * Velocidad de reproducción inicial, configurable desde el panel y servida por el payload
+     * público (`intro.velocidad`). Se aplica UNA sola vez: si el lead la cambia desde los controles
+     * nativos, no se le pelea.
+     */
+    velocidad: {
+      type: Number,
+      default: VELOCIDAD_FALLBACK,
     },
     /**
      * Función inyectada por el contenedor que hace el POST del progreso. Firma:
@@ -220,7 +236,7 @@ export default {
          válvula viene a cerrar. El callback ya decide solo: si para entonces hay duración
          válida, no libera nada. */
       if (!this.velocidad_fijada) {
-        video.playbackRate = 1.5
+        video.playbackRate = this.velocidad_efectiva()
         this.velocidad_fijada = true
       }
 
@@ -394,6 +410,26 @@ export default {
         return null
       }
       return duracion
+    },
+
+    /**
+     * La velocidad a aplicar, con red por si el valor configurado no sirve.
+     *
+     * 🔴 El guard no es defensivo de más: `playbackRate = 0` deja el video en marcha pero sin
+     * avanzar nunca, y con el gate del intro eso es un lead trabado afuera de su demo — el mismo
+     * defecto que la válvula del `mounted()` viene a cerrar, por otra puerta. Un negativo tira
+     * `NotSupportedError` en varios navegadores y corta el handler entero. Sólo se cae al fallback
+     * en esos casos: el rango lo fija el backend, y NO se lo vuelve a acotar acá para no tener dos
+     * reglas para el mismo número.
+     *
+     * @returns {number}
+     */
+    velocidad_efectiva() {
+      const valor = Number(this.velocidad)
+      if (!isFinite(valor) || valor <= 0) {
+        return VELOCIDAD_FALLBACK
+      }
+      return valor
     },
 
     /**

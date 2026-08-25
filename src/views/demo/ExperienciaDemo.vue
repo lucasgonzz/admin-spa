@@ -105,14 +105,16 @@
             class="demo-marco--protagonista"
             :class="{ 'demo-marco--con-turno': hay_bloque_de_turno }"
           >
-            <!-- Reproductor propio del intro (misión 46, pieza 4): 1.5x, sin
-                 poder adelantar, y reportando el progreso al backend, que es
-                 quien decide si el botón se habilita. No es PiezaMultimedia:
+            <!-- Reproductor propio del intro (misión 46, pieza 4): a la velocidad
+                 configurada en Cuenta → Configuración de demos, sin poder
+                 adelantar, y reportando el progreso al backend, que es quien
+                 decide si el botón se habilita. No es PiezaMultimedia:
                  esa la comparten los clips en loop del scroll de dolor. -->
             <video-intro
               :url="url_intro"
               titulo="Video de introducción (Lucas a cámara, 5:15)"
               :visto_pct="intro.visto_pct || 0"
+              :velocidad="intro.velocidad || 1.5"
               :reportar="reportar_intro"
             />
           </marco-dispositivo>
@@ -243,7 +245,7 @@ export default {
       media: {},
       /** { estado } del demo setup: pendiente | ejecutandose | exitoso | fallido (misión 46). */
       setup: {},
-      /** { visto_pct, umbral_pct, obligatorio } del video de introducción (misión 46). */
+      /** { visto_pct, umbral_pct, obligatorio, velocidad } del video de introducción (misión 46). */
       intro: {},
       /**
        * 🔴 Lo calcula el backend y esta página no lo deriva ni lo recalcula (misión 46,

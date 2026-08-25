@@ -312,6 +312,29 @@
         </div>
       </div>
 
+      <!-- Velocidad de reproducción del video de introducción -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-5">
+          <label class="form-label small" for="demo_intro_velocidad">Velocidad del video de introducción</label>
+          <!-- Float, no entero: 1, 1.1, 1.5. Paso de 0.1 y rango propio 0.5-3 -->
+          <input
+            id="demo_intro_velocidad"
+            v-model.number="local.demo_intro_velocidad"
+            type="number"
+            class="form-control form-control-sm"
+            min="0.5"
+            max="3"
+            step="0.1"
+            :disabled="saving"
+          />
+          <p class="text-muted small mb-0 mt-1">
+            A qué velocidad arranca el video de introducción para el lead. 1 es la velocidad normal;
+            1.5 es la que venía por defecto. El lead puede cambiarla después desde los controles del
+            reproductor.
+          </p>
+        </div>
+      </div>
+
       <!-- Horario laboral del closer: lunes a viernes -->
       <div class="row g-2 align-items-end mb-3">
         <div class="col-12">
@@ -592,6 +615,8 @@ export default {
         demo_minimo_minutos_desde_ahora: 5,
         /** Porcentaje del video de introducción necesario para entrar a la demo (misión 46). */
         demo_intro_umbral_pct: 90,
+        /** Velocidad de reproducción del video de introducción (float: 1, 1.1, 1.5). */
+        demo_intro_velocidad: 1.5,
         /** Hora de inicio de la franja de la demo lunes a viernes; solo dinámica nueva. */
         demo_lv_inicio: '00:00',
         /** Hora de fin de la franja de la demo lunes a viernes; solo dinámica nueva. */
@@ -648,6 +673,8 @@ export default {
         demo_minimo_minutos_desde_ahora: 5,
         /** Espejo del servidor: umbral del video de introducción (misión 46). */
         demo_intro_umbral_pct: 90,
+        /** Espejo del servidor: velocidad del video de introducción. */
+        demo_intro_velocidad: 1.5,
         /** Espejo del servidor: franja de la demo lunes a viernes. */
         demo_lv_inicio: '00:00',
         demo_lv_fin: '23:59',
@@ -829,6 +856,9 @@ export default {
           var string_fields = ['recordatorio_manana_hora', 'experiencia_default']
           /* Campos que se tratan como booleano. */
           var bool_fields = ['llamada_debe_terminar_en_horario']
+          /* Campos float: NO pasan por parseInt, que truncaría 1.5 a 1 y le pisaría al admin el
+             valor que acaba de guardar en cuanto llegue la respuesta del PUT. */
+          var float_fields = ['demo_intro_velocidad']
           /* Campos que maneja apply_closer_horario_from_api / apply_demo_horario_from_api —
              saltear en el forEach general (grupo 306, prompt 06 agrega los de demo_*). */
           var horario_closer_fields = [
@@ -854,6 +884,9 @@ export default {
               } else if (string_fields.indexOf(key) !== -1) {
                 self.local[key]  = String(data[key])
                 self.stored[key] = String(data[key])
+              } else if (float_fields.indexOf(key) !== -1) {
+                self.local[key]  = parseFloat(data[key])
+                self.stored[key] = parseFloat(data[key])
               } else {
                 self.local[key]  = parseInt(data[key], 10)
                 self.stored[key] = parseInt(data[key], 10)
@@ -897,6 +930,7 @@ export default {
           duracion_llamada_closer_minutos:     self.local.duracion_llamada_closer_minutos,
           demo_minimo_minutos_desde_ahora:     self.local.demo_minimo_minutos_desde_ahora,
           demo_intro_umbral_pct:               self.local.demo_intro_umbral_pct,
+          demo_intro_velocidad:                self.local.demo_intro_velocidad,
           demo_horario_lunes_viernes:          self.build_horario_range(self.local.demo_lv_inicio, self.local.demo_lv_fin),
           demo_horario_sabado:                 self.build_horario_range(self.local.demo_sabado_inicio, self.local.demo_sabado_fin),
           demo_horario_domingo:                self.build_horario_range(self.local.demo_domingo_inicio, self.local.demo_domingo_fin),
@@ -919,6 +953,9 @@ export default {
           var string_fields = ['recordatorio_manana_hora', 'experiencia_default']
           /* Campos que se tratan como booleano. */
           var bool_fields = ['llamada_debe_terminar_en_horario']
+          /* Campos float: NO pasan por parseInt, que truncaría 1.5 a 1 y le pisaría al admin el
+             valor que acaba de guardar en cuanto llegue la respuesta del PUT. */
+          var float_fields = ['demo_intro_velocidad']
           /* Campos que maneja apply_closer_horario_from_api / apply_demo_horario_from_api —
              saltear en el forEach general (grupo 306, prompt 06 agrega los de demo_*). */
           var horario_closer_fields = [
@@ -943,6 +980,9 @@ export default {
               } else if (string_fields.indexOf(key) !== -1) {
                 self.local[key]  = String(data[key])
                 self.stored[key] = String(data[key])
+              } else if (float_fields.indexOf(key) !== -1) {
+                self.local[key]  = parseFloat(data[key])
+                self.stored[key] = parseFloat(data[key])
               } else {
                 self.local[key]  = parseInt(data[key], 10)
                 self.stored[key] = parseInt(data[key], 10)
