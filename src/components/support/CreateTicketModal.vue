@@ -167,8 +167,10 @@ export default {
       message_body: '',
       /** Nombre de la plantilla de apertura configurada en el admin. */
       template_name: '',
-      /** Largo máximo del primer mensaje; el backend recorta a este valor. */
-      body_max_length: 600,
+      /** Tope del texto cuando viaja como variable de plantilla; el backend recorta ahí. */
+      template_body_max_length: 600,
+      /** Tope del texto libre, que es el de un mensaje normal de WhatsApp. */
+      free_body_max_length: 4096,
     }
   },
   computed: {
@@ -188,6 +190,21 @@ export default {
         return !!this.selected_phone && this.message_body.trim().length > 0
       }
       return true
+    },
+    /**
+     * Tope de caracteres del mensaje según cómo vaya a salir.
+     *
+     * Como variable de plantilla el backend recorta a 600; como texto libre, WhatsApp
+     * acepta bastante más y no tiene sentido cortarlo antes.
+     *
+     * @returns {number}
+     */
+    body_max_length() {
+      const contact = this.selected_contact
+      if (contact && contact.window && contact.window.open) {
+        return this.free_body_max_length
+      }
+      return this.template_body_max_length
     },
     /**
      * Texto del botón según el canal.
