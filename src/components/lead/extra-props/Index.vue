@@ -433,10 +433,17 @@ export default {
         {
           id: 4,
           label: 'Demo setup corrido',
-          /* El demo setup puede estar en tres estados intermedios además de pendiente. */
+          /* El demo setup puede estar en varios estados intermedios además de pendiente.
+             🔴 `sin_confirmar` cuenta como 'running' y no como 'failed', y no es cosmético: con
+             'running' se OCULTA el botón (ver el v-if de la etapa, más arriba). Ese estado lo
+             escribe admin-api cuando se le venció la espera de la llamada o cuando la instancia
+             contestó 409 — o sea, cuando la corrida del otro lado sigue perfectamente viva. Volver
+             a mostrar el botón ahí encima es lo que dejaba que el segundo click le hiciera un
+             `migrate:fresh` a la base que la primera corrida estaba sembrando. El motivo se sigue
+             viendo igual, en el `detail`. */
           status: r.demo_setup_status === 'exitoso'
             ? 'completed'
-            : r.demo_setup_status === 'ejecutandose'
+            : (r.demo_setup_status === 'ejecutandose' || r.demo_setup_status === 'sin_confirmar')
               ? 'running'
               : r.demo_setup_status === 'fallido'
                 ? 'failed'
