@@ -1756,12 +1756,20 @@ export default {
     },
     /**
      * Devuelve la clase CSS del badge según el estado del demo setup.
+     *
+     * 🔴 `sin_confirmar` comparte el amarillo con `ejecutandose`, y no cae al gris del `return` de
+     * abajo. Los dos estados significan lo mismo para el que mira la lista: hay una corrida viva y
+     * no se sabe cómo terminó. Con el gris se veía idéntico a `pendiente` —o sea, a un setup que
+     * nunca corrió— en las tres listas, que es la lectura exactamente opuesta a la real. Es la
+     * misma decisión que ya toma `lead/extra-props/Index.vue`, donde `sin_confirmar` mapea a
+     * 'running' para ocultar el botón de volver a dispararlo.
+     *
      * @param {string|null} status Estado del setup.
      * @returns {string} Clase Bootstrap para el badge.
      */
     demo_setup_badge_class(status) {
       if (status === 'exitoso') return 'bg-success'
-      if (status === 'ejecutandose') return 'bg-warning text-dark'
+      if (status === 'ejecutandose' || status === 'sin_confirmar') return 'bg-warning text-dark'
       if (status === 'fallido') return 'bg-danger'
       return 'bg-secondary'
     },
