@@ -69,6 +69,45 @@
               </div>
               <!-- Detalle opcional: fecha de demo, error de setup, etc. -->
               <div v-if="stage.detail" class="small text-muted mt-1">{{ stage.detail }}</div>
+              <!-- Editor manual del fin de la demo (tarea 62): visible con demo agendada o en
+                   curso. Cambia demo_end_time contra el endpoint dedicado, que valida (fin >
+                   inicio, mismo día), corre el vencimiento del token y reprograma el check de
+                   fin — por eso NO usa el PUT genérico del lead. -->
+              <div v-if="stage.id === 3 && demo_end_editable" class="mt-1">
+                <button
+                  v-if="!editing_demo_end"
+                  type="button"
+                  class="btn btn-link btn-sm p-0 text-decoration-none small"
+                  @click="start_demo_end_edit"
+                >
+                  <i class="bi bi-clock-history me-1"></i>Cambiar hora de fin
+                </button>
+                <div v-else class="d-flex align-items-center gap-2 flex-wrap">
+                  <input
+                    v-model="demo_end_draft"
+                    type="time"
+                    class="form-control form-control-sm demo-end-time-input"
+                    :disabled="saving_demo_end"
+                  />
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-primary"
+                    :disabled="saving_demo_end || !demo_end_draft"
+                    @click="save_demo_end"
+                  >
+                    <span v-if="saving_demo_end" class="spinner-border spinner-border-sm me-1"></span>
+                    Guardar fin
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-outline-secondary"
+                    :disabled="saving_demo_end"
+                    @click="cancel_demo_end_edit"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
               <!-- Resumen colapsable para la etapa 10 (demo summary generado por Claude) -->
               <div v-if="stage.id === 10 && record.demo_summary && summary_expanded" class="mt-2 p-2 bg-light rounded small" style="white-space: pre-line;">{{ record.demo_summary }}</div>
               <div v-if="stage.id === 10 && record.demo_summary" class="mt-1">
@@ -310,6 +349,18 @@ export default {
        * Bloquea ese switch puntual mientras se espera la confirmación del backend.
        */
       toggling_flag: null,
+      /**
+       * true mientras el editor del fin de la demo está desplegado (tarea 62).
+       */
+      editing_demo_end: false,
+      /**
+       * Borrador de la hora de fin (HH:MM) mientras se edita, ligado al input type="time".
+       */
+      demo_end_draft: '',
+      /**
+       * true mientras el POST del fin de la demo está en vuelo (bloquea el editor).
+       */
+      saving_demo_end: false,
     }
   },
   computed: {
@@ -617,6 +668,28 @@ export default {
       return !this.record.promoted_client.implementation
     },
     /**
+     * True cuando se puede editar a mano la hora de fin de la demo (tarea 62): el lead tiene
+     * una demo vigente (entorno + fecha + hora de inicio) y está en un estado del ciclo entre
+     * "demo agendada" y "pendiente de terminar". Es el espejo de la validación del backend
+     * (LeadController::ESTADOS_CON_DEMO_EDITABLE): el control no se ofrece donde el POST
+     * respondería 422.
+     * @returns {boolean}
+     */
+    demo_end_editable() {
+      var r = this.record
+      if (!r || !r.demo_id || !r.demo_date || !(r.demo_start_time || '').trim()) {
+        return false
+      }
+      var estados_con_demo = [
+        'demo_agendada',
+        'ingresando_demo',
+        'demo_en_curso',
+        'demo_pendiente_de_ingreso',
+        'demo_pendiente_de_terminar',
+      ]
+      return estados_con_demo.indexOf(r.status) !== -1
+    },
+    /**
      * True cuando el switch maestro "Estoy manejando este lead" está activo, es decir
      * cuando `automatizaciones_demo_activas` vale false (el control se muestra invertido:
      * activarlo el operador significa "no automatizar nada del ciclo de demo").
@@ -843,9 +916,66 @@ export default {
         texto += r.demo_end_time
           ? ' · Ventana extendida hasta las ' + r.demo_end_time
           : ' · Ventana extendida'
+      } else if (r.demo_end_time) {
+        /* Fin vigente también para la demo normal (tarea 62): es el valor que el editor de
+           abajo cambia, y sin mostrarlo el fin editado a mano no se vería en ningún lado. */
+        texto += ' · hasta las ' + r.demo_end_time
       }
 
       return texto
+    },
+    /**
+     * Despliega el editor del fin de la demo precargado con el valor vigente (tarea 62).
+     * El valor guardado es texto histórico libre: se normaliza a HH:MM con cero adelante
+     * para que el input type="time" lo acepte; si no se puede leer, arranca vacío.
+     * @returns {void}
+     */
+    start_demo_end_edit() {
+      var actual = String(this.record.demo_end_time || '')
+      var match = actual.match(/(\d{1,2}):(\d{2})/)
+      this.demo_end_draft = match
+        ? ('0' + match[1]).slice(-2) + ':' + match[2]
+        : ''
+      this.editing_demo_end = true
+    },
+    /**
+     * Cierra el editor del fin sin guardar (tarea 62).
+     * @returns {void}
+     */
+    cancel_demo_end_edit() {
+      this.editing_demo_end = false
+      this.demo_end_draft = ''
+    },
+    /**
+     * Guarda la hora de fin editada contra el endpoint dedicado (tarea 62). El backend valida
+     * (fin > inicio, mismo día, demo vigente), corre el vencimiento del token de ingreso y
+     * reprograma el check de fin; acá solo se sincroniza el modelo devuelto y se avisa.
+     * @returns {void}
+     */
+    save_demo_end() {
+      var self = this
+      if (!self.demo_end_draft || self.saving_demo_end) {
+        return
+      }
+      self.saving_demo_end = true
+
+      api.post('/lead/' + self.record.id + '/demo-end-time', { demo_end_time: self.demo_end_draft })
+        .then(function (res) {
+          var payload = res && res.data ? res.data : {}
+          if (payload.model) {
+            self.sync_model(payload.model)
+          }
+          self.editing_demo_end = false
+          self.demo_end_draft = ''
+          self.open_feedback('Hora de fin actualizada. El acceso del lead acompaña al fin nuevo.')
+        })
+        .catch(function (error) {
+          /* El 422 del backend trae el motivo exacto (formato, fin <= inicio, sin demo). */
+          self.open_feedback(self.get_error_message(error))
+        })
+        .then(function () {
+          self.saving_demo_end = false
+        })
     },
     /**
      * Formatea el origen de ejecución (manual / automático) para mostrar en UI.
@@ -1125,5 +1255,11 @@ export default {
 /* Elimina el borde inferior de la última etapa del pipeline */
 .pipeline-stage-row:last-child {
   border-bottom: none !important;
+}
+/* Input de hora del editor del fin de la demo (tarea 62): ancho contenido para que la fila
+   de botones quepa al lado incluso en el ancho intermedio de tablet */
+.demo-end-time-input {
+  width: 7.5rem;
+  flex-shrink: 0;
 }
 </style>

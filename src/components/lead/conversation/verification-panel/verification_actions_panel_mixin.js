@@ -91,6 +91,15 @@ export default {
             demo_date: this.agendar_demo.demo_date || '',
             demo_start_time: this.agendar_demo.demo_start_time || '',
             ventana_extendida: Boolean(this.agendar_demo.ventana_extendida),
+            /* 🔴 `ventana_hasta` (tarea 62): la franja que el agente negoció con el lead
+               ("de 12 a 18"). Mismo motivo que `ventana_extendida`: si no viaja, el backend
+               agenda hasta el tope automático y la franja negociada se pierde en silencio.
+               Solo se incluye la clave cuando HAY valor: mandarla en null también pisa la del
+               paquete original (el backend conserva la original únicamente cuando la clave no
+               viene). */
+            ...(this.agendar_demo.ventana_hasta
+              ? { ventana_hasta: this.agendar_demo.ventana_hasta }
+              : {}),
           }
           : null,
         forzar_slot: Boolean(this.forzar_slot),
@@ -169,6 +178,8 @@ export default {
           /* La modalidad que pidió el agente se conserva al precargar (misión 47): si se
              perdiera acá, el computed de arriba la mandaría en false igual. */
           ventana_extendida: Boolean(pending.agendar_demo.ventana_extendida),
+          /* Y la franja negociada (tarea 62), por el mismo motivo. */
+          ventana_hasta: pending.agendar_demo.ventana_hasta || null,
         }
         : null
       this.forzar_slot = Boolean(pending.forzar_slot)
