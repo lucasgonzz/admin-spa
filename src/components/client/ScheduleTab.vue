@@ -33,11 +33,13 @@
           </li>
           <li>
             Un día <strong>sin ningún rango</strong> significa que ese día el negocio
-            <strong>está cerrado</strong>.
+            <strong>está cerrado</strong>. Un día nuevo nace con <em>un rango vacío</em> para
+            completar: para cerrarlo hay que quitárselo a propósito.
           </li>
           <li>
             <strong>Quitar un día no es cerrarlo.</strong> Si lo quitás, ese día vuelve a regirse por
-            «Todos los días». Para cerrarlo hay que dejar la tarjeta del día <em>sin rangos</em>.
+            «Todos los días». Para cerrarlo hay que <em>quitarle el rango</em> a la tarjeta del día y
+            dejarla vacía.
           </li>
           <li>
             Un rango no puede cruzar la medianoche. Un negocio que cierra a las 00:00 o más tarde se
@@ -564,28 +566,46 @@ export default {
       this.aplicar_sync(payload)
     },
     /**
-     * Toma el estado de sincronización de donde venga: del propio payload de
-     * horarios, de un objeto `sync` anidado, o del registro del cliente que ya
-     * tiene el modal. Los tres campos son los persistidos en `clients`.
+     * Toma el estado de sincronización del payload del backend.
+     *
+     * 🔴 La fuente es `payload.sincronizacion.{estado, mensaje, sincronizado_at}`, que es
+     * exactamente lo que devuelven el GET, el PUT y el POST .../horarios/sync de
+     * `ClientScheduleController`. El front se alinea al backend, no al revés: el backend
+     * ya está commiteado y testeado.
+     *
+     * El respaldo `this.record.{schedule_sync_status, schedule_sync_message,
+     * schedule_synced_at}` (las columnas persistidas en `clients`, que trae el listado)
+     * queda solo para cuando el payload no traiga el bloque.
+     *
+     * ⚠️ El POST de sync devuelve 202 con el estado del intento ANTERIOR: encola, no
+     * espera. Por eso acá no se inventa ningún "Sincronizado" optimista.
      * @param {Object} payload
      * @returns {void}
      */
     aplicar_sync(payload) {
-      const fuente = payload && payload.sync ? payload.sync : payload || {}
+      const cuerpo = payload || {}
+      const fuente = cuerpo.sincronizacion || {}
       const respaldo = this.record || {}
-      const status =
-        fuente.schedule_sync_status !== undefined ? fuente.schedule_sync_status : respaldo.schedule_sync_status
-      const mensaje =
-        fuente.schedule_sync_message !== undefined ? fuente.schedule_sync_message : respaldo.schedule_sync_message
+      const status = fuente.estado !== undefined ? fuente.estado : respaldo.schedule_sync_status
+      const mensaje = fuente.mensaje !== undefined ? fuente.mensaje : respaldo.schedule_sync_message
       const momento =
-        fuente.schedule_synced_at !== undefined ? fuente.schedule_synced_at : respaldo.schedule_synced_at
+        fuente.sincronizado_at !== undefined ? fuente.sincronizado_at : respaldo.schedule_synced_at
       this.sync_status = status || null
       this.sync_message = mensaje || ''
       this.sync_synced_at = momento || null
     },
     /**
-     * Agrega la tarjeta del día elegido en el select, sin rangos (o sea: nace cerrado
-     * hasta que se le carguen rangos, que es exactamente lo que dice el cartel).
+     * Agrega la tarjeta del día elegido en el select, con UN rango vacío listo para
+     * completar.
+     *
+     * 🔴 Nace con un rango, no sin ninguno: Lucas dictó «cada día tiene por defecto un
+     * rango horario, y yo puedo agregar todos los que quiera». Naciendo sin rangos, quien
+     * agrega «Sábado» pensando 9–13 y guarda antes de cargar las horas deja los sábados
+     * cerrados en silencio. Con el rango vacío, la validación local (horas incompletas →
+     * Guardar deshabilitado) no lo deja guardar a medias.
+     *
+     * Para dejar un día CERRADO hay que quitarle el rango: sigue siendo la regla de Lucas
+     * (día sin rangos = cerrado), pero ahora es un acto deliberado.
      * @returns {void}
      */
     agregar_dia() {
@@ -597,7 +617,11 @@ export default {
         return dia.dia === clave
       })
       if (!ya_esta) {
-        this.dias.push({ dia: clave, dia_label: this.label_de(clave), rangos: [] })
+        this.dias.push({
+          dia: clave,
+          dia_label: this.label_de(clave),
+          rangos: [{ desde: '', hasta: '' }],
+        })
       }
       this.dia_a_agregar = ''
     },
@@ -612,7 +636,7 @@ export default {
       const mensaje =
         dia.dia === 'todos'
           ? '¿Quitar «Todos los días»? Los días sin tarjeta propia van a quedar SIN CONFIGURAR (no cerrados).'
-          : '¿Quitar ' + dia.dia_label + '? No lo cierra: vuelve a regirse por «Todos los días». Para cerrarlo, dejalo sin rangos.'
+          : '¿Quitar ' + dia.dia_label + '? No lo cierra: vuelve a regirse por «Todos los días». Para cerrarlo, quitale el rango y dejá la tarjeta sin rangos.'
       if (!window.confirm(mensaje)) {
         return
       }
