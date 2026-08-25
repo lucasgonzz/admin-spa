@@ -2,8 +2,9 @@
   <div>
     <label class="form-label mb-0">Tienda online (ecommerce)</label>
     <small class="form-text text-muted d-block mt-1 mb-2">
-      Direcciones públicas de la tienda del cliente. La API vive dentro del mismo dominio, en la
-      carpeta <code>/api</code>.
+      Direcciones públicas de la tienda del cliente. Normalmente la API vive dentro del mismo
+      dominio, en la carpeta <code>/api</code>. Si la tienda está instalada en otra carpeta del
+      hosting, cargá los paths de abajo.
     </small>
 
     <div class="row g-3">
@@ -28,7 +29,30 @@
       </div>
     </div>
 
-    <!-- Línea informativa: solo ayuda visual, no se manda al backend (el backend deriva por su cuenta). -->
+    <div class="row g-3 mt-1">
+      <div class="col-md-6">
+        <label class="form-label mb-0">Path de instalación del SPA (opcional)</label>
+        <input
+          v-model="record.ecommerce_spa_path"
+          type="text"
+          class="form-control"
+          placeholder="comerciocity.store/public_html/tienda/spa"
+        />
+        <small class="form-text text-muted">Relativo a <code>domains/</code>. Vacío = se deriva del dominio.</small>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label mb-0">Path de instalación de la API (opcional)</label>
+        <input
+          v-model="record.ecommerce_api_path"
+          type="text"
+          class="form-control"
+          placeholder="comerciocity.store/public_html/tienda/api"
+        />
+        <small class="form-text text-muted">Relativo a <code>domains/</code>. Vacío = se deriva del dominio.</small>
+      </div>
+    </div>
+
+    <!-- Línea informativa: solo ayuda visual, calculada con la misma lógica que el backend. -->
     <small class="text-muted d-block mt-2">{{ installation_path_hint }}</small>
   </div>
 </template>
@@ -41,7 +65,7 @@
  * `type: 'custom'` + `custom_component: 'client_ecommerce_urls'`, con el mismo
  * patrón que `client_implementation` en `common-vue/components/model/form/Index.vue`.
  *
- * No tiene guardado propio: los dos campos viven en el borrador del modal
+ * No tiene guardado propio: los cuatro campos viven en el borrador del modal
  * (`record`, que es el `form` del `ModelForm`) y se persisten junto con el
  * resto del formulario al tocar el botón "Guardar" del modal.
  */
@@ -55,27 +79,70 @@ export default {
     record: { type: Object, default: null },
   },
   created() {
-    // Si el borrador todavía no tiene la clave (cliente nuevo, o valor undefined/null
-    // llegado del meta), se inicializa en string vacío para que exista en el borrador
-    // desde el arranque y viaje igual en el guardado.
-    if (this.record && (this.record.ecommerce_api_url === undefined || this.record.ecommerce_api_url === null)) {
-      this.record.ecommerce_api_url = ''
+    // Si el borrador todavía no tiene alguna de estas claves (cliente nuevo, o valor
+    // undefined/null llegado del meta), se inicializa en string vacío para que exista en el
+    // borrador desde el arranque y viaje igual en el guardado.
+    /** Claves que tienen que existir en el borrador desde el arranque para viajar en el guardado. */
+    var seeded_keys = ['ecommerce_api_url', 'ecommerce_spa_path', 'ecommerce_api_path']
+    var self = this
+    if (this.record) {
+      seeded_keys.forEach(function (key) {
+        if (self.record[key] === undefined || self.record[key] === null) {
+          self.record[key] = ''
+        }
+      })
     }
   },
   computed: {
     /**
-     * Texto informativo con la ruta de instalación en el hosting, calculada en vivo
-     * a partir de la URL del SPA. Es solo orientativo: el backend hace su propia
-     * derivación (ver `ClientEcommerce::resolve_spa_path()` / `resolve_api_path()`).
+     * Path efectivo del SPA (sin el prefijo `domains/`): el cargado a mano si hay, y si no el
+     * derivado del dominio de la URL. Réplica en JS de ClientEcommerce::resolve_spa_path().
+     * @returns {string}
+     */
+    effective_spa_path() {
+      var manual = this.normalize_hosting_path(this.record ? this.record.ecommerce_spa_path : '')
+      if (manual) {
+        return manual
+      }
+      var domain = this.domain_from_url(this.record ? this.record.ecommerce_spa_url : '')
+      return domain ? domain + '/public_html' : ''
+    },
+    /** Idem para la API: manual si hay, si no `{dominio}/public_html/api`. @returns {string} */
+    effective_api_path() {
+      var manual = this.normalize_hosting_path(this.record ? this.record.ecommerce_api_path : '')
+      if (manual) {
+        return manual
+      }
+      var domain = this.domain_from_url(this.record ? this.record.ecommerce_spa_url : '')
+      return domain ? domain + '/public_html/api' : ''
+    },
+    /** Si al menos uno de los dos paths está cargado a mano. @returns {boolean} */
+    has_manual_path() {
+      var spa = this.normalize_hosting_path(this.record ? this.record.ecommerce_spa_path : '')
+      var api = this.normalize_hosting_path(this.record ? this.record.ecommerce_api_path : '')
+      return Boolean(spa || api)
+    },
+    /**
+     * Texto informativo con la ruta EFECTIVA de instalación en el hosting.
+     *
+     * Antes de la misión ecommerce-paths-subcarpeta este texto afirmaba siempre
+     * "domains/{dominio}/public_html", que es mentira en cuanto hay un path cargado a mano.
+     * Muestra lo mismo que va a usar el pipeline de deploy, no la convención.
      * @returns {string}
      */
     installation_path_hint() {
-      /** Dominio extraído de la URL del SPA cargada (sin "www."), o cadena vacía. */
-      var domain = this.domain_from_url(this.record ? this.record.ecommerce_spa_url : '')
-      if (!domain) {
-        return 'Cargá la URL de la tienda para ver dónde se va a instalar.'
+      var spa = this.effective_spa_path
+      var api = this.effective_api_path
+      if (!spa && !api) {
+        return 'Cargá la URL de la tienda (o los paths de instalación) para ver dónde se va a instalar.'
       }
-      return 'Se va a instalar en domains/' + domain + '/public_html (tienda) y domains/' + domain + '/public_html/api (API).'
+      var hint =
+        'Se va a instalar en domains/' + (spa || '(sin resolver)') + ' (tienda) y domains/' +
+        (api || '(sin resolver)') + ' (API).'
+      if (this.has_manual_path) {
+        hint += ' Los paths cargados a mano mandan sobre el dominio: no se recalculan si cambiás la URL.'
+      }
+      return hint
     },
   },
   methods: {
@@ -104,6 +171,42 @@ export default {
         host = host.substring(4)
       }
       return host
+    },
+    /**
+     * Normaliza un path de instalación del hosting. Réplica en JS, solo para el texto informativo,
+     * de `ClientEcommerce::normalize_hosting_path()` (admin-api). Si cambia una, cambia la otra.
+     * @param {string} path Valor crudo del campo.
+     * @returns {string} Path relativo a `domains/`, o cadena vacía si no queda nada usable.
+     */
+    normalize_hosting_path(path) {
+      var value = (path || '').toString().trim()
+      if (!value) {
+        return ''
+      }
+      value = value.split('\\').join('/')
+      var segments = value.split('/')
+      var i = 0
+      var last_domains_index = -1
+      for (i = 0; i < segments.length; i++) {
+        if (segments[i] === 'domains') {
+          last_domains_index = i
+        }
+      }
+      if (last_domains_index >= 0) {
+        segments = segments.slice(last_domains_index + 1)
+      }
+      var clean_segments = []
+      for (i = 0; i < segments.length; i++) {
+        var segment = segments[i].trim()
+        if (segment === '' || segment === '.') {
+          continue
+        }
+        if (segment === '..') {
+          return ''
+        }
+        clean_segments.push(segment)
+      }
+      return clean_segments.join('/')
     },
     /**
      * Al salir del campo de URL del SPA, propone automáticamente la URL de la API
