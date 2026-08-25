@@ -161,16 +161,19 @@ export default {
       whatsapp_contacts: [],
       /** GET /support-ticket/whatsapp-contacts en curso. */
       contacts_loading: false,
+      /** El GET ya volvió para el cliente elegido. */
+      contacts_loaded: false,
       /** Teléfono elegido, en E.164. */
       selected_phone: null,
       /** Texto del primer mensaje. */
       message_body: '',
       /** Nombre de la plantilla de apertura configurada en el admin. */
       template_name: '',
-      /** Tope del texto cuando viaja como variable de plantilla; el backend recorta ahí. */
-      template_body_max_length: 600,
-      /** Tope del texto libre, que es el de un mensaje normal de WhatsApp. */
-      free_body_max_length: 4096,
+      /** Tope del primer mensaje. Es el de la variable de plantilla, que es el más chico:
+          un tope variable según el contacto dejaba texto ya escrito por encima del límite. */
+      body_max_length: 600,
+      /** El GET de contactos falló; distinto de "el cliente no tiene teléfonos". */
+      contacts_error: '',
     }
   },
   computed: {
@@ -190,21 +193,6 @@ export default {
         return !!this.selected_phone && this.message_body.trim().length > 0
       }
       return true
-    },
-    /**
-     * Tope de caracteres del mensaje según cómo vaya a salir.
-     *
-     * Como variable de plantilla el backend recorta a 600; como texto libre, WhatsApp
-     * acepta bastante más y no tiene sentido cortarlo antes.
-     *
-     * @returns {number}
-     */
-    body_max_length() {
-      const contact = this.selected_contact
-      if (contact && contact.window && contact.window.open) {
-        return this.free_body_max_length
-      }
-      return this.template_body_max_length
     },
     /**
      * Texto del botón según el canal.
@@ -259,8 +247,11 @@ export default {
      * @returns {boolean}
      */
     whatsapp_disabled() {
-      if (this.selected_client_id == null || this.contacts_loading) {
-        return this.selected_client_id == null
+      if (this.selected_client_id == null) {
+        return true
+      }
+      if (this.contacts_loading || !this.contacts_loaded) {
+        return false
       }
       return this.whatsapp_contacts.length === 0
     },
@@ -274,6 +265,12 @@ export default {
         return ''
       }
       if (this.contacts_loading || this.whatsapp_contacts.length > 0) {
+        return ''
+      }
+      if (this.contacts_error) {
+        return this.contacts_error
+      }
+      if (!this.contacts_loaded) {
         return ''
       }
       return 'Este cliente no tiene ningún teléfono cargado, ni en la ficha ni como empleado. Cargalo primero: sin eso, la respuesta del cliente cae en el pipeline de leads.'
@@ -321,13 +318,27 @@ export default {
      *
      * @param {number|null} client_id
      */
-    selected_client_id(client_id) {
+    selected_client_id() {
       this.selected_phone = null
       this.whatsapp_contacts = []
-      if (client_id == null) {
-        return
+      this.contacts_loaded = false
+      this.contacts_error = ''
+      if (this.source === 'whatsapp') {
+        this.load_whatsapp_contacts()
       }
-      this.load_whatsapp_contacts(client_id)
+    },
+    /**
+     * Los contactos se traen recién al elegir el canal WhatsApp.
+     *
+     * El endpoint resuelve la ventana de 24hs recorriendo los entrantes de tres tablas: no
+     * tiene por qué correr cuando el operador está armando un ticket del canal Sistema.
+     *
+     * @param {string} value
+     */
+    source(value) {
+      if (value === 'whatsapp' && !this.contacts_loaded && !this.contacts_loading) {
+        this.load_whatsapp_contacts()
+      }
     },
   },
   methods: {
@@ -363,6 +374,8 @@ export default {
       this.selected_phone = null
       this.message_body = ''
       this.contacts_loading = false
+      this.contacts_loaded = false
+      this.contacts_error = ''
     },
     /**
      * Etiqueta legible del cliente en el select.
@@ -426,24 +439,41 @@ export default {
      * @param {number} client_id
      * @returns {void}
      */
-    load_whatsapp_contacts(client_id) {
+    load_whatsapp_contacts() {
+      const client_id = this.selected_client_id
+      if (client_id == null) {
+        return
+      }
       const self = this
       this.contacts_loading = true
+      this.contacts_error = ''
       this.$store
         .dispatch('support_ticket/fetch_whatsapp_contacts', Number(client_id))
         .then(function (data) {
+          // La respuesta puede llegar tarde, después de que el operador cambió de cliente.
+          if (String(self.selected_client_id) !== String(client_id)) {
+            return
+          }
           self.whatsapp_contacts = Array.isArray(data.contacts) ? data.contacts : []
           self.template_name = data.template_name || ''
+          self.contacts_loaded = true
           // Un solo contacto: se preselecciona para ahorrarle un clic al operador.
           if (self.whatsapp_contacts.length === 1) {
             self.selected_phone = self.whatsapp_contacts[0].phone
           }
         })
         .catch(function () {
+          if (String(self.selected_client_id) !== String(client_id)) {
+            return
+          }
           self.whatsapp_contacts = []
+          self.contacts_loaded = true
+          self.contacts_error = 'No se pudieron traer los teléfonos del cliente. Probá de nuevo en un momento.'
         })
         .then(function () {
-          self.contacts_loading = false
+          if (String(self.selected_client_id) === String(client_id)) {
+            self.contacts_loading = false
+          }
         })
     },
     /**
