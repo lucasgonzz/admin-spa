@@ -141,6 +141,9 @@
             <div v-else-if="p.type === 'custom' && p.custom_component === 'client_ecommerce_urls'">
               <client-ecommerce-urls :record="form" />
             </div>
+            <div v-else-if="p.type === 'custom' && p.custom_component === 'lead_demo_ingreso_link'">
+              <lead-demo-ingreso-link :record="form" :field_label="p.text" />
+            </div>
           </template>
         </div>
       </div>
@@ -153,6 +156,7 @@ import SearchField from '@/common-vue/components/search/Index.vue'
 import LeadPersonalizedDemoVideosEditor from '@/components/lead/PersonalizedDemoVideosEditor.vue'
 import ClientImplementationExtraProps from '@/components/client/extra-props/Index.vue'
 import ClientEcommerceUrls from '@/components/client/ClientEcommerceUrls.vue'
+import LeadDemoIngresoLink from '@/components/lead/DemoIngresoLink.vue'
 import HasManyField from '@/common-vue/components/model/form/HasMany.vue'
 import FieldLabelWithHelp from '@/common-vue/components/model/form/FieldLabelWithHelp.vue'
 import api from '@/utils/axios'
@@ -165,6 +169,7 @@ import { store_catalog_relations } from '@/utils/store_catalog_relations'
  * `type: search` (FK) usa el componente SearchField.
  * `type: custom` + `custom_component: lead_personalized_demo_videos` → editor de tutoriales del mail demo.
  * `type: custom` + `custom_component: client_ecommerce_urls` → sección "Tienda online (ecommerce)" (URLs SPA/API).
+ * `type: custom` + `custom_component: lead_demo_ingreso_link` → link de ingreso a la demo del lead (copiar / abrir).
  * `type: has_many` o propiedad con bloque `has_many` → tabla + modal anidado (`form/HasMany.vue`).
  * Filas del meta solo con `group_title` (sin `key`) agrupan campos.
  * El tablist de navegación se renderiza en `model/Index.vue` y aquí se recibe el grupo activo.
@@ -178,7 +183,7 @@ import { store_catalog_relations } from '@/utils/store_catalog_relations'
  */
 export default {
   name: 'ModelForm',
-  components: { SearchField, LeadPersonalizedDemoVideosEditor, ClientImplementationExtraProps, ClientEcommerceUrls, HasManyField, FieldLabelWithHelp },
+  components: { SearchField, LeadPersonalizedDemoVideosEditor, ClientImplementationExtraProps, ClientEcommerceUrls, LeadDemoIngresoLink, HasManyField, FieldLabelWithHelp },
   props: {
     form: { type: Object, default: null },
     all_properties: { type: Array, default: () => [] },
