@@ -588,7 +588,8 @@ export default {
       api
         .post('/support-message/' + payload.message.id + '/approve-ai-draft', cuerpo)
         .then(function (response) {
-          const model = response.data && response.data.model
+          const datos = response.data || {}
+          const model = datos.model
           if (model) {
             self.$store.commit('support_message/patch_message', model)
           }
@@ -597,6 +598,13 @@ export default {
             ai_pending_suggestion: null,
             ai_suggestion_send_at: null,
           })
+          /* Una respuesta partida puede salir a medias: el cliente recibe las primeras partes y
+             las demás quedan en la conversación marcadas como no enviadas. Sin este aviso, el
+             operador aprieta Enviar, no ve ningún error, y no tiene por qué mirar si aparecieron
+             dos burbujas rojas más abajo. */
+          if (datos.partial) {
+            window.alert(datos.error)
+          }
         })
         .catch(function (error) {
           self.mostrar_error_de_borrador(error, 'No se pudo enviar la sugerencia.')
