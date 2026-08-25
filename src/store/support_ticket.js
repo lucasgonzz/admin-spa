@@ -320,6 +320,45 @@ export default __base_store({
         })
       })
     },
+    /**
+     * Contactos de WhatsApp del cliente con el estado de la ventana de 24hs de cada uno.
+     *
+     * @param {Object} contexto Contexto Vuex (sin uso; el resultado no toca el estado).
+     * @param {number} client_id Id del cliente.
+     * @returns {Promise<Object>} { contacts, template_name }
+     */
+    fetch_whatsapp_contacts(contexto, client_id) {
+      return api
+        .get('/support-ticket/whatsapp-contacts', { params: { client_id: client_id } })
+        .then(function (response) {
+          return response.data || { contacts: [], template_name: '' }
+        })
+    },
+    /**
+     * Abre una conversación de soporte por WhatsApp.
+     *
+     * Se separa de store() a propósito: devuelve el resultado del envío además del ticket,
+     * y store() ya está consumida por el alta del canal ERP con otro valor de retorno.
+     *
+     * @param {Object} contexto Contexto Vuex con dispatch.
+     * @param {Object} payload  client_id, whatsapp_phone, body y name opcional.
+     * @returns {Promise<Object>} { model, whatsapp, reused }
+     */
+    store_whatsapp({ dispatch }, payload) {
+      const cuerpo = Object.assign({}, payload, { source: 'whatsapp' })
+      return api.post('/support-ticket', cuerpo).then(function (response) {
+        const data = response.data || {}
+        const m = data.model
+        if (m) {
+          return dispatch('apply_ticket_row', m).then(function () {
+            return data
+          })
+        }
+        return dispatch('get_models').then(function () {
+          return data
+        })
+      })
+    },
   },
 })
 
