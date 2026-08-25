@@ -95,32 +95,62 @@ export default {
   },
   computed: {
     /**
+     * Path del SPA DERIVADO del dominio de la URL, ignorando lo que haya en el campo de path.
+     * Réplica en JS de ClientEcommerce::derived_spa_path().
+     * @returns {string}
+     */
+    derived_spa_path() {
+      var domain = this.domain_from_url(this.record ? this.record.ecommerce_spa_url : '')
+      return domain ? domain + '/public_html' : ''
+    },
+    /** Idem para la API. Réplica de ClientEcommerce::derived_api_path(). @returns {string} */
+    derived_api_path() {
+      var domain = this.domain_from_url(this.record ? this.record.ecommerce_spa_url : '')
+      return domain ? domain + '/public_html/api' : ''
+    },
+    /**
+     * Path del SPA cargado A MANO, o cadena vacía si lo escrito coincide con el derivado.
+     * Réplica en JS de ClientEcommerce::manual_spa_path().
+     *
+     * 🔴 "MANUAL" NO ES "EL CAMPO TIENE ALGO" (defecto encontrado en el chequeo independiente de
+     * la misión ecommerce-paths-subcarpeta): el backend considera manual un path normalizado Y
+     * DISTINTO de la derivación. Mientras acá alcanzaba con que el campo no estuviera vacío, si
+     * alguien escribía exactamente `tienda.cliente.com.ar/public_html` teniendo esa URL, el hint
+     * afirmaba "los paths cargados a mano no se recalculan si cambiás la URL" y el backend hacía
+     * justo lo contrario (lo trataba como derivado y sí lo recalculaba). Si cambia una definición,
+     * cambia la otra.
+     * @returns {string}
+     */
+    manual_spa_path() {
+      var stored = this.normalize_hosting_path(this.record ? this.record.ecommerce_spa_path : '')
+      if (!stored || stored === this.derived_spa_path) {
+        return ''
+      }
+      return stored
+    },
+    /** Idem para la API. Réplica de ClientEcommerce::manual_api_path(). @returns {string} */
+    manual_api_path() {
+      var stored = this.normalize_hosting_path(this.record ? this.record.ecommerce_api_path : '')
+      if (!stored || stored === this.derived_api_path) {
+        return ''
+      }
+      return stored
+    },
+    /**
      * Path efectivo del SPA (sin el prefijo `domains/`): el cargado a mano si hay, y si no el
      * derivado del dominio de la URL. Réplica en JS de ClientEcommerce::resolve_spa_path().
      * @returns {string}
      */
     effective_spa_path() {
-      var manual = this.normalize_hosting_path(this.record ? this.record.ecommerce_spa_path : '')
-      if (manual) {
-        return manual
-      }
-      var domain = this.domain_from_url(this.record ? this.record.ecommerce_spa_url : '')
-      return domain ? domain + '/public_html' : ''
+      return this.manual_spa_path || this.derived_spa_path
     },
     /** Idem para la API: manual si hay, si no `{dominio}/public_html/api`. @returns {string} */
     effective_api_path() {
-      var manual = this.normalize_hosting_path(this.record ? this.record.ecommerce_api_path : '')
-      if (manual) {
-        return manual
-      }
-      var domain = this.domain_from_url(this.record ? this.record.ecommerce_spa_url : '')
-      return domain ? domain + '/public_html/api' : ''
+      return this.manual_api_path || this.derived_api_path
     },
     /** Si al menos uno de los dos paths está cargado a mano. @returns {boolean} */
     has_manual_path() {
-      var spa = this.normalize_hosting_path(this.record ? this.record.ecommerce_spa_path : '')
-      var api = this.normalize_hosting_path(this.record ? this.record.ecommerce_api_path : '')
-      return Boolean(spa || api)
+      return Boolean(this.manual_spa_path || this.manual_api_path)
     },
     /**
      * Texto informativo con la ruta EFECTIVA de instalación en el hosting.
@@ -134,7 +164,11 @@ export default {
       var spa = this.effective_spa_path
       var api = this.effective_api_path
       if (!spa && !api) {
-        return 'Cargá la URL de la tienda (o los paths de instalación) para ver dónde se va a instalar.'
+        // 🔴 NO VOLVER A OFRECER "o los paths de instalación" (defecto encontrado en el chequeo
+        // independiente de la misión ecommerce-paths-subcarpeta): sin la URL de la tienda no se
+        // puede instalar nada igual, porque el resto del pipeline la necesita. Ofrecer los paths
+        // como alternativa invitaba a cargar solo eso, que es un callejón sin salida.
+        return 'Cargá la URL de la tienda para ver dónde se va a instalar.'
       }
       var hint =
         'Se va a instalar en domains/' + (spa || '(sin resolver)') + ' (tienda) y domains/' +
@@ -205,6 +239,17 @@ export default {
           return ''
         }
         clean_segments.push(segment)
+      }
+      // Guarda de forma, réplica de la de PHP: menos de dos segmentos, o un primer segmento que no
+      // parece un dominio (sin punto), no es un path de instalación y se rechaza ENTERO. El caso
+      // que la originó: pegar `comerciocity.store` a secas dejaba el docroot en
+      // `domains/comerciocity.store` y el deploy borraba el public_html entero de ese dominio.
+      // 🔴 `{dominio}/public_html` (dos segmentos) SÍ pasa: es el path de los ~40 clientes.
+      if (clean_segments.length < 2) {
+        return ''
+      }
+      if (clean_segments[0].indexOf('.') === -1) {
+        return ''
       }
       return clean_segments.join('/')
     },
