@@ -218,9 +218,16 @@ export default {
 
     /**
      * URL de ingreso directo a la demo. Usa el accesor `demo_ingreso_url` del backend si vino
-     * en la respuesta; si no (el accesor no está en $appends de admin-api, deuda técnica
-     * detectada en este prompt), lo arma acá con la misma fórmula que usa el backend:
+     * en la respuesta; si no, lo arma acá con la misma fórmula que usa el backend:
      * `demo.erp_spa_url` + '/demo/ingreso?t=' + token.
+     *
+     * 🔴 El fallback SIGUE HACIENDO FALTA, y conviene ser preciso sobre por qué, porque desde el
+     * 25/8/2026 la mitad de la frase vieja quedó vencida: `demo_ingreso_url` ahora sí viaja, pero
+     * **solo en el detalle** (`GET /lead/{id}`, vía `prepare_lead_for_detail_json`), no en el
+     * listado ni en los payloads públicos. Este control se monta con el lead del listado, así que
+     * es justo el caso en el que el campo no viene. No se agregó a un `$appends` de clase a
+     * propósito: el accesor lee la relación `demo` y el modelo se serializa entero en lugares que
+     * no deberían llevar el token, entre ellos un canal público de Pusher.
      * @returns {string}
      */
     demo_ingreso_url() {
