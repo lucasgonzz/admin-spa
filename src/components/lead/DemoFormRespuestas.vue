@@ -132,12 +132,16 @@ import { PREGUNTAS, DEFAULTS } from '@/components/demo/preguntas-formulario'
  * seguiría pintándose con el `demo_form_panel` de antes de guardar —"todavía no completó el
  * formulario", el origen y las fechas viejas— arriba de respuestas que ya se persistieron.
  *
- * Las columnas van en la lista aunque el "Guardar" del modal ya no pueda pisarlas: desde el
- * 27/8/2026 ninguna de las nueve está en `LeadProperties::properties()` (se sacaron de ahí
- * `use_deposits` y `use_price_lists`, que eran las dos únicas que estaban, justamente porque
- * ofrecían un segundo camino de escritura que no marcaba la edición manual), y
- * `ModelPropertiesHelper` es una lista blanca: lo que no está en el meta no se escribe. Se
- * refrescan igual para que el borrador no quede mostrando un valor que ya no es el de la base.
+ * Y con las columnas es peor todavía, porque el borrador viejo no sólo se ve: se manda. Dos de
+ * las nueve —`use_deposits` y `use_price_lists`— son además checkboxes editables del mismo grupo
+ * Demo (`LeadProperties`), así que viajan en el "Guardar" del modal. Si el PUT de esta tarjeta
+ * cambia `use_price_lists` en la base y el borrador se queda con el valor viejo, el siguiente
+ * "Guardar" del modal lo pisa de vuelta y la corrección de Lucas se pierde sin que nada avise.
+ *
+ * (Ese par estuvo un rato fuera del meta el 27/8/2026, para que la tarjeta fuera la única puerta
+ * a esas columnas; se revirtió el mismo día — la tarjeta sólo es editable para la dinámica nueva
+ * y esas dos columnas alimentan también el setup del cliente real. El "Guardar" general marca
+ * ahora `demo_form_editado_admin_at` por su cuenta, así que las dos puertas cuentan.)
  *
  * Se refresca esta lista y no el modelo entero a propósito: copiar todas las claves pisaría lo
  * que Lucas esté editando en otros campos del modal sin haber apretado Guardar todavía.
