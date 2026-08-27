@@ -2,26 +2,24 @@
   <div>
     <label class="form-label mb-0">{{ field_label }}</label>
     <small class="form-text text-muted d-block mt-1 mb-2">
-      Es el link que abre la demo con la sesión ya iniciada y con el panel de tutoriales a la
-      vista. Sin el token en la URL la demo se abre sin ese panel, así que este es el link que
-      hay que mandarle al lead.
+      {{ textos.ayuda }}
     </small>
 
-    <!-- Sin token emitido no hay link que mostrar: se dice, en vez de dejar un input vacío que
-         parezca un campo roto o un valor que todavía no cargó. -->
-    <p v-if="!demo_ingreso_url" class="text-muted small mb-0">
+    <!-- Sin link que mostrar se dice, en vez de dejar un input vacío que parezca un campo roto o
+         un valor que todavía no cargó. -->
+    <p v-if="!link_url" class="text-muted small mb-0">
       <i class="bi bi-dash-circle me-1" aria-hidden="true" />
-      Todavía no hay link: el lead no tiene demo asignada o no se generó el acceso.
+      {{ textos.vacio }}
     </p>
 
     <div v-else class="input-group">
       <!-- readonly y no disabled: readonly deja seleccionar y copiar el texto a mano, disabled no. -->
       <input
-        :value="demo_ingreso_url"
+        :value="link_url"
         type="text"
         class="form-control"
         readonly
-        aria-label="Link de ingreso a la demo"
+        :aria-label="field_label"
         @focus="on_focus"
       />
       <button
@@ -34,14 +32,14 @@
         <i class="bi" :class="copied_feedback ? 'bi-check-lg' : 'bi-clipboard'" aria-hidden="true" />
         {{ copied_feedback ? 'Copiado' : 'Copiar' }}
       </button>
-      <!-- rel="noopener": la demo se abre en otra pestaña y no tiene por qué recibir una
+      <!-- rel="noopener": la página se abre en otra pestaña y no tiene por qué recibir una
            referencia al window del admin. -->
       <a
-        :href="demo_ingreso_url"
+        :href="link_url"
         target="_blank"
         rel="noopener"
         class="btn btn-outline-secondary"
-        title="Abrir la demo en una pestaña nueva"
+        :title="textos.abrir"
       >
         <i class="bi bi-box-arrow-up-right" aria-hidden="true" />
         Abrir
@@ -54,22 +52,57 @@
 import { copy_text_to_clipboard } from '@/utils/version_notification_clipboard'
 
 /**
- * Bloque "Link de ingreso a la demo" del modal del lead.
+ * Textos que cambian según el campo que se esté renderizando.
+ *
+ * Vive fuera del `export default` porque es una tabla constante, no estado del componente: no
+ * tiene por qué recrearse en cada instancia. La clave es la `key` del meta (`field_key`).
+ */
+const TEXTOS_POR_CAMPO = {
+  demo_ingreso_url: {
+    ayuda:
+      'Es el link que abre la demo con la sesión ya iniciada y con el panel de tutoriales a la ' +
+      'vista. Sin el token en la URL la demo se abre sin ese panel, así que este es el link que ' +
+      'hay que mandarle al lead.',
+    vacio: 'Todavía no hay link: el lead no tiene demo asignada o no se generó el acceso.',
+    abrir: 'Abrir la demo en una pestaña nueva',
+  },
+  demo_experiencia_url: {
+    ayuda:
+      'Es la página que el lead recorre antes de entrar a la demo: responde el formulario de ' +
+      'configuración, mira el video de introducción y desde ahí mismo accede. Es pública y no ' +
+      'pide usuario ni contraseña, y el link es propio de este lead, así que se le puede mandar ' +
+      'tal cual.',
+    vacio: 'Todavía no hay link: revisá que el lead tenga uuid y que esté cargada la URL de admin-spa.',
+    abrir: 'Abrir la página de experiencia en una pestaña nueva',
+  },
+}
+
+/**
+ * Bloque de link copiable del grupo Demo del modal del lead.
  *
  * Renderizado desde el meta declarativo (`LeadProperties.php`) vía `type: 'custom'` +
  * `custom_component: 'lead_demo_ingreso_link'`, con el mismo patrón que
  * `client_ecommerce_urls`: recibe `:record="form"`, o sea el borrador del modal.
  *
- * El valor sale del accesor `Lead::getDemoIngresoUrlAttribute()` de admin-api, que
- * `LeadController::prepare_lead_for_detail_json()` inyecta en la respuesta del detalle. Ese
- * accesor ya normaliza el esquema con `DemoUrlNormalizer` (misión del 17/8/2026), así que el
- * link que llega acá es navegable tal cual y este componente no vuelve a tocarlo.
+ * Sirve a los DOS campos de link del grupo Demo —`demo_ingreso_url` (link a la demo, con token) y
+ * `demo_experiencia_url` (link público a la página de experiencia)—, resolviendo el valor y los
+ * textos por `field_key`. Comparten renderizador a propósito: el bloque de copiar/abrir es
+ * idéntico y duplicarlo duplicaría la lógica de portapapeles, que es justo la deuda que este
+ * componente existe para no repetir.
  *
- * No persiste nada: el campo está declarado `not_persisted_on_model` + `exclude_on_update`.
+ * Los valores salen de los accesores `Lead::getDemoIngresoUrlAttribute()` y
+ * `Lead::getDemoExperienciaUrlAttribute()` de admin-api, que
+ * `LeadController::prepare_lead_for_detail_json()` inyecta en la respuesta del detalle. El
+ * primero ya normaliza el esquema con `DemoUrlNormalizer` (misión del 17/8/2026), así que los
+ * links que llegan acá son navegables tal cual y este componente no vuelve a tocarlos.
+ *
+ * No persiste nada: los campos están declarados `not_persisted_on_model` + `exclude_on_update`.
  *
  * Es un bloque distinto de `DemoAccesoControl.vue`, que vive en el panel lateral de WhatsApp:
  * aquel opera sobre el token (reemitir, revocar) y solo ofrece copiar; este muestra el link en
- * claro dentro del modal, que es lo que Lucas pidió el 25/8/2026.
+ * claro dentro del modal, que es lo que Lucas pidió el 25/8/2026. Y distinto también de
+ * `DemoExperienciaControl.vue`, que elige la dinámica de demo (`actual`/`nueva`) y no muestra
+ * ningún link.
  */
 export default {
   name: 'DemoIngresoLink',
@@ -77,6 +110,8 @@ export default {
   props: {
     /** Borrador del formulario del lead (el `form` del ModelForm). */
     record: { type: Object, default: null },
+    /** `key` del meta: decide qué campo del record se muestra y con qué textos. */
+    field_key: { type: String, default: 'demo_ingreso_url' },
     /** Etiqueta declarada en el meta, para no duplicar el texto acá. */
     field_label: { type: String, default: 'Link de ingreso a la demo' },
   },
@@ -92,7 +127,17 @@ export default {
 
   computed: {
     /**
-     * Link de ingreso tal como vino del backend.
+     * Textos del campo que se está renderizando. Ante una `field_key` desconocida cae en los del
+     * link de ingreso a la demo, que es el default histórico del componente.
+     *
+     * @returns {Object}
+     */
+    textos() {
+      return TEXTOS_POR_CAMPO[this.field_key] || TEXTOS_POR_CAMPO.demo_ingreso_url
+    },
+
+    /**
+     * Link tal como vino del backend.
      *
      * A propósito NO se arma acá un fallback concatenando `record.demo.erp_spa_url` con el
      * token: esa fórmula ya vive en un solo lugar (el accesor del modelo, que además normaliza
@@ -101,11 +146,11 @@ export default {
      *
      * @returns {string}
      */
-    demo_ingreso_url() {
-      if (!this.record || !this.record.demo_ingreso_url) {
+    link_url() {
+      if (!this.record || !this.record[this.field_key]) {
         return ''
       }
-      return String(this.record.demo_ingreso_url)
+      return String(this.record[this.field_key])
     },
   },
 
@@ -137,10 +182,10 @@ export default {
      */
     on_copy() {
       var self = this
-      if (!this.demo_ingreso_url) {
+      if (!this.link_url) {
         return
       }
-      copy_text_to_clipboard(this.demo_ingreso_url)
+      copy_text_to_clipboard(this.link_url)
         .then(function () {
           self.copied_feedback = true
           if (self.copied_feedback_timer) {
