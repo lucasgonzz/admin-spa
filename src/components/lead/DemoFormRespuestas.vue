@@ -128,10 +128,16 @@ import { PREGUNTAS, DEFAULTS } from '@/components/demo/preguntas-formulario'
  *
  * 🔴 NO ES COSMÉTICO. El modal manda el borrador ENTERO en su propio "Guardar"
  * (`model/Index.vue::on_save()` hace `JSON.parse(JSON.stringify(this.draft))`), y el borrador se
- * armó con el lead tal como estaba cuando se abrió el modal. Si el PUT del formulario cambia
- * `use_price_lists` en la base y el borrador se queda con el valor viejo, el siguiente "Guardar"
- * del modal lo pisa de vuelta y la corrección de Lucas se pierde sin que nada avise. Dos de estas
- * columnas (`use_deposits` y `use_price_lists`) además se editan a mano en el mismo grupo Demo.
+ * armó con el lead tal como estaba cuando se abrió el modal. Sin este refresco, la tarjeta
+ * seguiría pintándose con el `demo_form_panel` de antes de guardar —"todavía no completó el
+ * formulario", el origen y las fechas viejas— arriba de respuestas que ya se persistieron.
+ *
+ * Las columnas van en la lista aunque el "Guardar" del modal ya no pueda pisarlas: desde el
+ * 27/8/2026 ninguna de las nueve está en `LeadProperties::properties()` (se sacaron de ahí
+ * `use_deposits` y `use_price_lists`, que eran las dos únicas que estaban, justamente porque
+ * ofrecían un segundo camino de escritura que no marcaba la edición manual), y
+ * `ModelPropertiesHelper` es una lista blanca: lo que no está en el meta no se escribe. Se
+ * refrescan igual para que el borrador no quede mostrando un valor que ya no es el de la base.
  *
  * Se refresca esta lista y no el modelo entero a propósito: copiar todas las claves pisaría lo
  * que Lucas esté editando en otros campos del modal sin haber apretado Guardar todavía.
@@ -271,9 +277,18 @@ export default {
     },
 
     /**
-     * Texto del aviso de origen: de dónde salieron las respuestas que se están mostrando.
+     * Texto del aviso de origen: quién escribió las respuestas que se están mostrando.
+     *
+     * 🔴 Los cuatro casos dicen SIEMPRE si el lead completó el formulario o no, que es el
+     * requisito de Lucas y lo único que se puede afirmar con certeza en los cuatro. Lo que el
+     * aviso NO hace es decir quién escribió último cuando escribieron los dos: el backend
+     * manda `origen: 'ambos'` justamente porque no se puede saber
+     * (`demo_form_completado_at` marca el PRIMER envío del lead y no se mueve en los reenvíos,
+     * así que comparar las dos fechas daba ganadores falsos — ver el docblock de
+     * `LeadDemoFormMapper::origen()`). Se muestran las dos fechas y se deja leer.
+     *
      * Un `origen` que este front no conozca cae en el texto de los defaults, que es el más
-     * conservador de los tres (no le atribuye la respuesta a nadie).
+     * conservador: no le atribuye la respuesta a nadie.
      *
      * @returns {string}
      */
@@ -282,11 +297,19 @@ export default {
       if (!p) {
         return ''
       }
+      if (p.origen === 'ambos') {
+        const fecha_lead_ambos = this.formatear_fecha(p.completado_at)
+        const fecha_admin_ambos = this.formatear_fecha(p.editado_admin_at)
+        return 'El lead completó el formulario' +
+          (fecha_lead_ambos ? ' el ' + fecha_lead_ambos : '') +
+          ' y también se editaron respuestas desde el panel' +
+          (fecha_admin_ambos ? ' el ' + fecha_admin_ambos : '') + '.'
+      }
       if (p.origen === 'admin') {
         const fecha_admin = this.formatear_fecha(p.editado_admin_at)
-        return fecha_admin
+        return (fecha_admin
           ? 'Modificado por vos el ' + fecha_admin + '.'
-          : 'Modificado por vos.'
+          : 'Modificado por vos.') + ' El lead todavía no completó el formulario.'
       }
       if (p.origen === 'lead') {
         const fecha_lead = this.formatear_fecha(p.completado_at)
@@ -298,21 +321,20 @@ export default {
     },
 
     /**
-     * Segunda línea del aviso, solo cuando Lucas editó respuestas que el lead ya había
-     * contestado: las dos fechas juntas son lo que deja ver qué pasó primero.
+     * Segunda línea del aviso, sólo cuando escribieron las dos puntas. Dice explícitamente que
+     * las dos fechas no alcanzan para saber cuál de las dos escrituras quedó última, para que
+     * nadie lea la primera línea como un orden de prioridad. Lo que se ve arriba, en cambio, sí
+     * es siempre lo que está guardado hoy.
      *
      * @returns {string}
      */
     texto_completado_previo() {
       const p = this.panel
-      if (!p || p.origen !== 'admin' || !p.completado_por_lead) {
+      if (!p || p.origen !== 'ambos') {
         return ''
       }
-      const fecha = this.formatear_fecha(p.completado_at)
-      if (!fecha) {
-        return ''
-      }
-      return 'El lead lo había completado el ' + fecha + '.'
+      return 'Las respuestas de arriba son las que están guardadas hoy. La fecha del lead marca ' +
+        'su primer envío, así que las dos fechas no dicen cuál de las dos ediciones quedó última.'
     },
 
     /**
@@ -322,7 +344,7 @@ export default {
      */
     clase_aviso_origen() {
       const p = this.panel
-      if (p && p.origen === 'admin') {
+      if (p && (p.origen === 'admin' || p.origen === 'ambos')) {
         return 'alert-info'
       }
       if (p && p.origen === 'lead') {
@@ -338,6 +360,9 @@ export default {
      */
     icono_aviso_origen() {
       const p = this.panel
+      if (p && p.origen === 'ambos') {
+        return 'bi-people'
+      }
       if (p && p.origen === 'admin') {
         return 'bi-pencil-square'
       }
