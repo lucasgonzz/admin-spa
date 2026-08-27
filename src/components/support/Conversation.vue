@@ -1,6 +1,6 @@
 <template>
   <div class="support-conversation">
-    <div class="support-conversation-body" ref="conversation_body">
+    <div class="support-conversation-body whatsapp-conversation-wallpaper" ref="conversation_body">
       <div
         v-if="loading"
         class="support-conversation-loading d-flex align-items-center justify-content-center"
@@ -194,6 +194,23 @@
           </div>
         </div>
       </div>
+      <!-- Aviso de ventana vencida. Va al final del hilo y no en el pie de la pantalla para que
+           quede pegado a lo último que se dijo: es la respuesta a "por qué no puedo contestar
+           esto", y ahí es donde el operador está mirando. -->
+      <div v-if="!whatsapp_window_open" class="support-window-closed-notice">
+        <i class="bi bi-clock-history" aria-hidden="true" />
+        <div class="support-window-closed-text">
+          <strong>Pasaron más de 24hs desde el último mensaje del cliente.</strong>
+          Meta no deja mandar texto libre hasta que el cliente vuelva a escribir. Para retomar la
+          conversación tenés que mandarle una plantilla aprobada.
+        </div>
+        <button
+          type="button"
+          class="btn btn-sm btn-outline-primary support-window-closed-btn"
+          @click="template_modal_visible = true">
+          Elegir plantilla
+        </button>
+      </div>
       <div
         ref="scroll_end_anchor"
         class="support-conversation-scroll-end"
@@ -206,18 +223,28 @@
       :image_url="image_preview_url"
       @update:show="image_preview_visible = $event"
       @close="on_image_preview_close" />
+
+    <support-template-picker-modal
+      :show="template_modal_visible"
+      :ticket_id="active_ticket_id"
+      @update:show="template_modal_visible = $event"
+      @sent="on_template_sent" />
   </div>
 </template>
 
 <script>
+import api from '@/utils/axios'
 import ImageLightbox from '@/components/common/ImageLightbox.vue'
 import BorderProgressWrap from '@/components/support/BorderProgressWrap.vue'
+import SupportTemplatePickerModal from '@/components/support/SupportTemplatePickerModal.vue'
+import '@/styles/whatsapp-conversation-wallpaper.css'
 
 export default {
   name: 'SupportConversation',
   components: {
     ImageLightbox,
     BorderProgressWrap,
+    SupportTemplatePickerModal,
   },
   emits: ['retry-message', 'send-draft', 'discard-draft'],
   props: {
@@ -245,7 +272,69 @@ export default {
       editing_draft_id: null,
       /** Texto en edición del borrador. El original no se toca hasta aprobar. */
       draft_edit_text: '',
+      /** Ventana de 24hs del ticket abierto, tal como la devolvió la API. null = todavía no se sabe. */
+      whatsapp_window: null,
+      /** GET de la ventana en curso. */
+      window_loading: false,
+      /** Ticket al que corresponde whatsapp_window: evita repetir el GET del mismo hilo. */
+      window_ticket_id: null,
+      /** Id del último entrante que ya está contemplado en whatsapp_window. */
+      window_last_inbound_id: null,
+      /** Selector de plantillas abierto. */
+      template_modal_visible: false,
     }
+  },
+  computed: {
+    /**
+     * Ticket abierto en el hilo.
+     *
+     * Sale del store y no de un prop para no obligar a la pantalla a pasarlo: el store ya lo
+     * setea en load_ticket_messages y es el mismo id con el que se pidieron estos mensajes.
+     *
+     * @returns {number|string|null}
+     */
+    active_ticket_id() {
+      return this.$store.state.support_message.active_ticket_id
+    },
+    /**
+     * Id del último mensaje entrante del hilo. null si el cliente todavía no escribió.
+     *
+     * @returns {number|string|null}
+     */
+    last_inbound_message_id() {
+      const list = this.messages
+      if (!list || !list.length) {
+        return null
+      }
+      for (let i = list.length - 1; i >= 0; i--) {
+        if (list[i].sender_type === 'user' && list[i].id != null) {
+          return list[i].id
+        }
+      }
+      return null
+    },
+    /**
+     * true si Meta todavía deja mandar texto libre a este contacto.
+     *
+     * Se compara expires_at contra el reloj de la pantalla en vez de volver a preguntarle a la
+     * API cada minuto: la ventana se vence sola a una hora conocida, y un operador con el ticket
+     * abierto tiene que ver el aviso aparecer cuando se vence, no en el próximo refresco.
+     *
+     * @returns {boolean}
+     */
+    whatsapp_window_open() {
+      if (this.ticket_source !== 'whatsapp' || !this.whatsapp_window) {
+        return true
+      }
+      if (!this.whatsapp_window.open) {
+        return false
+      }
+      const vence = new Date(this.whatsapp_window.expires_at).getTime()
+      if (isNaN(vence)) {
+        return true
+      }
+      return vence > this.now_tick
+    },
   },
   /**
    * Al montar, posiciona al final (ticket ya cargado o carga inmediata).
@@ -261,6 +350,7 @@ export default {
       deep: true,
       handler() {
         this.schedule_scroll_to_bottom()
+        this.revisar_entrante_nuevo()
       },
     },
     /**
@@ -273,8 +363,112 @@ export default {
         }
       },
     },
+    /**
+     * Al abrir un ticket se pregunta la ventana una sola vez; de ahí en más se vence sola contra
+     * el reloj de la pantalla. Lo que quedaba del ticket anterior se descarta acá mismo: un
+     * aviso de otro hilo colgado un instante es peor que no mostrar nada.
+     */
+    active_ticket_id: {
+      immediate: true,
+      handler() {
+        this.template_modal_visible = false
+        this.whatsapp_window = null
+        this.window_ticket_id = null
+        this.window_last_inbound_id = this.last_inbound_message_id
+        this.fetch_whatsapp_window(false)
+      },
+    },
+    /**
+     * El canal puede llegar un instante después del id, porque sale de la fila de la bandeja y
+     * no del GET del hilo. Sin este watcher, un ticket abierto desde una notificación se
+     * quedaría sin ventana hasta que el operador cambie de hilo y vuelva.
+     */
+    ticket_source() {
+      this.fetch_whatsapp_window(false)
+    },
   },
   methods: {
+    /**
+     * Pide a la API el estado de la ventana de 24hs del ticket abierto.
+     *
+     * Al ticket del canal Sistema no se le pregunta nada: no tiene ventana de Meta y el aviso
+     * no le aplica. Si el GET falla, la ventana queda en null y no se muestra ningún aviso: es
+     * preferible callarse a decirle al operador que no puede escribir cuando quizá sí puede.
+     *
+     * @param {boolean} forzar true para volver a preguntar por un ticket que ya se preguntó
+     *   (entró un mensaje del cliente, o se acaba de mandar una plantilla).
+     * @returns {void}
+     */
+    fetch_whatsapp_window(forzar) {
+      const ticket_id = this.active_ticket_id
+      if (!ticket_id || this.ticket_source !== 'whatsapp') {
+        this.whatsapp_window = null
+        this.window_ticket_id = null
+        this.window_last_inbound_id = null
+        this.window_loading = false
+        return
+      }
+      if (!forzar && String(this.window_ticket_id) === String(ticket_id)) {
+        return
+      }
+      const self = this
+      this.window_ticket_id = ticket_id
+      this.window_loading = true
+      api
+        .get('/support-ticket/' + ticket_id + '/whatsapp-window', { silent_error: true })
+        .then(function (response) {
+          // La respuesta puede llegar tarde, con otro ticket ya abierto en pantalla.
+          if (String(self.active_ticket_id) !== String(ticket_id)) {
+            return
+          }
+          self.whatsapp_window = (response.data && response.data.window) || null
+        })
+        .catch(function () {
+          if (String(self.active_ticket_id) !== String(ticket_id)) {
+            return
+          }
+          self.whatsapp_window = null
+        })
+        .then(function () {
+          if (String(self.active_ticket_id) !== String(ticket_id)) {
+            return
+          }
+          // El dato que volvió contempla todo lo que hay en el hilo AHORA, no lo que había
+          // cuando se pidió: por eso la referencia se toma recién acá.
+          self.window_last_inbound_id = self.last_inbound_message_id
+          self.window_loading = false
+        })
+    },
+    /**
+     * Vuelve a pedir la ventana cuando entró un mensaje del cliente.
+     *
+     * Un entrante es lo ÚNICO que puede reabrir una ventana cerrada o correrle el vencimiento
+     * 24hs para adelante, así que es el único cambio del hilo que justifica otra consulta: un
+     * mensaje del operador, un visto o un borrador del agente no la mueven.
+     *
+     * @returns {void}
+     */
+    revisar_entrante_nuevo() {
+      if (this.ticket_source !== 'whatsapp' || this.window_loading) {
+        return
+      }
+      if (String(this.last_inbound_message_id) === String(this.window_last_inbound_id)) {
+        return
+      }
+      this.fetch_whatsapp_window(true)
+    },
+    /**
+     * La plantilla salió: se cierra el selector y se vuelve a preguntar la ventana.
+     *
+     * El mensaje NO se agrega a mano al hilo: la API dispara SupportMessageReceived y el socket
+     * al que ya está suscripta la pantalla lo empuja solo. Agregarlo acá lo mostraría dos veces.
+     *
+     * @returns {void}
+     */
+    on_template_sent() {
+      this.template_modal_visible = false
+      this.fetch_whatsapp_window(true)
+    },
     /**
      * Abre la edición del borrador con el texto que propuso el agente.
      *
@@ -691,22 +885,26 @@ export default {
   width: 100%;
 }
 
+/*
+  Sin `background` acá: el atajo pisaría el background-image de
+  .whatsapp-conversation-wallpaper, que es la clase que pinta el fondo del hilo.
+ */
 .support-conversation-body {
   flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
-  background: #f5f7fb;
   padding: 12px;
   position: relative;
 }
 
-/* Ocupa el área scroll mientras se espera el GET de la conversación. */
+/* Ocupa el área scroll mientras se espera el GET de la conversación.
+   El velo va en el beige del wallpaper para que abrir un ticket no destelle en gris. */
 .support-conversation-loading {
   position: absolute;
   inset: 0;
   z-index: 2;
   min-height: 8rem;
-  background: rgba(245, 247, 251, 0.92);
+  background: rgba(239, 234, 226, 0.92);
 }
 
 /* Marcador cero altura; scrollIntoView alinea el scroll al final del hilo. */
@@ -749,8 +947,10 @@ export default {
   cursor: help;
 }
 
+/* Verde de WhatsApp: sobre el beige del wallpaper contrasta bastante más que el #dff7df
+   que se usaba cuando el fondo era gris claro. */
 .support-message-row.mine .support-message-bubble {
-  background: #dff7df;
+  background: #d9fdd3;
 }
 
 .support-message-bubble--ai-draft {
@@ -908,5 +1108,46 @@ export default {
 }
 .support-ai-draft-textarea {
 	font-size: 13px;
+}
+
+/* Cartel del sistema al pie del hilo: centrado, angosto y amarillo justamente para que no se
+   lea como la burbuja de nadie. */
+.support-window-closed-notice {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 520px;
+  margin: 12px auto;
+  padding: 10px 12px;
+  background: #fff8e1;
+  border: 1px solid #ffe08a;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #664d03;
+}
+
+.support-window-closed-notice > i {
+  flex-shrink: 0;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.support-window-closed-text {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.support-window-closed-text strong {
+  display: block;
+}
+
+.support-window-closed-btn {
+  flex-shrink: 0;
+  align-self: center;
+  margin-left: auto;
+  white-space: nowrap;
+  font-size: 12px;
 }
 </style>
