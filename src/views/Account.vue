@@ -16,7 +16,7 @@
       <div class="account-page__content flex-grow-1 min-w-0">
         <!-- Preferencias personales -->
         <section
-          v-show="active_section === 'preferences'"
+          v-if="active_section === 'preferences'"
           id="preferences"
           class="account-section account-section--narrow"
         >
@@ -75,7 +75,7 @@
 
         <!-- Instalar la PWA en el dispositivo actual (antes de activar notificaciones) -->
         <section
-          v-show="active_section === 'pwa-install'"
+          v-if="active_section === 'pwa-install'"
           id="pwa-install"
           class="account-section"
         >
@@ -89,7 +89,7 @@
 
         <!-- Notificaciones push del dispositivo actual -->
         <section
-          v-show="active_section === 'push-notifications'"
+          v-if="active_section === 'push-notifications'"
           id="push-notifications"
           class="account-section"
         >
@@ -103,7 +103,7 @@
 
         <!-- Configuración de soporte: alertas -->
         <section
-          v-show="active_section === 'support-alert-settings'"
+          v-if="active_section === 'support-alert-settings'"
           id="support-alert-settings"
           class="account-section"
         >
@@ -117,7 +117,7 @@
 
         <!-- Configuración de soporte: IA -->
         <section
-          v-show="active_section === 'support-ai-settings'"
+          v-if="active_section === 'support-ai-settings'"
           id="support-ai-settings"
           class="account-section"
         >
@@ -130,6 +130,11 @@
         </section>
 
         <!-- Leads: identidad del agente Martín -->
+        <!--
+          NO pasar a v-if: el perfil del agente es un textarea rows="6" de prosa con un solo botón
+          Guardar — el mismo tamaño que los textareas de lead-whatsapp-onboarding, que también
+          queda montada. Protegerlo allá y no acá sería incoherente, y cuesta 1 request.
+        -->
         <section
           v-show="active_section === 'agent-identity'"
           id="agent-identity"
@@ -148,6 +153,14 @@
         </section>
 
         <!-- Leads: configuración de demos -->
+        <!--
+          NO pasar a v-if: es el formulario más largo de toda la pantalla — 31 campos con un solo
+          botón Guardar — y su can_save() es el mismo dirty-check que el has_unsaved_changes de las
+          otras dos que quedan en v-show, solo que con otro nombre. Con v-if, cambiar de sección y
+          volver repisa los 31 campos con el valor del servidor, sin aviso.
+          Cuesta 1 sola request (hace un único GET en mounted), así que es la que mejor paga
+          quedarse montada.
+        -->
         <section
           v-show="active_section === 'lead-demo-settings'"
           id="lead-demo-settings"
@@ -166,6 +179,14 @@
         </section>
 
         <!-- Leads: WhatsApp onboarding -->
+        <!--
+          NO pasar a v-if: es una de las tres secciones con formulario largo que se dejan montadas.
+          Cambiar de sección navega con $router.push({ hash }), que en vue-router 4 dispara
+          beforeRouteUpdate y NO beforeRouteLeave — o sea que el guard de más abajo no llega a
+          correr. Con v-if el componente se destruye al cambiar de sección y el formulario a medio
+          llenar se pierde sin ningún aviso. Las otras 13 secciones sí van con v-if para no
+          montarlas todas de una (ver comentario en ai-system-prompt).
+        -->
         <section
           v-show="active_section === 'lead-whatsapp-onboarding'"
           id="lead-whatsapp-onboarding"
@@ -181,7 +202,7 @@
 
         <!-- Leads: reglas de seguimiento -->
         <section
-          v-show="active_section === 'followup-rules'"
+          v-if="active_section === 'followup-rules'"
           id="followup-rules"
           class="account-section"
         >
@@ -199,7 +220,7 @@
 
         <!-- Leads: plantillas de seguimiento WhatsApp -->
         <section
-          v-show="active_section === 'followup-templates'"
+          v-if="active_section === 'followup-templates'"
           id="followup-templates"
           class="account-section"
         >
@@ -217,7 +238,7 @@
 
         <!-- Leads: protocolo de ventas -->
         <section
-          v-show="active_section === 'protocol-entries'"
+          v-if="active_section === 'protocol-entries'"
           id="protocol-entries"
           class="account-section"
         >
@@ -234,6 +255,32 @@
         </section>
 
         <!-- Leads: system prompt -->
+        <!--
+          NO pasar a v-if, mismo motivo que lead-whatsapp-onboarding: el guard de cambios sin
+          guardar no corre al cambiar de sección, y acá el costo es un textarea de 28 filas
+          perdido en silencio.
+          El criterio para dejar una sección en v-show NO es que el beforeRouteLeave la nombre: el
+          guard nombra dos por historia, no porque sean las dos que importan. Es esto, y hay siete
+          secciones con dirty-check (un has_unsaved_changes o un can_save contra lo guardado), así
+          que el dirty-check solo no alcanza para decidir:
+
+            queda en v-show  =  dirty-check  Y  lo que se pierde es caro de retipear
+                                (prosa larga o muchos campos con un solo Guardar)
+                                Y  cuesta pocas requests dejarla montada
+
+          Las cuatro que cumplen: esta, lead-whatsapp-onboarding, lead-demo-settings (31 campos,
+          un Guardar) y agent-identity (textarea rows="6" de prosa).
+          Las otras tres con dirty-check quedan en v-if a propósito:
+            - implementation-settings: hace 10 GET en mounted, el 38% de la ráfaga, y cada uno de
+              sus 9 campos tiene su propio botón Guardar.
+            - support-ai-settings (1 checkbox + 2 números) y support-alert-settings (1 número):
+              retipearlos son segundos, no vale montarlos siempre.
+
+          Las 12 secciones restantes van con v-if porque con todas en v-show se montaban las 16 al
+          entrar a /cuenta y salían ~26 requests en ráfaga. Eso disparaba errores 2002 del hosting
+          (medido: una ráfaga de 24 conexiones alcanza, ver informe 20260825-limpieza-crons-hostinger).
+          Tampoco sirve keep-alive: pone el $ref en null al desactivar y rompería el guard de salida.
+        -->
         <section
           v-show="active_section === 'ai-system-prompt'"
           id="ai-system-prompt"
@@ -253,7 +300,7 @@
 
         <!-- Leads: sincronizar prompts desde GitHub -->
         <section
-          v-show="active_section === 'agent-prompt-sync'"
+          v-if="active_section === 'agent-prompt-sync'"
           id="agent-prompt-sync"
           class="account-section"
         >
@@ -271,7 +318,7 @@
 
         <!-- Leads: firma del prestador en el PDF del contrato -->
         <section
-          v-show="active_section === 'contract-signature'"
+          v-if="active_section === 'contract-signature'"
           id="contract-signature"
           class="account-section"
         >
@@ -285,7 +332,7 @@
 
         <!-- Operaciones: plantillas de tareas -->
         <section
-          v-show="active_section === 'task-templates'"
+          v-if="active_section === 'task-templates'"
           id="task-templates"
           class="account-section"
         >
@@ -303,7 +350,7 @@
 
         <!-- Operaciones: implementaciones -->
         <section
-          v-show="active_section === 'implementation-settings'"
+          v-if="active_section === 'implementation-settings'"
           id="implementation-settings"
           class="account-section"
         >
@@ -383,11 +430,19 @@ export default {
       return this.$store.state.auth.admin
     },
   },
+  created() {
+    // Va en created y no en mounted: con las secciones en v-if, entrar por deep link
+    // (/cuenta#implementation-settings, y los redirects viejos del router) montaba la sección
+    // default y la destruía en el tick siguiente. Hoy eso no cuesta ni una request, porque la
+    // default es preferences y preferences no pide nada — el punto es desactivar la trampa antes
+    // de que muerda: el día que alguien mueva ACCOUNT_DEFAULT_SECTION_ID a una sección que sí
+    // pide datos, cada deep link montaría y tiraría a la basura esa sección con todos sus GET.
+    this.sync_active_section_from_route()
+  },
   mounted() {
     const self = this
     // Refresca perfil para traer flags actualizados si el token es antiguo.
     this.$store.dispatch('auth/me').catch(function () {})
-    this.sync_active_section_from_route()
     this.$nextTick(function () {
       self.ensure_route_hash_matches_section()
     })
