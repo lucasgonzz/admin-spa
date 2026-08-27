@@ -142,7 +142,7 @@
               <client-ecommerce-urls :record="form" />
             </div>
             <div v-else-if="p.type === 'custom' && p.custom_component === 'lead_demo_ingreso_link'">
-              <lead-demo-ingreso-link :record="form" :field_label="p.text" />
+              <lead-demo-ingreso-link :record="form" :field_key="p.key" :field_label="p.text" />
             </div>
           </template>
         </div>
@@ -170,7 +170,9 @@ import { store_catalog_relations } from '@/utils/store_catalog_relations'
  * `type: search` (FK) usa el componente SearchField.
  * `type: custom` + `custom_component: lead_personalized_demo_videos` → editor de tutoriales del mail demo.
  * `type: custom` + `custom_component: client_ecommerce_urls` → sección "Tienda online (ecommerce)" (URLs SPA/API).
- * `type: custom` + `custom_component: lead_demo_ingreso_link` → link de ingreso a la demo del lead (copiar / abrir).
+ * `type: custom` + `custom_component: lead_demo_ingreso_link` → bloque de link copiable (copiar / abrir) del
+ *   grupo Demo del lead. Sirve a los DOS campos del grupo (`demo_ingreso_url` y `demo_experiencia_url`): se le
+ *   pasa `field_key` y el componente resuelve con eso el valor del record y los textos de ayuda / vacío / abrir.
  * `type: has_many` o propiedad con bloque `has_many` → tabla + modal anidado (`form/HasMany.vue`).
  * Filas del meta solo con `group_title` (sin `key`) agrupan campos.
  * El tablist de navegación se renderiza en `model/Index.vue` y aquí se recibe el grupo activo.
