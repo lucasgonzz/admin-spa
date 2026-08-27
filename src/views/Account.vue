@@ -130,8 +130,13 @@
         </section>
 
         <!-- Leads: identidad del agente Martín -->
+        <!--
+          NO pasar a v-if: el perfil del agente es un textarea rows="6" de prosa con un solo botón
+          Guardar — el mismo tamaño que los textareas de lead-whatsapp-onboarding, que también
+          queda montada. Protegerlo allá y no acá sería incoherente, y cuesta 1 request.
+        -->
         <section
-          v-if="active_section === 'agent-identity'"
+          v-show="active_section === 'agent-identity'"
           id="agent-identity"
           class="account-section"
         >
@@ -254,13 +259,24 @@
           NO pasar a v-if, mismo motivo que lead-whatsapp-onboarding: el guard de cambios sin
           guardar no corre al cambiar de sección, y acá el costo es un textarea de 28 filas
           perdido en silencio.
-          El criterio para dejar una sección en v-show es que tenga un dirty-check (un
-          has_unsaved_changes o un can_save comparando contra lo guardado), NO que el
-          beforeRouteLeave la nombre: el guard nombra dos por historia, no porque sean las dos que
-          importan. Son tres: esta, lead-whatsapp-onboarding y lead-demo-settings.
-          implementation-settings queda en v-if a propósito pese a tener 9 campos: hace 10 GET en
-          mounted, es el 38% de la ráfaga, y cada campo tiene su propio botón Guardar.
-          Las otras 13 secciones van con v-if porque con todas en v-show se montaban las 16 al
+          El criterio para dejar una sección en v-show NO es que el beforeRouteLeave la nombre: el
+          guard nombra dos por historia, no porque sean las dos que importan. Es esto, y hay siete
+          secciones con dirty-check (un has_unsaved_changes o un can_save contra lo guardado), así
+          que el dirty-check solo no alcanza para decidir:
+
+            queda en v-show  =  dirty-check  Y  lo que se pierde es caro de retipear
+                                (prosa larga o muchos campos con un solo Guardar)
+                                Y  cuesta pocas requests dejarla montada
+
+          Las cuatro que cumplen: esta, lead-whatsapp-onboarding, lead-demo-settings (31 campos,
+          un Guardar) y agent-identity (textarea rows="6" de prosa).
+          Las otras tres con dirty-check quedan en v-if a propósito:
+            - implementation-settings: hace 10 GET en mounted, el 38% de la ráfaga, y cada uno de
+              sus 9 campos tiene su propio botón Guardar.
+            - support-ai-settings (1 checkbox + 2 números) y support-alert-settings (1 número):
+              retipearlos son segundos, no vale montarlos siempre.
+
+          Las 12 secciones restantes van con v-if porque con todas en v-show se montaban las 16 al
           entrar a /cuenta y salían ~26 requests en ráfaga. Eso disparaba errores 2002 del hosting
           (medido: una ráfaga de 24 conexiones alcanza, ver informe 20260825-limpieza-crons-hostinger).
           Tampoco sirve keep-alive: pone el $ref en null al desactivar y rompería el guard de salida.
@@ -415,9 +431,12 @@ export default {
     },
   },
   created() {
-    // Va en created y no en mounted: con las secciones en v-if, resolver la sección acá evita que
-    // entrar por deep link (/cuenta#implementation-settings, y los redirects viejos del router)
-    // monte la sección default y la destruya en el tick siguiente, con todos sus GET al pedo.
+    // Va en created y no en mounted: con las secciones en v-if, entrar por deep link
+    // (/cuenta#implementation-settings, y los redirects viejos del router) montaba la sección
+    // default y la destruía en el tick siguiente. Hoy eso no cuesta ni una request, porque la
+    // default es preferences y preferences no pide nada — el punto es desactivar la trampa antes
+    // de que muerda: el día que alguien mueva ACCOUNT_DEFAULT_SECTION_ID a una sección que sí
+    // pide datos, cada deep link montaría y tiraría a la basura esa sección con todos sus GET.
     this.sync_active_section_from_route()
   },
   mounted() {
