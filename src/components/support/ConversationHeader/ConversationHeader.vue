@@ -27,14 +27,13 @@
       :saving="saving_agent_controls"
       @toggle-agent="$emit('toggle-agent')"
       @toggle-verification="$emit('toggle-verification')" />
+    <ticket-ai-suggestion-button
+      :has_ticket="has_ticket"
+      :loading="ai_suggestion_loading"
+      :disabled="ai_suggestion_disabled"
+      :consult_timer="ai_consult_timer"
+      @request-suggestion="$emit('request-suggestion')" />
     <div class="ms-auto d-flex align-items-center gap-2 flex-shrink-0 ticket-header-actions-end">
-      <button
-        type="button"
-        class="btn btn-sm btn-outline-secondary flex-shrink-0"
-        title="Base de conocimiento para sugerencias IA"
-        @click="$emit('toggle-knowledge-panel')">
-        Base de conocimiento
-      </button>
       <button
         type="button"
         class="btn btn-sm btn-primary flex-shrink-0"
@@ -55,6 +54,7 @@ import TicketAssigneeSelect from './TicketAssigneeSelect.vue'
 import TicketStatusSelect from './TicketStatusSelect.vue'
 import TicketConversationActions from './TicketConversationActions.vue'
 import TicketAgentControls from './TicketAgentControls.vue'
+import TicketAiSuggestionButton from './TicketAiSuggestionButton.vue'
 
 /**
  * Agrupa controles del hilo y un único guardado HTTP para nombre, asignado y estado.
@@ -68,6 +68,7 @@ export default {
     TicketStatusSelect,
     TicketConversationActions,
     TicketAgentControls,
+    TicketAiSuggestionButton,
   },
   /**
    * Vue 3: v-model:prop requiere emitir update:prop; se declara para evitar fallos de two-way.
@@ -78,9 +79,9 @@ export default {
     'update:ticket_status_draft',
     'save-header',
     'exit-ticket',
-    'toggle-knowledge-panel',
     'toggle-agent',
     'toggle-verification',
+    'request-suggestion',
   ],
   props: {
     /**
@@ -133,6 +134,27 @@ export default {
     saving_agent_controls: {
       type: Boolean,
       default: false,
+    },
+    /**
+     * true mientras el POST de la sugerencia IA está en vuelo.
+     */
+    ai_suggestion_loading: {
+      type: Boolean,
+      default: false,
+    },
+    /**
+     * true cuando el botón de sugerencia IA no se puede apretar.
+     */
+    ai_suggestion_disabled: {
+      type: Boolean,
+      default: false,
+    },
+    /**
+     * Timer del debounce previo a Claude, para animar el borde del botón de sugerencia.
+     */
+    ai_consult_timer: {
+      type: Object,
+      default: null,
     },
   },
   computed: {

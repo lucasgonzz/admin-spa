@@ -32,14 +32,17 @@
           :admin_rows="admin_assign_options"
           :saving_header="saving_header"
           :saving_agent_controls="saving_agent_controls"
+          :ai_suggestion_loading="loading_suggestion"
+          :ai_suggestion_disabled="ai_suggestion_disabled"
+          :ai_consult_timer="active_ai_consult_timer_for_input"
           @update:ticket_name_draft="set_header_ticket_name_draft"
           @update:assigned_admin_id="set_header_assigned_admin_id"
           @update:ticket_status_draft="set_header_ticket_status_draft"
           @save-header="save_header"
           @exit-ticket="deselect_ticket"
-          @toggle-knowledge-panel="toggle_knowledge_panel"
           @toggle-agent="toggle_agent"
-          @toggle-verification="toggle_verification" />
+          @toggle-verification="toggle_verification"
+          @request-suggestion="request_suggestion" />
       </div>
       <div class="support-right-middle flex-grow-1 min-h-0 d-flex flex-column overflow-hidden">
         <conversation
@@ -54,20 +57,14 @@
       </div>
       <div class="support-right-bottom flex-shrink-0">
         <message-input
+          ref="message_input"
           :can_send="can_send_message"
-          :ticket_id="selected_ticket_id"
           :ai_suggestion_send_at="selected_ticket_ai_send_at"
-          :ai_consult_timer="active_ai_consult_timer_for_input"
-          :ai_generating="ai_generating_for_selected_ticket"
-          @send-message="send_message"
-          @suggested-title="apply_suggested_title" />
+          :suggestion_error="suggestion_error"
+          :ai_reasoning="ai_reasoning"
+          @send-message="send_message" />
       </div>
     </div>
-
-    <support-knowledge-base-panel
-      v-if="knowledge_panel_visible"
-      class="support-knowledge-sidebar flex-shrink-0"
-      @close="knowledge_panel_visible = false" />
 
     <create-ticket-modal
       :show="create_ticket_modal_visible"
@@ -84,7 +81,6 @@ import Conversation from '@/components/support/Conversation.vue'
 import ConversationHeader from '@/components/support/ConversationHeader/ConversationHeader.vue'
 import MessageInput from '@/components/support/MessageInput.vue'
 import UserTicketsNav from '@/components/support/UserTicketsNav.vue'
-import SupportKnowledgeBasePanel from '@/components/support/SupportKnowledgeBasePanel.vue'
 import CreateTicketModal from '@/components/support/CreateTicketModal.vue'
 import { useSupportSocket } from '@/composables/useSupportSocket'
 import api from '@/utils/axios'
@@ -97,7 +93,6 @@ export default {
     ConversationHeader,
     MessageInput,
     UserTicketsNav,
-    SupportKnowledgeBasePanel,
     CreateTicketModal,
   },
   data() {
@@ -130,8 +125,12 @@ export default {
        * Timer para agrupar refrescos de badges tras varios mark-read seguidos.
        */
       unread_badges_debounce_timer: null,
-      /** Panel lateral de base de conocimiento visible. */
-      knowledge_panel_visible: false,
+      /** POST de sugerencia IA en curso (el botón vive en el header). */
+      loading_suggestion: false,
+      /** Motivo del último fallo al pedir sugerencia; se muestra arriba del composer. */
+      suggestion_error: '',
+      /** Razonamiento devuelto por Claude en la última sugerencia. */
+      ai_reasoning: '',
       /** Umbral de alerta de demora (minutos). */
       support_alert_minutes: 30,
       /** Tick reactivo para recalcular badges cada minuto. */
@@ -228,6 +227,19 @@ export default {
         elapsed_seconds: elapsed_seconds,
         schedule_token: this.ai_consult_timer.schedule_token,
       }
+    },
+    /**
+     * Indica si el botón de sugerencia IA del header está inhabilitado.
+     *
+     * @returns {boolean}
+     */
+    ai_suggestion_disabled() {
+      return (
+        !this.can_send_message ||
+        !this.selected_ticket_id ||
+        this.loading_suggestion ||
+        this.ai_generating_for_selected_ticket
+      )
     },
     /**
      * Indica si Claude está generando sugerencia para el ticket abierto.
@@ -330,12 +342,61 @@ export default {
         .catch(function () {})
     },
     /**
-     * Muestra u oculta el panel de base de conocimiento.
+     * Le pide a Claude una respuesta para el ticket abierto y la vuelca en el input.
+     *
+     * El POST vive acá y no en MessageInput porque el botón que lo dispara se mudó al header:
+     * este es el único componente que ve a los dos, y además ya tiene el estado del debounce
+     * que llega por Pusher (ai_consult_timer, ai_generating_ticket_id).
      *
      * @returns {void}
      */
-    toggle_knowledge_panel() {
-      this.knowledge_panel_visible = !this.knowledge_panel_visible
+    request_suggestion() {
+      const self = this
+      if (!self.selected_ticket_id || self.loading_suggestion) {
+        return
+      }
+      self.loading_suggestion = true
+      self.suggestion_error = ''
+      api
+        .post('/support-ticket/' + self.selected_ticket_id + '/suggest')
+        .then(function (res) {
+          const suggested = (res.data && res.data.suggested_message) || ''
+          const reasoning = (res.data && res.data.reasoning) || ''
+          const suggested_title = (res.data && res.data.suggested_title) || ''
+          if (suggested) {
+            self.push_body_to_input(suggested)
+          }
+          if (suggested_title) {
+            self.apply_suggested_title(suggested_title)
+          }
+          self.ai_reasoning = reasoning
+          if (!suggested && reasoning) {
+            self.suggestion_error = reasoning
+          }
+        })
+        .catch(function (err) {
+          const msg =
+            (err.response && err.response.data && err.response.data.message) ||
+            'No se pudo obtener la sugerencia.'
+          self.suggestion_error = msg
+        })
+        .then(function () {
+          self.loading_suggestion = false
+        })
+    },
+    /**
+     * Vuelca el texto sugerido en el textarea del composer.
+     *
+     * Va por ref y no por un prop porque un prop habría que "des-setear" para poder volcar dos
+     * veces seguidas la misma sugerencia.
+     *
+     * @param {string} texto Texto sugerido por Claude.
+     * @returns {void}
+     */
+    push_body_to_input(texto) {
+      if (this.$refs.message_input && texto) {
+        this.$refs.message_input.set_body(texto)
+      }
     },
     /**
      * Refresca badges de tiempo cuando llega alerta Pusher global.
@@ -514,6 +575,11 @@ export default {
       this.selected_ticket_id = ticket_id
       this.ai_consult_timer = null
       this.ai_generating_ticket_id = null
+      /* El error y el razonamiento son del ticket anterior: dejarlos colgados haría que el
+         operador leyera un motivo de fallo que no tiene nada que ver con el hilo que abrió. */
+      this.loading_suggestion = false
+      this.suggestion_error = ''
+      this.ai_reasoning = ''
       this.$store.dispatch('support_message/load_ticket_messages', ticket_id)
       const ticket = this.tickets.find((t) => t.id == ticket_id)
       if (ticket) {
@@ -718,6 +784,9 @@ export default {
       this.selected_ticket_id = null
       this.ai_consult_timer = null
       this.ai_generating_ticket_id = null
+      this.loading_suggestion = false
+      this.suggestion_error = ''
+      this.ai_reasoning = ''
       this.ticket_name_draft = ''
       this.ticket_status_draft = 'open'
       this.assigned_admin_id = this.current_admin_id
@@ -767,6 +836,10 @@ export default {
      * Envía mensaje; la bandeja se alinea vía Pusher y apply_ticket del store.
      */
     send_message(payload) {
+      /* La sugerencia que había en pantalla ya se mandó o se descartó al escribir arriba: dejar
+         su error o su razonamiento visibles después del envío no explica nada del mensaje nuevo. */
+      this.suggestion_error = ''
+      this.ai_reasoning = ''
       this.$store.dispatch('support_message/send_message', payload)
     },
     /**
@@ -811,11 +884,6 @@ export default {
   min-height: 0;
   box-sizing: border-box;
   overflow: hidden;
-}
-
-.support-knowledge-sidebar {
-  height: 100%;
-  min-height: 0;
 }
 
 .support-left {

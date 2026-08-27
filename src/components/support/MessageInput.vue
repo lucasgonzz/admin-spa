@@ -8,6 +8,8 @@
       @confirm="on_image_annotation_confirm"
       @cancel="on_image_annotation_cancel" />
 
+    <!-- Los cuatro avisos de acá abajo quedan AFUERA de la fila del composer a propósito: son de
+         alto variable y adentro la partirían en dos renglones. -->
     <!-- Indicador de adjunto pendiente: nombre del archivo y botón para cancelarlo -->
     <div v-if="attachment" class="support-input-attachment-preview">
       <span class="support-input-attachment-icon">
@@ -40,104 +42,81 @@
     <div v-if="suggestion_error" class="support-input-suggestion-error">
       {{ suggestion_error }}
     </div>
+    <!-- Una sola fila: campo de texto y los cuatro botones -->
     <div class="support-input-composer">
       <textarea
+        ref="textarea"
         class="form-control support-input-textarea"
-        rows="3"
+        rows="1"
         placeholder="Escribir mensaje..."
         :disabled="!can_send"
         v-model="body"
+        @input="ajustar_alto"
         @paste="on_paste"
         @keydown.enter.exact.prevent="emit_send" />
       <input ref="file_input" class="d-none" type="file" accept="audio/*,image/*" @change="on_file_change" />
-      <!-- Botonera horizontal con iconos y tooltips -->
-      <div class="support-input-toolbar">
-        <div class="support-input-toolbar-actions">
-          <border-progress-wrap
-            :active="ai_consult_timer_active"
-            :duration_seconds="ai_consult_duration_seconds"
-            :elapsed_seconds="ai_consult_elapsed_seconds"
-            :animation_key="ai_consult_animation_key"
-            variant="button">
-            <button
-              type="button"
-              class="btn btn-outline-primary btn-sm support-input-icon-btn"
-              :disabled="!can_send || !ticket_id || loading_suggestion || ai_generating"
-              title="Sugerencia IA"
-              aria-label="Sugerencia IA"
-              @click="request_suggestion">
-              <span
-                v-if="loading_suggestion || ai_generating"
-                class="spinner-border spinner-border-sm"
-                role="status"
-                aria-hidden="true" />
-              <i v-else class="bi bi-stars" aria-hidden="true" />
-            </button>
-          </border-progress-wrap>
-          <!-- Botón de grabación: rojo mientras graba; muestra tiempo en tooltip -->
-          <button
-            type="button"
-            :class="[
-              'btn btn-sm support-input-icon-btn',
-              audio_recording ? 'btn-danger support-input-icon-btn--recording' : 'btn-outline-secondary',
-            ]"
-            :disabled="!can_send"
-            :title="audio_closing
-              ? 'Cerrando la grabación…'
-              : (audio_recording ? ('Detener grabación (' + audio_elapsed_label + ')') : 'Grabar audio')"
-            :aria-label="audio_closing
-              ? 'Cerrando la grabación…'
-              : (audio_recording ? ('Detener grabación (' + audio_elapsed_label + ')') : 'Grabar audio')"
-            @click="on_audio_click"
-            @mousedown="on_audio_mousedown"
-            @mouseup="on_audio_mouseup_or_leave"
-            @mouseleave="on_audio_mouseup_or_leave"
-            @touchstart.prevent="on_audio_touchstart"
-            @touchend.prevent="on_audio_touchend"
-            @touchcancel.prevent="on_audio_touchcancel">
-            <span
-              v-if="audio_closing"
-              class="spinner-border spinner-border-sm"
-              role="status"
-              aria-hidden="true" />
-            <i v-else-if="audio_recording" class="bi bi-stop-fill" aria-hidden="true" />
-            <i v-else class="bi bi-mic" aria-hidden="true" />
-            <span v-if="audio_recording" class="support-input-recording-time">
-              {{ audio_closing ? 'Cerrando…' : audio_elapsed_label }}
-            </span>
-          </button>
-          <!-- Sólo mientras graba: cancelar sin enviar (grupo 323, prompt 04). NO se esconde
-               mientras cierra: es la única salida que tiene la pantalla si el grabador se queda
-               colgado. Ver el comentario largo en LeadConversationView.vue. -->
-          <button
-            v-if="audio_recording"
-            type="button"
-            class="btn btn-link btn-sm text-muted"
-            title="Cancelar grabación"
-            aria-label="Cancelar grabación"
-            @click="cancel_audio_recording">
-            Cancelar
-          </button>
-          <button
-            type="button"
-            class="btn btn-outline-secondary btn-sm support-input-icon-btn"
-            :disabled="!can_send || audio_recording"
-            title="Adjuntar archivo"
-            aria-label="Adjuntar archivo"
-            @click="open_file_input">
-            <i class="bi bi-paperclip" aria-hidden="true" />
-          </button>
-        </div>
-        <button
-          type="button"
-          class="btn btn-success btn-sm support-input-icon-btn support-input-icon-btn--send"
-          :disabled="!can_send || audio_recording"
-          title="Enviar mensaje"
-          aria-label="Enviar mensaje"
-          @click="emit_send">
-          <i class="bi bi-send-fill" aria-hidden="true" />
-        </button>
-      </div>
+      <!-- Botón de grabación: rojo mientras graba; muestra tiempo en tooltip -->
+      <button
+        type="button"
+        :class="[
+          'btn btn-sm support-input-icon-btn',
+          audio_recording ? 'btn-danger support-input-icon-btn--recording' : 'btn-outline-secondary',
+        ]"
+        :disabled="!can_send"
+        :title="audio_closing
+          ? 'Cerrando la grabación…'
+          : (audio_recording ? ('Detener grabación (' + audio_elapsed_label + ')') : 'Grabar audio')"
+        :aria-label="audio_closing
+          ? 'Cerrando la grabación…'
+          : (audio_recording ? ('Detener grabación (' + audio_elapsed_label + ')') : 'Grabar audio')"
+        @click="on_audio_click"
+        @mousedown="on_audio_mousedown"
+        @mouseup="on_audio_mouseup_or_leave"
+        @mouseleave="on_audio_mouseup_or_leave"
+        @touchstart.prevent="on_audio_touchstart"
+        @touchend.prevent="on_audio_touchend"
+        @touchcancel.prevent="on_audio_touchcancel">
+        <span
+          v-if="audio_closing"
+          class="spinner-border spinner-border-sm"
+          role="status"
+          aria-hidden="true" />
+        <i v-else-if="audio_recording" class="bi bi-stop-fill" aria-hidden="true" />
+        <i v-else class="bi bi-mic" aria-hidden="true" />
+        <span v-if="audio_recording" class="support-input-recording-time">
+          {{ audio_closing ? 'Cerrando…' : audio_elapsed_label }}
+        </span>
+      </button>
+      <!-- Sólo mientras graba: cancelar sin enviar (grupo 323, prompt 04). NO se esconde
+           mientras cierra: es la única salida que tiene la pantalla si el grabador se queda
+           colgado. Ver el comentario largo en LeadConversationView.vue. -->
+      <button
+        v-if="audio_recording"
+        type="button"
+        class="btn btn-link btn-sm text-muted support-input-cancel-btn"
+        title="Cancelar grabación"
+        aria-label="Cancelar grabación"
+        @click="cancel_audio_recording">
+        Cancelar
+      </button>
+      <button
+        type="button"
+        class="btn btn-outline-secondary btn-sm support-input-icon-btn"
+        :disabled="!can_send || audio_recording"
+        title="Adjuntar archivo"
+        aria-label="Adjuntar archivo"
+        @click="open_file_input">
+        <i class="bi bi-paperclip" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        class="btn btn-success btn-sm support-input-icon-btn support-input-icon-btn--send"
+        :disabled="!can_send || audio_recording"
+        title="Enviar mensaje"
+        aria-label="Enviar mensaje"
+        @click="emit_send">
+        <i class="bi bi-send-fill" aria-hidden="true" />
+      </button>
     </div>
     <div v-if="ai_reasoning" class="support-input-reasoning mt-2">
       <button
@@ -155,8 +134,6 @@
 
 <script>
 import ImageAnnotationEditor from '@/components/common/ImageAnnotationEditor.vue'
-import BorderProgressWrap from '@/components/support/BorderProgressWrap.vue'
-import api from '@/utils/axios'
 import { OggOpusRecorder } from '@/utils/oggOpusRecorder'
 import audio_recorder_button from '@/mixins/audio_recorder_button'
 
@@ -164,33 +141,26 @@ export default {
   name: 'SupportMessageInput',
   components: {
     ImageAnnotationEditor,
-    BorderProgressWrap,
   },
   mixins: [audio_recorder_button],
-  emits: ['send-message', 'suggested-title'],
+  emits: ['send-message'],
   props: {
     can_send: { type: Boolean, default: true },
-    /** Id del ticket activo; necesario para POST /suggest. */
-    ticket_id: { type: [Number, String], default: null },
     /** ISO8601 del envío automático programado (null si no hay timer). */
     ai_suggestion_send_at: { type: String, default: null },
-    /** Timer activo del debounce antes de consultar a Claude. */
-    ai_consult_timer: { type: Object, default: null },
-    /** true mientras el backend consulta a Claude tras el debounce. */
-    ai_generating: { type: Boolean, default: false },
+    /** Motivo por el que falló la última sugerencia IA (la pide el header). */
+    suggestion_error: { type: String, default: '' },
+    /** Razonamiento devuelto por Claude en la última sugerencia. */
+    ai_reasoning: { type: String, default: '' },
   },
   data() {
     return {
       /** Texto pendiente de envío. */
       body: '',
-      /** Razonamiento devuelto por Claude en la última sugerencia. */
-      ai_reasoning: '',
       /** Panel colapsable del razonamiento visible. */
       reasoning_visible: false,
-      /** POST suggest en curso. */
-      loading_suggestion: false,
-      /** Error de sugerencia IA sin bloquear el input. */
-      suggestion_error: '',
+      /** Tope de renglones antes de que el textarea deje de crecer y aparezca el scroll. */
+      max_renglones: 8,
       /** Archivo adjunto temporal (File). */
       attachment: null,
       /** Modal de marcas sobre imagen visible. */
@@ -244,51 +214,76 @@ export default {
         typeof navigator.mediaDevices.getUserMedia === 'function'
       )
     },
+  },
+  watch: {
     /**
-     * Indica si debe animarse el borde del botón IA (debounce previo a Claude).
+     * Abre el panel de razonamiento cuando llega uno nuevo, y lo pliega cuando se limpia.
      *
-     * @returns {boolean}
-     */
-    ai_consult_timer_active() {
-      return !!(this.ai_consult_timer && this.ai_consult_timer.active)
-    },
-    /**
-     * Duración total del debounce en segundos.
+     * El razonamiento ahora lo trae el padre, así que el plegado no se puede resolver dentro del
+     * método que pide la sugerencia: hay que reaccionar al texto que baja.
      *
-     * @returns {number}
+     * @param {string} texto Razonamiento nuevo.
+     * @returns {void}
      */
-    ai_consult_duration_seconds() {
-      if (!this.ai_consult_timer) {
-        return 0
-      }
-      return parseFloat(this.ai_consult_timer.delay_seconds) || 0
-    },
-    /**
-     * Segundos ya transcurridos del debounce (para reanudar animación).
-     *
-     * @returns {number}
-     */
-    ai_consult_elapsed_seconds() {
-      if (!this.ai_consult_timer) {
-        return 0
-      }
-      return parseFloat(this.ai_consult_timer.elapsed_seconds) || 0
-    },
-    /**
-     * Key que reinicia la animación cuando el debounce se reprograma.
-     *
-     * @returns {string|number}
-     */
-    ai_consult_animation_key() {
-      if (!this.ai_consult_timer) {
-        return '0'
-      }
-      return this.ai_consult_timer.schedule_token != null
-        ? this.ai_consult_timer.schedule_token
-        : '0'
+    ai_reasoning(texto) {
+      this.reasoning_visible = !!texto
     },
   },
+  mounted() {
+    this.ajustar_alto()
+  },
   methods: {
+    /**
+     * Ajusta el alto del textarea al contenido, hasta ocho renglones. A partir de ahí aparece
+     * el scroll interno y el footer deja de crecer.
+     *
+     * El tope se calcula con el line-height real y no con un alto fijo en píxeles: con el zoom
+     * del navegador cambiado, un tope duro corta a la mitad del séptimo renglón o deja crecer
+     * hasta doce.
+     *
+     * @returns {void}
+     */
+    ajustar_alto() {
+      const el = this.$refs.textarea
+      if (!el) {
+        return
+      }
+      const estilo = window.getComputedStyle(el)
+      /* getComputedStyle devuelve "normal" en algunos navegadores: ahí se deriva del tamaño de
+         fuente con el 1.5 que usa Bootstrap, y como último recurso 20px. */
+      let alto_renglon = parseFloat(estilo.lineHeight)
+      if (isNaN(alto_renglon) || alto_renglon <= 0) {
+        alto_renglon = (parseFloat(estilo.fontSize) || 13.33) * 1.5
+      }
+      const relleno = (parseFloat(estilo.paddingTop) || 0) + (parseFloat(estilo.paddingBottom) || 0)
+      /* El borde entra en la cuenta porque el textarea es border-box: scrollHeight no lo incluye
+         y asignar height sin sumarlo deja el último renglón cortado. */
+      const borde = (parseFloat(estilo.borderTopWidth) || 0) + (parseFloat(estilo.borderBottomWidth) || 0)
+      const tope = alto_renglon * this.max_renglones + relleno + borde
+
+      el.style.height = 'auto'
+      const deseado = el.scrollHeight + borde
+      el.style.height = Math.min(deseado, tope) + 'px'
+      el.style.overflowY = deseado > tope ? 'auto' : 'hidden'
+    },
+
+    /**
+     * Vuelca un texto en el input y lo deja del alto que le corresponda.
+     *
+     * Lo llama Support.vue por ref cuando vuelve una sugerencia IA. Es una llamada y no un prop
+     * porque un prop habría que "des-setear" para poder volcar dos veces el mismo texto.
+     *
+     * @param {string} texto Texto a dejar en el input.
+     * @returns {void}
+     */
+    set_body(texto) {
+      const self = this
+      this.body = texto == null ? '' : String(texto)
+      this.$nextTick(function () {
+        self.ajustar_alto()
+      })
+    },
+
     /**
      * Captura imagen pegada desde portapapeles y abre el editor de anotaciones.
      *
@@ -437,52 +432,13 @@ export default {
         : 'Sin acceso al micrófono. Verificá los permisos del navegador o usá Adjuntar.'
     },
     /**
-     * Solicita sugerencia IA al backend y completa el textarea.
-     *
-     * @returns {void}
-     */
-    request_suggestion() {
-      const self = this
-      if (!self.ticket_id || self.loading_suggestion) {
-        return
-      }
-      self.loading_suggestion = true
-      self.suggestion_error = ''
-      api
-        .post('/support-ticket/' + self.ticket_id + '/suggest')
-        .then(function (res) {
-          const suggested = (res.data && res.data.suggested_message) || ''
-          const reasoning = (res.data && res.data.reasoning) || ''
-          const suggested_title = (res.data && res.data.suggested_title) || ''
-          if (suggested) {
-            self.body = suggested
-          }
-          if (suggested_title) {
-            self.$emit('suggested-title', suggested_title)
-          }
-          self.ai_reasoning = reasoning
-          self.reasoning_visible = !!reasoning
-          if (!suggested && reasoning) {
-            self.suggestion_error = reasoning
-          }
-        })
-        .catch(function (err) {
-          const msg =
-            (err.response && err.response.data && err.response.data.message) ||
-            'No se pudo obtener la sugerencia.'
-          self.suggestion_error = msg
-        })
-        .then(function () {
-          self.loading_suggestion = false
-        })
-    },
-    /**
      * Emite mensaje al padre con tipo detectado por mime.
      */
     emit_send() {
       if (!this.body && !this.attachment) {
         return
       }
+      const self = this
       let kind = 'text'
       if (this.attachment && this.attachment.type.indexOf('audio') == 0) {
         kind = 'audio'
@@ -497,10 +453,13 @@ export default {
       })
       this.body = ''
       this.attachment = null
-      this.ai_reasoning = ''
       this.reasoning_visible = false
-      this.suggestion_error = ''
       this.$refs.file_input.value = ''
+      /* Con el texto ya vaciado el textarea tiene que volver a un renglón; si no, el footer se
+         queda del alto que tenía el mensaje que se acaba de mandar. */
+      this.$nextTick(function () {
+        self.ajustar_alto()
+      })
     },
   },
 }
@@ -571,32 +530,26 @@ export default {
   color: #c53030;
 }
 
-/* Contenedor del textarea y la botonera debajo */
+/* Una sola fila: campo de texto y los cuatro botones, alineados al pie para que al crecer el
+   textarea los botones queden pegados al último renglón, como en WhatsApp. */
 .support-input-composer {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex-direction: row;
+  align-items: flex-end;
+  flex-wrap: nowrap;
+  gap: 6px;
 }
 
 .support-input-textarea {
-  width: 100%;
+  /* flex: 1 1 auto + min-width: 0 es lo que deja que el textarea se achique cuando el botón de
+     audio se ensancha para mostrar el tiempo y aparece el Cancelar al lado. Sin el min-width: 0
+     el textarea se niega a bajar de su ancho de contenido y la fila se parte en dos renglones. */
+  flex: 1 1 auto;
   min-width: 0;
-  resize: vertical;
-}
-
-/* Fila de acciones: iconos a la izquierda, enviar a la derecha */
-.support-input-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.support-input-toolbar-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
+  /* Arranca en un renglón; ajustar_alto() lo lleva hasta ocho. resize: none porque el alto lo
+     maneja el componente: la manija del navegador pelearía con él. */
+  resize: none;
+  overflow-y: hidden;
 }
 
 /* Botones cuadrados solo con icono */
@@ -629,6 +582,12 @@ export default {
   line-height: 1;
 }
 
+/* El "Cancelar" es el único botón sin ancho fijo: sin esto la fila lo achica y le parte el texto. */
+.support-input-cancel-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .support-input-suggestion-error {
   padding: 4px 8px;
   margin-bottom: 6px;
@@ -653,4 +612,3 @@ export default {
   border: 1px solid #e9ecef;
 }
 </style>
-
