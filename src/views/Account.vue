@@ -16,7 +16,7 @@
       <div class="account-page__content flex-grow-1 min-w-0">
         <!-- Preferencias personales -->
         <section
-          v-show="active_section === 'preferences'"
+          v-if="active_section === 'preferences'"
           id="preferences"
           class="account-section account-section--narrow"
         >
@@ -75,7 +75,7 @@
 
         <!-- Instalar la PWA en el dispositivo actual (antes de activar notificaciones) -->
         <section
-          v-show="active_section === 'pwa-install'"
+          v-if="active_section === 'pwa-install'"
           id="pwa-install"
           class="account-section"
         >
@@ -89,7 +89,7 @@
 
         <!-- Notificaciones push del dispositivo actual -->
         <section
-          v-show="active_section === 'push-notifications'"
+          v-if="active_section === 'push-notifications'"
           id="push-notifications"
           class="account-section"
         >
@@ -103,7 +103,7 @@
 
         <!-- Configuración de soporte: alertas -->
         <section
-          v-show="active_section === 'support-alert-settings'"
+          v-if="active_section === 'support-alert-settings'"
           id="support-alert-settings"
           class="account-section"
         >
@@ -117,7 +117,7 @@
 
         <!-- Configuración de soporte: IA -->
         <section
-          v-show="active_section === 'support-ai-settings'"
+          v-if="active_section === 'support-ai-settings'"
           id="support-ai-settings"
           class="account-section"
         >
@@ -131,7 +131,7 @@
 
         <!-- Leads: identidad del agente Martín -->
         <section
-          v-show="active_section === 'agent-identity'"
+          v-if="active_section === 'agent-identity'"
           id="agent-identity"
           class="account-section"
         >
@@ -149,7 +149,7 @@
 
         <!-- Leads: configuración de demos -->
         <section
-          v-show="active_section === 'lead-demo-settings'"
+          v-if="active_section === 'lead-demo-settings'"
           id="lead-demo-settings"
           class="account-section"
         >
@@ -166,6 +166,14 @@
         </section>
 
         <!-- Leads: WhatsApp onboarding -->
+        <!--
+          NO pasar a v-if: es una de las dos secciones con formulario largo que protege el
+          beforeRouteLeave de más abajo. Cambiar de sección navega con $router.push({ hash }),
+          que en vue-router 4 dispara beforeRouteUpdate y NO beforeRouteLeave — o sea que el
+          guard no llega a correr. Con v-if el componente se destruye al cambiar de sección y el
+          formulario a medio llenar se pierde sin ningún aviso. Las otras 14 secciones sí van con
+          v-if para no montarlas todas de una (ver comentario en ai-system-prompt).
+        -->
         <section
           v-show="active_section === 'lead-whatsapp-onboarding'"
           id="lead-whatsapp-onboarding"
@@ -181,7 +189,7 @@
 
         <!-- Leads: reglas de seguimiento -->
         <section
-          v-show="active_section === 'followup-rules'"
+          v-if="active_section === 'followup-rules'"
           id="followup-rules"
           class="account-section"
         >
@@ -199,7 +207,7 @@
 
         <!-- Leads: plantillas de seguimiento WhatsApp -->
         <section
-          v-show="active_section === 'followup-templates'"
+          v-if="active_section === 'followup-templates'"
           id="followup-templates"
           class="account-section"
         >
@@ -217,7 +225,7 @@
 
         <!-- Leads: protocolo de ventas -->
         <section
-          v-show="active_section === 'protocol-entries'"
+          v-if="active_section === 'protocol-entries'"
           id="protocol-entries"
           class="account-section"
         >
@@ -234,6 +242,15 @@
         </section>
 
         <!-- Leads: system prompt -->
+        <!--
+          NO pasar a v-if, mismo motivo que lead-whatsapp-onboarding: el guard de cambios sin
+          guardar no corre al cambiar de sección, y acá el costo es un textarea de 28 filas
+          perdido en silencio.
+          Las otras 14 secciones van con v-if porque con todas en v-show se montaban las 16 al
+          entrar a /cuenta y salían ~26 requests en ráfaga. Eso disparaba errores 2002 del hosting
+          (medido: una ráfaga de 24 conexiones alcanza, ver informe 20260825-limpieza-crons-hostinger).
+          Tampoco sirve keep-alive: pone el $ref en null al desactivar y rompería el guard de salida.
+        -->
         <section
           v-show="active_section === 'ai-system-prompt'"
           id="ai-system-prompt"
@@ -253,7 +270,7 @@
 
         <!-- Leads: sincronizar prompts desde GitHub -->
         <section
-          v-show="active_section === 'agent-prompt-sync'"
+          v-if="active_section === 'agent-prompt-sync'"
           id="agent-prompt-sync"
           class="account-section"
         >
@@ -271,7 +288,7 @@
 
         <!-- Leads: firma del prestador en el PDF del contrato -->
         <section
-          v-show="active_section === 'contract-signature'"
+          v-if="active_section === 'contract-signature'"
           id="contract-signature"
           class="account-section"
         >
@@ -285,7 +302,7 @@
 
         <!-- Operaciones: plantillas de tareas -->
         <section
-          v-show="active_section === 'task-templates'"
+          v-if="active_section === 'task-templates'"
           id="task-templates"
           class="account-section"
         >
@@ -303,7 +320,7 @@
 
         <!-- Operaciones: implementaciones -->
         <section
-          v-show="active_section === 'implementation-settings'"
+          v-if="active_section === 'implementation-settings'"
           id="implementation-settings"
           class="account-section"
         >
