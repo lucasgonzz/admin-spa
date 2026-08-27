@@ -144,6 +144,9 @@
             <div v-else-if="p.type === 'custom' && p.custom_component === 'lead_demo_ingreso_link'">
               <lead-demo-ingreso-link :record="form" :field_key="p.key" :field_label="p.text" />
             </div>
+            <div v-else-if="p.type === 'custom' && p.custom_component === 'lead_demo_form_respuestas'">
+              <lead-demo-form-respuestas :record="form" :field_label="p.text" />
+            </div>
           </template>
         </div>
       </div>
@@ -158,6 +161,7 @@ import LeadPersonalizedDemoVideosEditor from '@/components/lead/PersonalizedDemo
 import ClientImplementationExtraProps from '@/components/client/extra-props/Index.vue'
 import ClientEcommerceUrls from '@/components/client/ClientEcommerceUrls.vue'
 import LeadDemoIngresoLink from '@/components/lead/DemoIngresoLink.vue'
+import LeadDemoFormRespuestas from '@/components/lead/DemoFormRespuestas.vue'
 import HasManyField from '@/common-vue/components/model/form/HasMany.vue'
 import FieldLabelWithHelp from '@/common-vue/components/model/form/FieldLabelWithHelp.vue'
 import api from '@/utils/axios'
@@ -173,6 +177,9 @@ import { store_catalog_relations } from '@/utils/store_catalog_relations'
  * `type: custom` + `custom_component: lead_demo_ingreso_link` → bloque de link copiable (copiar / abrir) del
  *   grupo Demo del lead. Sirve a los DOS campos del grupo (`demo_ingreso_url` y `demo_experiencia_url`): se le
  *   pasa `field_key` y el componente resuelve con eso el valor del record y los textos de ayuda / vacío / abrir.
+ * `type: custom` + `custom_component: lead_demo_form_respuestas` → tarjeta de las nueve respuestas del
+ *   formulario de configuración de la demo (grupo Demo del lead): muestra de dónde salieron las respuestas,
+ *   deja corregirlas y las guarda con `PUT /lead/{id}/demo-form`. Refresca el borrador por su cuenta.
  * `type: has_many` o propiedad con bloque `has_many` → tabla + modal anidado (`form/HasMany.vue`).
  * Filas del meta solo con `group_title` (sin `key`) agrupan campos.
  * El tablist de navegación se renderiza en `model/Index.vue` y aquí se recibe el grupo activo.
@@ -188,7 +195,7 @@ import { store_catalog_relations } from '@/utils/store_catalog_relations'
  */
 export default {
   name: 'ModelForm',
-  components: { SearchField, LeadPersonalizedDemoVideosEditor, ClientImplementationExtraProps, ClientEcommerceUrls, LeadDemoIngresoLink, HasManyField, FieldLabelWithHelp },
+  components: { SearchField, LeadPersonalizedDemoVideosEditor, ClientImplementationExtraProps, ClientEcommerceUrls, LeadDemoIngresoLink, LeadDemoFormRespuestas, HasManyField, FieldLabelWithHelp },
   props: {
     form: { type: Object, default: null },
     all_properties: { type: Array, default: () => [] },

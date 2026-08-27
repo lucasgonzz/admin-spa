@@ -506,6 +506,23 @@ export default __base_store({
       })
     },
     /**
+     * Guarda las nueve respuestas del formulario de configuración de la demo editadas a mano
+     * desde el modal del lead (misión del 27/8/2026). El backend marca
+     * `demo_form_editado_admin_at`, que es lo que hace que el demo setup use estas respuestas y
+     * no los defaults del catálogo, y devuelve el lead completo ya actualizado.
+     *
+     * PUT y no POST: es una actualización idempotente del mismo recurso.
+     *
+     * @param {Object} context contexto del módulo Vuex.
+     * @param {{ lead_id: number, respuestas: Object }} payload id del lead y las nueve respuestas.
+     * @returns {Promise<Object>} modelo de lead actualizado devuelto por el backend.
+     */
+    update_demo_form(context, payload) {
+      return api.put('/lead/' + payload.lead_id + '/demo-form', payload.respuestas).then((res) => {
+        return res.data.model
+      })
+    },
+    /**
      * Promueve un lead a cliente de producción.
      * @param {Object} context contexto del módulo Vuex.
      * @param {{ lead_id: number, api_url: string }} payload datos de promoción.
