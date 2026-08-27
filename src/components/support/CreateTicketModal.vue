@@ -574,7 +574,10 @@ export default {
             self.submit_error = 'No se pudo abrir la conversación.'
             return
           }
-          if (whatsapp.delivery === 'failed') {
+          /* 'partial' también entra acá. Desde que el mensaje de apertura se puede partir con el
+             separador, el envío puede salir a medias, y tratar eso como éxito cerraría el modal
+             sin que nadie se entere de que faltan mensajes por mandar. */
+          if (whatsapp.delivery === 'failed' || whatsapp.delivery === 'partial') {
             self.submit_error = self.build_delivery_error(whatsapp)
             self.$emit('created', model.id)
             return
@@ -596,6 +599,21 @@ export default {
      * @returns {string}
      */
     build_delivery_error(whatsapp) {
+      /* El envío partido puede salir a medias: las primeras partes llegaron y las demás quedaron
+         en el hilo para reintentar. Ahí "no salió" sería mentira y "salió" también, así que el
+         parcial lleva su propio texto con la cuenta de lo que llegó. */
+      if (whatsapp.delivery === 'partial') {
+        let parcial = 'La conversación quedó abierta y el mensaje salió a medias'
+        if (whatsapp.sent_parts && whatsapp.total_parts) {
+          parcial += ': llegaron ' + whatsapp.sent_parts + ' de ' + whatsapp.total_parts + ' mensajes'
+        }
+        parcial += '. Los que faltan quedaron en el hilo, marcados como no enviados, para que los reintentes desde ahí.'
+        if (whatsapp.error) {
+          parcial += ' Motivo: ' + whatsapp.error
+        }
+        return parcial
+      }
+
       let texto = 'La conversación quedó abierta, pero el mensaje no salió.'
       if (whatsapp.used_template) {
         texto += ' Se intentó con la plantilla' + (whatsapp.template_name ? ' ' + whatsapp.template_name : '') + '; revisá que esté aprobada en Meta.'

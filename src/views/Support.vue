@@ -355,11 +355,21 @@ export default {
       if (!self.selected_ticket_id || self.loading_suggestion) {
         return
       }
+      /* El ticket que pidió la sugerencia queda capturado acá y se compara en las tres ramas de
+         la promesa. Claude tarda varios segundos: sin esta guarda, pedir una sugerencia en un
+         ticket y cambiar de conversación antes de que vuelva le escribe la respuesta del primero
+         en el cuadro de texto del segundo -pisando lo que el operador ya hubiera tecleado-, y si
+         el segundo todavía no tiene nombre, le mete el título pensado para el otro. Es el mismo
+         patrón que usa fetch_whatsapp_window en Conversation.vue. */
+      const ticket_id = self.selected_ticket_id
       self.loading_suggestion = true
       self.suggestion_error = ''
       api
-        .post('/support-ticket/' + self.selected_ticket_id + '/suggest')
+        .post('/support-ticket/' + ticket_id + '/suggest')
         .then(function (res) {
+          if (String(self.selected_ticket_id) !== String(ticket_id)) {
+            return
+          }
           const suggested = (res.data && res.data.suggested_message) || ''
           const reasoning = (res.data && res.data.reasoning) || ''
           const suggested_title = (res.data && res.data.suggested_title) || ''
@@ -375,12 +385,18 @@ export default {
           }
         })
         .catch(function (err) {
+          if (String(self.selected_ticket_id) !== String(ticket_id)) {
+            return
+          }
           const msg =
             (err.response && err.response.data && err.response.data.message) ||
             'No se pudo obtener la sugerencia.'
           self.suggestion_error = msg
         })
         .then(function () {
+          if (String(self.selected_ticket_id) !== String(ticket_id)) {
+            return
+          }
           self.loading_suggestion = false
         })
     },
