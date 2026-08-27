@@ -148,8 +148,16 @@
         </section>
 
         <!-- Leads: configuración de demos -->
+        <!--
+          NO pasar a v-if: es el formulario más largo de toda la pantalla — 31 campos con un solo
+          botón Guardar — y su can_save() es el mismo dirty-check que el has_unsaved_changes de las
+          otras dos que quedan en v-show, solo que con otro nombre. Con v-if, cambiar de sección y
+          volver repisa los 31 campos con el valor del servidor, sin aviso.
+          Cuesta 1 sola request (hace un único GET en mounted), así que es la que mejor paga
+          quedarse montada.
+        -->
         <section
-          v-if="active_section === 'lead-demo-settings'"
+          v-show="active_section === 'lead-demo-settings'"
           id="lead-demo-settings"
           class="account-section"
         >
@@ -167,12 +175,12 @@
 
         <!-- Leads: WhatsApp onboarding -->
         <!--
-          NO pasar a v-if: es una de las dos secciones con formulario largo que protege el
-          beforeRouteLeave de más abajo. Cambiar de sección navega con $router.push({ hash }),
-          que en vue-router 4 dispara beforeRouteUpdate y NO beforeRouteLeave — o sea que el
-          guard no llega a correr. Con v-if el componente se destruye al cambiar de sección y el
-          formulario a medio llenar se pierde sin ningún aviso. Las otras 14 secciones sí van con
-          v-if para no montarlas todas de una (ver comentario en ai-system-prompt).
+          NO pasar a v-if: es una de las tres secciones con formulario largo que se dejan montadas.
+          Cambiar de sección navega con $router.push({ hash }), que en vue-router 4 dispara
+          beforeRouteUpdate y NO beforeRouteLeave — o sea que el guard de más abajo no llega a
+          correr. Con v-if el componente se destruye al cambiar de sección y el formulario a medio
+          llenar se pierde sin ningún aviso. Las otras 13 secciones sí van con v-if para no
+          montarlas todas de una (ver comentario en ai-system-prompt).
         -->
         <section
           v-show="active_section === 'lead-whatsapp-onboarding'"
@@ -246,7 +254,13 @@
           NO pasar a v-if, mismo motivo que lead-whatsapp-onboarding: el guard de cambios sin
           guardar no corre al cambiar de sección, y acá el costo es un textarea de 28 filas
           perdido en silencio.
-          Las otras 14 secciones van con v-if porque con todas en v-show se montaban las 16 al
+          El criterio para dejar una sección en v-show es que tenga un dirty-check (un
+          has_unsaved_changes o un can_save comparando contra lo guardado), NO que el
+          beforeRouteLeave la nombre: el guard nombra dos por historia, no porque sean las dos que
+          importan. Son tres: esta, lead-whatsapp-onboarding y lead-demo-settings.
+          implementation-settings queda en v-if a propósito pese a tener 9 campos: hace 10 GET en
+          mounted, es el 38% de la ráfaga, y cada campo tiene su propio botón Guardar.
+          Las otras 13 secciones van con v-if porque con todas en v-show se montaban las 16 al
           entrar a /cuenta y salían ~26 requests en ráfaga. Eso disparaba errores 2002 del hosting
           (medido: una ráfaga de 24 conexiones alcanza, ver informe 20260825-limpieza-crons-hostinger).
           Tampoco sirve keep-alive: pone el $ref en null al desactivar y rompería el guard de salida.
@@ -400,11 +414,16 @@ export default {
       return this.$store.state.auth.admin
     },
   },
+  created() {
+    // Va en created y no en mounted: con las secciones en v-if, resolver la sección acá evita que
+    // entrar por deep link (/cuenta#implementation-settings, y los redirects viejos del router)
+    // monte la sección default y la destruya en el tick siguiente, con todos sus GET al pedo.
+    this.sync_active_section_from_route()
+  },
   mounted() {
     const self = this
     // Refresca perfil para traer flags actualizados si el token es antiguo.
     this.$store.dispatch('auth/me').catch(function () {})
-    this.sync_active_section_from_route()
     this.$nextTick(function () {
       self.ensure_route_hash_matches_section()
     })
