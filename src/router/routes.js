@@ -103,8 +103,8 @@ const routes_def = [
     meta: { requiresAuth: true, nav: false },
   },
   {
-    // Ítem padre con submenú: Actualizaciones / Sistema, Ecommerce y Demo (prompt 587;
-    // Demo sumado como submódulo por pedido de Lucas, ver contexto_master.md).
+    // Ítem padre con submenú: Actualizaciones / Sistema y Ecommerce (prompt 587). El submódulo
+    // Demo se fue al módulo Demos propio (misión demos-instalacion-y-ecommerce, 31/8/2026).
     // Redirige a Sistema por compatibilidad con el link directo a "/actualizaciones"
     // que ya existe en version/extra-props/Index.vue.
     path: '/actualizaciones',
@@ -131,13 +131,57 @@ const routes_def = [
         component: () => import('@/views/EcommerceUpdates.vue'),
         meta: { requiresAuth: true, nav: false },
       },
+    ],
+  },
+  {
+    /**
+     * Ex "Actualizaciones > Demo". Desde la misión demos-instalacion-y-ecommerce (31/8/2026) esa
+     * pantalla es la pestaña "Sistema" de Demos > Actualizaciones, así que acá queda solo el
+     * redirect: es la única forma de que un link viejo o un marcador no termine en un 404.
+     * Fuera del array de children a propósito — el Nav pinta TODOS los hijos de un grupo sin
+     * mirar meta.nav, así que ahí adentro seguiría apareciendo en el submenú.
+     */
+    path: '/actualizaciones/demo',
+    redirect: '/demos/actualizaciones',
+    meta: { requiresAuth: true, nav: false },
+  },
+  {
+    /**
+     * Módulo Demos (misión demos-instalacion-y-ecommerce, 31/8/2026): todo lo que se hace sobre
+     * una instancia de demo, que hasta ahora estaba repartido entre un modal de Leads (el
+     * catálogo) y un submódulo de Actualizaciones (las de sistema). Va pegado a Instalaciones y
+     * Actualizaciones de clientes porque es el mismo tipo de trabajo, sobre la otra máquina.
+     * Redirige a Catálogo, que es la pantalla de entrada del módulo.
+     */
+    path: '/demos',
+    name: 'demos',
+    text: 'Demos',
+    redirect: '/demos/catalogo',
+    meta: { requiresAuth: true, nav: true, icon: 'easel' },
+    children: [
       {
-        /** Ex ítem único de nivel superior "Actualizaciones Demo", movido a submódulo. */
-        path: '/actualizaciones/demo',
-        name: 'updates_demo',
-        text: 'Demo',
-        model_name: 'demo_update',
-        component: () => import('@/views/DemoUpdates.vue'),
+        /** CRUD del catálogo de demos, antes escondido en un modal de Leads.vue. */
+        path: '/demos/catalogo',
+        name: 'demos_catalogo',
+        text: 'Catálogo',
+        model_name: 'demo',
+        component: () => import('@/views/demos/Catalogo.vue'),
+        meta: { requiresAuth: true, nav: false },
+      },
+      {
+        /** Instalación desde cero de una demo, con pestañas Sistema / Ecommerce. */
+        path: '/demos/instalaciones',
+        name: 'demos_instalaciones',
+        text: 'Instalaciones',
+        component: () => import('@/views/demos/Instalaciones.vue'),
+        meta: { requiresAuth: true, nav: false },
+      },
+      {
+        /** Actualización de una demo ya instalada, con pestañas Sistema / Ecommerce. */
+        path: '/demos/actualizaciones',
+        name: 'demos_actualizaciones',
+        text: 'Actualizaciones',
+        component: () => import('@/views/demos/Actualizaciones.vue'),
         meta: { requiresAuth: true, nav: false },
       },
     ],
