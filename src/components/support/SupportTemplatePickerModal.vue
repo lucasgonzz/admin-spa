@@ -1,8 +1,9 @@
 <template>
   <base-modal
     :show="show"
-    title="Mandar una plantilla"
+    :title="titulo_modal"
     size="lg"
+    :stack_level="stack_level"
     @update:show="on_update_show"
     @close="close">
 
@@ -55,7 +56,7 @@
         @click="enviar">
         <span v-if="enviando" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
         <i v-else class="bi bi-send me-2" aria-hidden="true" />
-        Mandar plantilla
+        {{ boton_label }}
       </button>
     </div>
 
@@ -169,8 +170,24 @@ export default {
       type: [Number, String],
       default: null,
     },
+    /**
+     * Modo "elegir sin mandar": en vez de hacer el POST de envío, emite 'selected' con la
+     * plantilla ya resuelta y cierra. Lo usa el alta de ticket, que todavía no tiene ticket_id.
+     */
+    defer_send: {
+      type: Boolean,
+      default: false,
+    },
+    /**
+     * Nivel de apilado para cuando el picker se abre encima de otro modal (BaseModal ya
+     * resuelve el z-index a partir de esto).
+     */
+    stack_level: {
+      type: Number,
+      default: 0,
+    },
   },
-  emits: ['update:show', 'sent'],
+  emits: ['update:show', 'sent', 'selected'],
   data() {
     return {
       /** Plantillas activas que devolvió la API. */
@@ -288,6 +305,23 @@ export default {
       return this.variable_values.map(function (variable) {
         return String(variable.value || '').trim()
       })
+    },
+    /**
+     * Título del modal: en modo diferido todavía no se manda nada, así que "elegir" describe
+     * mejor la acción que "mandar".
+     *
+     * @returns {string}
+     */
+    titulo_modal() {
+      return this.defer_send ? 'Elegir una plantilla' : 'Mandar una plantilla'
+    },
+    /**
+     * Texto del botón de confirmar, con el mismo criterio que titulo_modal.
+     *
+     * @returns {string}
+     */
+    boton_label() {
+      return this.defer_send ? 'Usar esta plantilla' : 'Mandar plantilla'
     },
   },
   watch: {
@@ -459,7 +493,8 @@ export default {
       })
     },
     /**
-     * Manda la plantilla al teléfono del ticket.
+     * Manda la plantilla al teléfono del ticket, o (con defer_send) la devuelve elegida sin
+     * mandar nada todavía.
      *
      * Con delivery = failed el modal NO se cierra: el mensaje ya quedó en el hilo marcado como
      * no entregado, y el operador tiene que poder corregir un dato y volver a mandarla sin
@@ -469,6 +504,19 @@ export default {
      */
     enviar() {
       if (!this.selected_template || this.enviando) {
+        return
+      }
+      if (this.defer_send) {
+        // Todavía no hay ticket: se le devuelve la elección al padre y que la mande él cuando
+        // el alta se resuelva. Nada de POST acá.
+        this.$emit('selected', {
+          client_template_id: this.selected_template.id,
+          template_name: this.selected_template.template_name,
+          titulo: this.selected_template.titulo || this.selected_template.template_name,
+          preview: this.preview_text,
+          variables: this.resolved_variables,
+        })
+        this.close()
         return
       }
       if (this.ticket_id == null) {
