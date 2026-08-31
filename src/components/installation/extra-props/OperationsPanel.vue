@@ -113,6 +113,14 @@ var CHECKLIST_ESQUELETO = [
  * final, después de finalize_api, no al principio con los otros cuatro: el cron necesita el
  * Kernel.php que recién sube upload_api, y Let's Encrypt necesita que el A record haya propagado
  * (los ~15 minutos de compile_spa + uploads son esa espera, gratis).
+ *
+ * 🔴 ESTE ARRAY ES LA MITAD DE UN CONTRATO Y LA OTRA MITAD ESTÁ EN admin-api. Si cambiás el orden
+ * acá, cambialo también allá; si cambia allá, este archivo tiene que seguirlo. El candado del lado
+ * que sí tiene tests es
+ * `tests/Feature/AprovisionamientoDeHostingDelClienteTest::test_el_orden_de_los_pasos_es_el_contrato_con_el_operations_panel_del_spa()`,
+ * que fija el array exacto en las cuatro combinaciones (real/esqueleto × con/sin aprovisionamiento)
+ * y nombra este archivo. Acá no hay tests: esta mitad se rompe en silencio, y por eso el candado
+ * está del otro lado.
  */
 var PASOS_APROVISIONAMIENTO_INICIO = ['provision_check', 'provision_sites', 'provision_dns', 'provision_db']
 var PASOS_APROVISIONAMIENTO_FINAL = ['provision_cron', 'provision_ssl']
