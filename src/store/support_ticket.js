@@ -341,7 +341,9 @@ export default __base_store({
      * y store() ya está consumida por el alta del canal ERP con otro valor de retorno.
      *
      * @param {Object} contexto Contexto Vuex con dispatch.
-     * @param {Object} payload  client_id, whatsapp_phone, body y name opcional.
+     * @param {Object} payload  client_id, whatsapp_phone y, según si la ventana de 24hs del
+     *   contacto está abierta o cerrada, `body` (texto libre) O `client_template_id` +
+     *   `variables` (plantilla elegida). La action es agnóstica del payload: lo manda tal cual.
      * @returns {Promise<Object>} { model, whatsapp, reused }
      */
     store_whatsapp({ dispatch }, payload) {
