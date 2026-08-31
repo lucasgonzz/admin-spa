@@ -100,6 +100,38 @@ var CHECKLIST_ESQUELETO = [
 ]
 
 /**
+ * Las cuatro etapas de aprovisionamiento que van ADELANTE del pipeline de siempre, y las dos que
+ * van al final. Calcadas de InstallationProvisioningSteps::build_steps_con_aprovisionamiento() en
+ * admin-api, que arma exactamente esto:
+ *
+ *   completa  → check, sites, dns, db + [compile_spa … finalize_api] + cron, ssl
+ *   esqueleto → check, sites, dns, db + [prepare_dirs … finalize_skeleton]
+ *
+ * 🔴 El orden no es cosmético y las dos listas no se pueden fusionar en una sola: get_step_status()
+ * decide "completado" mirando si el paso SIGUIENTE del array ya tiene logs, así que un array
+ * desalineado del backend deja etapas en gris para siempre. Y el cron y el certificado van al
+ * final, después de finalize_api, no al principio con los otros cuatro: el cron necesita el
+ * Kernel.php que recién sube upload_api, y Let's Encrypt necesita que el A record haya propagado
+ * (los ~15 minutos de compile_spa + uploads son esa espera, gratis).
+ */
+var PASOS_APROVISIONAMIENTO_INICIO = ['provision_check', 'provision_sites', 'provision_dns', 'provision_db']
+var PASOS_APROVISIONAMIENTO_FINAL = ['provision_cron', 'provision_ssl']
+
+/** Ítems de checklist de los cuatro pasos de aprovisionamiento iniciales. */
+var CHECKLIST_APROVISIONAMIENTO_INICIO = [
+  { key: 'provision_check', label: 'Verificar el hosting' },
+  { key: 'provision_sites', label: 'Crear los subdominios' },
+  { key: 'provision_dns', label: 'Apuntar el DNS' },
+  { key: 'provision_db', label: 'Crear la base de datos' },
+]
+
+/** Ítems de checklist de los dos pasos finales (solo en la fila con instalación real). */
+var CHECKLIST_APROVISIONAMIENTO_FINAL = [
+  { key: 'provision_cron', label: 'Crear el cron' },
+  { key: 'provision_ssl', label: 'Emitir el certificado' },
+]
+
+/**
  * "Instalar composer" no es una etapa propia del backend: ocurre dentro del tag upload_api.
  * Se detecta por estos dos marcadores de texto, verificados contra InstallationService.php
  * (líneas donde se loguean con tag 'upload_api').
@@ -109,8 +141,9 @@ var COMPOSER_DONE_MARKER = 'API lista en el hosting'
 
 /**
  * Panel de operaciones de una instalación: log en vivo (colapsable, auto-scroll) +
- * checklist de las etapas visibles del pipeline que corresponde al kind de la fila
- * (6 en una instalación completa, 4 en un esqueleto) vía SubTaskItem, con estado derivado
+ * checklist de las etapas visibles del pipeline que corresponde al kind de la fila y a si
+ * aprovisiona el hosting (6 en una instalación completa, 4 en un esqueleto; +4 al principio y +2
+ * al final con aprovisionamiento) vía SubTaskItem, con estado derivado
  * directamente del campo `step` de cada deployment_log (sin parsear texto con regex,
  * a diferencia del panel equivalente de actualización de la demo).
  */
@@ -149,12 +182,33 @@ export default {
     },
 
     /**
+     * ¿Esta fila aprovisiona el hosting antes de instalar?
+     *
+     * Se pregunta por el valor y no por un booleano porque en el backend la columna es una sola y
+     * nullable: null = no aprovisionar (el comportamiento de siempre), 'shared_hosting' o 'vps' =
+     * correr el bloque. Una fila vieja, o una creada por un SPA que todavía no manda el campo, lo
+     * lee undefined y cae al pipeline de siempre, que es lo que corresponde.
+     *
+     * @returns {boolean}
+     */
+    aprovisiona_hosting() {
+      return String(this.installation.provision_hosting_type || '').trim() !== ''
+    },
+
+    /**
      * Orden de las etapas del pipeline que corresponde a esta fila.
      *
      * @returns {Array<string>}
      */
     steps_order() {
-      return this.is_esqueleto ? LOG_STEPS_ORDER_ESQUELETO : LOG_STEPS_ORDER_COMPLETA
+      var base = this.is_esqueleto ? LOG_STEPS_ORDER_ESQUELETO : LOG_STEPS_ORDER_COMPLETA
+      if (!this.aprovisiona_hosting) {
+        return base
+      }
+      var order = PASOS_APROVISIONAMIENTO_INICIO.concat(base)
+      /* El cron y el certificado son solo de la fila real: el esqueleto no tiene vendor/ ni
+         sistema, y el backend ni siquiera agrega esas dos etapas a su pipeline. */
+      return this.is_esqueleto ? order : order.concat(PASOS_APROVISIONAMIENTO_FINAL)
     },
 
     /**
@@ -163,7 +217,12 @@ export default {
      * @returns {Array<{key: string, label: string}>}
      */
     checklist_items() {
-      return this.is_esqueleto ? CHECKLIST_ESQUELETO : CHECKLIST_COMPLETA
+      var base = this.is_esqueleto ? CHECKLIST_ESQUELETO : CHECKLIST_COMPLETA
+      if (!this.aprovisiona_hosting) {
+        return base
+      }
+      var items = CHECKLIST_APROVISIONAMIENTO_INICIO.concat(base)
+      return this.is_esqueleto ? items : items.concat(CHECKLIST_APROVISIONAMIENTO_FINAL)
     },
   },
   watch: {
@@ -270,13 +329,19 @@ export default {
       return this.installation.status === 'fallida' ? 'failed' : 'running'
     },
     /**
-     * Clase de color Bootstrap según nivel del log (info, success, error).
+     * Clase de color Bootstrap según nivel del log (info, success, warning, error).
+     *
+     * 🔴 'warning' se mapea a propósito y no es cosmético: hasta acá caía en el `return 'light'` y
+     * se leía exactamente igual que un 'info'. El aprovisionamiento emite warnings que cambian lo
+     * que hay que hacer después —"el sitio ya existía y no tengo su contraseña", "el .env no se
+     * tocó"—, y un aviso de esos perdido entre cien líneas blancas no lo ve nadie.
      *
      * @param {string} level
      * @returns {string}
      */
     log_level_class(level) {
       if (level === 'error') return 'danger'
+      if (level === 'warning') return 'warning'
       if (level === 'success') return 'success'
       return 'light'
     },

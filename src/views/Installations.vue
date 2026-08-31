@@ -258,6 +258,66 @@
           </p>
         </div>
 
+        <!--
+          Aprovisionamiento del hosting. Va entre las APIs destino y la versión a propósito: es una
+          decisión sobre el cliente entero (sus 4 subdominios y su base), no sobre una instalación
+          puntual, así que se lee después de haber elegido de qué cliente estamos hablando.
+        -->
+        <div v-if="selected_client" class="mb-3">
+          <div class="form-check">
+            <input
+              id="provision-hosting"
+              class="form-check-input"
+              type="checkbox"
+              :checked="aprovisiona_hosting"
+              :disabled="!puede_aprovisionar"
+              @change="on_provision_toggled($event)"
+            />
+            <label class="form-check-label small" for="provision-hosting">
+              Aprovisionar el hosting (4 subdominios, base de datos y cron)
+            </label>
+          </div>
+
+          <!--
+            El motivo va a la vista y no en un title: el tildado deshabilitado sin explicación se
+            lee como un bug. Es la guarda de §1.4 del backend adelantada acá, para no hacerle
+            completar el formulario entero y fallar recién adentro del job.
+          -->
+          <p v-if="motivo_no_aprovisionable" class="form-text small mb-0">
+            {{ motivo_no_aprovisionable }}
+          </p>
+
+          <!-- El radio aparece solo si está tildado: sin tilde no hay tipo que elegir. -->
+          <div v-if="aprovisiona_hosting" class="provision-tipos mt-2">
+            <div class="form-check">
+              <input
+                id="provision-tipo-shared"
+                v-model="new_installation.provision_hosting_type"
+                class="form-check-input"
+                type="radio"
+                name="provision_hosting_type"
+                value="shared_hosting"
+              />
+              <label class="form-check-label small" for="provision-tipo-shared">
+                Hosting compartido
+              </label>
+            </div>
+            <div class="form-check">
+              <input
+                id="provision-tipo-vps"
+                v-model="new_installation.provision_hosting_type"
+                class="form-check-input"
+                type="radio"
+                name="provision_hosting_type"
+                value="vps"
+              />
+              <label class="form-check-label small" for="provision-tipo-vps">
+                VPS
+              </label>
+            </div>
+          </div>
+        </div>
+
         <!-- Selección de versión: preselecciona la última publicada -->
         <div class="mb-3">
           <label class="form-label small">Versión</label>
@@ -281,13 +341,25 @@
           en un modal de confirmación: no se agrega un paso, se dice lo que ya se eligió.
         -->
         <div v-if="can_create_installation" class="alert alert-light border py-2 small mb-0">
+          <!--
+            Dos formas de renglón en la misma lista: los destinos llevan la URL adelante, y los del
+            aprovisionamiento son una frase sola. Se renderizan juntos porque son una sola cosa: lo
+            que este formulario va a hacer.
+          -->
           <div
             v-for="destino in resumen_destinos"
-            :key="destino.client_api_id"
+            :key="destino.key"
             class="resumen-destino"
           >
-            <code class="resumen-destino-url">{{ destino.url }}</code>
-            <span class="text-muted">— {{ destino.texto }}</span>
+            <template v-if="destino.url">
+              <code class="resumen-destino-url">{{ destino.url }}</code>
+              <span class="text-muted">— {{ destino.texto }}</span>
+            </template>
+            <span
+              v-else
+              class="resumen-destino-texto"
+              :class="destino.tipo === 'advertencia' ? 'text-warning-emphasis fw-semibold' : 'text-muted'"
+            >{{ destino.texto }}</span>
           </div>
           <div v-if="!hay_instalacion_real" class="text-muted mt-1">
             Ningún subdominio va a quedar con el sistema instalado.
@@ -388,6 +460,13 @@ export default {
         version_id: null,
         apis_incluidas: [],
         client_api_id_real: null,
+        /*
+          null = no aprovisionar nada, que es el comportamiento de siempre y el default. Los otros
+          dos valores válidos son 'shared_hosting' y 'vps'. Es una sola clave y no un booleano más
+          un tipo porque así es la columna del backend: la ausencia de valor tiene significado
+          propio y no existe la combinación inválida "tildado sin tipo".
+        */
+        provision_hosting_type: null,
       },
     }
   },
@@ -436,11 +515,13 @@ export default {
      */
     resumen_destinos() {
       const self = this
-      return self.build_targets().map(function (target) {
+      const renglones = self.build_targets().map(function (target) {
         const client_api = self.selected_client_apis.find(function (a) {
           return a.id === target.client_api_id
         })
         return {
+          key: 'destino-' + target.client_api_id,
+          tipo: 'destino',
           client_api_id: target.client_api_id,
           url: client_api ? client_api.url : ('API #' + target.client_api_id),
           texto: target.kind === 'completa'
@@ -448,6 +529,121 @@ export default {
             : 'solo esqueleto: directorios, public/ y .env. El sistema no se instala',
         }
       })
+
+      if (!self.aprovisiona_hosting) {
+        return renglones
+      }
+
+      const slug = self.slug_del_cliente || 'x'
+      renglones.push({
+        key: 'aprovisionamiento',
+        tipo: 'aviso',
+        url: null,
+        texto: 'Se van a crear 4 subdominios (api-' + slug + ', ' + slug + ', api-' + slug + '2, '
+          + slug + '2), una base compartida por las dos instancias y un cron en la instancia con '
+          + 'instalación real.',
+      })
+
+      /*
+        🔴 Esta advertencia es el único lugar del sistema donde este aviso puede salir, y por eso no
+        es opcional. El backend no arma el paso provision_cron cuando la fila es un esqueleto —ni
+        siquiera lo agrega al pipeline—, así que no tiene dónde loguear que no creó ningún cron: no
+        hay etapa que lo diga. Y el radio de instalación real arranca en "Ninguna" por default, con
+        lo cual este es justo el camino de los tres clicks.
+      */
+      if (!self.hay_instalacion_real) {
+        renglones.push({
+          key: 'aprovisionamiento-sin-real',
+          tipo: 'advertencia',
+          url: null,
+          texto: 'Sin instalación real no se crea ningún cron.',
+        })
+      }
+
+      return renglones
+    },
+
+    /**
+     * ¿Está tildado el aprovisionamiento del hosting?
+     *
+     * Es un solo campo y no dos (un booleano + un tipo) porque el backend guarda una sola columna
+     * nullable: la ausencia de valor ES el estado viejo, y con dos campos existiría el estado
+     * imposible "tildado sin tipo" que alguien tendría que decidir cómo mandar.
+     *
+     * @returns {boolean}
+     */
+    aprovisiona_hosting() {
+      return this.new_installation.provision_hosting_type !== null
+    },
+
+    /**
+     * ¿El cliente elegido se puede aprovisionar?
+     *
+     * El aprovisionamiento deriva el slug y los 4 nombres de subdominio del par de client_apis del
+     * cliente (guarda 1 de §1.4 del backend: exactamente dos). Con una sola o con tres no hay forma
+     * de saber cuáles son los 4 subdominios y el job frena en el preflight.
+     *
+     * @returns {boolean}
+     */
+    puede_aprovisionar() {
+      return !!this.selected_client && this.selected_client_apis.length === 2
+    },
+
+    /**
+     * Por qué el tildado está deshabilitado, o '' si no lo está.
+     *
+     * @returns {string}
+     */
+    motivo_no_aprovisionable() {
+      if (this.puede_aprovisionar) {
+        return ''
+      }
+      const cantidad = this.selected_client_apis.length
+      if (cantidad === 0) {
+        return 'Este cliente no tiene APIs cargadas: el aprovisionamiento necesita el par '
+          + '<slug> y <slug>2 para derivar los 4 subdominios.'
+      }
+      return 'Este cliente tiene ' + cantidad + ' API' + (cantidad === 1 ? '' : 's')
+        + ' cargada' + (cantidad === 1 ? '' : 's') + ' y el aprovisionamiento necesita exactamente '
+        + '2 (el par <slug> y <slug>2): de ahí salen los 4 subdominios y el nombre de la base. '
+        + 'Arreglá el par en el perfil del cliente o aprovisioná el hosting a mano.'
+    },
+
+    /**
+     * Slug del cliente, derivado de los spa_url de sus dos APIs igual que en el backend
+     * (HostingProvisioningStructure): 'https://lacava.comerciocity.com' → 'lacava', y de las dos
+     * etiquetas gana la que la otra tiene con un '2' pegado.
+     *
+     * Devuelve null si no se puede derivar. Acá NO se reimplementan las 5 guardas de §1.4 a
+     * propósito: la que valida de verdad es provision_check, que corre contra la base y falla con
+     * un mensaje propio. Esto es solo para que el resumen diga nombres reales en vez de una letra.
+     *
+     * @returns {string|null}
+     */
+    slug_del_cliente() {
+      const labels = this.selected_client_apis.map(function (client_api) {
+        const url = String(client_api.spa_url || '').trim()
+        if (url === '') {
+          return ''
+        }
+        /* Sin URL absoluta el constructor tira; el catch deja la etiqueta vacía y el resumen cae
+           al placeholder, que es exactamente lo que corresponde con un dato mal cargado. */
+        try {
+          return String(new URL(url).hostname).split('.')[0]
+        } catch (e) {
+          return ''
+        }
+      })
+      if (labels.length !== 2) {
+        return null
+      }
+      if (labels[0] !== '' && labels[0] + '2' === labels[1]) {
+        return labels[0]
+      }
+      if (labels[1] !== '' && labels[1] + '2' === labels[0]) {
+        return labels[1]
+      }
+      return null
     },
 
     /**
@@ -559,6 +755,7 @@ export default {
         version_id: null,
         apis_incluidas: [],
         client_api_id_real: null,
+        provision_hosting_type: null,
       }
       this.show_create_modal = true
       if (!this.create_data_loaded) {
@@ -640,6 +837,25 @@ export default {
       })
       self.new_installation.apis_incluidas = ids.slice(0, MAX_APIS_DESTINO)
       self.new_installation.client_api_id_real = null
+      /*
+        El aprovisionamiento se destilda al cambiar de cliente y no se conserva: es una decisión
+        sobre los subdominios y la base de ESE cliente, y arrastrarla al siguiente sería crearle
+        cuatro subdominios a alguien que nadie eligió.
+      */
+      self.new_installation.provision_hosting_type = null
+    },
+
+    /**
+     * Tilda o destilda el aprovisionamiento del hosting.
+     *
+     * Al tildar arranca en 'shared_hosting', que es el hosting de los ~40 clientes activos y el
+     * único camino ya probado de punta a punta. El VPS se elige a propósito, no por default.
+     *
+     * @param {Event} event
+     * @returns {void}
+     */
+    on_provision_toggled(event) {
+      this.new_installation.provision_hosting_type = event.target.checked ? 'shared_hosting' : null
     },
 
     /**
@@ -728,6 +944,12 @@ export default {
         client_id: self.new_installation.client_id,
         version_id: self.new_installation.version_id,
         targets: self.build_targets(),
+        /*
+          🔴 null cuando no está tildado, y se manda igual en vez de omitir la clave: el backend lo
+          valida como nullable y guarda null, que es el valor que deja el pipeline de siempre byte
+          por byte. Mandar un false o un string vacío rompería la regla 'in:shared_hosting,vps'.
+        */
+        provision_hosting_type: self.new_installation.provision_hosting_type,
       })
         .then(function (res) {
           /* models trae las dos filas del par; el fallback a model es para una respuesta vieja. */
@@ -945,5 +1167,24 @@ export default {
 .resumen-destino-url {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+/*
+  El renglón del aprovisionamiento es una frase larga con cuatro subdominios adentro y ningún
+  espacio dentro de cada uno. Sin el overflow-wrap se sale del cuadro en tablet, que es el ancho
+  donde el modal de 500px ya se quedó corto una vez (informe del 24/8).
+*/
+.resumen-destino-texto {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/*
+  Los dos tipos de hosting en una línea, indentados debajo del tildado del que dependen. El wrap
+  los baja uno abajo del otro en teléfono en vez de comprimir las etiquetas.
+*/
+.provision-tipos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.5rem;
+  margin-left: 1.5rem;
 }
 </style>
