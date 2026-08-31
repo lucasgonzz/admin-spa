@@ -1,8 +1,43 @@
 # Generador de los cuadros de la máquina
 
+> 🔴 **DEFERIDO desde el 31/8/2026 -- este generador NO produjo la tira que hoy se
+> shippea en `public/demo/maquina/`.** La animación corregida de Claude Design cerró el
+> loop de la máquina a 24,75s (antes 12s) y cambió el aspecto del encuadre a 1,5 (antes
+> 1,65306, ver `marca/animacion-hero/README.md` del repo de conocimiento). El WebP animado
+> que se shippeó sale de re-encodear con `ffmpeg` los 594 PNG que Lucas ya renderizó y
+> aprobó (fuera de este repo -- ver "De dónde salió la tira que se shippea" más abajo),
+> **no de correr `generar.mjs`**, que sigue escrito contra el diseño viejo
+> (`escena-determinista.js`, con su cabecera de obsolescencia) y produciría una máquina
+> distinta si se lo corriera tal cual.
+>
+> `machine.js` en esta misma carpeta **ya es la copia actualizada** (viene del repo de
+> conocimiento, trae `initStatic()`/`renderAt()`/`LOOP_T` con las frecuencias correctas) y
+> está lista para que `generar.mjs` la use en vez de `escena-determinista.js` -- ese
+> repunte, más la verificación de que reproduce los PNG de Lucas byte a byte, quedó fuera
+> del alcance de esta misión por tiempo. Es el próximo trabajo de esta carpeta.
+
 La máquina que se ve en el centro de la escena hero de `/experiencia/:uuid` **no se
-renderiza en vivo**: son cuadros WebP pre-renderizados que se reproducen en un canvas 2D.
-Acá se generan.
+renderiza en vivo**: es un WebP animado con alfa que se muestra en un `<img>`. Acá vive
+la herramienta para regenerarlo cuando cambie el diseño (una vez hecho el repunte de
+arriba).
+
+## De dónde salió la tira que se shippea (31/8/2026)
+
+Sin pasar por este generador: Lucas exportó la escena corregida desde Claude Design junto
+con 594 cuadros PNG ya renderizados (loop completo a 24 fps, dos resoluciones —
+1200×800 y 600×400), y esos PNG se re-encodearon directo a WebP animado con `ffmpeg`:
+
+```bash
+ffmpeg -framerate 24 -i frames/f%04d.png \
+  -vf "fps=12[,scale=360:240:flags=lanczos]" -pix_fmt yuva420p \
+  -c:v libwebp_anim -lossless 0 -q:v <calidad> -compression_level 4 -loop 0 -an \
+  public/demo/maquina/maquina-<perfil>.webp
+```
+
+`-compression_level 6` (el más alto) resultó **impracticable en esta máquina**: más de
+15 minutos sin terminar sobre los 594 cuadros, contra menos de un minuto con
+`-compression_level 4` para el mismo resultado -- si alguien vuelve a tocar este comando,
+que no suba ese número sin medir cuánto tarda antes de confiar en que va a terminar.
 
 Esto **no es parte del build de la SPA**. Se corre a mano, cuando cambia el diseño de la
 máquina, y su salida (`public/demo/maquina/`) se versiona.

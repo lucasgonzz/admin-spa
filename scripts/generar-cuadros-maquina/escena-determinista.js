@@ -1,4 +1,26 @@
 /**
+ * 🔴 OBSOLETO desde el 31/8/2026 -- NO USAR PARA GENERAR LA TIRA QUE SE SHIPPEA.
+ *
+ * Los tres números que fija este archivo quedaron desactualizados por la animación
+ * corregida de Claude Design: `DURACION_S = 12` (el loop real ahora es 24,75s, ver
+ * `LOOP_T` en `./machine.js`), las frecuencias cuantizadas de FRECUENCIAS más abajo (el
+ * `machine.js` nuevo ya las trae cuantizadas de fábrica, con otro loop) y `ASPECTO =
+ * 8,1/4,9 = 1,65306` (el asset que se shippea hoy viene a 1,5 -- decisión de Lucas,
+ * documentada en `marca/animacion-hero/README.md` del repo de conocimiento). Usar este
+ * archivo tal cual generaría una máquina DISTINTA de la que se ve en pantalla, sin que
+ * nada avise.
+ *
+ * Por qué sigue acá en vez de borrarse: `machine.js` (copia textual del repo de
+ * conocimiento, en esta misma carpeta) ya trae `initStatic()` + `renderAt()` con las
+ * frecuencias correctas y podría reemplazar a este archivo entero -- pero verificar que
+ * `generar.mjs` repuntado a esa fuente reproduce bytes a byte los cuadros que Lucas ya
+ * aprobó (594 PNG a 1200x800/600x400, fuera de este repo, ver el README de esta carpeta)
+ * quedó fuera del alcance de esta misión por tiempo. La tira que se shippeó en
+ * `public/demo/maquina/` sale de re-encodear esos PNG directo a WebP animado con
+ * `ffmpeg`, no de este generador. Repuntar `generar.mjs` a `machine.js` y borrar este
+ * archivo es el trabajo que queda pendiente -- ver la sección correspondiente del
+ * README.
+ *
  * La máquina de la escena hero, en versión DETERMINISTA y sin bucle: se le pide un
  * cuadro para un instante `t` y lo dibuja. Es la fuente de los WebP pre-renderizados
  * que reproduce `src/components/demo/maquina-cuadros.js` en la página.
