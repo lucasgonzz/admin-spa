@@ -95,7 +95,7 @@
         {{ window_alert_text }}
       </div>
 
-      <div class="mb-3">
+      <div v-if="ventana_abierta" class="mb-3">
         <label class="form-label" for="support_create_ticket_body">Mensaje</label>
         <textarea
           id="support_create_ticket_body"
@@ -109,6 +109,33 @@
           <small class="text-muted">{{ message_body.length }}/{{ body_max_length }}</small>
         </div>
       </div>
+
+      <!-- Ventana cerrada: Meta no deja texto libre, así que el primer mensaje sale del mismo
+           selector de plantillas que ya usan las conversaciones existentes. -->
+      <div v-else class="mb-3">
+        <label class="form-label d-block">Mensaje</label>
+        <button
+          v-if="!plantilla_elegida"
+          type="button"
+          class="btn btn-sm btn-outline-primary"
+          :disabled="creating"
+          @click="picker_visible = true">
+          Elegir plantilla
+        </button>
+        <div v-else class="support-template-chosen">
+          <div class="d-flex justify-content-between align-items-start gap-2">
+            <div class="fw-semibold small">{{ plantilla_elegida.titulo }}</div>
+            <button
+              type="button"
+              class="btn btn-link btn-sm p-0 text-muted flex-shrink-0"
+              :disabled="creating"
+              @click="cambiar_plantilla">
+              Cambiar plantilla
+            </button>
+          </div>
+          <div class="support-template-chosen-preview">{{ plantilla_elegida.preview }}</div>
+        </div>
+      </div>
     </template>
 
     <p v-if="submit_error" class="text-danger small mb-2">{{ submit_error }}</p>
@@ -120,12 +147,20 @@
       <span v-if="creating" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
       {{ submit_label }}
     </button>
+
+    <support-template-picker-modal
+      :show="picker_visible"
+      :defer_send="true"
+      :stack_level="1"
+      @update:show="picker_visible = $event"
+      @selected="on_template_selected" />
   </base-modal>
 </template>
 
 <script>
 import api from '@/utils/axios'
 import BaseModal from '@/components/ui/BaseModal.vue'
+import SupportTemplatePickerModal from '@/components/support/SupportTemplatePickerModal.vue'
 
 /**
  * Espera entre la última tecla y la consulta. Sin esto cada letra tipeada es una búsqueda
@@ -154,6 +189,7 @@ export default {
   name: 'CreateTicketModal',
   components: {
     BaseModal,
+    SupportTemplatePickerModal,
   },
   props: {
     /**
@@ -203,6 +239,10 @@ export default {
       creating: false,
       /** Error de validación o API al abrir la conversación. */
       submit_error: '',
+      /** Plantilla elegida para el primer mensaje cuando la ventana está cerrada. null = sin elegir. */
+      plantilla_elegida: null,
+      /** Selector de plantillas anidado (defer_send) abierto. */
+      picker_visible: false,
     }
   },
   computed: {
@@ -255,13 +295,19 @@ export default {
     /**
      * Habilita el botón de enviar.
      *
+     * Con la ventana cerrada no hay texto libre: lo que habilita el envío es tener una
+     * plantilla elegida, no el textarea (que ni siquiera se muestra en ese caso).
+     *
      * @returns {boolean}
      */
     can_submit() {
       if (this.creating || !this.contacto_elegido) {
         return false
       }
-      return this.message_body.trim().length > 0
+      if (this.ventana_abierta) {
+        return this.message_body.trim().length > 0
+      }
+      return this.plantilla_elegida !== null
     },
     /**
      * Texto del botón de enviar.
@@ -272,16 +318,23 @@ export default {
       return this.creating ? 'Enviando…' : 'Enviar y abrir'
     },
     /**
+     * true si Meta todavía deja mandar texto libre a este contacto (no escribió hace más de
+     * 24hs). Mismo criterio defensivo que ya usaban window_alert_class/window_alert_text: sin
+     * el dato, se asume cerrada.
+     *
+     * @returns {boolean}
+     */
+    ventana_abierta() {
+      const c = this.contacto_elegido
+      return !!(c && c.window && c.window.open)
+    },
+    /**
      * Clase del cartel de ventana.
      *
      * @returns {string}
      */
     window_alert_class() {
-      const contacto = this.contacto_elegido
-      if (contacto && contacto.window && contacto.window.open) {
-        return 'alert-success'
-      }
-      return 'alert-warning'
+      return this.ventana_abierta ? 'alert-success' : 'alert-warning'
     },
     /**
      * Texto del cartel de ventana.
@@ -293,11 +346,10 @@ export default {
      * @returns {string}
      */
     window_alert_text() {
-      const contacto = this.contacto_elegido
-      if (contacto && contacto.window && contacto.window.open) {
+      if (this.ventana_abierta) {
         return 'Escribió hace menos de 24hs: tu mensaje sale tal cual lo escribís.'
       }
-      return 'Hace más de 24hs que no escribe, así que Meta no deja mandar texto libre: tu mensaje va adentro de la plantilla aprobada de apertura.'
+      return 'Hace más de 24hs que no escribe, así que Meta no deja mandar texto libre: el primer mensaje tiene que ser una plantilla aprobada.'
     },
   },
   watch: {
@@ -354,6 +406,8 @@ export default {
       this.message_body = ''
       this.creating = false
       this.submit_error = ''
+      this.plantilla_elegida = null
+      this.picker_visible = false
     },
     /**
      * Pone el cursor en el buscador después de que el modal terminó de renderizar.
@@ -530,6 +584,7 @@ export default {
       this.cancelar_busqueda_pendiente()
       this.contacto_elegido = contacto
       this.submit_error = ''
+      this.plantilla_elegida = null
     },
     /**
      * Vuelve al buscador conservando lo que ya se había escrito y los resultados.
@@ -539,7 +594,28 @@ export default {
     cambiar_contacto() {
       this.contacto_elegido = null
       this.submit_error = ''
+      this.plantilla_elegida = null
       this.focus_search()
+    },
+    /**
+     * Limpia la plantilla elegida y vuelve a abrir el picker para elegir otra.
+     *
+     * @returns {void}
+     */
+    cambiar_plantilla() {
+      this.plantilla_elegida = null
+      this.picker_visible = true
+    },
+    /**
+     * El picker anidado eligió una plantilla (modo defer_send: todavía no mandó nada).
+     *
+     * @param {Object} payload {client_template_id, template_name, titulo, preview, variables}
+     * @returns {void}
+     */
+    on_template_selected(payload) {
+      this.plantilla_elegida = payload
+      this.picker_visible = false
+      this.submit_error = ''
     },
     /**
      * Abre la conversación por WhatsApp y manda el primer mensaje.
@@ -560,12 +636,23 @@ export default {
       const self = this
       this.submit_error = ''
       this.creating = true
+      /* La ventana decide qué manda: texto libre de siempre, o -si Meta no lo permite- la
+         plantilla que ya eligió el operador en el picker anidado. El store y la respuesta son
+         los mismos en los dos casos, así que de acá para abajo no hay que distinguir nada. */
+      const payload = this.ventana_abierta
+        ? {
+            client_id: Number(contacto.client_id),
+            whatsapp_phone: contacto.phone,
+            body: this.message_body.trim(),
+          }
+        : {
+            client_id: Number(contacto.client_id),
+            whatsapp_phone: contacto.phone,
+            client_template_id: this.plantilla_elegida.client_template_id,
+            variables: this.plantilla_elegida.variables,
+          }
       this.$store
-        .dispatch('support_ticket/store_whatsapp', {
-          client_id: Number(contacto.client_id),
-          whatsapp_phone: contacto.phone,
-          body: this.message_body.trim(),
-        })
+        .dispatch('support_ticket/store_whatsapp', payload)
         .then(function (data) {
           self.creating = false
           const model = data && data.model
@@ -680,5 +767,21 @@ export default {
 /* Sin esto un nombre largo empuja al botón Cambiar fuera del modal en pantallas angostas. */
 .support-contact-selected-data {
   min-width: 0;
+}
+
+/* Resumen de la plantilla elegida. El picker tiene su propio .template-preview pero es
+   scoped y no cruza, así que acá va una versión chica propia. */
+.support-template-chosen {
+  border: 1px solid #dee2e6;
+  border-radius: 0.375rem;
+  padding: 8px 10px;
+}
+
+.support-template-chosen-preview {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.85rem;
+  color: #495057;
+  margin-top: 4px;
 }
 </style>
