@@ -184,7 +184,7 @@ import MarcoDispositivo from './MarcoDispositivo.vue'
 import PiezaMultimedia from './PiezaMultimedia.vue'
 import FondoSeccionSticky from './FondoSeccionSticky.vue'
 import EscenaHero from './EscenaHero.vue'
-import { precargar_cuadros } from './maquina-cuadros'
+import { precargar_maquina } from './maquina-animacion'
 
 /**
  * Copy completo del scroll de dolor, transcripto palabra por palabra desde
@@ -786,18 +786,18 @@ export default {
          viendo los dolores" -- y el lugar exacto importa: desde el primer bloque de
          dolor hasta la escena hay CUATRO pantallas, que es el tiempo que la tira de
          ~1,3 MB necesita para bajar y decodificarse sin que el lead vea nada.
-         `precargar_cuadros()` es idempotente, así que llamarla en cada cuadro de scroll
+         `precargar_maquina()` es idempotente, así que llamarla en cada cuadro de scroll
          de este bloque no dispara más de una descarga. Va antes del corte de abajo a
          propósito: el tracking espera a que el bloque termine de entrar, la precarga no
          tiene por qué.
 
          🔴 El `p > 0` no es una precaución: FondoSeccionSticky emite una vez al montar,
          con el progreso real (0 si su sección todavía está más abajo). Sin esta guarda
-         la tira se pedía apenas cargaba la página -- medido: los 120 cuadros ya estaban
-         pedidos antes del primer scroll -- o sea compitiendo por el ancho de banda con
-         la primera pantalla, que es exactamente lo contrario de lo que se buscaba. */
+         la máquina se pedía apenas cargaba la página -- o sea compitiendo por el ancho
+         de banda con la primera pantalla, que es exactamente lo contrario de lo que se
+         buscaba. */
       if (p > 0 && this.contenido.bloques.length && bloque_id === this.contenido.bloques[0].id) {
-        precargar_cuadros()
+        precargar_maquina()
       }
 
       if (p < ENTRADA_FIN || this.bloques_trackeados[bloque_id]) {
