@@ -1,17 +1,22 @@
 /**
  * 🔴 COPIA TEXTUAL de `marca/animacion-hero/machine.js` del repo de conocimiento
- * (`lucasgonzz/claude-comerciocity`), traída acá el 31/8/2026 en reemplazo de
- * `escena-determinista.js` (borrado en el mismo commit). Antes esta carpeta mantenía una
- * REIMPLEMENTACIÓN a mano de la escena, con su propia cuantización de frecuencias y su
- * propio aspecto de cámara -- una copia paralela que dos correcciones del diseño (la de
- * esta misión y la anterior) dejaron desincronizada sin que nada avisara. Esta versión de
- * `machine.js` ya trae `initStatic(canvas, w, h)` + `renderAt(t, {power, suck})` con las
- * frecuencias ya cuantizadas de fábrica (`LOOP_T = 24.75`, ver la tabla `F` más abajo), así
- * que no hace falta reimplementar nada: alcanza con importarla.
+ * (`lucasgonzz/claude-comerciocity`), traída acá el 31/8/2026 -- TODAVÍA SIN USAR.
+ * `escena-determinista.js` sigue siendo la fuente que lee `generar.mjs` (con una cabecera
+ * de obsolescencia encima, no se borró): repuntar el generador a este archivo y verificar
+ * que reproduce los PNG que Lucas ya aprobó quedó pendiente, ver el README de esta carpeta.
  *
- * Para regenerar la tira con un diseño nuevo: pisar este archivo con la versión nueva de
- * `marca/animacion-hero/machine.js` (byte a byte, sin editar nada acá) y correr
- * `generar.mjs` de nuevo.
+ * Por qué esta copia entra igual, sin usarse todavía: antes esta carpeta mantenía una
+ * REIMPLEMENTACIÓN a mano de la escena (`escena-determinista.js`), con su propia
+ * cuantización de frecuencias y su propio aspecto de cámara -- una copia paralela que dos
+ * correcciones del diseño (la de esta misión y la anterior) dejaron desincronizada sin que
+ * nada avisara. Esta versión de `machine.js` ya trae `initStatic(canvas, w, h)` +
+ * `renderAt(t, {power, suck})` con las frecuencias ya cuantizadas de fábrica
+ * (`LOOP_T = 24.75`, ver la tabla `F` más abajo), así que el día que se haga el repunte no
+ * hace falta reimplementar nada: alcanza con importarla desde `generar.mjs`.
+ *
+ * Si cambia el diseño en el repo de conocimiento antes de que ese repunte pase: pisar este
+ * archivo con la versión nueva de `marca/animacion-hero/machine.js` (byte a byte, sin
+ * editar nada acá).
  */
 import * as THREE from 'three';
 

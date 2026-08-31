@@ -185,13 +185,21 @@ export function crear_reproductor(img_el, datos) {
      * `scripts/generar-cuadros-maquina/README.md`); acá se convierte ese número de
      * espacio-imagen a espacio-caja.
      *
+     * 🔴 Si la caja todavía no tiene layout (`clientWidth`/`clientHeight` en 0 -- pasa si
+     * el `<img>` disparó `@error` y Vue lo sacó del DOM antes de que esto se llame de
+     * nuevo), NO se devuelve `fraccion_borde` crudo: ese número está en espacio-IMAGEN
+     * (0,905) y quien llama lo trata como espacio-caja. Se devuelve el mismo fallback de
+     * reposo (0,578) que usa `escena-coreografia.js` cuando no hay máquina en absoluto,
+     * para no aterrizar el bloque asentado un cuarto de la caja más abajo de lo que
+     * corresponde.
+     *
      * @returns {number}
      */
     fraccion_borde_inferior() {
       const ancho_caja = img_el.clientWidth
       const alto_caja = img_el.clientHeight
       if (!ancho_caja || !alto_caja) {
-        return fraccion_borde
+        return 0.578
       }
       const alto_dibujado = Math.min(alto_caja, ancho_caja / aspecto)
       const margen_superior = (alto_caja - alto_dibujado) / 2

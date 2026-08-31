@@ -1059,7 +1059,12 @@ export default {
   height: 0;
 }
 
-.hero-escena__person-row--asentado {
+/* Selector de DOS clases a propósito, igual que `.person-settle.is-settled` en el
+   export: `.hero-escena__person-row` (una sola clase) también fija `height` para el
+   breakpoint de teléfono, y una regla de una sola clase acá perdería contra esa por
+   orden de aparición si algún día se reordena la hoja. Con dos clases gana siempre,
+   sin depender de dónde caiga cada bloque. */
+.hero-escena__person-settle.hero-escena__person-row--asentado {
   position: absolute;
   left: 50%;
   top: var(--settle-top, 0px);
@@ -1073,11 +1078,11 @@ export default {
   transform-origin: center;
 }
 
-.hero-escena__person-row--asentado .hero-escena__person {
+.hero-escena__person-settle.hero-escena__person-row--asentado .hero-escena__person {
   height: 78px;
 }
 
-.hero-escena__person-row--asentado .hero-escena__person-note {
+.hero-escena__person-settle.hero-escena__person-row--asentado .hero-escena__person-note {
   max-width: 20ch;
   padding-bottom: 0;
   font-weight: 700;

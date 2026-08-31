@@ -22,8 +22,10 @@
  * README.
  *
  * La máquina de la escena hero, en versión DETERMINISTA y sin bucle: se le pide un
- * cuadro para un instante `t` y lo dibuja. Es la fuente de los WebP pre-renderizados
- * que reproduce `src/components/demo/maquina-cuadros.js` en la página.
+ * cuadro para un instante `t` y lo dibuja. Era la fuente de los WebP pre-renderizados
+ * que reproducía `src/components/demo/maquina-cuadros.js` en la página -- ese módulo se
+ * borró junto con este diseño (ver la cabecera de obsolescencia de arriba); hoy la
+ * máquina se reproduce con `src/components/demo/maquina-animacion.js`.
  *
  * 🔴 ESTE ARCHIVO ES LA ÚLTIMA COPIA VIVA DE LA GEOMETRÍA. El módulo que la
  * renderizaba en vivo (`src/components/demo/escena-maquina.js`) se borró en la misión
