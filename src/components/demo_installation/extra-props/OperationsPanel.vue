@@ -98,24 +98,25 @@ const CHECKLIST = [
 ]
 
 /** Marcador de inicio de "composer install" adentro del tag upload_api. */
-const COMPOSER_START_MARKER = 'Corriendo composer install en hosting'
+const COMPOSER_START_MARKER = 'Corriendo composer install en la demo'
 
 /** Marcador de fin de "composer install" adentro del tag upload_api. */
-const COMPOSER_DONE_MARKER = 'API lista en el hosting'
-
-/** Formato de una línea de log en texto plano: `[HH:mm:ss] [step] mensaje`. */
-const PLAIN_LOG_REGEX = /^\[(\d{2}:\d{2}:\d{2})\]\s+\[(\w+)\]\s*(.*)$/
+const COMPOSER_DONE_MARKER = 'API lista en el servidor de la demo'
 
 /**
  * Panel de operaciones de una instalación de sistema de demo: log en vivo (colapsable, con
  * auto-scroll) + checklist de las etapas del pipeline.
  *
- * 🔴 Lee el log de las DOS formas que usa hoy admin-api, porque los dos pipelines hermanos lo
- * guardan distinto y esta pantalla se programó contra un contrato que todavía se estaba
- * construyendo: `deployment_logs` (array de { step, line, level }, como ClientInstallation) si
- * viene, y si no el campo de texto `log` con líneas `[HH:mm:ss] [step] mensaje` (como DemoUpdate).
- * Cuando el backend quede firme se puede dejar una sola, pero soportar las dos no cuesta nada y
- * evita una pantalla en blanco si el contrato final es el otro.
+ * 🔴 El log viene en `installation.logs`: una fila por línea (`DemoInstallationLog`), cargada por
+ * `DemoInstallation::scopeWithAll()`. NO es `deployment_logs` (eso es de ClientInstallation) ni el
+ * campo de texto `log` (eso es de DemoUpdate, y es el diseño que este pipeline evitó a propósito
+ * porque ya desbordó una columna TEXT y dejó corridas colgadas para siempre).
+ *
+ * Esta pantalla se programó en paralelo con el backend, contra un contrato que todavía no existía,
+ * y adivinó los otros dos nombres: el panel se quedaba en "Esperando líneas de log…" durante los
+ * treinta minutos del pipeline y el checklist entero en gris, que es exactamente el rato en que no
+ * se puede estar a ciegas sobre una corrida que hace `migrate:fresh`. Si alguna vez hay que
+ * soportar otra forma, que sea agregando, no adivinando.
  */
 export default {
   name: 'DemoInstallationOperationsPanel',
@@ -123,7 +124,7 @@ export default {
   components: { SubTaskItem },
 
   props: {
-    /** Objeto completo de la DemoInstallation (status, log / deployment_logs, fechas). */
+    /** Objeto completo de la DemoInstallation (status, logs, fechas, failure_reason). */
     installation: { type: Object, required: true },
   },
 
@@ -136,15 +137,12 @@ export default {
 
   computed: {
     /**
-     * Líneas del log, normalizadas a { step, line, level } venga como venga del backend.
+     * Líneas del log de la corrida, tal como las devuelve el backend.
      *
      * @returns {Array<{step: string, line: string, level: string}>}
      */
     log_lines() {
-      if (Array.isArray(this.installation.deployment_logs)) {
-        return this.installation.deployment_logs
-      }
-      return this.parse_plain_log(this.installation.log || '')
+      return Array.isArray(this.installation.logs) ? this.installation.logs : []
     },
 
     /**
@@ -184,33 +182,6 @@ export default {
   },
 
   methods: {
-    /**
-     * Parsea el log en texto plano (`[HH:mm:ss] [step] mensaje`) al mismo formato estructurado
-     * que devuelve el pipeline de clientes. Las líneas que no matchean se descartan.
-     *
-     * @param {string} raw_log
-     * @returns {Array<{step: string, line: string, level: string}>}
-     */
-    parse_plain_log(raw_log) {
-      const result = []
-      raw_log.split('\n').forEach(function (raw_line) {
-        const trimmed = raw_line.trim()
-        if (!trimmed) {
-          return
-        }
-        const match = trimmed.match(PLAIN_LOG_REGEX)
-        if (!match) {
-          return
-        }
-        const line = match[3]
-        let level = 'info'
-        if (line.indexOf('ERROR:') !== -1 || line.toLowerCase().indexOf('fallido') !== -1) {
-          level = 'error'
-        }
-        result.push({ step: match[2], line: line, level: level })
-      })
-      return result
-    },
 
     /**
      * ¿Esta etapa tiene al menos una línea registrada?
