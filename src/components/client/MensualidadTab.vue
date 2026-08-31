@@ -758,11 +758,35 @@ export default {
       if (!this.record || !this.record.id || !this.cuit_consultable) {
         return
       }
+
+      /* 🔴 Cliente al que pertenece ESTE request. Este componente no se desmonta al
+         cambiar de cliente —hay un watcher sobre `record.id` que solo recarga el
+         snapshot—, así que sin esta guarda una respuesta de ARCA que llega tarde
+         escribiría los datos fiscales del cliente anterior sobre el formulario del
+         que está abierto ahora. Si además se apretara Guardar, la Factura C saldría
+         a nombre del contribuyente equivocado: un comprobante fiscal real mal emitido. */
+      const client_id = this.record.id
+
+      /* Solo dígitos: el campo acepta guiones y puntos, y un CUIT pegado de una
+         planilla o de un mail suele traer espacios. La ruta matchea `[0-9\-\.]+`,
+         así que un espacio daría un 404 que en pantalla parece "ARCA está caída". */
+      const cuit = String(this.form.afip_cuit).replace(/\D/g, '')
+
       self.obteniendo_datos_afip = true
       api
-        .get('/client/' + this.record.id + '/mensualidad/datos-afip/' + encodeURIComponent(this.form.afip_cuit))
+        // Timeout propio de esta llamada: la instancia global de axios no define
+        // ninguno, y sin esto una conexión colgada deja el botón en "Consultando..."
+        // hasta que se recargue la página.
+        .get('/client/' + client_id + '/mensualidad/datos-afip/' + cuit, { timeout: 60000 })
         .then(function (res) {
           self.obteniendo_datos_afip = false
+
+          // Se cambió de cliente mientras ARCA respondía: la respuesta ya no
+          // corresponde al formulario que se está viendo y se descarta entera.
+          if (!self.record || self.record.id !== client_id) {
+            return
+          }
+
           const data = res.data || {}
 
           // ARCA contesta 200 tanto si encontró al contribuyente como si no;
@@ -775,17 +799,37 @@ export default {
           }
 
           const datos = data.datos || {}
+          let completados = 0
+
+          // El CUIT no cuenta como dato completado: solo se normaliza a dígitos,
+          // que es la forma en la que hay que guardarlo para poder facturar.
           if (datos.cuit) {
             self.form.afip_cuit = datos.cuit
           }
           if (datos.razon_social) {
             self.form.afip_razon_social = datos.razon_social
+            completados++
           }
           if (datos.domicilio) {
             self.form.afip_domicilio = datos.domicilio
+            completados++
           }
           if (datos.condicion_iva) {
             self.form.afip_condicion_iva = datos.condicion_iva
+            completados++
+          }
+
+          // Hay contribuyentes que ARCA reconoce pero de los que no devuelve
+          // ninguno de estos tres datos. Sin este aviso el formulario queda igual
+          // que antes y el toast verde haría pensar que el botón no anduvo.
+          if (completados === 0) {
+            window.dispatchEvent(new CustomEvent('admin-spa-toast', {
+              detail: {
+                message: 'ARCA reconoce el CUIT pero no devolvió razón social, domicilio ni condición IVA. Cargalos a mano.',
+                variant: 'warning',
+              },
+            }))
+            return
           }
 
           window.dispatchEvent(new CustomEvent('admin-spa-toast', {
