@@ -81,9 +81,17 @@
     <div class="hero-escena__core">
       <div class="hero-escena__core-anchor">
         <div class="hero-escena__core-glow" aria-hidden="true"></div>
-        <!-- El canvas se monta siempre; si la máquina no se puede reproducir queda
-             vacío y en su lugar se ve el isotipo estático de abajo (ver `sin_maquina`). -->
-        <canvas v-if="!sin_maquina" ref="canvas" class="hero-escena__canvas" aria-hidden="true"></canvas>
+        <!-- El <img> se monta siempre; si la máquina no se puede reproducir (404, el
+             navegador no decodifica WebP animado) el @error la retira y en su lugar se ve
+             el isotipo estático de abajo (ver `sin_maquina`). -->
+        <img
+          v-if="!sin_maquina"
+          ref="maquina_img"
+          class="hero-escena__maquina"
+          alt=""
+          aria-hidden="true"
+          @error="sin_maquina = true"
+        />
         <img
           v-else
           src="../../assets/isotipo-comerciocity.svg"
@@ -92,6 +100,11 @@
           class="hero-escena__isotipo-respaldo"
         />
       </div>
+      <!-- Banda donde aterriza el comerciante tranquilo al asentarse (grupo de la
+           animación corregida, 31/8/2026): vacía en reposo, la ocupa
+           escena-coreografia.js por DOM cuando el progreso pasa el 80%. Ausente del
+           flujo (height:0 en el <style>) para no correr nada mientras está vacía. -->
+      <div class="hero-escena__core-slot"></div>
       <div class="hero-escena__brand">
         <img src="../../assets/isotipo-comerciocity.svg" alt="ComercioCity" />
         <span class="hero-escena__name">Comercio<em>City</em></span>
@@ -114,7 +127,11 @@
         </article>
       </div>
 
-      <div class="hero-escena__person-row">
+      <!-- .hero-escena__person-settle marca este bloque como el que
+           escena-coreografia.js reubica junto a la máquina al final del recorrido
+           (progreso 80%-90%). Apagado en teléfono -- ver el punto 5 del docblock de
+           cabecera de ese módulo. -->
+      <div class="hero-escena__person-row hero-escena__person-settle">
         <svg
           class="hero-escena__person"
           viewBox="0 0 200 200"
@@ -159,7 +176,7 @@
 
 <script>
 import { crear_coreografia } from './escena-coreografia'
-import { precargar_cuadros, crear_reproductor, soltar_cuadros } from './maquina-cuadros'
+import { precargar_maquina, crear_reproductor, soltar_maquina } from './maquina-animacion'
 
 /**
  * Copy de las trece tarjetas, transcrito de contexto/demo_pagina.md (sección del
@@ -204,9 +221,17 @@ const PROBLEMAS = [
 ]
 
 const SOLUCIONES = [
-  { tag: 'Venta', titulo: 'Tienda online', detalle: null },
-  { tag: 'Atención', titulo: 'WhatsApp atendido con IA', detalle: null },
-  { tag: 'Admin', titulo: 'Ventas y facturación automatizadas', detalle: null },
+  /* Los tres detalles de acá abajo se agregaron el 31/8/2026, transcritos literales del
+     export corregido de Claude Design (contexto/demo_pagina.md §6) -- SIN corregir los
+     acentos que faltan ("tenes", "informacion"): decisión explícita de Lucas, consultado,
+     de dejarlos tal cual vinieron en vez de normalizarlos contra el resto de la tarjeta. */
+  { tag: 'Venta', titulo: 'Tienda online', detalle: '100% automatizada, no tenes que mantener nada' },
+  {
+    tag: 'Atención',
+    titulo: 'WhatsApp atendido con IA',
+    detalle: 'Agente humanizado con informacion 100% actualizada, sin que tengas que mantener nada',
+  },
+  { tag: 'Admin', titulo: 'Ventas y facturación automatizadas', detalle: 'Ventas en negro y en blanco con un click' },
   {
     tag: 'Cuentas',
     titulo: 'Cuenta corriente organizada',
@@ -237,14 +262,20 @@ const SOLUCIONES = [
  *
  * 🔴 LA MÁQUINA YA NO SE RENDERIZA EN VIVO (misión 12, piezas 1 y 2). Era una escena
  * de three.js que llegaba por un `import()` dinámico, y andaba lenta en la máquina de
- * Lucas. Ahora es una secuencia de cuadros WebP pre-renderizados que se dibujan en un
- * canvas 2D (`maquina-cuadros.js`), y `three` se borró del proyecto entero.
+ * Lucas; `three` se borró del proyecto entero. Primero pasó a ser una secuencia de
+ * cuadros WebP dibujados en un canvas 2D, y desde la animación corregida del 31/8/2026
+ * es un ÚNICO WebP animado con alfa en un `<img>` (`maquina-animacion.js`): el loop se
+ * cerró a 24,75s (antes 12s), y a esa duración la tira de cuadros sueltos ya no entraba
+ * en presupuesto sin bajar a un frame rate visible -- el WebP animado tiene compresión
+ * entre cuadros y el mismo loop entero pesa unos pocos MB. El costo es la pausa exacta
+ * del loop cuando la escena sale de pantalla: un `<img>` no tiene `pause()`. Ver el
+ * docblock de cabecera de `maquina-animacion.js` para el resto del porqué.
  *
- * Por eso el import de la máquina pasó a ser ESTÁTICO: el motivo del dinámico era no
+ * Por eso el import de la máquina es ESTÁTICO: el motivo de un dinámico habría sido no
  * arrastrar three al bundle inicial de una página pública que la mayoría de los leads
- * abre desde el teléfono. El módulo nuevo son unos pocos KB y lo pesado -- la tira de
- * imágenes -- no está en el bundle: se pide por red cuando el lead entra al primer
- * bloque de dolor, cuatro pantallas antes de llegar acá.
+ * abre desde el teléfono, y acá no hay three. El módulo son unos pocos KB y lo pesado --
+ * el WebP -- no está en el bundle: se pide por red cuando el lead entra al primer bloque
+ * de dolor, cuatro pantallas antes de llegar acá.
  */
 export default {
   name: 'EscenaHero',
@@ -274,8 +305,8 @@ export default {
       problemas: PROBLEMAS,
       soluciones: SOLUCIONES,
       /**
-       * true si la máquina no se puede reproducir (la tira de cuadros no cargó, o el
-       * navegador no tiene con qué decodificarla), o si el sistema pide reduced-motion.
+       * true si la máquina no se puede reproducir (el WebP no cargó, o el navegador no
+       * tiene con qué decodificarlo), o si el sistema pide reduced-motion.
        * En los dos casos la escena muestra el isotipo estático en el centro y las
        * tarjetas quedan legibles: es una página pública, un hueco negro o un error en
        * consola no son opciones.
@@ -374,16 +405,17 @@ export default {
     /**
      * Monta la máquina recién cuando la sección se acerca, no al montar el componente.
      *
-     * 🔴 Lo que se está difiriendo cambió de naturaleza (misión 12, pieza 1) pero el
-     * motivo es el mismo. Antes era un chunk de 538 kB con three adentro; ahora es una
-     * tira de imágenes de ~1,3 MB. Esta es una página pública que la mayoría de los
+     * 🔴 Lo que se está difiriendo cambió de naturaleza dos veces (misión 12, pieza 1;
+     * animación corregida, 31/8/2026) pero el motivo es el mismo. Primero era un chunk
+     * de 538 kB con three adentro; después una tira de imágenes de ~1,3 MB; hoy un único
+     * WebP animado de un par de MB. Esta es una página pública que la mayoría de los
      * leads abre desde el teléfono, y este componente vive dentro del slot de una
      * sección que se renderiza siempre: pedir eso en el `mounted()` sería pedirlo junto
      * con la primera pantalla.
      *
      * La diferencia con antes es que ahora la descarga arranca ANTES de este punto, no
      * acá: la dispara ScrollDolor cuando el lead entra al primer bloque de dolor, con
-     * cuatro pantallas por delante. `precargar_cuadros()` es idempotente, así que esta
+     * cuatro pantallas por delante. `precargar_maquina()` es idempotente, así que esta
      * llamada normalmente se engancha a esa descarga en curso en vez de empezar otra.
      * Sigue haciendo falta igual para el lead que llega con la escena ya a la vista.
      *
@@ -415,10 +447,10 @@ export default {
     },
 
     /**
-     * Espera a que la tira de cuadros esté decodificada, monta el reproductor y arranca
-     * la coreografía.
+     * Espera a que el WebP de la máquina esté decodificado, monta el reproductor y
+     * arranca la coreografía.
      *
-     * `precargar_cuadros()` nunca rechaza -- devuelve null si no pudo -- así que el
+     * `precargar_maquina()` nunca rechaza -- devuelve null si no pudo -- así que el
      * `.catch()` es sólo la red de seguridad de un error inesperado. Se resuelve con
      * `.then()`/`.catch()` y no con async/await por la regla del workspace.
      *
@@ -426,14 +458,14 @@ export default {
      */
     arrancar() {
       const self = this
-      precargar_cuadros()
-        .then(function (tira) {
-          if (self.desmontado || !self.$refs.canvas) {
+      precargar_maquina()
+        .then(function (datos) {
+          if (self.desmontado || !self.$refs.maquina_img) {
             return
           }
-          self.maquina = crear_reproductor(self.$refs.canvas, tira)
+          self.maquina = crear_reproductor(self.$refs.maquina_img, datos)
           if (!self.maquina) {
-            /* Sin cuadros que reproducir: el canvas se retira y queda el isotipo
+            /* Sin máquina que mostrar: el <img> se retira y queda el isotipo
                estático. */
             self.sin_maquina = true
           }
@@ -445,7 +477,7 @@ export default {
           }
           self.sin_maquina = true
           /* La coreografía de las tarjetas no depende de la máquina: se arranca igual,
-             así que la escena sigue teniendo su movimiento aunque la tira no cargue. */
+             así que la escena sigue teniendo su movimiento aunque el WebP no cargue. */
           self.arrancar_coreografia()
         })
     },
@@ -455,7 +487,7 @@ export default {
      */
     arrancar_coreografia() {
       const self = this
-      /* En nextTick: si sin_maquina acaba de cambiar, el canvas se retiró del DOM y las
+      /* En nextTick: si sin_maquina acaba de cambiar, el <img> se retiró del DOM y las
          medidas de la coreografía tienen que tomarse sobre el layout ya actualizado. */
       this.$nextTick(function () {
         if (self.desmontado || !self.$refs.raiz || self.coreografia) {
@@ -472,7 +504,7 @@ export default {
     /**
      * Prende el vigía permanente de viewport (grupo 370, correctivo 8, prompt 04,
      * criterio b). Se arranca acá (no en `mounted()`) porque recién acá existen
-     * `coreografia` y (si la tira cargó) `maquina`, que son a quienes hay que pausar.
+     * `coreografia` y (si el WebP cargó) `maquina`, que son a quienes hay que pausar.
      *
      * Mismo margen generoso que `arrancar_cuando_se_acerque()` (una pantalla entera):
      * así los bucles ya están corriendo de nuevo antes de que la escena vuelva a
@@ -555,14 +587,15 @@ export default {
     },
 
     /**
-     * Apaga todo: el bucle de la coreografía, el del reproductor de la máquina y sus
-     * listeners de resize, y suelta los cuadros decodificados.
+     * Apaga todo: el bucle de la coreografía (que además devuelve el comerciante
+     * asentado a su lugar de origen si estaba reubicado) y el reproductor de la máquina.
      *
-     * Antes lo que había que soltar acá era el contexto WebGL, porque el navegador tiene
-     * un tope por pestaña y terminaba matando los viejos a la fuerza. Ese problema ya no
-     * existe, pero el de fondo sí y es del mismo tipo: los ImageBitmap de la tira son
-     * ~120 MB de píxeles crudos, y sin este `destruir()` se quedarían vivos después de
-     * que el lead se fue de la página.
+     * Antes lo que había que soltar acá con cuidado eran ~120 MB de `ImageBitmap`
+     * crudos (la tira de cuadros) o, más atrás, un contexto WebGL. Un único `<img>` no
+     * arrastra ese problema: el navegador libera sus píxeles decodificados solo, como
+     * con cualquier otra imagen que sale del DOM. `maquina.destruir()` sigue existiendo
+     * para llevar la cuenta de cuántos reproductores comparten la precarga, no porque
+     * haga falta liberar memoria a mano.
      *
      * @returns {void}
      */
@@ -581,7 +614,7 @@ export default {
          vuelo que nadie va a reclamar (el lead entró a los bloques de dolor, la descarga
          arrancó, y se fue antes de llegar hasta acá). `destruir()` no cubre ese caso
          porque nunca hubo qué destruir. */
-      soltar_cuadros()
+      soltar_maquina()
     },
   },
 }
@@ -601,10 +634,10 @@ export default {
      Donde el export repetía un color que la página ya tiene como token, se usa el token
      (--demo-color-texto, --demo-color-texto-suave).
 
-   Las variables --p, --suck, --out, --power, --calm y --stress son la interfaz entre la
-   coreografía (JS) y estos estilos: las escribe escena-coreografia.js en el elemento raíz
-   de este componente. Los valores de acá son los de reposo, para el primer frame y para
-   el caso en que la coreografía no arranque. */
+   Las variables --p, --suck, --out, --power, --calm, --stress y --settled son la interfaz
+   entre la coreografía (JS) y estos estilos: las escribe escena-coreografia.js en el
+   elemento raíz de este componente. Los valores de acá son los de reposo, para el primer
+   frame y para el caso en que la coreografía no arranque. */
 .hero-escena {
   --p: 0;
   --suck: 0;
@@ -612,6 +645,7 @@ export default {
   --power: 0;
   --calm: 0;
   --stress: 1;
+  --settled: 0;
   --hero-ink: var(--demo-color-texto, #0e1b2e);
   --hero-ink-2: #3c4a5e;
   --hero-ink-dim: var(--demo-color-texto-suave, #76839a);
@@ -924,9 +958,13 @@ export default {
   height: clamp(78px, 15vh, 170px);
 }
 
+/* Altura propia desde la animación corregida (31/8/2026, antes compartía la de la
+   izquierda): más baja porque este bloque se va a reubicar junto a la máquina al
+   asentarse, y ahí ocupa mucho menos que en su fila de origen. */
 .hero-escena__side--right .hero-escena__person-row {
   flex-direction: row-reverse;
   text-align: right;
+  height: clamp(62px, 10.5vh, 118px);
 }
 
 .hero-escena__person {
@@ -963,6 +1001,12 @@ export default {
   will-change: transform;
 }
 
+.hero-escena__person-settle {
+  will-change: transform;
+  position: relative;
+  z-index: 6;
+}
+
 .hero-escena__core {
   position: relative;
   z-index: 3;
@@ -982,13 +1026,70 @@ export default {
   min-height: 0;
   display: grid;
   place-items: center;
+  /* El hueco que deja el comerciante al asentarse no reflowea la columna: la máquina y
+     la marca se separan con transform, así la caja del <img> nunca cambia y el WebP no
+     reinicia su decodificación. Ver el comentario largo sobre .hero-escena__core-slot
+     más abajo. */
+  transform: translateY(calc(var(--settled, 0) * -38px));
 }
 
-.hero-escena__canvas {
+.hero-escena__maquina {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
+  /* El WebP viene a aspecto 1,5 (Lucas ya aceptó el cambio respecto del 1,65306 anterior
+     -- ver marca/animacion-hero/README.md, sección "Cuadros pre-renderizados"): con
+     contain la máquina entra entera, centrada, con algo más de margen vertical que
+     antes en pantallas anchas. */
+  object-fit: contain;
+}
+
+/* Banda donde aterriza el comerciante tranquilo al asentarse (progreso 80%-90%),
+   reubicado por DOM desde escena-coreografia.js. Vacía en reposo -- height:0 para no
+   ocupar espacio ni empujar nada mientras no tiene contenido -- y el bloque que cae
+   adentro se posiciona con --settle-top, que la coreografía calcula una vez que mide la
+   banda real entre la máquina y la marca. Apagada en teléfono: ver el punto 5 del
+   docblock de cabecera de escena-coreografia.js. */
+.hero-escena__core-slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 0;
+}
+
+/* Selector de DOS clases a propósito, igual que `.person-settle.is-settled` en el
+   export: `.hero-escena__person-row` (una sola clase) también fija `height` para el
+   breakpoint de teléfono, y una regla de una sola clase acá perdería contra esa por
+   orden de aparición si algún día se reordena la hoja. Con dos clases gana siempre,
+   sin depender de dónde caiga cada bloque. */
+.hero-escena__person-settle.hero-escena__person-row--asentado {
+  position: absolute;
+  left: 50%;
+  top: var(--settle-top, 0px);
+  width: 188px;
+  margin-left: -94px;
+  height: auto;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 7px;
+  transform-origin: center;
+}
+
+.hero-escena__person-settle.hero-escena__person-row--asentado .hero-escena__person {
+  height: 78px;
+}
+
+.hero-escena__person-settle.hero-escena__person-row--asentado .hero-escena__person-note {
+  max-width: 20ch;
+  padding-bottom: 0;
+  font-weight: 700;
+  color: var(--hero-ink-2);
+  font-size: clamp(14px, 1.1vw, 18px);
+  line-height: 1.32;
+  letter-spacing: -0.015em;
 }
 
 /* Respaldo cuando la máquina no se puede reproducir y bajo reduced-motion: el isotipo
@@ -1022,6 +1123,9 @@ export default {
   display: flex;
   align-items: center;
   gap: 10px;
+  /* Se corre hacia abajo en espejo del -38px de .hero-escena__core-anchor, para que el
+     hueco que deja el comerciante al asentarse se reparta entre los dos sin reflow. */
+  transform: translateY(calc(var(--settled, 0) * 18px));
 }
 
 .hero-escena__brand img {
@@ -1049,6 +1153,7 @@ export default {
   color: var(--hero-ink-dim);
   text-align: center;
   margin: 0;
+  transform: translateY(calc(var(--settled, 0) * 18px));
 }
 
 .hero-escena__footer {
@@ -1201,6 +1306,13 @@ export default {
   .hero-escena__side--right .hero-escena__person-row {
     flex-direction: row;
     text-align: left;
+    /* Pisa el clamp(62px,10.5vh,118px) de escritorio: esa altura más baja existe para
+       cuando el bloque se reubica al asentarse, y acá el asentamiento está apagado (ver
+       set_eje() en escena-coreografia.js), así que este lado vuelve a valer lo mismo que
+       el de la izquierda. Mismo selector de dos clases que la regla de escritorio -- si
+       fuera de una sola, la especificidad de esa regla ganaría igual estando antes en la
+       hoja. */
+    height: clamp(44px, 6.5vh, 64px);
   }
 
   /* El comerciante se queda (es medio mensaje de cada lado) pero chico, y su nota se va:
@@ -1211,6 +1323,17 @@ export default {
 
   .hero-escena__person-note {
     display: none;
+  }
+
+  /* El asentamiento está apagado en este ancho (ver el punto 5 del docblock de cabecera
+     de escena-coreografia.js): --settled nunca deja de ser 0 acá, pero por las dudas
+     -- por ejemplo si alguien entra ya con progreso avanzado y después achica la
+     ventana -- se neutralizan los corrimientos igual, en vez de confiar en que el JS
+     llegue a tiempo. */
+  .hero-escena__core-anchor,
+  .hero-escena__brand,
+  .hero-escena__core-sub {
+    transform: none;
   }
 
   .hero-escena__footer {

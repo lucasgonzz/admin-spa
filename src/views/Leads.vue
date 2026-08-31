@@ -116,15 +116,20 @@
         >
           <i class="bi bi-calendar-check" aria-hidden="true" />
         </button>
-        <button
-          type="button"
+        <!--
+          Catálogo de demos: desde la misión demos-instalacion-y-ecommerce (31/8/2026) tiene
+          ruta propia en el módulo Demos, así que este botón navega en vez de abrir un modal.
+          Es un router-link y no un botón con @click para que se pueda abrir en otra pestaña
+          con ctrl+click, como cualquier link del admin.
+        -->
+        <router-link
           class="btn btn-outline-primary btn-sm"
+          to="/demos/catalogo"
           title="Gestionar catálogo de demos"
           aria-label="Gestionar catálogo de demos"
-          @click="on_open_demo_modal"
         >
           <i class="bi bi-window-sidebar" aria-hidden="true" />
-        </button>
+        </router-link>
         <!-- Botón marcar leads pendientes de revisión (sin respuesta o con error de envío/generación).
              No envía ni genera nada: solo marca para que aparezcan en rojo en la grilla. -->
         <button
@@ -512,29 +517,6 @@
       </template>
     </resource-view>
 
-    
-
-    <base-modal
-      :show="show_demo_modal"
-      title="Gestión de demos"
-      size="xl"
-      @update:show="on_update_demo_modal"
-      @close="on_close_demo_modal"
-    >
-      <resource-view model_name="demo" />
-      <template #footer>
-        <button
-          type="button"
-          class="btn btn-secondary btn-sm"
-          title="Cerrar gestión de demos"
-          aria-label="Cerrar gestión de demos"
-          @click="on_close_demo_modal"
-        >
-          <i class="bi bi-x-lg" aria-hidden="true" />
-        </button>
-      </template>
-    </base-modal>
-
     <!-- Sidebar lateral de conversación WhatsApp (solo desktop; en mobile se navega a ruta) -->
     <lead-conversation-sidebar
       :lead="sidebar_lead"
@@ -551,7 +533,6 @@ import ResourceView from '@/common-vue/components/view/Index.vue'
 import LeadExtraProps from '@/components/lead/extra-props/Index.vue'
 import LeadResumenTab from '@/components/lead/resumen/Index.vue'
 import LeadContractTab from '@/components/lead/contract/Index.vue'
-import BaseModal from '@/components/ui/BaseModal.vue'
 import LeadConversationSidebar from '@/components/lead/LeadConversationSidebar.vue'
 
 /**
@@ -624,11 +605,9 @@ const EN_CURSO_LIFECYCLE_STATUSES = [
  */
 export default {
   name: 'ViewLeads',
-  components: { ResourceView, LeadExtraProps, LeadResumenTab, LeadContractTab, BaseModal, LeadConversationSidebar },
+  components: { ResourceView, LeadExtraProps, LeadResumenTab, LeadContractTab, LeadConversationSidebar },
   data() {
     return {
-      /** Controla visibilidad del modal para gestionar catálogo de demos. */
-      show_demo_modal: false,
       /** Pestañas extra del modal de leads usando la API nueva `model_extra_tabs`. */
       model_extra_tabs: lead_model_extra_tabs,
       /** Orden de la barra de pestañas del modal (Resumen → Operaciones → Demo → Basico → Contrato → WhatsApp). */
@@ -1449,28 +1428,6 @@ export default {
       this.$store.commit('lead/add_filter', { type: 'select', key: 'status', igual_que: opt.value })
       this.$store.commit('lead/set_filter_page', 1)
       this.$store.dispatch('lead/run_filter', { page: 1 })
-    },
-    /**
-     * Abre modal fullscreen con el CRUD de demos.
-     * @returns {void}
-     */
-    on_open_demo_modal() {
-      this.show_demo_modal = true
-    },
-    /**
-     * Sincroniza el estado show del modal de demos.
-     * @param {boolean} value nuevo estado de visibilidad.
-     * @returns {void}
-     */
-    on_update_demo_modal(value) {
-      this.show_demo_modal = value
-    },
-    /**
-     * Cierra modal de demos.
-     * @returns {void}
-     */
-    on_close_demo_modal() {
-      this.show_demo_modal = false
     },
     /**
      * Sincroniza en la tabla los cambios recibidos desde acciones extra del modal.

@@ -60,12 +60,23 @@
 
         <div class="demo-scroll-dolor__bloque-pieza" :style="estilo_bloque(progreso, true, indice)">
           <marco-dispositivo :tipo="bloque.marco">
-            <!-- Único bloque con marco combinado (scroll.2): misma pieza en las dos pantallas -->
+            <!-- Único bloque con marco combinado (scroll.2): UNA PIEZA POR PANTALLA.
+                 El mensaje del bloque es que el mismo artículo está en los dos lados —el
+                 sistema y la tienda—, así que las dos pantallas no pueden mostrar el mismo
+                 video: la computadora lleva `bloque.id` (scroll.2) y el teléfono
+                 `bloque.id_telefono` (scroll.2-tel).
+                 El `|| bloque.id` no es defensivo por las dudas: es lo que mantiene el
+                 componente compatible con cualquier bloque combinado que no declare pieza
+                 propia de teléfono, que es como se comportaba hasta ahora. -->
             <template v-if="bloque.marco === 'computadora+telefono'" #computadora>
               <pieza-multimedia :slot_id="bloque.id" :titulo="bloque.titulo_pieza" :media="media" />
             </template>
             <template v-if="bloque.marco === 'computadora+telefono'" #telefono>
-              <pieza-multimedia :slot_id="bloque.id" :titulo="bloque.titulo_pieza" :media="media" />
+              <pieza-multimedia
+                :slot_id="bloque.id_telefono || bloque.id"
+                :titulo="bloque.titulo_pieza_telefono || bloque.titulo_pieza"
+                :media="media"
+              />
             </template>
             <pieza-multimedia
               v-if="bloque.marco !== 'computadora+telefono'"
@@ -184,7 +195,7 @@ import MarcoDispositivo from './MarcoDispositivo.vue'
 import PiezaMultimedia from './PiezaMultimedia.vue'
 import FondoSeccionSticky from './FondoSeccionSticky.vue'
 import EscenaHero from './EscenaHero.vue'
-import { precargar_cuadros } from './maquina-cuadros'
+import { precargar_maquina } from './maquina-animacion'
 
 /**
  * Copy completo del scroll de dolor, transcripto palabra por palabra desde
@@ -192,9 +203,14 @@ import { precargar_cuadros } from './maquina-cuadros'
  * claude-comerciocity. No parafrasear ni ajustar acá: cualquier cambio de
  * texto se hace en ese archivo, no en este componente.
  *
- * Las seis piezas multimedia (scroll.1 a scroll.6) y su marco de dispositivo
- * son las mismas en las dos versiones (contexto/demo_experiencia.md §3.18);
- * lo único que cambia entre dueño y campeón es el texto.
+ * Las piezas multimedia y su marco de dispositivo son las mismas en las dos
+ * versiones (contexto/demo_experiencia.md §3.18); lo único que cambia entre
+ * dueño y campeón es el texto.
+ *
+ * Son SIETE slots para seis bloques: `scroll.1` a `scroll.6`, más `scroll.2-tel`.
+ * El bloque 2 es el único con marco combinado y lleva una pieza por pantalla —el
+ * artículo en el sistema y el mismo artículo en la tienda—, porque ahí el mensaje
+ * ES que el dato está en los dos lados.
  */
 const CONTENIDO_POR_PERFIL = {
   dueno: {
@@ -219,7 +235,16 @@ const CONTENIDO_POR_PERFIL = {
       {
         id: 'scroll.2',
         marco: 'computadora+telefono',
-        titulo_pieza: 'El artículo del sistema publicado en la tienda',
+        titulo_pieza: 'El artículo, cargado en el sistema',
+        /*
+         * Único bloque con DOS piezas, una por pantalla. Es a propósito y es todo el
+         * mensaje del bloque: el mismo artículo, cargado una sola vez, visible en el
+         * sistema y en la tienda (contexto/demo_experiencia.md §3.18 -- el par
+         * computadora+teléfono aparece una sola vez en el scroll, y justamente acá).
+         * Mostrar el mismo video en las dos pantallas decía lo contrario.
+         */
+        id_telefono: 'scroll.2-tel',
+        titulo_pieza_telefono: 'El mismo artículo, ya en la tienda',
         // Duplicación: el mismo artículo cargado tres veces en tres lugares distintos.
         icono: 'bi-copy',
         texto: [
@@ -307,7 +332,16 @@ const CONTENIDO_POR_PERFIL = {
       {
         id: 'scroll.2',
         marco: 'computadora+telefono',
-        titulo_pieza: 'El artículo del sistema publicado en la tienda',
+        titulo_pieza: 'El artículo, cargado en el sistema',
+        /*
+         * Único bloque con DOS piezas, una por pantalla. Es a propósito y es todo el
+         * mensaje del bloque: el mismo artículo, cargado una sola vez, visible en el
+         * sistema y en la tienda (contexto/demo_experiencia.md §3.18 -- el par
+         * computadora+teléfono aparece una sola vez en el scroll, y justamente acá).
+         * Mostrar el mismo video en las dos pantallas decía lo contrario.
+         */
+        id_telefono: 'scroll.2-tel',
+        titulo_pieza_telefono: 'El mismo artículo, ya en la tienda',
         // Duplicación: el mismo artículo cargado tres veces en tres lugares distintos.
         icono: 'bi-copy',
         texto: [
@@ -786,18 +820,18 @@ export default {
          viendo los dolores" -- y el lugar exacto importa: desde el primer bloque de
          dolor hasta la escena hay CUATRO pantallas, que es el tiempo que la tira de
          ~1,3 MB necesita para bajar y decodificarse sin que el lead vea nada.
-         `precargar_cuadros()` es idempotente, así que llamarla en cada cuadro de scroll
+         `precargar_maquina()` es idempotente, así que llamarla en cada cuadro de scroll
          de este bloque no dispara más de una descarga. Va antes del corte de abajo a
          propósito: el tracking espera a que el bloque termine de entrar, la precarga no
          tiene por qué.
 
          🔴 El `p > 0` no es una precaución: FondoSeccionSticky emite una vez al montar,
          con el progreso real (0 si su sección todavía está más abajo). Sin esta guarda
-         la tira se pedía apenas cargaba la página -- medido: los 120 cuadros ya estaban
-         pedidos antes del primer scroll -- o sea compitiendo por el ancho de banda con
-         la primera pantalla, que es exactamente lo contrario de lo que se buscaba. */
+         la máquina se pedía apenas cargaba la página -- o sea compitiendo por el ancho
+         de banda con la primera pantalla, que es exactamente lo contrario de lo que se
+         buscaba. */
       if (p > 0 && this.contenido.bloques.length && bloque_id === this.contenido.bloques[0].id) {
-        precargar_cuadros()
+        precargar_maquina()
       }
 
       if (p < ENTRADA_FIN || this.bloques_trackeados[bloque_id]) {

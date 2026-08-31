@@ -1,10 +1,13 @@
 /**
- * La coreografía de la escena hero (grupo 369, prompt 05): mapea un progreso [0,1] a la
- * posición, la escala y la opacidad de las trece tarjetas, mueve al comerciante de la
- * izquierda y publica las variables CSS que usa el resto de la escena.
+ * La coreografía de la escena hero (grupo 369, prompt 05; retiming y mecánica de
+ * asentamiento agregados en la misión de la animación corregida, 31/8/2026): mapea un
+ * progreso [0,1] a la posición, la escala y la opacidad de las trece tarjetas, mueve al
+ * comerciante de la izquierda, reubica al de la derecha junto a la máquina al final del
+ * recorrido, y publica las variables CSS que usa el resto de la escena.
  *
  * Viene de `marca/animacion-hero/hero.js` del repo de conocimiento. El guion (los BEAT,
- * SUCK y OUT, las curvas, el jitter) se transcribe tal cual. Lo que cambia:
+ * SUCK, OUT y SETTLE, las curvas, el jitter, la mecánica de asentamiento) se transcribe tal
+ * cual. Lo que cambia:
  *
  *  1. **No secuestra el scroll.** El export escuchaba `wheel`, `touchmove` y `keydown`
  *     sobre `window` con `preventDefault` y tenía su propio `advance()`, porque en el HTML
@@ -19,18 +22,32 @@
  *  3. **Se puede apagar**: el `requestAnimationFrame` guarda su id y el `resize` se
  *     retira. El export no hacía ninguna de las dos cosas.
  *  4. **Nada de `window.CCHero`.** El que la crea se queda con la referencia.
+ *  5. **El asentamiento se apaga en teléfono.** En el eje vertical la columna central mide
+ *     20vh y no existe la banda entre la máquina y la marca donde el export ubica el bloque
+ *     asentado -- el cálculo de `--settle-top` daría un valor negativo o superpuesto a la
+ *     marca. Decisión de Lucas (31/8/2026): en `eje === 'v'` el comerciante de la derecha se
+ *     queda en su lugar de siempre, sin reubicarse.
+ *  6. **`visibleBottomFraction()` de `machine.js` no existe acá.** Ese método proyecta la
+ *     caja del objeto 3D con la cámara Three.js vigente -- y `three` se borró del proyecto
+ *     en la misión 12. El número equivalente sale de `maquina.fraccion_borde_inferior()`
+ *     (ver `maquina-animacion.js`), medido una vez sobre los píxeles del asset que se
+ *     shippea, no en tiempo de ejecución.
  */
 
-/* Ritmo del guion, tal cual el export. */
+/* Ritmo del guion, tal cual el export corregido (loop cerrado a 24,75s). */
 const BEAT_0 = 0.05
-const BEAT_STEP = 0.095
-const BEAT_DUR = 0.085
-const SUCK_0 = 0.56
-const SUCK_STEP = 0.018
-const SUCK_DUR = 0.11
-const OUT_0 = 0.7
-const OUT_STEP = 0.03
-const OUT_DUR = 0.14
+const BEAT_STEP = 0.085
+const BEAT_DUR = 0.08
+const SUCK_0 = 0.5
+const SUCK_STEP = 0.016
+const SUCK_DUR = 0.1
+const OUT_0 = 0.63
+const OUT_STEP = 0.026
+const OUT_DUR = 0.115
+/* El 10% final del recorrido es la pausa de asentamiento: el comerciante tranquilo se
+   reubica junto a la máquina entre SETTLE_0 y SETTLE_1 y se queda ahí. */
+const SETTLE_0 = 0.8
+const SETTLE_1 = 0.9
 
 /* Amortiguación interna: el progreso renderizado persigue al que entra. 🔴 Quien llame a
    set_progreso NO tiene que amortiguar de nuevo -- FondoSeccionSticky ya trae la suya y
@@ -103,10 +120,10 @@ function centro_de(el) {
  * Arranca la coreografía dentro de `raiz` (el elemento raíz del componente).
  *
  * @param {Element} raiz
- * @param {object|null} maquina Lo que devuelve crear_reproductor() de maquina-cuadros.js,
- *                              o null si la tira de cuadros no se pudo cargar.
+ * @param {object|null} maquina Lo que devuelve crear_reproductor() de
+ *                              maquina-animacion.js, o null si la tira no se pudo cargar.
  * @param {string} eje 'h' horizontal (desktop) | 'v' vertical (teléfono).
- * @returns {{set_progreso: function, relayout: function, destruir: function}}
+ * @returns {{set_progreso: function, relayout: function, set_eje: function, pausar: function, reanudar: function, destruir: function}}
  */
 export function crear_coreografia(raiz, maquina, eje) {
   let objetivo = 0
@@ -117,7 +134,18 @@ export function crear_coreografia(raiz, maquina, eje) {
   let axis = eje === 'v' ? 'v' : 'h'
 
   const ancla = raiz.querySelector('.hero-escena__core-anchor')
+  const core = raiz.querySelector('.hero-escena__core')
   const lift = raiz.querySelector('.hero-escena__person-lift')
+  const settle = raiz.querySelector('.hero-escena__person-settle')
+  const slot = raiz.querySelector('.hero-escena__core-slot')
+  const brand = raiz.querySelector('.hero-escena__brand')
+
+  /* Dónde vivía `settle` en el template, para devolverlo ahí -- tanto al desasentarse
+     como al destruir la coreografía. Ver el comentario largo de `set_settled()` sobre por
+     qué esta cirugía de DOM es tolerable acá. */
+  const settle_home = settle ? { padre: settle.parentNode, siguiente: settle.nextSibling } : null
+  let settle_on = false
+  const flip = { x: 0, y: 0 }
 
   const cards = []
   raiz.querySelectorAll('.hero-escena__p-card').forEach(function (el) {
@@ -142,7 +170,7 @@ export function crear_coreografia(raiz, maquina, eje) {
      extremos de una fase, donde range()/toFixed() devuelven el mismo string cuadro tras
      cuadro) es trabajo tirado. Se compara el string YA REDONDEADO, no el número crudo:
      dos números que difieren en la sexta cifra decimal redondean al mismo texto. */
-  const ultimo_css = { p: null, suck: null, out: null, power: null, calm: null, stress: null }
+  const ultimo_css = { p: null, suck: null, out: null, power: null, calm: null, stress: null, settled: null }
 
   /**
    * Escribe una variable CSS en la raíz solo si el string cambió desde el cuadro
@@ -175,9 +203,9 @@ export function crear_coreografia(raiz, maquina, eje) {
   }
 
   /**
-   * Recalcula, para cada tarjeta, cuánto tiene que viajar hasta el centro de la máquina.
-   * Se llama al montar y en cada resize: son medidas en píxeles y una rotación de
-   * teléfono las invalida todas.
+   * Recalcula, para cada tarjeta, cuánto tiene que viajar hasta el centro de la máquina, y
+   * -- si corresponde -- dónde va a aterrizar el bloque asentado. Se llama al montar y en
+   * cada resize: son medidas en píxeles y una rotación de teléfono las invalida todas.
    *
    * @returns {void}
    */
@@ -203,6 +231,54 @@ export function crear_coreografia(raiz, maquina, eje) {
       lift_dy = (m.y - centro_de(lift).y) / k
       lift.style.transform = t
     }
+    /* En teléfono no hay banda donde ubicar el bloque asentado (ver el punto 5 del
+       docblock de arriba): no se mide nada y `--settle-top` se queda en lo que tenía. */
+    if (settle && slot && core && brand && !settle_on && axis === 'h') {
+      const t = settle.style.transform
+      settle.style.transform = 'none'
+      /* Mide el bloque ya apilado y lo ubica en la banda que se abre entre la máquina y
+         el logo. */
+      settle.classList.add('hero-escena__person-row--asentado')
+      slot.appendChild(settle)
+      const bh = settle.getBoundingClientRect().height / k
+      const core_top = core.getBoundingClientRect().top / k
+      const vf = maquina && maquina.fraccion_borde_inferior ? maquina.fraccion_borde_inferior() : 0.578
+      const mb = ancla.getBoundingClientRect()
+      const gap_top = (mb.top + mb.height * vf) / k - 38 - core_top
+      const gap_bottom = brand.getBoundingClientRect().top / k + 18 - core_top
+      raiz.style.setProperty('--settle-top', (gap_top + (gap_bottom - gap_top - bh) / 2) + 'px')
+      settle.classList.remove('hero-escena__person-row--asentado')
+      settle_home.padre.insertBefore(settle, settle_home.siguiente)
+      settle.style.transform = t
+    }
+  }
+
+  /**
+   * FLIP: cambia de columna y de layout, y compensa el salto con una traslación que el
+   * `frame()` de abajo relaja a cero. Es un no-op en teléfono: `axis === 'v'` nunca deja
+   * pasar `on = true` (ver `frame()`).
+   *
+   * @param {boolean} on
+   * @returns {void}
+   */
+  function set_settled(on) {
+    if (!settle || !slot || on === settle_on) {
+      return
+    }
+    const k = escala()
+    const a = settle.getBoundingClientRect()
+    settle.style.transform = 'none'
+    if (on) {
+      settle.classList.add('hero-escena__person-row--asentado')
+      slot.appendChild(settle)
+    } else {
+      settle.classList.remove('hero-escena__person-row--asentado')
+      settle_home.padre.insertBefore(settle, settle_home.siguiente)
+    }
+    settle_on = on
+    const b = settle.getBoundingClientRect()
+    flip.x = (a.left + a.width / 2 - (b.left + b.width / 2)) / k
+    flip.y = (a.top + a.height / 2 - (b.top + b.height / 2)) / k
   }
 
   /**
@@ -210,13 +286,13 @@ export function crear_coreografia(raiz, maquina, eje) {
    * @returns {string}
    */
   function fase(p) {
-    if (p < 0.5) {
+    if (p < SUCK_0) {
       return 'caos'
     }
-    if (p < 0.7) {
+    if (p < OUT_0) {
       return 'succion'
     }
-    if (p < 0.9) {
+    if (p < SETTLE_0) {
       return 'salida'
     }
     return 'final'
@@ -265,16 +341,33 @@ export function crear_coreografia(raiz, maquina, eje) {
     })
 
     if (lift) {
-      const d = lift_dy * (1 - in_out(range(p, 0.03, 0.46)))
+      const d = lift_dy * (1 - in_out(range(p, 0.03, 0.42)))
       lift.style.transform = 'translate3d(0,' + d.toFixed(1) + 'px,0)'
+    }
+
+    if (settle) {
+      /* En teléfono `g` nunca pasa de 0: `set_settled(false)` es un no-op si ya estaba
+         apagado, así que esto no hace nada en cada cuadro salvo cuando axis cambia a
+         mitad de recorrido (ver set_eje()). */
+      const g = axis === 'v' ? 0 : in_out(range(p, SETTLE_0, SETTLE_1))
+      set_settled(g > 0.001)
+      escribir_si_cambio('settled', g.toFixed(3))
+      if (settle_on) {
+        const sc = lerp(0.78, 1, g)
+        settle.style.transform =
+          'translate3d(' + (flip.x * (1 - g)).toFixed(1) + 'px,' + (flip.y * (1 - g)).toFixed(1) +
+          'px,0) scale(' + sc.toFixed(3) + ')'
+      } else {
+        settle.style.transform = 'none'
+      }
     }
 
     escribir_si_cambio('p', p.toFixed(4))
     escribir_si_cambio('suck', range(p, SUCK_0, SUCK_0 + 0.14).toFixed(3))
     escribir_si_cambio('out', range(p, OUT_0, 0.9).toFixed(3))
     escribir_si_cambio('power', range(p, 0.02, 0.2).toFixed(3))
-    escribir_si_cambio('calm', range(p, 0.76, 0.94).toFixed(3))
-    escribir_si_cambio('stress', (1 - range(p, 0.66, 0.84)).toFixed(3))
+    escribir_si_cambio('calm', range(p, 0.66, 0.84).toFixed(3))
+    escribir_si_cambio('stress', (1 - range(p, 0.56, 0.74)).toFixed(3))
 
     const ph = fase(p)
     if (raiz.dataset.phase !== ph) {
@@ -318,6 +411,10 @@ export function crear_coreografia(raiz, maquina, eje) {
      * cambió con el breakpoint y los viajes hasta el centro de la máquina ya no son los
      * mismos.
      *
+     * Si el comerciante de la derecha estaba asentado y el teléfono rota a vertical a
+     * mitad de recorrido, se desasienta de una: en 'v' no hay banda donde mostrarlo
+     * asentado, así que se lo devuelve a su lugar de siempre en el mismo cuadro.
+     *
      * @param {string} nuevo 'h' | 'v'
      * @returns {void}
      */
@@ -327,6 +424,13 @@ export function crear_coreografia(raiz, maquina, eje) {
         return
       }
       axis = valor
+      if (axis === 'v' && settle_on) {
+        set_settled(false)
+        escribir_si_cambio('settled', '0.000')
+        if (settle) {
+          settle.style.transform = 'none'
+        }
+      }
       layout()
     },
 
@@ -364,6 +468,12 @@ export function crear_coreografia(raiz, maquina, eje) {
     },
 
     /**
+     * Devuelve el bloque asentado a su lugar de origen en el template antes de cortar --
+     * si el componente se desmonta con el comerciante ya reubicado dentro de
+     * `.hero-escena__core-slot` y nadie lo devuelve, el nodo queda colgado del padre que
+     * Vue puede estar por retirar del DOM. Es la misma cirugía que hace `set_settled()`,
+     * llamada una vez más al final.
+     *
      * @returns {void}
      */
     destruir() {
@@ -373,6 +483,9 @@ export function crear_coreografia(raiz, maquina, eje) {
         raf_id = null
       }
       window.removeEventListener('resize', layout)
+      if (settle_on) {
+        set_settled(false)
+      }
     },
   }
 }

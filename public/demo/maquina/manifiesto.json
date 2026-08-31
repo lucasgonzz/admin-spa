@@ -1,21 +1,24 @@
 {
-  "generado_por": "scripts/generar-cuadros-maquina/generar.mjs",
-  "duracion_s": 12,
-  "aspecto": 1.65306,
+  "generado_por": "re-encode manual con ffmpeg de los PNG del export corregido de Claude Design -- ver scripts/generar-cuadros-maquina/README.md",
+  "duracion_s": 24.75,
+  "aspecto": 1.5,
+  "fraccion_borde": 0.905,
   "perfiles": [
     {
       "nombre": "escritorio",
-      "ancho": 640,
-      "alto": 387,
-      "fps": 10,
-      "cuadros": 120
+      "archivo": "maquina-escritorio.webp",
+      "ancho": 600,
+      "alto": 400,
+      "fps": 12,
+      "bytes": 2039044
     },
     {
       "nombre": "telefono",
-      "ancho": 320,
-      "alto": 194,
-      "fps": 10,
-      "cuadros": 120
+      "archivo": "maquina-telefono.webp",
+      "ancho": 300,
+      "alto": 200,
+      "fps": 6,
+      "bytes": 818662
     }
   ]
 }

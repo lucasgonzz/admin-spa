@@ -15,14 +15,22 @@ export default {
 
   actions: {
     /**
-     * Lista todas las corridas de instalación/actualización de ecommerce (todos los clientes),
-     * para el listado del submódulo "Actualizaciones del ecommerce" (prompt 587).
+     * Lista las corridas de instalación/actualización de ecommerce de todos los CLIENTES, para los
+     * listados de los submódulos "Instalaciones del ecommerce" y "Actualizaciones del ecommerce"
+     * (prompt 587).
+     *
+     * 🔴 `owner=cliente` NO es opcional. Desde el 31/8/2026 una tienda puede pertenecer a un cliente
+     * o a una demo, y el endpoint sin ese parámetro devuelve las dos. Sin el filtro, las corridas de
+     * demo aparecían en las pantallas de clientes con la etiqueta "Cliente #null" (el `client_id`
+     * viene en null y no matchea contra `clients_by_id`), y desde ahí se podía abrir y borrar una
+     * corrida de demo creyendo que era de un cliente. El listado de demos usa `owner=demo`, en
+     * `src/store/demo_installation.js`.
      *
      * @param {object} context Contexto Vuex (no usa commit: sin estado propio).
      * @returns {Promise} Resuelve con { models: ClientEcommerceInstallation[] } (res.data).
      */
     fetch_all(context) {
-      return api.get('/ecommerce-installations')
+      return api.get('/ecommerce-installations?owner=cliente')
     },
 
     /**
