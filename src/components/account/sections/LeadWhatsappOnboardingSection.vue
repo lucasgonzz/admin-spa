@@ -5,9 +5,9 @@
       inmediata) y, tras la demora configurada, el mensaje de bienvenida con la presentación de ComercioCity.
       Tras la segunda respuesta del lead, la sugerencia de Claude se pide tras la demora de sugerencia IA
       (cada mensaje nuevo reinicia el contador; 0 = consulta inmediata). Esa sugerencia se envía por WhatsApp
-      automáticamente y al instante, salvo que el mensaje requiera verificación (porque el lead está en el
-      tramo de agenda o porque le activaste la verificación de mensajes desde la conversación), en cuyo caso
-      espera tu aprobación y usa como respaldo la demora de auto-envío de abajo.
+      automáticamente y al instante, salvo que el mensaje quede marcado para verificación —solo, por el
+      interruptor de abajo, o porque le activaste la verificación de mensajes desde la conversación—, en
+      cuyo caso espera tu aprobación y usa como respaldo la demora de auto-envío de abajo.
       Usá <code>{{ placeholder_nombre }}</code> en las variantes «con nombre» para personalizar el saludo.
     </p>
 
@@ -82,6 +82,33 @@
           intervención humana. Poné un valor alto (por ejemplo varias horas) si querés que, en la práctica,
           ningún mensaje de verificación salga sin que lo revises. Mínimo
           {{ verificacion_agendamiento_auto_send_delay_min }} minutos (por defecto 30). Sin límite superior.
+        </p>
+      </div>
+
+      <div class="mb-3">
+        <div class="form-check">
+          <input
+            id="lead_auto_activar_verificacion_al_solicitar_disponibilidad"
+            v-model="form.auto_activar_verificacion_al_solicitar_disponibilidad"
+            type="checkbox"
+            class="form-check-input"
+            :disabled="saving"
+            @change="on_input_change"
+          />
+          <label class="form-check-label small" for="lead_auto_activar_verificacion_al_solicitar_disponibilidad">
+            Activar sola la verificación de mensajes cuando el lead entra al tramo de agenda
+          </label>
+        </div>
+        <p class="form-text small text-muted mb-0">
+          Si está activado (por defecto), todo lead que pasa a «Solicita disponibilidad» —y hasta «Closer
+          activo»— queda marcado solo para verificación: desde ese momento, cada mensaje que arma Claude para
+          ese lead espera tu aprobación, y las acciones que agendan o cancelan la demo, confirman ingreso o
+          marcan no ingreso también esperan tu OK antes de aplicarse. Se marca una sola vez, al entrar; si
+          después lo apagás desde la conversación, queda apagado. Si está desactivado, ningún lead se marca
+          solo, y esas acciones se aplican en el momento —incluido el efecto real sobre el calendario del
+          closer— sin que las revises antes. En los dos casos podés activar o desactivar la verificación
+          lead por lead desde el botón del escudo en su conversación: eso no depende de esta opción, y
+          siempre gana. Desactivar esta opción tampoco desmarca a los leads que ya quedaron marcados.
         </p>
       </div>
 
@@ -187,6 +214,7 @@ export default {
         welcome_delay_seconds: 60,
         ai_suggestion_delay_seconds: 60,
         verificacion_agendamiento_auto_send_delay_minutes: 30,
+        auto_activar_verificacion_al_solicitar_disponibilidad: true,
       },
       /** Snapshot persistido para detectar cambios. */
       stored_form: null,
@@ -283,6 +311,12 @@ export default {
           data && data.verificacion_agendamiento_auto_send_delay_minutes,
           30
         ),
+        /* Default true: si el campo faltara en la respuesta, "!!(data && data.x)" convertiría ese
+         * default en false y el siguiente "Guardar" persistiría false sin que nadie lo tocara. */
+        auto_activar_verificacion_al_solicitar_disponibilidad:
+          data && typeof data.auto_activar_verificacion_al_solicitar_disponibilidad !== 'undefined'
+            ? !!data.auto_activar_verificacion_al_solicitar_disponibilidad
+            : true,
       }
       self.form = JSON.parse(JSON.stringify(snapshot))
       self.stored_form = JSON.parse(JSON.stringify(snapshot))
@@ -390,6 +424,7 @@ export default {
           welcome_delay_seconds: welcome_delay,
           ai_suggestion_delay_seconds: ai_delay,
           verificacion_agendamiento_auto_send_delay_minutes: verif_agendamiento_delay,
+          auto_activar_verificacion_al_solicitar_disponibilidad: !!self.form.auto_activar_verificacion_al_solicitar_disponibilidad,
         })
         .then(function (res) {
           self.apply_from_response(res.data)
