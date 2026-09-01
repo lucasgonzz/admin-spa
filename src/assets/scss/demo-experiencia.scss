@@ -499,17 +499,26 @@
 // Acotada por ALTO, no solo por ancho (grupo 325, prompt 01): dentro de
 // FondoSeccionSticky el bloque tiene que entrar en 100vh completos, y antes
 // esta pieza solo tenía width:100%, así que en viewports angostos y bajos
-// (portátil 1366x768) el aspect-ratio 16/9 la estiraba de alto más de lo que
-// el bloque podía darle. width: min(...) deriva el ancho a partir del alto
-// máximo permitido (62vh) según la proporción -- el resultado es "acotar por
-// alto" aunque la propiedad que técnicamente cambia sea el ancho, porque
-// aspect-ratio sigue siendo el que fija la relación entre los dos ejes.
-// max-height es la red de seguridad si algún navegador redondea distinto.
+// (portátil 1366x768) se estiraba de alto más de lo que el bloque podía darle.
+// width: min(...) deriva el ancho a partir del alto máximo permitido (62vh).
+//
+// 🔴 LA PROPORCIÓN VIVE EN LA PANTALLA (`-inner`), NO EN EL DISPOSITIVO, y esto
+// costó una tanda entera de piezas mal encuadradas. Hasta el 31/8/2026 el
+// `aspect-ratio: 16/9` estaba acá arriba, sobre una caja con
+// `padding: 10px 10px 22px` y `box-sizing: border-box`: o sea que los 16:9 los
+// cumplía el MARCO, y la pantalla de adentro quedaba con otra proporción.
+// Medido en el navegador: marco 580x326 (1.778 ✅) y pantalla 560x294 (1.903 ❌).
+// Con `object-fit: cover`, un video 16:9 dentro de una caja 1.903 se escala por
+// ancho y **pierde un 7% del alto, recortado arriba y abajo** — el video arranca
+// mostrando la pantalla cortada aunque se haya filmado entera. Lucas lo vio como
+// "arranca con la pantalla recortada" y tenía razón.
+//
+// Con la proporción en `-inner`, el alto del dispositivo pasa a derivarse del
+// ancho (pantalla + padding), así que los `max-height` que había en esta regla y
+// en sus variantes se sacaron: ya no acotaban nada, RECORTABAN.
 .demo-marco__pantalla-compu {
 	position: relative;
 	width: min(100%, calc(62vh * 16 / 9));
-	max-height: 62vh;
-	aspect-ratio: 16 / 9;
 	background: #10131c;
 	border-radius: 12px;
 	padding: 10px 10px 22px;
@@ -530,26 +539,33 @@
 
 .demo-marco__pantalla-compu-inner {
 	width: 100%;
-	height: 100%;
+	aspect-ratio: 16 / 9;
 	border-radius: 6px;
 	overflow: hidden;
-	background: #fff;
+	// 🔴 Antes era #fff, y se veía. Un video escalado a un tamaño fraccionario deja
+	// una costura de medio píxel contra el borde de su caja, y ese blanco se asomaba
+	// como una LÍNEA CLARA en el borde izquierdo de la pieza (reportado por Lucas el
+	// 31/8/2026, con captura). Con el color del marco la costura sigue existiendo y
+	// deja de leerse. No se arregla con `object-fit`: es redondeo de compositor.
+	background: #10131c;
 }
 
 // Pantalla de teléfono: proporción real de dispositivo móvil (9:19.5), con
 // notch simulado arriba.
 //
-// Acotada por ALTO (grupo 325, prompt 01): con ancho 220px y aspect-ratio
-// 9/19.5 el alto real supera los 470px, que en un portátil de 768px de
-// viewport se come todo el espacio disponible del bloque -- por eso el
-// ancho ahora deriva del alto máximo (62vh) igual que en la pantalla de
-// computadora, con 220px como techo aparte (el teléfono nunca fue pensado
-// para verse más ancho que eso). max-height como red de seguridad.
+// Acotada por ALTO (grupo 325, prompt 01): con ancho 220px y 9/19.5 el alto real
+// supera los 470px, que en un portátil de 768px de viewport se come todo el
+// espacio del bloque -- por eso el ancho deriva del alto máximo (62vh) igual que
+// en la computadora, con 220px como techo aparte (el teléfono nunca fue pensado
+// para verse más ancho que eso).
+//
+// 🔴 Misma corrección que la computadora, y por el mismo motivo: la proporción
+// vive en `-inner`. Con el `aspect-ratio` en el dispositivo y
+// `padding: 14px 8px 10px`, la pantalla quedaba en 0.451 contra los 0.462 que
+// pide 9/19.5, y `object-fit: cover` recortaba el video por los costados.
 .demo-marco__pantalla-telefono {
 	position: relative;
 	width: min(100%, 220px, calc(62vh * 9 / 19.5));
-	max-height: 62vh;
-	aspect-ratio: 9 / 19.5;
 	margin: 0 auto;
 	background: #10131c;
 	border-radius: 26px;
@@ -571,10 +587,12 @@
 
 .demo-marco__pantalla-telefono-inner {
 	width: 100%;
-	height: 100%;
+	aspect-ratio: 9 / 19.5;
 	border-radius: 16px;
 	overflow: hidden;
-	background: #fff;
+	// Mismo motivo que en la pantalla de computadora: era #fff y la costura del
+	// escalado se leía como una línea clara en el borde.
+	background: #10131c;
 }
 
 // Composición computadora + teléfono (única combinación, pieza scroll.2): los
@@ -635,7 +653,6 @@
 .demo-marco--protagonista {
 	.demo-marco__pantalla-compu {
 		width: min(100%, calc(72vh * 16 / 9));
-		max-height: 72vh;
 	}
 }
 
@@ -691,8 +708,6 @@
 		// conserva la primera. Mismo patrón que el resto de la página.
 		width: min(100%, calc(min(56vh, calc(100vh - 14.375rem)) * 16 / 9));
 		width: min(100%, calc(min(56vh, calc(100dvh - 14.375rem)) * 16 / 9));
-		max-height: min(56vh, calc(100vh - 14.375rem));
-		max-height: min(56vh, calc(100dvh - 14.375rem));
 	}
 }
 
@@ -703,7 +718,6 @@
 @media (max-width: 767.98px) {
 	.demo-marco__pantalla-compu {
 		width: min(100%, calc(45vh * 16 / 9));
-		max-height: 45vh;
 	}
 
 	// 🔴 En teléfono VERTICAL el que manda es el ANCHO, no el alto: con 16:9, un
@@ -724,7 +738,6 @@
 	// tamaño. Lo que sí gana el video ahí es la pantalla entera para él solo.
 	.demo-marco--protagonista .demo-marco__pantalla-compu {
 		width: min(100%, calc(56vh * 16 / 9));
-		max-height: 56vh;
 		border-radius: 0;
 		padding-left: 0;
 		padding-right: 0;
@@ -732,7 +745,6 @@
 
 	.demo-marco__pantalla-telefono {
 		width: min(100%, 220px, calc(45vh * 9 / 19.5));
-		max-height: 45vh;
 	}
 }
 
