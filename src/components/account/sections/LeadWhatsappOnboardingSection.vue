@@ -73,15 +73,19 @@
           @input="on_input_change"
         />
         <p class="form-text small text-muted mb-0">
-          Es el único control de demora del sistema. Cuando un mensaje que arma Claude requiere verificación
-          —porque el lead está en el tramo de agenda o porque le activaste la verificación de mensajes desde
-          la conversación— queda esperando tu aprobación en el panel. Si nadie lo aprueba dentro de estos
-          minutos, se envía solo, como red de seguridad para que el lead no se enfríe. Los mensajes que NO
-          requieren verificación se envían al instante, sin esperar. Excepciones que nunca se auto-envían
-          (esperan tu OK sí o sí): los mensajes que agendan o cancelan una demo, y los de leads derivados a
-          intervención humana. Poné un valor alto (por ejemplo varias horas) si querés que, en la práctica,
-          ningún mensaje de verificación salga sin que lo revises. Mínimo
-          {{ verificacion_agendamiento_auto_send_delay_min }} minutos (por defecto 30). Sin límite superior.
+          Es el único control de demora del sistema. Cuando un mensaje que arma Claude queda marcado para
+          verificación —porque le activaste la verificación de mensajes desde la conversación, porque el
+          lead está en el tramo de agenda con el interruptor de abajo activado, o porque Claude mismo pidió
+          revisión— queda esperando tu aprobación en el panel. Si nadie lo aprueba dentro de estos minutos,
+          se envía solo, como red de seguridad para que el lead no se enfríe. Los mensajes que NO quedan
+          marcados se envían al instante, sin esperar: eso incluye los que agendan o cancelan una demo,
+          confirman ingreso o marcan no ingreso, si el lead no tiene la verificación activada (ni por el
+          interruptor de abajo ni a mano) — se aplican en el momento, sin pasar por acá. La única excepción
+          que nunca se auto-envía (espera tu OK sí o sí, sin importar esta demora ni el interruptor de
+          abajo) es la de leads derivados a intervención humana. Poné un valor alto (por ejemplo varias
+          horas) si querés que, en la práctica, ningún mensaje marcado para verificación salga sin que lo
+          revises. Mínimo {{ verificacion_agendamiento_auto_send_delay_min }} minutos (por defecto 30). Sin
+          límite superior.
         </p>
       </div>
 
