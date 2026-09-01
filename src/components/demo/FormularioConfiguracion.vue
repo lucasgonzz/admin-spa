@@ -90,6 +90,11 @@
    corrige estas mismas respuestas. Ver el docblock de `preguntas-formulario.js`. */
 import { PREGUNTAS, DEFAULTS } from './preguntas-formulario'
 
+/* Tolerancia para decidir "ya estoy adentro del formulario": mismo criterio y mismo valor que
+   FondoSeccionSticky.vue y avance-guiado.js (Chrome redondea el offset de scroll a píxeles de
+   dispositivo). Ver el comentario largo de mounted() más abajo. */
+const TOLERANCIA_SNAP_PX = 2
+
 /**
  * Formulario de configuración de la demo (Grupo 300 · pagina-inmersiva-demo,
  * prompt 05). Nueve preguntas, todas preseleccionadas con lo que trae el
@@ -158,6 +163,12 @@ export default {
        * pintó la posición inicial.
        */
       sin_transicion: true,
+      /**
+       * El ancestro con scroll real (Element) o `window`, mientras este
+       * componente está montado -- se guarda para poder desuscribirse en
+       * beforeUnmount. Mismo criterio que ExperienciaDemo.vue/FondoSeccionSticky.vue.
+       */
+      scroll_target: null,
     }
   },
 
@@ -166,6 +177,43 @@ export default {
     this.$nextTick(function () {
       self.sin_transicion = false
     })
+
+    /**
+     * Suspende el scroll-snap mandatory del recorrido mientras el lead está
+     * DENTRO del formulario (31/8/2026, reporte de Lucas: en iPhone, Chrome
+     * devolvía el scroll al título justo antes de llegar al botón de enviar,
+     * y ningún lead podía completar el formulario desde ese navegador).
+     *
+     * `.demo-formulario` mide bastante más que una pantalla (nueve preguntas +
+     * botón) y es el ÚLTIMO punto de enganche del recorrido -- el controlador
+     * de avance-guiado.js ya suelta el gesto correctamente cerca del final
+     * (hay_contenido_sin_ver + hay_a_donde_ir), pero eso solo apaga la
+     * INTERCEPCIÓN por JS. `scroll-snap-type: y mandatory` sigue vivo en el
+     * CSS por debajo, sin pasar por ningún JS, y con un solo punto de enganche
+     * en todo el tramo (el título del formulario) algunos navegadores -- medido
+     * por Lucas en Chrome de iPhone, no en Safari -- reenganchan ahí apenas el
+     * gesto nativo termina, justo cuando el borde inferior del formulario
+     * entra en pantalla. Es la misma familia de bug que ya tiene su arreglo
+     * para el interludio (FondoSeccionSticky.revisar_snap_libre/
+     * alternar_snap_libre, sobre la misma clase compartida
+     * demo-scroll-guiado--libre, ya leída por avance-guiado.js vía
+     * scroll_libre()) -- acá se replica con una sola condición porque no hay
+     * nada después del formulario a lo que reengancharse.
+     */
+    this.scroll_target = this.encontrar_ancestro_scroll()
+    this.scroll_target.addEventListener('scroll', this.revisar_snap_libre, { passive: true })
+    this.revisar_snap_libre()
+  },
+
+  beforeUnmount() {
+    if (this.scroll_target) {
+      this.scroll_target.removeEventListener('scroll', this.revisar_snap_libre)
+    }
+    /* El formulario puede desmontarse con el snap todavía suspendido (el lead
+       confirmó estando adentro): si esta clase quedara puesta, el resto del
+       recorrido -- o el próximo lead que reabra la página -- se quedaría sin
+       encuadre. */
+    this.alternar_snap_libre(false)
   },
 
   computed: {
@@ -282,6 +330,52 @@ export default {
         .then(function () {
           self.enviando = false
         })
+    },
+
+    /**
+     * Sube por los ancestros hasta el contenedor que realmente scrollea. Mismo
+     * criterio que ExperienciaDemo.vue/FondoSeccionSticky.vue: en este admin es
+     * <main class="app-main-scroll">, pero no se hardcodea ese selector.
+     *
+     * @returns {Window|Element}
+     */
+    encontrar_ancestro_scroll: function () {
+      let nodo = this.$el ? this.$el.parentElement : null
+      while (nodo && nodo !== document.body) {
+        const overflow_y = window.getComputedStyle(nodo).overflowY
+        if (overflow_y === 'auto' || overflow_y === 'scroll') {
+          return nodo
+        }
+        nodo = nodo.parentElement
+      }
+      return window
+    },
+
+    /**
+     * Suspende (o repone) el scroll-snap del scroller según si el lead ya
+     * entró al formulario. Ver el comentario largo de mounted().
+     *
+     * @returns {void}
+     */
+    revisar_snap_libre: function () {
+      if (!this.$el || typeof this.$el.getBoundingClientRect !== 'function') {
+        return
+      }
+      const rect = this.$el.getBoundingClientRect()
+      this.alternar_snap_libre(rect.top <= TOLERANCIA_SNAP_PX)
+    },
+
+    /**
+     * Prende o apaga la clase que suspende el snap en el scroller compartido.
+     *
+     * @param {boolean} libre
+     * @returns {void}
+     */
+    alternar_snap_libre: function (libre) {
+      if (!this.scroll_target || !this.scroll_target.classList) {
+        return
+      }
+      this.scroll_target.classList.toggle('demo-scroll-guiado--libre', !!libre)
     },
   },
 }
