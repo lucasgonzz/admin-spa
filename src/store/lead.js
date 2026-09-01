@@ -1007,6 +1007,28 @@ export default __base_store({
       })
     },
     /**
+     * Reacciona con un emoji desde el panel sobre un mensaje del hilo, y la reacción
+     * viaja al WhatsApp del lead. Un emoji vacío ('') es cómo se quita la reacción:
+     * es el mismo endpoint, no hay una acción aparte para el quitado.
+     *
+     * Recibe un objeto y no dos argumentos porque una acción de Vuex toma un solo
+     * payload (mismo criterio que approve_message_with_edit).
+     *
+     * @param {Object} context
+     * @param {Object} payload { message_id: number, emoji: string }
+     * @returns {Promise<Object>} modelo lead
+     */
+    react_to_message(context, payload) {
+      const commit = context.commit
+      return api
+        .put('/lead-message/' + payload.message_id + '/reaction', { emoji: payload.emoji })
+        .then((res) => {
+          const model = res.data.model
+          commit('update_lead_en_conversacion', model)
+          return model
+        })
+    },
+    /**
      * Marca como vista la alerta de seguimiento automático en la tabla de leads.
      * @param {Object} context
      * @param {number} lead_id id del lead
