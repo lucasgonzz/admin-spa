@@ -3,7 +3,7 @@
        componentes de formulario del admin (son de interfaz interna y rompen el
        clima de esta página pública). Controles grandes, pensados para el pulgar
        (contexto/demo_experiencia.md §3.16 B: la mayoría entra desde el teléfono). -->
-  <section class="demo-formulario">
+  <section ref="raiz" class="demo-formulario">
     <!-- Encabezado, texto de demo_pagina.md §3: se transcribe, no se reescribe -->
     <header class="demo-formulario__encabezado">
       <h2 class="demo-formulario__titulo">Contanos cómo trabajás</h2>
@@ -199,7 +199,14 @@ export default {
      * demo-scroll-guiado--libre, ya leída por avance-guiado.js vía
      * scroll_libre()) -- acá se replica con una sola condición porque no hay
      * nada después del formulario a lo que reengancharse.
-     */
+     *
+     * 🔴 MEDIDO en el navegador, no asumido: la primera versión de esto usaba
+     * `this.$el` en vez de un `ref` explícito, y `revisar_snap_libre` nunca
+     * hacía nada -- `this.$el` acá es un nodo de TEXTO, no la `<section>`. El
+     * comentario HTML al principio del `<template>` (línea 2) hace que Vue
+     * compile este componente con raíz fragmentada, y `$el` apunta al primer
+     * nodo del fragmento, no al elemento con la clase. Mismo motivo por el
+     * que FondoSeccionSticky.vue usa `ref="seccion"` en vez de `this.$el`. */
     this.scroll_target = this.encontrar_ancestro_scroll()
     this.scroll_target.addEventListener('scroll', this.revisar_snap_libre, { passive: true })
     this.revisar_snap_libre()
@@ -340,7 +347,7 @@ export default {
      * @returns {Window|Element}
      */
     encontrar_ancestro_scroll: function () {
-      let nodo = this.$el ? this.$el.parentElement : null
+      let nodo = this.$refs.raiz ? this.$refs.raiz.parentElement : null
       while (nodo && nodo !== document.body) {
         const overflow_y = window.getComputedStyle(nodo).overflowY
         if (overflow_y === 'auto' || overflow_y === 'scroll') {
@@ -358,10 +365,10 @@ export default {
      * @returns {void}
      */
     revisar_snap_libre: function () {
-      if (!this.$el || typeof this.$el.getBoundingClientRect !== 'function') {
+      if (!this.$refs.raiz) {
         return
       }
-      const rect = this.$el.getBoundingClientRect()
+      const rect = this.$refs.raiz.getBoundingClientRect()
       this.alternar_snap_libre(rect.top <= TOLERANCIA_SNAP_PX)
     },
 
