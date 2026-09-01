@@ -473,6 +473,11 @@ export default __base_store({
       context.commit('set_sort_by', sort_by)
       /** Si hay filtros activos, recargar búsqueda con el nuevo orden. */
       if (context.state.is_filtered) {
+        /* 🔴 El set_filter_page(1) va SÍ o SÍ antes del run_filter: el orden nuevo devuelve la
+           primera página, y sin esto `filter_page` queda en la que estaba. Antes del paginador
+           no se notaba; ahora dejaría el control marcando la página 3 sobre las filas 1 a 25.
+           Es el mismo reseteo que ya hacen todos los demás caminos que cambian filtros. */
+        context.commit('set_filter_page', 1)
         return context.dispatch('run_filter', { page: 1 })
       }
       return context.dispatch('get_models')
@@ -528,10 +533,20 @@ export default __base_store({
      *    `state.models`: ese es el listado base, sin filtrar — ResourceView solo lo muestra cuando
      *    `is_filtered` es false, así que filtrarlo lo rompería en silencio.
      *
-     * El total local se ajusta en ±1, que es una aproximación y no la verdad del servidor. Se
-     * acepta la deriva a propósito: resincronizar de verdad costaría un run_filter por webhook.
-     * Se corrige sola en el próximo refetch (cambiar de página, de filtro, de orden, o volver a
-     * la vista).
+     * 🔴 **Al insertar una fila NO se toca el total.** Es asimétrico a propósito y no es un
+     * descuido. Que un lead no esté en el array visible no significa que sea nuevo: con 25 por
+     * página, la enorme mayoría de los leads del servidor están fuera del tramo cargado, así que
+     * un `+1` por cada mensaje de WhatsApp de un lead ya existente inflaría el total sin techo —
+     * una mañana con la vista abierta y el paginador termina ofreciendo páginas que no existen y
+     * que devuelven la grilla vacía. Como el listado no tiene forma de distinguir "lead nuevo" de
+     * "lead que ya estaba pero no cargado", la única cuenta correcta es no tocar el total y dejar
+     * que lo diga el servidor en el próximo fetch.
+     *
+     * En cambio al SACAR una fila sí se resta 1, porque ahí sí lo sabemos: la fila estaba visible
+     * dentro del listado filtrado, o sea que el total del servidor la incluía, y dejó de
+     * corresponder al filtro. Esa resta es una aproximación local (puede derivar si dos eventos
+     * pisan al mismo lead) y se corrige sola en el próximo refetch: cambiar de página, de filtro,
+     * de orden, o volver a la vista.
      *
      * @param {Object} context
      * @param {Object} model
@@ -569,10 +584,7 @@ export default __base_store({
         if (arr.length > per_page) {
           arr.pop()
         }
-        const nuevo_total = (state.total_results || 0) + 1
         commit('set_models', arr)
-        commit('set_total_results', nuevo_total)
-        commit('set_total_pages', total_pages_for(nuevo_total, per_page))
       }
 
       /* --- Listado filtrado: acá sí manda el filtro de estado activo. --- */
@@ -604,10 +616,7 @@ export default __base_store({
           if (filtered_arr.length > filter_per_page) {
             filtered_arr.pop()
           }
-          const total_mas = (state.total_filter_results || 0) + 1
           commit('set_filtered', filtered_arr)
-          commit('set_total_filter_results', total_mas)
-          commit('set_total_filter_pages', total_pages_for(total_mas, filter_per_page))
         }
         /* No está y no corresponde al estado filtrado: no se hace nada (requisito 4). */
       }

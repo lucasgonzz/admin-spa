@@ -864,7 +864,11 @@ export default {
       this.$store.dispatch('lead/run_filter', { page: this.$store.state.lead.filter_page })
     } else {
       /* 🔴 `_get_models` y no `get_models`: este último commitea set_page(1), así que volver
-         de la conversación de un lead estando en la página 4 te tiraría siempre a la 1. */
+         de la conversación de un lead estando en la página 4 te tiraría siempre a la 1.
+         Lo único que hay que replicar a mano de `get_models` es el limpiado de la selección:
+         si no, las filas tildadas sobreviven a la ida y vuelta a la conversación y el operador
+         puede accionar en masa sobre filas que ya no cree tener elegidas. */
+      this.$store.commit('lead/set_selected', [])
       this.$store.dispatch('lead/_get_models')
     }
     this.$store.dispatch('lead/fetch_unread_badges')
@@ -1513,6 +1517,11 @@ export default {
       if (conv && model && model.id && conv.id == model.id) {
         this.$store.commit('lead/update_lead_en_conversacion', model)
       }
+      /* Editar el lead a mano puede haberle cambiado el estado, y ese es el único camino de
+         cambio de estado que no pasa por el socket. Sin esto, mover un lead de Calificado a
+         Demo agendada desde el modal deja las dos tarjetas con el número viejo hasta que algo
+         más dispare un refresco. */
+      this.$store.dispatch('lead/fetch_status_cards')
     },
     /**
      * Abre el modal del lead reutilizando el handler de fila del ResourceView principal.

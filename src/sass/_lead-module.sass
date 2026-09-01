@@ -254,6 +254,8 @@
 		border-left-width: 4px
 		border-radius: 0.5rem
 		background: transparent
+		color: inherit
+		cursor: pointer
 		transition: box-shadow 0.15s ease-in-out, background-color 0.15s ease-in-out
 
 		&:hover
@@ -283,7 +285,8 @@
 		font-size: 0.72rem
 		line-height: 1.1
 
-	/* Tablet (768-1024): dos columnas, dos filas. */
+	// A partir de 576px entran dos por fila; de 992 para arriba, las cuatro en una sola.
+	// O sea que en tablet angosta (768-991) son dos columnas y en tablet ancha (992-1024) ya son cuatro.
 	@media (min-width: 576px)
 		.lead-status-cards
 			grid-template-columns: repeat(2, minmax(0, 1fr))

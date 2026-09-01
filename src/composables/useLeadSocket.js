@@ -3,6 +3,18 @@ import api from '@/utils/axios'
 import router from '@/router'
 
 /**
+ * Debounce del GET /lead/status-cards. Más largo que el de badges (450 ms) porque la query es
+ * bastante más cara y los números de las tarjetas cambian mucho menos seguido.
+ */
+const STATUS_CARDS_DEBOUNCE_MS = 1500
+
+/**
+ * Tope de espera del mismo refresco: por más seguido que lleguen los eventos, entre dos
+ * refrescos de tarjetas nunca pasa más que esto.
+ */
+const STATUS_CARDS_MAX_ESPERA_MS = 6000
+
+/**
  * Suscripción Pusher al canal compartido `leads.admins`.
  *
  * Eventos:
@@ -25,6 +37,8 @@ export function useLeadSocket(options) {
   let mark_read_if_viewing_debounce_timer = null
   /** Debounce del GET /lead/status-cards (tarjetas de estado arriba de la grilla). */
   let status_cards_debounce_timer = null
+  /** Momento del primer pedido de refresco de tarjetas de la ráfaga actual (null si no hay ráfaga). */
+  let status_cards_primer_pedido_at = null
 
   /**
    * true si el admin está en la grilla de Leads (ruta `leads`, no conversación fullscreen).
@@ -151,13 +165,31 @@ export function useLeadSocket(options) {
     if (!is_admin_viewing_leads_grid()) {
       return
     }
+    /* 🔴 Tope de espera. Un debounce que se reprograma en cada evento se muere de hambre justo
+       cuando más importa: con varios leads conversando a la vez, los eventos llegan a menos de
+       1500 ms de distancia y el timer nunca llega a disparar, así que las tarjetas se congelan
+       en el momento de mayor movimiento. Con este tope, entre dos refrescos nunca pasan más de
+       STATUS_CARDS_MAX_ESPERA_MS por más seguido que lleguen los eventos. */
+    if (status_cards_primer_pedido_at == null) {
+      status_cards_primer_pedido_at = Date.now()
+    }
+    if (Date.now() - status_cards_primer_pedido_at >= STATUS_CARDS_MAX_ESPERA_MS) {
+      if (status_cards_debounce_timer) {
+        clearTimeout(status_cards_debounce_timer)
+        status_cards_debounce_timer = null
+      }
+      status_cards_primer_pedido_at = null
+      store.dispatch('lead/fetch_status_cards')
+      return
+    }
     if (status_cards_debounce_timer) {
       clearTimeout(status_cards_debounce_timer)
     }
     status_cards_debounce_timer = setTimeout(function () {
       status_cards_debounce_timer = null
+      status_cards_primer_pedido_at = null
       store.dispatch('lead/fetch_status_cards')
-    }, 1500)
+    }, STATUS_CARDS_DEBOUNCE_MS)
   }
 
   /**
@@ -372,6 +404,7 @@ export function useLeadSocket(options) {
         clearTimeout(status_cards_debounce_timer)
         status_cards_debounce_timer = null
       }
+      status_cards_primer_pedido_at = null
       let i = 0
       for (i = 0; i < channels_to_leave.length; i = i + 1) {
         // Los canales privados se registran en Echo con el prefijo "private-"; echo.leave()
