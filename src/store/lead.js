@@ -117,7 +117,12 @@ export default __base_store({
   state: {
     model_name: 'lead',
     use_per_page: true,
-    per_page: 500,
+    /* 25 por página, con paginador debajo de la grilla. Antes era 500, que además era ficción:
+       index_json clampea per_page a 200. */
+    per_page: 25,
+    /* Pisa el 100 del base store para que la búsqueda filtrada pagine igual que el listado base
+       (se puede pisar porque base_state() hace Object.assign({}, base, extra)). */
+    filter_per_page: 25,
     /** Lead abierto en la pestaña de conversación (para refrescar listas coherentes). */
     lead_en_conversacion: null,
     /**

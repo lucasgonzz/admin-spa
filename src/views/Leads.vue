@@ -8,6 +8,7 @@
       :model_properties_nav_order="model_properties_nav_order"
       :highlighted_row_id="sidebar_lead ? sidebar_lead.id : null"
       :danger_row_ids="danger_row_ids"
+      :show_paginator="true"
       @extra-record-updated="on_record_updated"
       @open-conversation="on_open_conversation"
     >
@@ -824,7 +825,9 @@ export default {
     if (this.$store.state.lead.is_filtered) {
       this.$store.dispatch('lead/run_filter', { page: this.$store.state.lead.filter_page })
     } else {
-      this.$store.dispatch('lead/get_models')
+      /* 🔴 `_get_models` y no `get_models`: este último commitea set_page(1), así que volver
+         de la conversación de un lead estando en la página 4 te tiraría siempre a la 1. */
+      this.$store.dispatch('lead/_get_models')
     }
     this.$store.dispatch('lead/fetch_unread_badges')
     this.restore_scroll_position()
@@ -864,6 +867,8 @@ export default {
       this._last_leads_reload_version = this.$store.state.lead.leads_reload_version
       this.$store.commit('lead/set_filters', [])
       this.$store.commit('lead/set_filter_page', 1)
+      /* Volver a Leads desde el menú también vuelve a la primera página del listado base. */
+      this.$store.commit('lead/set_page', 1)
       this.$store.commit('lead/set_filtered', [])
       this.$store.commit('lead/set_is_filtered', false)
       this.$store.commit('lead/set_total_filter_results', 0)
