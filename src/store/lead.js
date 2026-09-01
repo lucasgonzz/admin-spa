@@ -143,6 +143,13 @@ export default __base_store({
      * @type {Record<string, number>}
      */
     unread_by_status: {},
+    /**
+     * Tarjetas de estado arriba de la grilla (GET /lead/status-cards).
+     * @type {Array<{ value: string, text: string, color: string, group: string|null, total: number, sin_responder: number }>}
+     */
+    status_cards: [],
+    /** true mientras el GET de tarjetas de estado está en vuelo. */
+    loading_status_cards: false,
     /** Id de lead con GET conversación en curso (evita duplicados). */
     _conversation_fetch_in_flight: null,
     /** Id del lead cuyo mark-whatsapp-messages-read está en vuelo (null si ninguno). */
@@ -268,6 +275,23 @@ export default __base_store({
         return
       }
       state.unread_by_status = value
+    },
+    /**
+     * Tarjetas de estado tal cual las devuelve GET /lead/status-cards. El SPA no las ordena
+     * ni las inventa: si el payload no es un array, se guarda vacío.
+     *
+     * @param {Object} state
+     * @param {Array|null|undefined} value
+     */
+    set_status_cards(state, value) {
+      state.status_cards = Array.isArray(value) ? value : []
+    },
+    /**
+     * @param {Object} state
+     * @param {boolean} value
+     */
+    set_loading_status_cards(state, value) {
+      state.loading_status_cards = Boolean(value)
     },
     /**
      * @param {Object} state
@@ -1066,6 +1090,33 @@ export default __base_store({
         }
         return context.state.unread_total
       })
+    },
+    /**
+     * GET /lead/status-cards: conteos globales por estado para las tarjetas de arriba de la grilla.
+     *
+     * Nunca rechaza. Si el GET falla se dejan en pantalla las tarjetas anteriores en vez de
+     * vaciarlas: números viejos por unos segundos son mejores que una grilla que parpadea a cero
+     * cada vez que se corta la red.
+     *
+     * @param {Object} context
+     * @returns {Promise<Array>} tarjetas vigentes en el store
+     */
+    fetch_status_cards(context) {
+      const commit = context.commit
+      commit('set_loading_status_cards', true)
+      return api
+        .get('/lead/status-cards')
+        .then(function (res) {
+          if (res.data && Array.isArray(res.data.cards)) {
+            commit('set_status_cards', res.data.cards)
+          }
+          commit('set_loading_status_cards', false)
+          return context.state.status_cards
+        })
+        .catch(function () {
+          commit('set_loading_status_cards', false)
+          return context.state.status_cards
+        })
     },
     /**
      * Marca leídos los mensajes entrantes del lead y refresca modelo.

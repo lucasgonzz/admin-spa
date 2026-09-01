@@ -255,6 +255,16 @@
           </div>
         </div>
 
+        <!-- Tarjetas de estado: cuántos leads hay en cada estado clave y cuántos necesitan
+             respuesta. Los conteos son GLOBALES (no aplican los filtros de columna/fecha),
+             mismo criterio que los badges de no leídos de la barra de arriba. -->
+        <lead-status-cards
+          :cards="lead_status_cards"
+          :active_status_slug="active_status_slug"
+          :loading="loading_status_cards"
+          @select="on_select_status_card"
+        />
+
         <!-- Panel de demos agendadas: visible solo cuando el toggle está activo -->
         <div v-if="show_demos_agendadas" class="card mt-3 mb-3">
           <div class="card-body">
@@ -535,6 +545,7 @@ import LeadExtraProps from '@/components/lead/extra-props/Index.vue'
 import LeadResumenTab from '@/components/lead/resumen/Index.vue'
 import LeadContractTab from '@/components/lead/contract/Index.vue'
 import LeadConversationSidebar from '@/components/lead/LeadConversationSidebar.vue'
+import LeadStatusCards from '@/components/lead/LeadStatusCards.vue'
 
 /**
  * Definición de pestaña extra fuera de `data()` para no recrear el array por instancia.
@@ -606,7 +617,14 @@ const EN_CURSO_LIFECYCLE_STATUSES = [
  */
 export default {
   name: 'ViewLeads',
-  components: { ResourceView, LeadExtraProps, LeadResumenTab, LeadContractTab, LeadConversationSidebar },
+  components: {
+    ResourceView,
+    LeadExtraProps,
+    LeadResumenTab,
+    LeadContractTab,
+    LeadConversationSidebar,
+    LeadStatusCards,
+  },
   data() {
     return {
       /** Pestañas extra del modal de leads usando la API nueva `model_extra_tabs`. */
@@ -726,6 +744,22 @@ export default {
     },
 
     /**
+     * Tarjetas de estado tal cual las devuelve GET /lead/status-cards (orden y colores incluidos).
+     * @returns {Array<{ value: string, text: string, color: string, group: string|null, total: number, sin_responder: number }>}
+     */
+    lead_status_cards() {
+      return this.$store.state.lead.status_cards || []
+    },
+
+    /**
+     * true mientras el GET de tarjetas de estado está en vuelo.
+     * @returns {boolean}
+     */
+    loading_status_cards() {
+      return this.$store.state.lead.loading_status_cards
+    },
+
+    /**
      * true si el viewport es desktop (≥768px).
      * Se evalúa en runtime; en contextos sin window devuelve true por defecto.
      * @returns {boolean}
@@ -797,6 +831,8 @@ export default {
     this.sync_status_nav_from_store()
     /* Totales de no leídos por estado para los badges de la barra de navegación. */
     this.$store.dispatch('lead/fetch_unread_badges')
+    /* Conteos globales por estado para las tarjetas de arriba de la grilla. */
+    this.$store.dispatch('lead/fetch_status_cards')
     /* Restaurar scroll si el usuario volvió desde la conversación WhatsApp de un lead (primera carga). */
     this.restore_scroll_position()
   },
@@ -813,6 +849,8 @@ export default {
     var current_version = this.$store.state.lead.leads_reload_version
     if (current_version !== this._last_leads_reload_version) {
       this.reload_module_from_nav()
+      /* Los conteos de las tarjetas también se refrescan al volver desde el menú. */
+      this.$store.dispatch('lead/fetch_status_cards')
       /* Fix keep-alive: si venimos de una navegación con ?lead_id (ej. desde el panel
          del closer), activated() también tiene que revisar el query param, igual que
          mounted() — antes solo se revisaba acá si era el primer montaje del componente. */
@@ -830,6 +868,7 @@ export default {
       this.$store.dispatch('lead/_get_models')
     }
     this.$store.dispatch('lead/fetch_unread_badges')
+    this.$store.dispatch('lead/fetch_status_cards')
     this.restore_scroll_position()
     /* Fix keep-alive: revisar ?lead_id también en esta rama (ver comentario arriba). */
     this.open_lead_from_query_param()
@@ -1433,6 +1472,35 @@ export default {
       this.$store.commit('lead/add_filter', { type: 'select', key: 'status', igual_que: opt.value })
       this.$store.commit('lead/set_filter_page', 1)
       this.$store.dispatch('lead/run_filter', { page: 1 })
+    },
+    /**
+     * Clic en una tarjeta de estado: filtra la grilla por ese estado reusando el mismo camino
+     * que el botón de la barra de navegación, para que las dos queden sincronizadas.
+     *
+     * Busca la opción del meta por slug porque `on_select_status` necesita `opt.group` para
+     * prender también el botón de grupo (fila 1). Si el meta todavía no cargó, usa la propia
+     * tarjeta, que trae `group` del backend con el mismo criterio.
+     *
+     * Volver a clickear la misma tarjeta re-ejecuta el filtro, no lo apaga: idéntico al botón
+     * de estado de la barra. Para sacar el filtro está "Todos".
+     *
+     * @param {{ value: string, text: string, color: string, group: string|null }} card
+     * @returns {void}
+     */
+    on_select_status_card(card) {
+      if (!card || !card.value) {
+        return
+      }
+      var opciones = this.lead_status_options
+      var opt = null
+      var i = 0
+      for (i = 0; i < opciones.length; i = i + 1) {
+        if (opciones[i] && opciones[i].value === card.value) {
+          opt = opciones[i]
+          break
+        }
+      }
+      this.on_select_status(opt || card)
     },
     /**
      * Sincroniza en la tabla los cambios recibidos desde acciones extra del modal.

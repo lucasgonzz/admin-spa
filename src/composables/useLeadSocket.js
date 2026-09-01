@@ -23,6 +23,8 @@ export function useLeadSocket(options) {
   let list_row_refetch_debounce_timer = null
   /** Debounce del POST mark-whatsapp-messages-read mientras el operador mira el hilo. */
   let mark_read_if_viewing_debounce_timer = null
+  /** Debounce del GET /lead/status-cards (tarjetas de estado arriba de la grilla). */
+  let status_cards_debounce_timer = null
 
   /**
    * true si el admin está en la grilla de Leads (ruta `leads`, no conversación fullscreen).
@@ -95,6 +97,8 @@ export function useLeadSocket(options) {
         const model = res.data && res.data.model ? res.data.model : null
         if (model && model.id) {
           store.dispatch('lead/upsert_model_in_lists', model)
+          /* Acá es donde puede haber cambiado el `status` del lead: refrescar las tarjetas. */
+          schedule_refresh_status_cards()
         }
       }).catch(function () {
         return null
@@ -135,6 +139,28 @@ export function useLeadSocket(options) {
   }
 
   /**
+   * Programa GET /lead/status-cards para refrescar los conteos de las tarjetas de estado.
+   *
+   * Debounce más largo que el de badges (450 ms) porque la query es bastante más cara y los
+   * números cambian mucho menos seguido. Solo corre si el admin está parado en la grilla de
+   * Leads: si está en otra vista, las tarjetas ni se ven.
+   *
+   * @returns {void}
+   */
+  function schedule_refresh_status_cards() {
+    if (!is_admin_viewing_leads_grid()) {
+      return
+    }
+    if (status_cards_debounce_timer) {
+      clearTimeout(status_cards_debounce_timer)
+    }
+    status_cards_debounce_timer = setTimeout(function () {
+      status_cards_debounce_timer = null
+      store.dispatch('lead/fetch_status_cards')
+    }, 1500)
+  }
+
+  /**
    * Fusiona lead en tabla y conversación abierta.
    *
    * @param {Object|null} lead
@@ -154,6 +180,8 @@ export function useLeadSocket(options) {
    */
   function handle_suggestion_created(event_data) {
     apply_lead_row(event_data ? event_data.lead : null)
+    /* Una sugerencia nueva cambia el "sin responder" de la tarjeta de ese estado. */
+    schedule_refresh_status_cards()
     if (event_data && event_data.lead && event_data.lead.id != null) {
       const generating_id = store.state.lead.ai_generating_lead_id
       if (generating_id != null && String(generating_id) === String(event_data.lead.id)) {
@@ -280,6 +308,7 @@ export function useLeadSocket(options) {
       store.commit('lead/set_unread_total', event_data.unread_total)
     } else {
       schedule_refresh_unread_badges()
+      schedule_refresh_status_cards()
     }
   }
 
@@ -338,6 +367,10 @@ export function useLeadSocket(options) {
       if (mark_read_if_viewing_debounce_timer) {
         clearTimeout(mark_read_if_viewing_debounce_timer)
         mark_read_if_viewing_debounce_timer = null
+      }
+      if (status_cards_debounce_timer) {
+        clearTimeout(status_cards_debounce_timer)
+        status_cards_debounce_timer = null
       }
       let i = 0
       for (i = 0; i < channels_to_leave.length; i = i + 1) {
