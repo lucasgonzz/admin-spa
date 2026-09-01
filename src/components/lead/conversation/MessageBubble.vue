@@ -507,6 +507,22 @@
         </div>
         <!-- Hora y estado de entrega dentro de la burbuja (estilo WhatsApp) -->
         <div class="wa-bubble-footer">
+          <!--
+            Disparador de la paleta de reacciones del panel. Va acá adentro y no como una
+            acción flotante al costado porque el pie ya es el carril de las acciones
+            discretas del mensaje y no cambia el alto de ninguna burbuja.
+          -->
+          <button
+            v-if="segment.is_last && puede_reaccionar"
+            type="button"
+            class="btn btn-link wa-react-toggle p-0"
+            :disabled="busy"
+            :title="palette_open ? 'Cerrar la paleta de reacciones' : 'Reaccionar a este mensaje (el lead ve la reacción en WhatsApp)'"
+            aria-label="Reaccionar a este mensaje"
+            @click.stop="on_toggle_reaction_palette"
+          >
+            <i class="bi bi-emoji-smile" aria-hidden="true" />
+          </button>
           <button
             v-if="segment.is_last"
             type="button"
@@ -558,14 +574,77 @@
           </span>
         </div>
       </div>
-      <!-- Reacción del lead sobre este mensaje (estilo pill de WhatsApp) -->
+      <!--
+        Paleta de reacciones rápidas. Va EN FLUJO, hermana de la burbuja, y no
+        `position: absolute`: el contenedor del hilo (.conversation-messages) tiene
+        overflow-y: auto y en CSS no existe el par overflow-y:auto + overflow-x:visible,
+        así que clippea en los dos ejes. Una paleta absoluta se cortaría contra el borde
+        del hilo, y en tablet —que es donde el hilo está más angosto— es donde más se nota.
+        En flujo, con flex-wrap y max-width: 100%, no puede desbordar por construcción.
+
+        Los seis emojis se muestran solo si el mensaje admite una reacción nueva. Cuando no la
+        admite (ventana de 24hs cerrada, por ejemplo) pero ya hay una puesta, la pill sigue
+        abriendo esta paleta y lo único que ofrece es el botón de quitar: antes ofrecía los seis
+        y cada clic se comía un 422.
+      -->
       <div
-        v-if="segment.is_last && has_lead_reaction"
-        class="wa-reaction-pill"
-        :title="lead_reaction_title"
-        aria-label="Reacción del lead"
+        v-if="segment.is_last && palette_open && puede_abrir_paleta"
+        class="wa-reaction-palette"
+        role="group"
+        aria-label="Reaccionar al mensaje"
       >
-        {{ message.lead_reaction_emoji }}
+        <template v-if="puede_reaccionar">
+          <button
+            v-for="emoji in reacciones_rapidas"
+            :key="emoji"
+            type="button"
+            class="wa-reaction-option"
+            :class="{ 'wa-reaction-option--active': emoji === message.admin_reaction_emoji }"
+            :disabled="busy"
+            @click.stop="on_pick_reaction(emoji)"
+          >{{ emoji }}</button>
+        </template>
+        <button
+          v-if="has_admin_reaction"
+          type="button"
+          class="wa-reaction-option wa-reaction-option--clear"
+          :disabled="busy"
+          title="Quitar mi reacción"
+          aria-label="Quitar mi reacción"
+          @click.stop="on_pick_reaction('')"
+        >
+          <i class="bi bi-x-lg" aria-hidden="true" />
+        </button>
+      </div>
+      <!--
+        Reacciones sobre este mensaje (estilo pill de WhatsApp). Son dos ejes distintos que
+        conviven: la del lead sobre nuestro mensaje y la nuestra sobre el suyo. Van en una
+        fila para que no se pisen. La del panel es un <button>: tocarla vuelve a abrir la
+        paleta, que es como se cambia o se quita sin ir a buscar el ícono del pie.
+      -->
+      <div
+        v-if="segment.is_last && (has_lead_reaction || has_admin_reaction)"
+        class="wa-reaction-row"
+      >
+        <div
+          v-if="has_lead_reaction"
+          class="wa-reaction-pill"
+          :title="lead_reaction_title"
+          aria-label="Reacción del lead"
+        >
+          {{ message.lead_reaction_emoji }}
+        </div>
+        <button
+          v-if="has_admin_reaction"
+          type="button"
+          class="wa-reaction-pill wa-reaction-pill--admin"
+          :title="admin_reaction_title"
+          aria-label="Reacción del panel"
+          :disabled="busy"
+          @click.stop="on_toggle_reaction_palette"
+        >
+          {{ message.admin_reaction_emoji }}
+        </button>
       </div>
     </div>
     </div>
@@ -587,6 +666,31 @@ import ImageLightbox from '@/components/common/ImageLightbox.vue'
    reutilizamos para el botón "Copiar lo que falta enviar" del badge de envío parcial. */
 import { copy_text_to_clipboard } from '@/utils/version_notification_clipboard'
 
+/*
+  Paleta de reacciones rápidas del panel. Espejo byte a byte de
+  LeadMessage::REACCIONES_DEL_PANEL en admin-api: si acá se agrega o se cambia un emoji,
+  hay que cambiarlo también allá o el backend lo rechaza con 422.
+
+  Van con escapes Unicode explícitos y no con el glifo pegado: un editor o un git mal
+  configurado se come el VARIATION SELECTOR-16 del corazón y la validación empieza a
+  rechazar reacciones válidas sin que se vea nada raro en el diff.
+*/
+const REACCIONES_RAPIDAS = [
+  '\u{1F44D}', // 👍 pulgar
+  '\u2764\uFE0F', // ❤️ corazón (con selector de variación, como lo manda WhatsApp)
+  '\u{1F602}', // 😂 risa
+  '\u{1F62E}', // 😮 sorpresa
+  '\u{1F622}', // 😢 llanto
+  '\u{1F64F}', // 🙏 gracias
+]
+
+/*
+  Límite propio de Meta para reaccionar a un mensaje. Pasados los 30 días la reacción se
+  descarta del lado de ellos, pero el POST devuelve 200 igual, así que sin esta guarda el
+  panel pinta una reacción que el lead nunca ve.
+*/
+const TREINTA_DIAS_EN_MS = 30 * 24 * 60 * 60 * 1000
+
 /**
  * Burbuja de mensaje de la conversación WhatsApp (lead, setter, sistema / IA).
  */
@@ -600,6 +704,8 @@ export default {
     'toggle_deleted_from_context',
     /** Aprobar con el paquete de acciones editado en el panel de verificación (prompt 323). */
     'aprobar_con_acciones',
+    /** Reaccionar con un emoji desde el panel; cadena vacía significa quitar la reacción. */
+    'reaccionar',
   ],
   props: {
     /** Fila `lead_messages` desde la API. */
@@ -612,6 +718,8 @@ export default {
     auto_send_delay_seconds: { type: Number, default: 0 },
     /** Estado actual (slug) del lead dueño de la conversación, para el panel de verificación. */
     lead_status: { type: String, default: '' },
+    /** true si la ventana de 24hs de Meta sigue abierta; con la ventana cerrada no se puede reaccionar. */
+    whatsapp_window_open: { type: Boolean, default: true },
   },
   data() {
     return {
@@ -633,6 +741,8 @@ export default {
       partial_copy_feedback: false,
       /** Timer que apaga partial_copy_feedback a los 2s, igual patrón que el resto del proyecto. */
       partial_copy_feedback_timer: null,
+      /** true mientras está abierta la paleta de reacciones rápidas de este mensaje. */
+      palette_open: false,
     }
   },
   computed: {
@@ -1126,6 +1236,95 @@ export default {
         }
       }
       return 'El lead reaccionó a este mensaje'
+    },
+    /**
+     * true si un admin ya reaccionó a este mensaje desde el panel.
+     * Es el eje opuesto a has_lead_reaction: los dos pueden estar prendidos a la vez.
+     * @returns {boolean}
+     */
+    has_admin_reaction() {
+      var emoji = this.message.admin_reaction_emoji
+      return typeof emoji === 'string' && emoji.trim() !== ''
+    },
+    /**
+     * Tooltip de la reacción del panel (quién reaccionó y cuándo, si están disponibles).
+     * @returns {string}
+     */
+    admin_reaction_title() {
+      if (!this.has_admin_reaction) {
+        return ''
+      }
+      var quien = this.message.admin_reaction_by_name
+      var base = typeof quien === 'string' && quien.trim() !== ''
+        ? 'Reaccionó ' + quien.trim()
+        : 'Reacción del panel'
+      var at = this.message.admin_reaction_at
+      if (at) {
+        try {
+          var d = new Date(at)
+          if (!isNaN(d.getTime())) {
+            return base + ' · ' + d.toLocaleString('es-AR')
+          }
+        } catch (e) {
+          /* fallback abajo */
+        }
+      }
+      return base
+    },
+    /**
+     * Paleta de emojis que ofrece el panel. Es la constante del módulo, espejo de
+     * LeadMessage::REACCIONES_DEL_PANEL en admin-api.
+     * @returns {Array<string>}
+     */
+    reacciones_rapidas() {
+      return REACCIONES_RAPIDAS
+    },
+    /**
+     * Guarda del frontend: si este mensaje admite que le reaccionemos.
+     *
+     * Es un espejo de las guardas del controller, que siguen siendo las que mandan; acá
+     * sirve para no ofrecer un botón que va a terminar en un 422. Un mensaje que nunca
+     * salió por WhatsApp (sugerencia, rechazado, historial importado) no tiene wamid al
+     * que engancharle la reacción, uno fallido no llegó nunca, los eventos internos del
+     * hilo no existen en WhatsApp, y con la ventana de 24hs cerrada Meta rechaza todo.
+     *
+     * @returns {boolean}
+     */
+    puede_reaccionar() {
+      if (this.is_status_event || this.is_error) {
+        return false
+      }
+      var wamid = this.message.whatsapp_message_id
+      if (typeof wamid !== 'string' || wamid.trim() === '') {
+        return false
+      }
+      if (this.message.whatsapp_delivery_status === 'fallido') {
+        return false
+      }
+      /* Meta no entrega una reacción sobre un mensaje de más de 30 días, pero responde 200
+         al POST igual y avisa después por webhook: sin esta guarda el operador reacciona,
+         la pill se pinta y el lead no ve nada. Un hilo con historia está lleno de mensajes
+         así. El backend la repite y sigue siendo el que manda. */
+      var fecha = this.message.sent_at || this.message.created_at
+      if (fecha) {
+        var d = new Date(fecha)
+        if (!isNaN(d.getTime()) && (Date.now() - d.getTime()) > TREINTA_DIAS_EN_MS) {
+          return false
+        }
+      }
+      return Boolean(this.whatsapp_window_open)
+    },
+    /**
+     * Si tiene sentido abrir la paleta de reacciones de este mensaje.
+     *
+     * Con la ventana de 24hs cerrada ya no se puede reaccionar, pero si quedó una reacción
+     * puesta el operador todavía tiene algo que hacer: quitarla. Por eso la pill sigue
+     * abriendo la paleta y la paleta muestra únicamente el botón de quitar.
+     *
+     * @returns {boolean}
+     */
+    puede_abrir_paleta() {
+      return this.puede_reaccionar || this.has_admin_reaction
     },
     /**
      * Tooltip del check de WhatsApp según whatsapp_check_state.
@@ -1710,10 +1909,20 @@ export default {
     'message.id'() {
       this.editing = false
       this.edited_text = ''
+      this.palette_open = false
     },
     'message.status'() {
       this.editing = false
       this.edited_text = ''
+    },
+    /**
+     * Cuando arranca una operación sobre este mensaje, la paleta se cierra: el resultado
+     * llega por refresh del hilo y dejarla abierta encima del cambio confunde.
+     */
+    busy(nuevo) {
+      if (nuevo) {
+        this.palette_open = false
+      }
     },
   },
   methods: {
@@ -1857,6 +2066,33 @@ export default {
      */
     on_toggle_deleted_from_context() {
       this.$emit('toggle_deleted_from_context')
+    },
+    /**
+     * Abre o cierra la paleta de reacciones rápidas de este mensaje.
+     *
+     * Cerrarla al hacer clic afuera queda fuera de alcance a propósito: el clic en el
+     * ícono del pie o en una opción ya la cierra, y un listener global de document en un
+     * componente que se instancia una vez por mensaje del hilo es justo el tipo de cosa
+     * que después aparece como fuga.
+     *
+     * @returns {void}
+     */
+    on_toggle_reaction_palette() {
+      this.palette_open = !this.palette_open
+    },
+    /**
+     * Pide al padre reaccionar a este mensaje con el emoji elegido.
+     * La cadena vacía es el quitado: no hay un evento aparte para eso.
+     *
+     * @param {string} emoji Emoji de la paleta, o '' para quitar la reacción.
+     * @returns {void}
+     */
+    on_pick_reaction(emoji) {
+      if (this.busy) {
+        return
+      }
+      this.palette_open = false
+      this.$emit('reaccionar', emoji)
     },
     /**
      * Copia al portapapeles el texto de las partes de la sugerencia que no llegaron al
@@ -2338,6 +2574,9 @@ export default {
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  /* 🔴 Las reglas de reacciones para 480px NO van acá: sus reglas base se declaran más abajo
+     en este mismo <style> y, a igual especificidad, gana la última. Una @media no aporta
+     especificidad, así que desde acá no pisaban nada. Están al final del archivo. */
 }
 .wa-badge-tight {
   font-size: 0.9rem;
@@ -2516,7 +2755,6 @@ export default {
   justify-content: center;
   min-width: 1.65rem;
   min-height: 1.35rem;
-  margin-top: -0.55rem;
   padding: 0.1rem 0.35rem;
   font-size: 0.95rem;
   line-height: 1;
@@ -2526,11 +2764,134 @@ export default {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
   z-index: 1;
 }
-.wa-bubble-shell--in .wa-reaction-pill {
+/*
+  Fila que contiene las dos pills (la del lead y la del panel) para que convivan lado a
+  lado sin pisarse. El margin-top negativo y los márgenes laterales vivían antes en
+  .wa-reaction-pill: se mudaron acá porque ahora quien se monta sobre la burbuja es la
+  fila entera, no cada pill por separado.
+*/
+.wa-reaction-row {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-top: -0.55rem;
+  z-index: 1;
+}
+.wa-bubble-shell--in .wa-reaction-row {
   margin-left: 0.45rem;
 }
-.wa-bubble-shell--out .wa-reaction-pill {
+.wa-bubble-shell--out .wa-reaction-row {
   margin-right: 0.45rem;
+}
+/* Pill de la reacción del panel: es un botón (vuelve a abrir la paleta) y lleva fondo y
+   borde propios para distinguirse de un vistazo de la del lead, que es blanca. */
+.wa-reaction-pill--admin {
+  background: #d9fdd3;
+  border-color: rgba(37, 211, 102, 0.55);
+  cursor: pointer;
+}
+.wa-reaction-pill--admin:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+/*
+  Paleta de reacciones rápidas. EN FLUJO, nunca absoluta: el hilo (.conversation-messages)
+  tiene overflow-y: auto, y como en CSS no existe overflow-y:auto + overflow-x:visible,
+  clippea en los dos ejes. Con flex-wrap y max-width: 100% no puede desbordar la burbuja ni
+  el hilo en ninguno de los tres anchos. El costo es que al abrirse empuja el contenido
+  unos 34px, aceptable porque la abre un clic deliberado.
+*/
+.wa-reaction-palette {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem;
+  max-width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.15rem 0.25rem;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+}
+.wa-reaction-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.9rem;
+  min-height: 1.9rem;
+  padding: 0;
+  font-size: 1.05rem;
+  line-height: 1;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.12s, background-color 0.12s;
+}
+.wa-reaction-option:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.05);
+  transform: scale(1.15);
+}
+.wa-reaction-option:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+/* El emoji ya elegido queda marcado con un fondo tenue. */
+.wa-reaction-option--active {
+  background: #d9fdd3;
+}
+/* Quitar la reacción: mismo tamaño que las demás, pero en gris y con ícono. */
+.wa-reaction-option--clear {
+  font-size: 0.8rem;
+  color: #667781;
+}
+/* Disparador de la paleta, discreto en el pie de la burbuja igual que .wa-ctx-toggle. */
+.wa-react-toggle {
+  font-size: 0.72rem;
+  line-height: 1;
+  color: #667781;
+  opacity: 0;
+  text-decoration: none !important;
+  vertical-align: middle;
+  transition: opacity 0.15s;
+}
+.wa-bubble-row:hover .wa-react-toggle {
+  opacity: 0.75;
+}
+.wa-react-toggle:hover {
+  opacity: 1;
+}
+/*
+  Dispositivo táctil: no hay hover, así que el `opacity: 0` de arriba dejaría el disparador
+  invisible y la funcionalidad entera inaccesible. Cubre por capacidad y no por ancho, que es
+  lo que hace falta en una tablet táctil en horizontal (entra en 1024px, no en 480px).
+*/
+@media (hover: none) {
+  .wa-react-toggle {
+    opacity: 0.75;
+  }
+}
+/*
+  🔴 Este bloque va acá, al final, y no arriba con las demás reglas de 480px: sus reglas base
+  (.wa-react-toggle y .wa-reaction-option) se declaran unas líneas más arriba, con la misma
+  especificidad, y una @media no aporta especificidad — desde el bloque de arriba no pisaba
+  nada y las dos reglas eran código muerto.
+
+  La de .wa-react-toggle importa porque el proyecto se verifica REDIMENSIONANDO EL ESCRITORIO,
+  donde el navegador sigue reportando `hover: hover`: sin esta regla, a 360px el disparador
+  queda invisible. En un teléfono real lo salva la @media (hover: none) de acá arriba.
+*/
+@media (max-width: 480px) {
+  .wa-react-toggle {
+    opacity: 0.75;
+  }
+  /* Opciones un toque más chicas para que la paleta entre a 360px sin desbordar. */
+  .wa-reaction-option {
+    min-width: 1.7rem;
+    min-height: 1.7rem;
+    font-size: 1rem;
+  }
 }
 </style>
 

@@ -46,6 +46,20 @@
       </template>
     </view-list>
 
+    <!--
+      Paginador: hermano de la tabla, no hijo. Apagado por defecto (show_paginator) para que
+      los módulos que traen la lista entera de una no cambien de comportamiento.
+    -->
+    <view-pagination
+      v-if="show_paginator"
+      :page="paginator_page"
+      :total_pages="paginator_total_pages"
+      :total_results="paginator_total_results"
+      :per_page="paginator_per_page"
+      :loading="paginator_loading"
+      @paginate="on_paginate"
+    />
+
     <column-filter-modal
       :show="show_filter_modal"
       :field="filter_field"
@@ -91,6 +105,7 @@
 <script>
 import ViewHeader from './header/Index.vue'
 import ViewList from './List.vue'
+import ViewPagination from './Pagination.vue'
 import ColumnFilterModal from '../table/header/column-filter/modal/Index.vue'
 import ModelModal from '../model/Index.vue'
 import TableFab from '../table-fab/Index.vue'
@@ -103,10 +118,11 @@ import { resolve_props_to_show } from '../../helpers/column_preferences_helper'
  */
 export default {
   name: 'ResourceView',
-  emits: ['extra-record-updated', 'open-conversation'],
+  emits: ['extra-record-updated', 'open-conversation', 'paginate'],
   components: {
     ViewHeader,
     ViewList,
+    ViewPagination,
     ColumnFilterModal,
     ModelModal,
     TableFab,
@@ -164,6 +180,15 @@ export default {
     danger_row_ids: {
       type: Array,
       default: function () { return [] },
+    },
+    /**
+     * Muestra el paginador debajo de la tabla. Apagado por defecto: el resto de los módulos del
+     * admin (clientes, versiones, tickets, …) sigue trayendo la lista entera de una y no debe
+     * cambiar de comportamiento por esta prop.
+     */
+    show_paginator: {
+      type: Boolean,
+      default: false,
     },
   },
   data() {
@@ -235,6 +260,42 @@ export default {
     },
     fab_visible() {
       return (this.st.filters && this.st.filters.length > 0) && !this.st.is_filtered
+    },
+    /**
+     * Página que muestra el paginador: la del listado base o la de la búsqueda filtrada,
+     * según qué esté mostrando la tabla (`is_filtered` decide de qué par de contadores leer).
+     * @returns {number}
+     */
+    paginator_page() {
+      return this.st.is_filtered ? this.st.filter_page : this.st.page
+    },
+    /**
+     * Cantidad total de páginas del listado que se está mostrando.
+     * @returns {number}
+     */
+    paginator_total_pages() {
+      return this.st.is_filtered ? (this.st.total_filter_pages || 1) : (this.st.total_pages || 1)
+    },
+    /**
+     * Cantidad total de resultados del listado que se está mostrando.
+     * @returns {number}
+     */
+    paginator_total_results() {
+      return this.st.is_filtered ? (this.st.total_filter_results || 0) : (this.st.total_results || 0)
+    },
+    /**
+     * Filas por página del listado que se está mostrando.
+     * @returns {number}
+     */
+    paginator_per_page() {
+      return this.st.is_filtered ? (this.st.filter_per_page || 25) : (this.st.per_page || 25)
+    },
+    /**
+     * true mientras la petición del listado que se está mostrando está en vuelo.
+     * @returns {boolean}
+     */
+    paginator_loading() {
+      return this.st.is_filtered ? this.st.loading_filtered : this.st.loading
     },
   },
   mounted() {
@@ -364,6 +425,26 @@ export default {
     on_fab_apply() {
       this.$store.commit(this.model_name + '/set_filter_page', 1)
       this.$store.dispatch(this.model_name + '/run_filter', { page: 1 })
+    },
+    /**
+     * Cambia de página en el camino que corresponda: búsqueda filtrada o listado base.
+     *
+     * 🔴 En el listado base despacha `_get_models` y NO `get_models`: este último commitea
+     * set_page(1) antes de pedir, así que pasar a la página 3 volvería siempre a la 1.
+     *
+     * @param {number} page Página destino (1-based).
+     * @returns {void}
+     */
+    on_paginate(page) {
+      if (this.st.is_filtered) {
+        this.$store.commit(this.model_name + '/set_filter_page', page)
+        this.$store.dispatch(this.model_name + '/run_filter', { page: page })
+      } else {
+        this.$store.commit(this.model_name + '/set_page', page)
+        this.$store.dispatch(this.model_name + '/_get_models')
+      }
+      window.scrollTo(0, 0)
+      this.$emit('paginate', page)
     },
     on_model_saved(model) {
       this.$store.dispatch(this.model_name + '/upsert_model_in_lists', model)

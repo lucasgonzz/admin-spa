@@ -228,11 +228,13 @@
             :now_tick="now_tick"
             :auto_send_delay_seconds="ai_suggestion_auto_send_delay_seconds"
             :lead_status="effective_record ? effective_record.status : ''"
+            :whatsapp_window_open="whatsapp_window_open"
             @enviar="on_enviar_sugerencia(msg.id)"
             @guardar_y_enviar="on_guardar_y_enviar_sugerencia(msg.id, $event)"
             @aprobar_con_acciones="on_aprobar_con_acciones(msg.id, $event)"
             @cancelar_envio_automatico="on_cancelar_envio_automatico(msg.id)"
             @toggle_deleted_from_context="on_toggle_deleted_from_context(msg.id)"
+            @reaccionar="on_reaccionar_mensaje(msg.id, $event)"
           />
         </div>
         <!-- Mensajes salientes todavía no confirmados por el backend (envío optimista) -->
@@ -2354,6 +2356,38 @@ export default {
         })
         .catch(function () {
           self.busy_message_id = null
+        })
+    },
+
+    /**
+     * Reacciona con un emoji sobre un mensaje del hilo; la reacción viaja al WhatsApp
+     * del lead. El emoji vacío ('') quita la reacción.
+     *
+     * A propósito no llama a schedule_scroll_to_bottom(): una reacción no es un mensaje
+     * nuevo, y saltar al final del hilo mientras el operador está leyendo arriba es un
+     * defecto, no una comodidad.
+     *
+     * @param {number} message_id Id del mensaje al que se reacciona.
+     * @param {string} emoji Emoji de la paleta, o '' para quitar la reacción.
+     * @returns {void}
+     */
+    on_reaccionar_mensaje(message_id, emoji) {
+      const self = this
+      this.busy_message_id = message_id
+      this.$store
+        .dispatch('lead/react_to_message', { message_id: message_id, emoji: emoji })
+        .then(function (model) {
+          self.busy_message_id = null
+          self.on_record_updated(model)
+        })
+        .catch(function (err) {
+          self.busy_message_id = null
+          /* El motivo que devuelve el backend es lo único que le explica al operador que
+             la ventana de 24hs está cerrada o que Meta rechazó la reacción. */
+          const msg =
+            (err.response && err.response.data && err.response.data.message) ||
+            'No se pudo enviar la reacción.'
+          alert(msg)
         })
     },
 
