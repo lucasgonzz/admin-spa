@@ -471,6 +471,15 @@ export default {
      * @returns {String}
      */
     texto_del_parcial(hito) {
+      // 🔴 El hito de ingreso no es un clip y no tiene tutorial: cae acá cuando el lead pulsó el
+      // link y no llegó a entrar. Sin esta primera rama termina en el texto de más abajo y le
+      // cuenta a Tomás que "vio el tutorial", que es de otra cosa. Va primero porque el hito de
+      // ingreso SÍ declara `evento_esperado` (`DemoHitosService::generar()` le pone
+      // `demo.ingreso`), así que la guarda que sigue no lo ataja.
+      if (hito.tipo === 'ingreso') {
+        return 'Abrió el link y no llegó a entrar'
+      }
+
       if (!hito.evento_esperado) {
         return 'Este clip no tiene una acción que el sistema pueda verificar'
       }
