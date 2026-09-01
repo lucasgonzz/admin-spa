@@ -113,6 +113,69 @@ function apply_viewing_unread_override(state, model) {
   })
 }
 
+/**
+ * Slugs de estado que el operador tiene filtrados ahora, leídos del store (no del componente:
+ * este mismo upsert lo dispara el socket, que no tiene acceso a Leads.vue).
+ *
+ * Cubre los dos formatos que produce la barra de navegación: `igual_que` string (un estado
+ * puntual, o el botón "Solo calificados") y `igual_que` array (un grupo entero — ver
+ * on_select_status_group y el whereIn de SearchController).
+ *
+ * @param {Object} state Estado del módulo lead.
+ * @returns {Array<string>|null} null = no hay filtro de estado (no hay que decidir nada).
+ */
+function active_status_filter_slugs(state) {
+  const filters = state.filters || []
+  let i = 0
+  for (i = 0; i < filters.length; i = i + 1) {
+    if (filters[i] && filters[i].key === 'status') {
+      const value = filters[i].igual_que
+      if (value == null || value === '') {
+        return null
+      }
+      if (Array.isArray(value)) {
+        return value.length ? value.map(String) : null
+      }
+      return [String(value)]
+    }
+  }
+  return null
+}
+
+/**
+ * true si el lead entrante corresponde al filtro de estado activo.
+ *
+ * 🔴 Devuelve true en dos casos "no sé": sin filtro de estado, y payload sin `status`. El
+ * segundo importa: los eventos de Pusher mandan payloads mínimos, y sacar una fila de la
+ * pantalla porque al JSON le faltaba una clave es peor que dejar una fila de más.
+ *
+ * @param {Object} state Estado del módulo lead.
+ * @param {Object} model Lead entrante.
+ * @returns {boolean}
+ */
+function lead_matches_active_status(state, model) {
+  const allowed = active_status_filter_slugs(state)
+  if (!allowed) {
+    return true
+  }
+  if (!model || model.status == null || model.status === '') {
+    return true
+  }
+  return allowed.indexOf(String(model.status)) !== -1
+}
+
+/**
+ * Cantidad de páginas para un total y un tamaño de página dados (mínimo 1).
+ *
+ * @param {number} total
+ * @param {number} per_page
+ * @returns {number}
+ */
+function total_pages_for(total, per_page) {
+  const per = per_page || 25
+  return Math.max(1, Math.ceil((total || 0) / per))
+}
+
 export default __base_store({
   state: {
     model_name: 'lead',
@@ -455,6 +518,21 @@ export default __base_store({
     /**
      * Fusiona fila en listados preservando `messages` si el payload de Pusher no los trae.
      *
+     * Dos reglas además del merge:
+     *
+     * 1. **Página.** Una fila nueva sube al tope solo si el operador está parado en la página 1.
+     *    Con 25 por página, meterle una fila al tope de la página 4 le mostraría un lead que no
+     *    corresponde a ese tramo del listado.
+     * 2. **Filtro de estado (solo en `state.filtered`).** Si hay un estado filtrado, un lead que
+     *    no matchea no entra, y uno visible que dejó de matchear sale. 🔴 Esto NO se le aplica a
+     *    `state.models`: ese es el listado base, sin filtrar — ResourceView solo lo muestra cuando
+     *    `is_filtered` es false, así que filtrarlo lo rompería en silencio.
+     *
+     * El total local se ajusta en ±1, que es una aproximación y no la verdad del servidor. Se
+     * acepta la deriva a propósito: resincronizar de verdad costaría un run_filter por webhook.
+     * Se corrige sola en el próximo refetch (cambiar de página, de filtro, de orden, o volver a
+     * la vista).
+     *
      * @param {Object} context
      * @param {Object} model
      * @returns {void}
@@ -477,28 +555,61 @@ export default __base_store({
         return merged
       }
 
+      /* --- Listado base: sin filtro de estado, solo la regla de página. --- */
       const in_idx = state.models.findIndex(function (m) {
         return m.id == row_model.id
       })
       const arr = state.models.slice()
-      if (in_idx === -1) {
-        arr.unshift(row_model)
-      } else {
+      if (in_idx !== -1) {
         arr.splice(in_idx, 1, merge_lead_row(arr[in_idx], row_model))
+        commit('set_models', arr)
+      } else if (state.page == 1) {
+        const per_page = state.per_page || 25
+        arr.unshift(row_model)
+        if (arr.length > per_page) {
+          arr.pop()
+        }
+        const nuevo_total = (state.total_results || 0) + 1
+        commit('set_models', arr)
+        commit('set_total_results', nuevo_total)
+        commit('set_total_pages', total_pages_for(nuevo_total, per_page))
       }
-      commit('set_models', arr)
 
+      /* --- Listado filtrado: acá sí manda el filtro de estado activo. --- */
       if (state.is_filtered) {
+        const matchea = lead_matches_active_status(state, row_model)
+        const filter_per_page = state.filter_per_page || 25
         const f_idx = state.filtered.findIndex(function (m) {
           return m.id == row_model.id
         })
         const filtered_arr = state.filtered.slice()
-        if (f_idx === -1) {
-          filtered_arr.unshift(row_model)
-        } else {
+
+        if (f_idx !== -1 && matchea) {
+          /* Está y sigue correspondiendo: se actualiza donde está, no sube al tope. */
           filtered_arr.splice(f_idx, 1, merge_lead_row(filtered_arr[f_idx], row_model))
+          commit('set_filtered', filtered_arr)
+        } else if (f_idx !== -1) {
+          /* Está pero dejó de corresponder al estado filtrado: sale de la lista. */
+          filtered_arr.splice(f_idx, 1)
+          const total_menos = Math.max(0, (state.total_filter_results || 0) - 1)
+          commit('set_filtered', filtered_arr)
+          commit('set_selected', state.selected.filter(function (m) {
+            return m.id != row_model.id
+          }))
+          commit('set_total_filter_results', total_menos)
+          commit('set_total_filter_pages', total_pages_for(total_menos, filter_per_page))
+        } else if (matchea && state.filter_page == 1) {
+          /* No está, corresponde, y el operador ve la primera página: entra al tope. */
+          filtered_arr.unshift(row_model)
+          if (filtered_arr.length > filter_per_page) {
+            filtered_arr.pop()
+          }
+          const total_mas = (state.total_filter_results || 0) + 1
+          commit('set_filtered', filtered_arr)
+          commit('set_total_filter_results', total_mas)
+          commit('set_total_filter_pages', total_pages_for(total_mas, filter_per_page))
         }
-        commit('set_filtered', filtered_arr)
+        /* No está y no corresponde al estado filtrado: no se hace nada (requisito 4). */
       }
     },
     /**
