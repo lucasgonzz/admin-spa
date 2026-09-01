@@ -581,22 +581,29 @@
         así que clippea en los dos ejes. Una paleta absoluta se cortaría contra el borde
         del hilo, y en tablet —que es donde el hilo está más angosto— es donde más se nota.
         En flujo, con flex-wrap y max-width: 100%, no puede desbordar por construcción.
+
+        Los seis emojis se muestran solo si el mensaje admite una reacción nueva. Cuando no la
+        admite (ventana de 24hs cerrada, por ejemplo) pero ya hay una puesta, la pill sigue
+        abriendo esta paleta y lo único que ofrece es el botón de quitar: antes ofrecía los seis
+        y cada clic se comía un 422.
       -->
       <div
-        v-if="segment.is_last && palette_open"
+        v-if="segment.is_last && palette_open && puede_abrir_paleta"
         class="wa-reaction-palette"
         role="group"
         aria-label="Reaccionar al mensaje"
       >
-        <button
-          v-for="emoji in reacciones_rapidas"
-          :key="emoji"
-          type="button"
-          class="wa-reaction-option"
-          :class="{ 'wa-reaction-option--active': emoji === message.admin_reaction_emoji }"
-          :disabled="busy"
-          @click.stop="on_pick_reaction(emoji)"
-        >{{ emoji }}</button>
+        <template v-if="puede_reaccionar">
+          <button
+            v-for="emoji in reacciones_rapidas"
+            :key="emoji"
+            type="button"
+            class="wa-reaction-option"
+            :class="{ 'wa-reaction-option--active': emoji === message.admin_reaction_emoji }"
+            :disabled="busy"
+            @click.stop="on_pick_reaction(emoji)"
+          >{{ emoji }}</button>
+        </template>
         <button
           v-if="has_admin_reaction"
           type="button"
@@ -676,6 +683,13 @@ const REACCIONES_RAPIDAS = [
   '\u{1F622}', // 😢 llanto
   '\u{1F64F}', // 🙏 gracias
 ]
+
+/*
+  Límite propio de Meta para reaccionar a un mensaje. Pasados los 30 días la reacción se
+  descarta del lado de ellos, pero el POST devuelve 200 igual, así que sin esta guarda el
+  panel pinta una reacción que el lead nunca ve.
+*/
+const TREINTA_DIAS_EN_MS = 30 * 24 * 60 * 60 * 1000
 
 /**
  * Burbuja de mensaje de la conversación WhatsApp (lead, setter, sistema / IA).
@@ -1287,7 +1301,30 @@ export default {
       if (this.message.whatsapp_delivery_status === 'fallido') {
         return false
       }
+      /* Meta no entrega una reacción sobre un mensaje de más de 30 días, pero responde 200
+         al POST igual y avisa después por webhook: sin esta guarda el operador reacciona,
+         la pill se pinta y el lead no ve nada. Un hilo con historia está lleno de mensajes
+         así. El backend la repite y sigue siendo el que manda. */
+      var fecha = this.message.sent_at || this.message.created_at
+      if (fecha) {
+        var d = new Date(fecha)
+        if (!isNaN(d.getTime()) && (Date.now() - d.getTime()) > TREINTA_DIAS_EN_MS) {
+          return false
+        }
+      }
       return Boolean(this.whatsapp_window_open)
+    },
+    /**
+     * Si tiene sentido abrir la paleta de reacciones de este mensaje.
+     *
+     * Con la ventana de 24hs cerrada ya no se puede reaccionar, pero si quedó una reacción
+     * puesta el operador todavía tiene algo que hacer: quitarla. Por eso la pill sigue
+     * abriendo la paleta y la paleta muestra únicamente el botón de quitar.
+     *
+     * @returns {boolean}
+     */
+    puede_abrir_paleta() {
+      return this.puede_reaccionar || this.has_admin_reaction
     },
     /**
      * Tooltip del check de WhatsApp según whatsapp_check_state.
@@ -2537,20 +2574,9 @@ export default {
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  /*
-    🔴 En teléfono no hay hover: el patrón de .wa-ctx-toggle (opacity: 0 hasta el :hover
-    del row) dejaría el disparador de la paleta invisible en touch y la funcionalidad
-    entera inaccesible desde el celular. Acá se muestra siempre.
-  */
-  .wa-react-toggle {
-    opacity: 0.75;
-  }
-  /* Opciones un toque más chicas para que la paleta entre a 360px sin desbordar. */
-  .wa-reaction-option {
-    min-width: 1.7rem;
-    min-height: 1.7rem;
-    font-size: 1rem;
-  }
+  /* 🔴 Las reglas de reacciones para 480px NO van acá: sus reglas base se declaran más abajo
+     en este mismo <style> y, a igual especificidad, gana la última. Una @media no aporta
+     especificidad, así que desde acá no pisaban nada. Están al final del archivo. */
 }
 .wa-badge-tight {
   font-size: 0.9rem;
@@ -2837,14 +2863,34 @@ export default {
   opacity: 1;
 }
 /*
-  Mismo motivo que la media query de 480px, pero por capacidad del dispositivo y no por
-  ancho: en cualquier pantalla táctil (una tablet en horizontal entra en 1024px y no en
-  480px) no hay hover, y el disparador tiene que verse igual o la funcionalidad queda
-  inaccesible.
+  Dispositivo táctil: no hay hover, así que el `opacity: 0` de arriba dejaría el disparador
+  invisible y la funcionalidad entera inaccesible. Cubre por capacidad y no por ancho, que es
+  lo que hace falta en una tablet táctil en horizontal (entra en 1024px, no en 480px).
 */
 @media (hover: none) {
   .wa-react-toggle {
     opacity: 0.75;
+  }
+}
+/*
+  🔴 Este bloque va acá, al final, y no arriba con las demás reglas de 480px: sus reglas base
+  (.wa-react-toggle y .wa-reaction-option) se declaran unas líneas más arriba, con la misma
+  especificidad, y una @media no aporta especificidad — desde el bloque de arriba no pisaba
+  nada y las dos reglas eran código muerto.
+
+  La de .wa-react-toggle importa porque el proyecto se verifica REDIMENSIONANDO EL ESCRITORIO,
+  donde el navegador sigue reportando `hover: hover`: sin esta regla, a 360px el disparador
+  queda invisible. En un teléfono real lo salva la @media (hover: none) de acá arriba.
+*/
+@media (max-width: 480px) {
+  .wa-react-toggle {
+    opacity: 0.75;
+  }
+  /* Opciones un toque más chicas para que la paleta entre a 360px sin desbordar. */
+  .wa-reaction-option {
+    min-width: 1.7rem;
+    min-height: 1.7rem;
+    font-size: 1rem;
   }
 }
 </style>
