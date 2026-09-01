@@ -113,11 +113,79 @@ function apply_viewing_unread_override(state, model) {
   })
 }
 
+/**
+ * Slugs de estado que el operador tiene filtrados ahora, leídos del store (no del componente:
+ * este mismo upsert lo dispara el socket, que no tiene acceso a Leads.vue).
+ *
+ * Cubre los dos formatos que produce la barra de navegación: `igual_que` string (un estado
+ * puntual, o el botón "Solo calificados") y `igual_que` array (un grupo entero — ver
+ * on_select_status_group y el whereIn de SearchController).
+ *
+ * @param {Object} state Estado del módulo lead.
+ * @returns {Array<string>|null} null = no hay filtro de estado (no hay que decidir nada).
+ */
+function active_status_filter_slugs(state) {
+  const filters = state.filters || []
+  let i = 0
+  for (i = 0; i < filters.length; i = i + 1) {
+    if (filters[i] && filters[i].key === 'status') {
+      const value = filters[i].igual_que
+      if (value == null || value === '') {
+        return null
+      }
+      if (Array.isArray(value)) {
+        return value.length ? value.map(String) : null
+      }
+      return [String(value)]
+    }
+  }
+  return null
+}
+
+/**
+ * true si el lead entrante corresponde al filtro de estado activo.
+ *
+ * 🔴 Devuelve true en dos casos "no sé": sin filtro de estado, y payload sin `status`. El
+ * segundo importa: los eventos de Pusher mandan payloads mínimos, y sacar una fila de la
+ * pantalla porque al JSON le faltaba una clave es peor que dejar una fila de más.
+ *
+ * @param {Object} state Estado del módulo lead.
+ * @param {Object} model Lead entrante.
+ * @returns {boolean}
+ */
+function lead_matches_active_status(state, model) {
+  const allowed = active_status_filter_slugs(state)
+  if (!allowed) {
+    return true
+  }
+  if (!model || model.status == null || model.status === '') {
+    return true
+  }
+  return allowed.indexOf(String(model.status)) !== -1
+}
+
+/**
+ * Cantidad de páginas para un total y un tamaño de página dados (mínimo 1).
+ *
+ * @param {number} total
+ * @param {number} per_page
+ * @returns {number}
+ */
+function total_pages_for(total, per_page) {
+  const per = per_page || 25
+  return Math.max(1, Math.ceil((total || 0) / per))
+}
+
 export default __base_store({
   state: {
     model_name: 'lead',
     use_per_page: true,
-    per_page: 500,
+    /* 25 por página, con paginador debajo de la grilla. Antes era 500, que además era ficción:
+       index_json clampea per_page a 200. */
+    per_page: 25,
+    /* Pisa el 100 del base store para que la búsqueda filtrada pagine igual que el listado base
+       (se puede pisar porque base_state() hace Object.assign({}, base, extra)). */
+    filter_per_page: 25,
     /** Lead abierto en la pestaña de conversación (para refrescar listas coherentes). */
     lead_en_conversacion: null,
     /**
@@ -138,6 +206,13 @@ export default __base_store({
      * @type {Record<string, number>}
      */
     unread_by_status: {},
+    /**
+     * Tarjetas de estado arriba de la grilla (GET /lead/status-cards).
+     * @type {Array<{ value: string, text: string, color: string, group: string|null, total: number, sin_responder: number }>}
+     */
+    status_cards: [],
+    /** true mientras el GET de tarjetas de estado está en vuelo. */
+    loading_status_cards: false,
     /** Id de lead con GET conversación en curso (evita duplicados). */
     _conversation_fetch_in_flight: null,
     /** Id del lead cuyo mark-whatsapp-messages-read está en vuelo (null si ninguno). */
@@ -265,6 +340,23 @@ export default __base_store({
       state.unread_by_status = value
     },
     /**
+     * Tarjetas de estado tal cual las devuelve GET /lead/status-cards. El SPA no las ordena
+     * ni las inventa: si el payload no es un array, se guarda vacío.
+     *
+     * @param {Object} state
+     * @param {Array|null|undefined} value
+     */
+    set_status_cards(state, value) {
+      state.status_cards = Array.isArray(value) ? value : []
+    },
+    /**
+     * @param {Object} state
+     * @param {boolean} value
+     */
+    set_loading_status_cards(state, value) {
+      state.loading_status_cards = Boolean(value)
+    },
+    /**
      * @param {Object} state
      * @param {'last_message'|'created_at'|'atencion'} value
      */
@@ -381,6 +473,11 @@ export default __base_store({
       context.commit('set_sort_by', sort_by)
       /** Si hay filtros activos, recargar búsqueda con el nuevo orden. */
       if (context.state.is_filtered) {
+        /* 🔴 El set_filter_page(1) va SÍ o SÍ antes del run_filter: el orden nuevo devuelve la
+           primera página, y sin esto `filter_page` queda en la que estaba. Antes del paginador
+           no se notaba; ahora dejaría el control marcando la página 3 sobre las filas 1 a 25.
+           Es el mismo reseteo que ya hacen todos los demás caminos que cambian filtros. */
+        context.commit('set_filter_page', 1)
         return context.dispatch('run_filter', { page: 1 })
       }
       return context.dispatch('get_models')
@@ -426,6 +523,31 @@ export default __base_store({
     /**
      * Fusiona fila en listados preservando `messages` si el payload de Pusher no los trae.
      *
+     * Dos reglas además del merge:
+     *
+     * 1. **Página.** Una fila nueva sube al tope solo si el operador está parado en la página 1.
+     *    Con 25 por página, meterle una fila al tope de la página 4 le mostraría un lead que no
+     *    corresponde a ese tramo del listado.
+     * 2. **Filtro de estado (solo en `state.filtered`).** Si hay un estado filtrado, un lead que
+     *    no matchea no entra, y uno visible que dejó de matchear sale. 🔴 Esto NO se le aplica a
+     *    `state.models`: ese es el listado base, sin filtrar — ResourceView solo lo muestra cuando
+     *    `is_filtered` es false, así que filtrarlo lo rompería en silencio.
+     *
+     * 🔴 **Al insertar una fila NO se toca el total.** Es asimétrico a propósito y no es un
+     * descuido. Que un lead no esté en el array visible no significa que sea nuevo: con 25 por
+     * página, la enorme mayoría de los leads del servidor están fuera del tramo cargado, así que
+     * un `+1` por cada mensaje de WhatsApp de un lead ya existente inflaría el total sin techo —
+     * una mañana con la vista abierta y el paginador termina ofreciendo páginas que no existen y
+     * que devuelven la grilla vacía. Como el listado no tiene forma de distinguir "lead nuevo" de
+     * "lead que ya estaba pero no cargado", la única cuenta correcta es no tocar el total y dejar
+     * que lo diga el servidor en el próximo fetch.
+     *
+     * En cambio al SACAR una fila sí se resta 1, porque ahí sí lo sabemos: la fila estaba visible
+     * dentro del listado filtrado, o sea que el total del servidor la incluía, y dejó de
+     * corresponder al filtro. Esa resta es una aproximación local (puede derivar si dos eventos
+     * pisan al mismo lead) y se corrige sola en el próximo refetch: cambiar de página, de filtro,
+     * de orden, o volver a la vista.
+     *
      * @param {Object} context
      * @param {Object} model
      * @returns {void}
@@ -448,28 +570,55 @@ export default __base_store({
         return merged
       }
 
+      /* --- Listado base: sin filtro de estado, solo la regla de página. --- */
       const in_idx = state.models.findIndex(function (m) {
         return m.id == row_model.id
       })
       const arr = state.models.slice()
-      if (in_idx === -1) {
-        arr.unshift(row_model)
-      } else {
+      if (in_idx !== -1) {
         arr.splice(in_idx, 1, merge_lead_row(arr[in_idx], row_model))
+        commit('set_models', arr)
+      } else if (state.page == 1) {
+        const per_page = state.per_page || 25
+        arr.unshift(row_model)
+        if (arr.length > per_page) {
+          arr.pop()
+        }
+        commit('set_models', arr)
       }
-      commit('set_models', arr)
 
+      /* --- Listado filtrado: acá sí manda el filtro de estado activo. --- */
       if (state.is_filtered) {
+        const matchea = lead_matches_active_status(state, row_model)
+        const filter_per_page = state.filter_per_page || 25
         const f_idx = state.filtered.findIndex(function (m) {
           return m.id == row_model.id
         })
         const filtered_arr = state.filtered.slice()
-        if (f_idx === -1) {
-          filtered_arr.unshift(row_model)
-        } else {
+
+        if (f_idx !== -1 && matchea) {
+          /* Está y sigue correspondiendo: se actualiza donde está, no sube al tope. */
           filtered_arr.splice(f_idx, 1, merge_lead_row(filtered_arr[f_idx], row_model))
+          commit('set_filtered', filtered_arr)
+        } else if (f_idx !== -1) {
+          /* Está pero dejó de corresponder al estado filtrado: sale de la lista. */
+          filtered_arr.splice(f_idx, 1)
+          const total_menos = Math.max(0, (state.total_filter_results || 0) - 1)
+          commit('set_filtered', filtered_arr)
+          commit('set_selected', state.selected.filter(function (m) {
+            return m.id != row_model.id
+          }))
+          commit('set_total_filter_results', total_menos)
+          commit('set_total_filter_pages', total_pages_for(total_menos, filter_per_page))
+        } else if (matchea && state.filter_page == 1) {
+          /* No está, corresponde, y el operador ve la primera página: entra al tope. */
+          filtered_arr.unshift(row_model)
+          if (filtered_arr.length > filter_per_page) {
+            filtered_arr.pop()
+          }
+          commit('set_filtered', filtered_arr)
         }
-        commit('set_filtered', filtered_arr)
+        /* No está y no corresponde al estado filtrado: no se hace nada (requisito 4). */
       }
     },
     /**
@@ -1061,6 +1210,33 @@ export default __base_store({
         }
         return context.state.unread_total
       })
+    },
+    /**
+     * GET /lead/status-cards: conteos globales por estado para las tarjetas de arriba de la grilla.
+     *
+     * Nunca rechaza. Si el GET falla se dejan en pantalla las tarjetas anteriores en vez de
+     * vaciarlas: números viejos por unos segundos son mejores que una grilla que parpadea a cero
+     * cada vez que se corta la red.
+     *
+     * @param {Object} context
+     * @returns {Promise<Array>} tarjetas vigentes en el store
+     */
+    fetch_status_cards(context) {
+      const commit = context.commit
+      commit('set_loading_status_cards', true)
+      return api
+        .get('/lead/status-cards')
+        .then(function (res) {
+          if (res.data && Array.isArray(res.data.cards)) {
+            commit('set_status_cards', res.data.cards)
+          }
+          commit('set_loading_status_cards', false)
+          return context.state.status_cards
+        })
+        .catch(function () {
+          commit('set_loading_status_cards', false)
+          return context.state.status_cards
+        })
     },
     /**
      * Marca leídos los mensajes entrantes del lead y refresca modelo.

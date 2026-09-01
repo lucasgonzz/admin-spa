@@ -233,6 +233,71 @@
 		line-height: 1
 		flex: none
 
+	/* Tarjetas de estado arriba de la grilla: conteos globales por estado del pipeline. */
+	.lead-status-cards
+		display: grid
+		grid-template-columns: 1fr
+		gap: 0.5rem
+		width: 100%
+
+	.lead-status-cards--loading
+		opacity: 0.6
+
+	.lead-status-card
+		display: flex
+		flex-direction: column
+		align-items: flex-start
+		gap: 0.15rem
+		text-align: left
+		padding: 0.6rem 0.75rem
+		border: 1px solid var(--bs-border-color)
+		border-left-width: 4px
+		border-radius: 0.5rem
+		background: transparent
+		color: inherit
+		cursor: pointer
+		transition: box-shadow 0.15s ease-in-out, background-color 0.15s ease-in-out
+
+		&:hover
+			border-color: var(--bs-secondary-border-subtle)
+
+		&:focus-visible
+			outline: 2px solid var(--bs-primary)
+			outline-offset: 2px
+
+	.lead-status-card__head
+		display: inline-flex
+		align-items: center
+		gap: 0.35rem
+
+	.lead-status-card__title
+		font-size: 0.78rem
+		font-weight: 600
+		line-height: 1.1
+
+	.lead-status-card__total
+		font-size: 1.6rem
+		font-weight: 700
+		line-height: 1
+		color: var(--bs-body-color)
+
+	.lead-status-card__sub
+		font-size: 0.72rem
+		line-height: 1.1
+
+	// A partir de 576px entran dos por fila; de 992 para arriba, las cuatro en una sola.
+	// O sea que en tablet angosta (768-991) son dos columnas y en tablet ancha (992-1024) ya son cuatro.
+	@media (min-width: 576px)
+		.lead-status-cards
+			grid-template-columns: repeat(2, minmax(0, 1fr))
+
+	// Escritorio (>=992): las cuatro en una fila.
+	// En telefono quedan apiladas (grid de 1fr), nunca en carrusel: la barra de estados ya
+	// scrollea horizontal y dos scrollers apilados son imposibles de operar con el pulgar.
+	@media (min-width: 992px)
+		.lead-status-cards
+			grid-template-columns: repeat(4, minmax(0, 1fr))
+
 	/* Fila del lead cuya conversación WhatsApp está abierta en el sidebar lateral. */
 	.table tbody tr.table-success > *
 		--bs-table-bg-state: var(--bs-success-bg-subtle)

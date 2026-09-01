@@ -3,6 +3,18 @@ import api from '@/utils/axios'
 import router from '@/router'
 
 /**
+ * Debounce del GET /lead/status-cards. Más largo que el de badges (450 ms) porque la query es
+ * bastante más cara y los números de las tarjetas cambian mucho menos seguido.
+ */
+const STATUS_CARDS_DEBOUNCE_MS = 1500
+
+/**
+ * Tope de espera del mismo refresco: por más seguido que lleguen los eventos, entre dos
+ * refrescos de tarjetas nunca pasa más que esto.
+ */
+const STATUS_CARDS_MAX_ESPERA_MS = 6000
+
+/**
  * Suscripción Pusher al canal compartido `leads.admins`.
  *
  * Eventos:
@@ -23,6 +35,10 @@ export function useLeadSocket(options) {
   let list_row_refetch_debounce_timer = null
   /** Debounce del POST mark-whatsapp-messages-read mientras el operador mira el hilo. */
   let mark_read_if_viewing_debounce_timer = null
+  /** Debounce del GET /lead/status-cards (tarjetas de estado arriba de la grilla). */
+  let status_cards_debounce_timer = null
+  /** Momento del primer pedido de refresco de tarjetas de la ráfaga actual (null si no hay ráfaga). */
+  let status_cards_primer_pedido_at = null
 
   /**
    * true si el admin está en la grilla de Leads (ruta `leads`, no conversación fullscreen).
@@ -95,6 +111,8 @@ export function useLeadSocket(options) {
         const model = res.data && res.data.model ? res.data.model : null
         if (model && model.id) {
           store.dispatch('lead/upsert_model_in_lists', model)
+          /* Acá es donde puede haber cambiado el `status` del lead: refrescar las tarjetas. */
+          schedule_refresh_status_cards()
         }
       }).catch(function () {
         return null
@@ -135,6 +153,46 @@ export function useLeadSocket(options) {
   }
 
   /**
+   * Programa GET /lead/status-cards para refrescar los conteos de las tarjetas de estado.
+   *
+   * Debounce más largo que el de badges (450 ms) porque la query es bastante más cara y los
+   * números cambian mucho menos seguido. Solo corre si el admin está parado en la grilla de
+   * Leads: si está en otra vista, las tarjetas ni se ven.
+   *
+   * @returns {void}
+   */
+  function schedule_refresh_status_cards() {
+    if (!is_admin_viewing_leads_grid()) {
+      return
+    }
+    /* 🔴 Tope de espera. Un debounce que se reprograma en cada evento se muere de hambre justo
+       cuando más importa: con varios leads conversando a la vez, los eventos llegan a menos de
+       1500 ms de distancia y el timer nunca llega a disparar, así que las tarjetas se congelan
+       en el momento de mayor movimiento. Con este tope, entre dos refrescos nunca pasan más de
+       STATUS_CARDS_MAX_ESPERA_MS por más seguido que lleguen los eventos. */
+    if (status_cards_primer_pedido_at == null) {
+      status_cards_primer_pedido_at = Date.now()
+    }
+    if (Date.now() - status_cards_primer_pedido_at >= STATUS_CARDS_MAX_ESPERA_MS) {
+      if (status_cards_debounce_timer) {
+        clearTimeout(status_cards_debounce_timer)
+        status_cards_debounce_timer = null
+      }
+      status_cards_primer_pedido_at = null
+      store.dispatch('lead/fetch_status_cards')
+      return
+    }
+    if (status_cards_debounce_timer) {
+      clearTimeout(status_cards_debounce_timer)
+    }
+    status_cards_debounce_timer = setTimeout(function () {
+      status_cards_debounce_timer = null
+      status_cards_primer_pedido_at = null
+      store.dispatch('lead/fetch_status_cards')
+    }, STATUS_CARDS_DEBOUNCE_MS)
+  }
+
+  /**
    * Fusiona lead en tabla y conversación abierta.
    *
    * @param {Object|null} lead
@@ -154,6 +212,8 @@ export function useLeadSocket(options) {
    */
   function handle_suggestion_created(event_data) {
     apply_lead_row(event_data ? event_data.lead : null)
+    /* Una sugerencia nueva cambia el "sin responder" de la tarjeta de ese estado. */
+    schedule_refresh_status_cards()
     if (event_data && event_data.lead && event_data.lead.id != null) {
       const generating_id = store.state.lead.ai_generating_lead_id
       if (generating_id != null && String(generating_id) === String(event_data.lead.id)) {
@@ -280,6 +340,7 @@ export function useLeadSocket(options) {
       store.commit('lead/set_unread_total', event_data.unread_total)
     } else {
       schedule_refresh_unread_badges()
+      schedule_refresh_status_cards()
     }
   }
 
@@ -339,6 +400,11 @@ export function useLeadSocket(options) {
         clearTimeout(mark_read_if_viewing_debounce_timer)
         mark_read_if_viewing_debounce_timer = null
       }
+      if (status_cards_debounce_timer) {
+        clearTimeout(status_cards_debounce_timer)
+        status_cards_debounce_timer = null
+      }
+      status_cards_primer_pedido_at = null
       let i = 0
       for (i = 0; i < channels_to_leave.length; i = i + 1) {
         // Los canales privados se registran en Echo con el prefijo "private-"; echo.leave()
