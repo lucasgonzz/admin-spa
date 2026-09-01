@@ -85,12 +85,33 @@
                   }"
                 >{{ hito.titulo }}</div>
 
-                <!-- Texto de apoyo: la hora en el completo, la explicación en el parcial. -->
+                <!-- 🔴 Detalle del recorrido: cuánto vio del video y cuánto hizo del tour.
+                     Es lo que Lucas pidió el 1/9/2026 ("*quiero que cuando ya vio el video (...)
+                     me aparezca la información de que lo vio y la información de si lo probó*").
+
+                     Los chips los resuelve `chips_de()` y llegan acá ya armados desde la computed
+                     `grupos`. La lista viene VACÍA cuando no hay nada que decir — incluido el caso
+                     de un `admin-api` VIEJO, donde los cinco campos vienen `undefined` y acá no se
+                     dibuja ni un chip vacío ni un "0%".
+                     `flex-wrap` porque en el teléfono los dos chips no entran en una línea. -->
+                <div v-if="hito.chips.length" class="d-flex flex-wrap gap-1 mt-1">
+                  <span
+                    v-for="chip in hito.chips"
+                    :key="chip.clave"
+                    class="badge fw-normal"
+                    :class="chip.clase"
+                  >
+                    <i class="bi me-1" :class="chip.icono"></i>{{ chip.texto }}
+                  </span>
+                </div>
+
+                <!-- Texto de apoyo: la hora en el completo, y en el parcial el porqué —que ahora
+                     se deriva de los datos en vez de ser un texto fijo, ver `texto_del_parcial()`. -->
                 <div v-if="hito.estado === 'completo' && hito.accion_hecha_at" class="small text-muted mt-1">
                   {{ hito.accion_hecha_at }}
                 </div>
                 <div v-else-if="hito.estado === 'parcial'" class="small text-muted mt-1">
-                  Vio el tutorial, no llegó a hacerlo
+                  {{ texto_del_parcial(hito) }}
                 </div>
               </div>
             </div>
@@ -135,6 +156,11 @@ import api from '@/utils/axios'
  * Los tres estados y por qué son tres: `parcial` —vio el tutorial pero no hizo la acción— es el
  * que dice dónde se trabó el lead, que es de lo que el closer va a hablar en la llamada. Por eso
  * se pinta en `warning` y no en `danger`: no es una falla, es información.
+ *
+ * Desde el 1/9/2026 cada hito de tutorial lleva además dos badges —cuánto vio del video y cuánto
+ * hizo del tour— que salen de cinco campos nuevos del endpoint. **Los tres estados no cambiaron**:
+ * los badges van al costado del estado, no lo reemplazan. Ver `chips_de()`, que además explica por
+ * qué no se dibuja nada cuando esos campos no vienen.
  *
  * Props:
  *   lead {Object} - Lead del que se muestra el recorrido. Requerido.
@@ -189,11 +215,17 @@ export default {
      * Los hitos agrupados para la exhibición: el de ingreso suelto arriba (sin encabezado de
      * sección) y después un grupo por sección, en el orden en que vienen del backend.
      *
-     * @returns {Array} Lista de { seccion, hitos }.
+     * Cada hito sale de acá con una clave `chips` agregada —los badges de "Visto" y "Probado"—,
+     * ya resueltos. Se calculan acá y no en el template porque el template los usaría dos veces
+     * cada uno (una en el `v-if` y otra en el contenido), y porque ésta ya es la computed que le
+     * da forma de exhibición a lo que vino del backend.
+     *
+     * @returns {Array} Lista de { id, seccion, hitos }.
      */
     grupos() {
       const grupos = []
       let actual = null
+      const self = this
 
       this.hitos.forEach(function (hito) {
         /* Se compara por el id COMPLETO de la sección (`S1 - Listado`) y no por el nombre corto
@@ -214,7 +246,10 @@ export default {
           grupos.push(actual)
         }
 
-        actual.hitos.push(hito)
+        /* Se copia el hito en vez de escribirle la clave encima: `this.hitos` es lo que llegó del
+         * endpoint y se pisa entero en cada tick del poleo, así que mutarlo acá sería escribir
+         * sobre el dato crudo desde una computed. */
+        actual.hitos.push(Object.assign({}, hito, { chips: self.chips_de(hito) }))
       })
 
       return grupos
@@ -311,6 +346,147 @@ export default {
   },
 
   methods: {
+    /**
+     * Los badges de detalle de un hito: cuánto vio del video y cuánto hizo del tour.
+     *
+     * 🔴 Devuelve una lista VACÍA cuando no hay nada que decir, y ése es el caso que importa
+     * defender: contra un `admin-api` viejo los cinco campos vienen `undefined`, y entonces acá no
+     * se dibuja ni un badge vacío ni un "0%" —que sería afirmar que el lead no vio nada cuando lo
+     * que pasa es que esta versión de la API no lo sabe—. Puede parecer imposible (el SPA y la API
+     * se suben juntos con `/deploy-admin`), pero el navegador de Lucas puede tener el SPA cacheado
+     * y quedar adelantado a la API por unos minutos.
+     *
+     * Se pregunta por `typeof === 'boolean'` y no por `!== undefined`: así un `null` de alguna
+     * versión intermedia tampoco dibuja nada, en vez de caer en el `else` y mentir.
+     *
+     * @param {Object} hito Hito tal como vino del endpoint.
+     * @returns {Array} Lista de { clave, texto, icono, clase }. Vacía si no hay nada que mostrar.
+     */
+    chips_de(hito) {
+      const chips = []
+
+      /* El verde queda reservado para "Probado", que es el logro: el lead se puso a hacer el
+       * recorrido y lo terminó. Haber visto el video es el piso, y va en gris. La jerarquía de
+       * color es la que hace legible la columna de un vistazo. */
+      if (typeof hito.visto === 'boolean') {
+        if (hito.visto) {
+          chips.push({
+            clave: 'visto',
+            texto: 'Visto',
+            icono: 'bi-check2',
+            clase: 'bg-secondary-subtle text-secondary',
+          })
+        } else {
+          const visto = this.porcentaje_de(hito.porcentaje_visto)
+
+          if (visto > 0) {
+            /* Ámbar oscuro y no `text-warning`: mismo motivo y misma variable que
+             * `demo-roadmap-parcial` unas líneas más abajo —el amarillo de Bootstrap sobre el
+             * fondo blanco de la tarjeta no llega a AA—. Es el par que ya usan `resumen/Index.vue`
+             * y `CallSummaryPanel.vue` en este mismo modal. */
+            chips.push({
+              clave: 'visto',
+              texto: 'Visto ' + visto + '%',
+              icono: 'bi-play-circle',
+              clase: 'bg-warning-subtle text-warning-emphasis',
+            })
+          }
+        }
+      }
+
+      if (typeof hito.probado === 'boolean') {
+        if (hito.probado) {
+          chips.push({
+            clave: 'tour',
+            texto: 'Probado',
+            icono: 'bi-check2-circle',
+            clase: 'bg-success-subtle text-success',
+          })
+        } else {
+          const tour = this.porcentaje_de(hito.porcentaje_tour)
+
+          if (tour > 0) {
+            chips.push({
+              clave: 'tour',
+              texto: 'Tour ' + tour + '%',
+              icono: 'bi-signpost-2',
+              clase: 'bg-warning-subtle text-warning-emphasis',
+            })
+          } else if (hito.tour_iniciado === true) {
+            /* Arrancó el tour y no llegó a mostrarse un solo paso. Es poco, pero no es lo mismo
+             * que no haberlo tocado nunca: dice que el lead quiso probar. */
+            chips.push({
+              clave: 'tour',
+              texto: 'Tour empezado',
+              icono: 'bi-signpost-2',
+              clase: 'bg-secondary-subtle text-secondary',
+            })
+          }
+        }
+      }
+
+      return chips
+    },
+
+    /**
+     * Un porcentaje del payload, leído como entero de 0 a 100.
+     *
+     * La API ya lo sanea y clampea, así que esto es la segunda red y no la primera: cualquier cosa
+     * que no sea un número finito da 0, que es el valor con el que no se dibuja nada. Es más barato
+     * que confiar y terminar imprimiendo "Visto NaN%" en la pantalla del closer.
+     *
+     * @param {*} valor
+     * @returns {Number} Entero de 0 a 100.
+     */
+    porcentaje_de(valor) {
+      if (typeof valor !== 'number' || !isFinite(valor) || valor <= 0) {
+        return 0
+      }
+
+      return Math.min(100, Math.round(valor))
+    },
+
+    /**
+     * El texto de apoyo del estado `parcial`.
+     *
+     * 🔴 Hasta el 1/9/2026 acá había un texto fijo —*"Vio el tutorial, no llegó a hacerlo"*— que
+     * era falso en dos casos reales, y con los badges nuevos arriba la contradicción quedaba a la
+     * vista:
+     *
+     *  1. **El hito sin acción verificable.** `DemoHitosService::estado_segun_marcas()` deja en
+     *     `parcial` para siempre a todo hito con `evento_esperado` null, que según su propio
+     *     docblock es *"la mitad de los clips"*. Decir de esos que el lead "no llegó a hacerlo" lo
+     *     culpa de no hacer algo que el sistema no puede detectar.
+     *  2. **La acción sin el tutorial.** El estado se calcula con un O, no con un Y
+     *     (`vio_tutorial || hizo_accion`), así que un lead que creó el artículo sin mirar el video
+     *     también cae en `parcial` — y ahí el texto afirmaba lo contrario de lo que pasó, ahora al
+     *     lado de un hito sin badge "Visto".
+     *
+     * Los tres campos con los que se decide (`evento_esperado`, `tutorial_visto_at`,
+     * `accion_hecha_at`) están en el payload desde la misión 48, así que este arreglo vale igual
+     * contra un `admin-api` viejo. Lo único que se mira de esta misión es si hay badges: si no los
+     * hay, el texto tiene que seguir diciendo las dos mitades, porque nadie más las dice.
+     *
+     * @param {Object} hito
+     * @returns {String}
+     */
+    texto_del_parcial(hito) {
+      if (!hito.evento_esperado) {
+        return 'Este clip no tiene una acción que el sistema pueda verificar'
+      }
+
+      if (!hito.tutorial_visto_at && hito.accion_hecha_at) {
+        return 'Hizo la acción sin ver el tutorial'
+      }
+
+      // Con el badge "Visto" justo arriba, repetirlo acá es decir dos veces lo mismo.
+      if (typeof hito.visto === 'boolean') {
+        return 'No llegó a hacer la acción'
+      }
+
+      return 'Vio el tutorial, no llegó a hacerlo'
+    },
+
     /**
      * 🔴 Empieza a mirar si la tarjeta está efectivamente en pantalla (misión 58).
      *
