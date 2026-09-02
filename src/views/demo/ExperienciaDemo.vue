@@ -203,6 +203,16 @@ const POLEO_INTERVALO_MS = 10000
  */
 const POLEO_TOPE_MS = 20 * 60 * 1000
 
+/**
+ * Cuánto puede moverse el arranque estimado de una MISMA corrida del armado entre dos
+ * payloads, en ms. `setup.iniciado_hace_seg` viene en segundos enteros y cada payload
+ * viaja por red, así que el instante que se deriva de él baila unos segundos de un
+ * poleo al otro. Un salto hacia adelante más grande que este margen ya no es ruido: es
+ * otra corrida (el reintento automático de la misión 60, o el setup que recién arranca
+ * horas después de que el lead completó el formulario).
+ */
+const CORRIDA_NUEVA_MARGEN_MS = 60000
+
 
 /**
  * Página inmersiva de demo (Grupo 300 · pagina-inmersiva-demo, prompts 04 y
@@ -261,16 +271,35 @@ export default {
       poleo_desde_ms: 0,
       /**
        * true cuando el poleo se cortó por haber llegado al tope de POLEO_TOPE_MS sin
-       * que la demo se habilitara. Es lo que le permite a BotonAcceso dejar de decir
-       * "en un momento" y mandar al lead a WhatsApp: desde ese instante esta página
-       * no se actualiza más sola, así que el cartel que quede es el definitivo.
+       * que la demo se habilitara. Le dice a BotonAcceso una sola cosa: que desde ese
+       * instante esta página no se actualiza más sola, así que el cartel que quede es
+       * el definitivo.
+       *
+       * 🔴 NO significa "el armado se está demorando", y ese malentendido ya costó un
+       * cartel alarmista: el poleo arranca cuando el lead completa el formulario, que
+       * para un turno de más tarde puede ser horas antes de que el setup exista.
+       * BotonAcceso exige además evidencia del payload (una corrida en vuelo pasada
+       * del estimado) para mandar a nadie a WhatsApp.
        *
        * 🔴 Se prende SOLO en el tick del poleo, donde se detecta el tope -- nunca en
        * frenar_poleo(), que también corre cuando la demo ya está lista (debe_polear
        * pasa a false) y en beforeUnmount. Prenderla ahí le mostraría "se está
        * demorando" a un lead que entró perfecto.
+       *
+       * Y se apaga sola en cuanto un payload muestra una corrida NUEVA del armado:
+       * ver sincronizar_ventana_de_espera().
        */
       espera_agotada: false,
+      /**
+       * Instante estimado (ms del reloj local) en que arrancó la corrida del armado que
+       * el último payload mostró, o null si no mostró ninguna. Se deriva de
+       * `setup.iniciado_hace_seg` -- que lo mide el BACKEND con su reloj -- y el
+       * `Date.now()` de acá entra solo para poder comparar dos payloads entre sí y
+       * darse cuenta de que la corrida cambió: los dos lados de la comparación arrastran
+       * el mismo desvío, así que se cancela. No gobierna ninguna puerta (la puerta es
+       * `puede_ingresar`, y la calcula el backend).
+       */
+      setup_arranque_ms: null,
       /**
        * true cuando la carga inicial encontró el formulario ya completado y hay
        * que correr la secuencia de la confirmación al retirar la pantalla de
@@ -818,7 +847,75 @@ export default {
       this.intro = payload.intro || {}
       this.modo_prueba = !!payload.modo_prueba
       this.puede_ingresar = !!payload.puede_ingresar
+      /* Después de asignar `setup` y `puede_ingresar`: el método los lee a los dos. */
+      this.sincronizar_ventana_de_espera()
       return payload
+    },
+
+    /**
+     * Le devuelve la ventana entera a la espera cuando el payload muestra una corrida
+     * del armado DISTINTA de la que se venía esperando: apaga la marca de agotamiento
+     * y, si el poleo estaba muerto, lo vuelve a poner.
+     *
+     * POR QUÉ HACE FALTA. El tope del poleo cuenta desde que el poleo arrancó, y el
+     * poleo arranca cuando el lead completa el formulario (`debe_polear`) -- no cuando
+     * el armado arranca. Un lead que pide la demo para las 18 y completa el formulario
+     * a las 14 agota el tope a las 14:22, con el setup todavía en `pendiente`: cuando a
+     * las 17:45 la corrida arranca de verdad, la página ya dejó de preguntar y la marca
+     * de agotamiento quedó pegada para siempre, porque solo se apagaba en
+     * arrancar_poleo() y `debe_polear` nunca cambió de valor. O sea: la espera se daba
+     * por vencida antes de empezar.
+     *
+     * CÓMO SE DETECTA UNA CORRIDA NUEVA. `iniciado_hace_seg` es la edad de la ÚLTIMA
+     * corrida (sale de `demo_setup_last_run_at`), así que su instante de arranque
+     * --ahora menos esa edad-- se mantiene parejo mientras es la misma corrida y salta
+     * hacia adelante cuando hay otra. Un salto mayor a CORRIDA_NUEVA_MARGEN_MS, o pasar
+     * de "ninguna corrida" a "una corrida", es corrida nueva.
+     *
+     * No hay riesgo de poleo eterno: cada corrida distinta habilita UNA ventana de
+     * POLEO_TOPE_MS, y la cantidad de corridas la topea el backend (MAX_INTENTOS_
+     * AUTOMATICOS del reintento). Una pestaña olvidada cuyo setup nunca arranca no
+     * dispara nada de esto y el poleo se muere a los 20 minutos, como hasta ahora.
+     *
+     * @returns {void}
+     */
+    sincronizar_ventana_de_espera() {
+      if (this.desmontado) {
+        return
+      }
+
+      const crudo = this.setup ? this.setup.iniciado_hace_seg : null
+      const segundos = Number(crudo)
+      const hay_corrida =
+        crudo !== null && crudo !== undefined && crudo !== '' && Number.isFinite(segundos) && segundos >= 0
+
+      /* Sin corrida (setup en `pendiente`, o una API vieja que no manda el campo) no hay
+         nada que reiniciar, y se olvida la anterior para que la próxima que aparezca
+         cuente como nueva. */
+      if (!hay_corrida) {
+        this.setup_arranque_ms = null
+        return
+      }
+
+      const arranque_ms = Date.now() - segundos * 1000
+      const anterior = this.setup_arranque_ms
+      this.setup_arranque_ms = arranque_ms
+
+      /* Es la misma corrida de siempre: la ventana sigue corriendo donde estaba. */
+      if (anterior !== null && arranque_ms - anterior <= CORRIDA_NUEVA_MARGEN_MS) {
+        return
+      }
+
+      this.espera_agotada = false
+      this.poleo_desde_ms = Date.now()
+      /* Idempotente: si el poleo sigue vivo no monta un segundo, y la ventana nueva ya
+         quedó puesta en la línea de arriba. La ventana arranca ACÁ y no en el arranque
+         de la corrida a propósito: anclarla al pasado mataría el poleo en el primer tick
+         justo cuando el lead abre la página sobre una corrida vieja, que es cuando más
+         falta hace seguir preguntando. */
+      if (this.debe_polear) {
+        this.arrancar_poleo()
+      }
     },
 
     /**

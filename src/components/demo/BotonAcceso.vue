@@ -90,13 +90,17 @@
          seguía viendo para siempre.
 
          Las cuatro variantes salen de `espera_variante`. La que manda cuando el
-         payload no trae los campos nuevos es el texto de siempre: entre el merge y
-         el deploy este front convive con la API vieja, y esa convivencia no puede
-         verse rota ni tirar nada por consola. -->
+         payload no trae los campos nuevos --o cuando no muestra ninguna corrida en
+         vuelo-- es el texto de siempre: entre el merge y el deploy este front convive
+         con la API vieja, y esa convivencia no puede verse rota ni tirar nada por
+         consola. -->
     <div v-else class="demo-boton-acceso__bloque">
-      <!-- g.1) El poleo se agotó (20 min sin novedad). Ya no va a llegar ningún
-           payload nuevo, así que este texto es el último que el lead va a ver: tiene
-           que darle una salida. Mismo tono que el bloque d) de setup fallido. -->
+      <!-- g.1) Hay una corrida del armado en vuelo, ya pasada del estimado, Y encima
+           el poleo se agotó: no va a llegar ningún payload nuevo, así que este texto
+           es el último que el lead va a ver y tiene que darle una salida. Mismo tono
+           que el bloque d) de setup fallido. Las tres condiciones van juntas a
+           propósito: con el poleo agotado solo, este cartel le salía a un lead cuya
+           demo se estaba armando perfecto (ver el docblock de `espera_variante`). -->
       <template v-if="espera_variante === 'agotada'">
         <p class="demo-boton-acceso__titulo"><strong>Se está demorando más de lo esperable.</strong></p>
         <p class="demo-boton-acceso__nota">
@@ -195,11 +199,23 @@ export default {
     },
     /**
      * { estado, iniciado_hace_seg, duracion_estimada_seg } del demo setup.
-     * `estado`: pendiente | ejecutandose | exitoso | fallido.
+     *
+     * `estado`: son CINCO, no cuatro -- pendiente | ejecutandose | sin_confirmar |
+     * exitoso | fallido. `sin_confirmar` (RunDemoSetupService::ESTADO_SIN_CONFIRMAR)
+     * es el que queda cuando la llamada a la instancia venció o volvió 409: el admin
+     * dejó de escuchar y nadie sabe si la corrida sigue viva del otro lado. No es un
+     * sinónimo de `fallido` y acá se trata como una corrida en vuelo (ver
+     * `setup_corriendo`).
+     *
      * `iniciado_hace_seg`: segundos desde que arrancó el armado, medidos por el
-     * backend con SU reloj, o null si todavía no arrancó. Puede no venir: una API
-     * anterior a esta misión no lo manda, y ese caso es el default seguro del
-     * bloque g).
+     * backend con SU reloj, o null si todavía no arrancó. 🔴 Sale de
+     * `demo_setup_last_run_at`, que es la estampa del ÚLTIMO arranque y no se borra
+     * cuando la corrida termina: viene con número también para un setup ya exitoso,
+     * ya fallido, o vuelto a `pendiente` por el reintento automático (misión 60).
+     * O sea que por sí solo NO prueba que haya algo armándose ahora -- quien lo
+     * prueba es `estado`. Puede además no venir: una API anterior a la misión que
+     * agregó el contador no lo manda, y ese caso es el default seguro del bloque g).
+     *
      * `duracion_estimada_seg`: el estimado con el que se cuenta la espera.
      */
     setup: {
@@ -211,8 +227,15 @@ export default {
     /**
      * true cuando el contenedor (ExperienciaDemo.vue) ya agotó el tope del poleo:
      * dejó de pedir el payload, así que esta pantalla no se va a actualizar sola
-     * nunca más. Es lo único que justifica mandar al lead a WhatsApp mientras el
-     * armado, en teoría, sigue corriendo.
+     * nunca más.
+     *
+     * 🔴 Dice SOLO eso: que la pantalla quedó quieta. NO dice que el armado se esté
+     * demorando, y confundir las dos cosas es lo que este componente arregla. El
+     * poleo arranca en cuanto el lead completa el formulario (`debe_polear` =
+     * intro_desbloqueada && !puede_ingresar), que para un turno de más tarde puede
+     * ser horas antes de que el setup exista siquiera: son dos relojes distintos.
+     * La evidencia de la demora la pone el payload, no esta marca -- ver
+     * `espera_variante`.
      */
     espera_agotada: {
       type: Boolean,
@@ -312,6 +335,44 @@ export default {
     },
 
     /**
+     * true cuando el payload muestra una corrida del armado ARRANCADA y todavía sin
+     * desenlace. Son dos estados y no uno: `ejecutandose` es el caso normal, y
+     * `sin_confirmar` es esa misma corrida con la llamada vencida (o con un 409 de la
+     * instancia) -- el admin dejó de escuchar, pero del otro lado la demo puede estar
+     * sembrándose en este mismo instante.
+     *
+     * `sin_confirmar` NO se lleva un texto propio, y es una decisión, no un olvido:
+     * desde donde lo mira el lead es indistinguible de `ejecutandose` --hay algo
+     * armándose, no hay nada que él pueda hacer, y se resuelve solo (el evento
+     * `demo.setup.completado` o el comando que lo vence a `fallido`)--, así que le
+     * corresponden los mismos textos de espera. Un cartel aparte solo podría contarle
+     * una avería que ni siquiera sabemos que ocurrió, que es exactamente el error que
+     * esta corrección vino a sacar de esta pantalla.
+     *
+     * @returns {boolean}
+     */
+    setup_corriendo() {
+      return this.setup_estado === 'ejecutandose' || this.setup_estado === 'sin_confirmar'
+    },
+
+    /**
+     * true cuando hay evidencia REAL de que el armado se está demorando: una corrida
+     * en vuelo, con su edad medida por el backend, y esa edad ya pasada del estimado.
+     * Es la única condición que habilita los dos textos de demora del bloque g), y
+     * ninguna de las tres partes sobra: sin `setup_corriendo` la edad puede ser la de
+     * una corrida que ya terminó, y sin la edad no hay con qué comparar.
+     *
+     * @returns {boolean}
+     */
+    armado_pasado_del_estimado() {
+      const iniciado = this.setup_iniciado_hace_seg
+      if (!this.setup_corriendo || iniciado === null) {
+        return false
+      }
+      return iniciado >= this.setup_duracion_estimada_seg
+    },
+
+    /**
      * Segundos desde que arrancó el demo setup, tal como los manda el backend en
      * `setup.iniciado_hace_seg`, o null cuando no hay dato utilizable.
      *
@@ -355,26 +416,39 @@ export default {
     /**
      * Cuál de las cuatro variantes del bloque g) corresponde:
      *
-     *  - 'agotada'   el poleo se terminó: la pantalla ya no se actualiza sola.
-     *  - 'sin_datos' no hay `iniciado_hace_seg`: texto de siempre, sin contador.
-     *  - 'demorada'  se pasó del estimado y el poleo sigue vivo.
-     *  - 'contando'  espera normal, con la barra avanzando cada poleo.
+     *  - 'sin_datos' no hay corrida en vuelo (o no vino su edad): texto de siempre,
+     *                sin contador ni cuentas.
+     *  - 'contando'  hay una corrida en vuelo y todavía está dentro del estimado.
+     *  - 'demorada'  esa corrida ya se pasó del estimado, y la pantalla se sigue
+     *                actualizando sola.
+     *  - 'agotada'   lo mismo, pero además el poleo murió: este es el último cartel
+     *                que el lead va a ver, así que tiene que darle una salida.
      *
-     * El orden importa: 'agotada' gana sobre todo lo demás, porque cuando el poleo
-     * murió el contador es una promesa que ya nadie va a cumplir.
+     * 🔴 PRIMERO LA EVIDENCIA, DESPUÉS EL POLEO -- y el orden está invertido a
+     * propósito respecto de como nació esto. Antes 'agotada' ganaba antes de mirar
+     * nada, y `espera_agotada` no habla del armado: habla del poleo, que arranca
+     * apenas el lead completa el formulario. Un lead que pedía la demo para las 18
+     * y completaba el formulario a las 14 agotaba el poleo a las 14:22 sin que nada
+     * se viera raro (mandaba el bloque f), el del turno reservado); a las 18:00 la
+     * cuenta regresiva pedía el payload fresco, la pantalla caía a este bloque y le
+     * afirmaba "se está demorando, escribinos por WhatsApp" teniendo en la mano un
+     * setup arrancado hacía un minuto y andando bien. Y era el ÚLTIMO cartel que
+     * veía, porque el poleo ya estaba muerto.
+     *
+     * Ahora los dos textos de demora exigen `armado_pasado_del_estimado`, que es
+     * evidencia del payload y no del reloj de otra cosa. Ante cualquier duda -- sin
+     * corrida en vuelo, sin edad, o edad dentro del estimado -- sale el mensaje
+     * neutro, nunca el alarmista.
      *
      * @returns {string}
      */
     espera_variante() {
-      if (this.espera_agotada) {
-        return 'agotada'
-      }
       const iniciado = this.setup_iniciado_hace_seg
-      if (iniciado === null) {
+      if (!this.setup_corriendo || iniciado === null) {
         return 'sin_datos'
       }
-      if (iniciado >= this.setup_duracion_estimada_seg) {
-        return 'demorada'
+      if (this.armado_pasado_del_estimado) {
+        return this.espera_agotada ? 'agotada' : 'demorada'
       }
       return 'contando'
     },
