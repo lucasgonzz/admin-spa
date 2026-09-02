@@ -370,6 +370,25 @@
               <i class="bi bi-stop-circle" aria-hidden="true" />
               <span>Cancelar envío</span>
             </button>
+            <!--
+              Descartar la sugerencia sin mandarla. Antes no había forma de sacarse de encima una
+              sugerencia vieja: "Cancelar envío" solo aparece cuando hay auto-envío programado y
+              apaga el timer, y "Excluido del contexto de IA" saca el mensaje del historial que ve
+              Claude pero lo deja en `sugerido`, o sea que el lead sigue figurando como pendiente
+              para siempre. El backend ya tenía el endpoint (PUT lead-message/{id}/reject);
+              lo que faltaba era el botón.
+            -->
+            <button
+              type="button"
+              class="btn btn-outline-danger btn-sm wa-btn-tight d-inline-flex align-items-center justify-content-center gap-1"
+              :disabled="busy"
+              title="Descartar la sugerencia sin enviarla"
+              aria-label="Descartar la sugerencia sin enviarla"
+              @click="on_descartar"
+            >
+              <i class="bi bi-trash" aria-hidden="true" />
+              <span>Descartar</span>
+            </button>
           </template>
           <template v-else>
             <button
@@ -2058,6 +2077,14 @@ export default {
      */
     on_cancelar_envio_automatico() {
       this.$emit('cancelar_envio_automatico')
+    },
+    /**
+     * Pide al padre descartar la sugerencia sin enviarla (queda en estado rechazado).
+     *
+     * @returns {void}
+     */
+    on_descartar() {
+      this.$emit('descartar_sugerencia')
     },
     /**
      * Solicita al padre alternar si el mensaje se incluye o excluye del contexto de Claude.
