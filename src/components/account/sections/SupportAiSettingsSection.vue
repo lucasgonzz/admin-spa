@@ -6,7 +6,7 @@
         v-model="local_suggestions_enabled"
         class="form-check-input"
         type="checkbox"
-        :disabled="loading || saving" />
+        :disabled="loading || saving || load_failed" />
       <label class="form-check-label small" for="support_ai_suggestions_enabled">
         Activar sugerencias automáticas de IA para soporte
       </label>
@@ -23,7 +23,7 @@
         v-model="local_require_verification"
         class="form-check-input"
         type="checkbox"
-        :disabled="loading || saving" />
+        :disabled="loading || saving || load_failed" />
       <label class="form-check-label small" for="support_ai_require_verification">
         Los tickets nuevos arrancan pidiendo verificación humana
       </label>
@@ -52,7 +52,7 @@
           min="0"
           max="3600"
           class="form-control form-control-sm"
-          :disabled="loading || saving" />
+          :disabled="loading || saving || load_failed" />
       </div>
       <div class="col-sm-4">
         <label class="form-label small" for="support_ai_auto_send_delay">
@@ -65,7 +65,7 @@
           min="0"
           max="3600"
           class="form-control form-control-sm"
-          :disabled="loading || saving" />
+          :disabled="loading || saving || load_failed" />
       </div>
       <div class="col-auto">
         <button type="button" class="btn btn-primary btn-sm" :disabled="loading || saving || !can_save" @click="on_save">
@@ -137,9 +137,10 @@ export default {
       /**
        * La carga inicial falló.
        *
-       * Bloquea el guardado. El catch de load_setting() deja los checkboxes habilitados con los valores del data(),
-       * que no son los del servidor sino los de arranque: sin ese bloqueo, tocar un check y guardar mandaría en el
-       * mismo PUT tres claves que el operador nunca vio, y una de ellas apaga el agente para todos los clientes.
+       * Deshabilita los controles y bloquea el guardado. Sin respuesta del servidor, los `stored_` son los valores de
+       * arranque del data() y no lo que hay guardado: un PUT desde ese estado mandaría claves que el operador nunca
+       * vio, y una de ellas apaga el agente para todos los clientes. Los controles van grises y no solo muertos para
+       * que nadie mueva un check, vea que Guardar no responde y se vaya sin saber si quedó guardado.
        */
       load_failed: false,
       /** PUT en curso. */
@@ -271,15 +272,18 @@ export default {
       self.saving = true
       self.saved_message = ''
       self.error_message = ''
-      // El payload lleva solo lo que cambió. Las dos demoras son `nullable` del lado de la API y, si no vienen, caen
-      // en el valor que ya está guardado: omitirlas cuando no cambiaron evita que tocar un check pise la demora que
-      // otro operador acaba de configurar desde otra pestaña, que ni siquiera está en pantalla con el corte maestro
-      // apagado. `suggestions_enabled` es el único que se manda incondicionalmente, porque la API lo pide `required`.
+      // La regla es una sola y pareja: cada clave viaja solo si el operador la cambió. Las tres son `nullable` del
+      // lado de la API y, si no vienen, caen en lo que ya está guardado, así que este PUT no puede pisar lo que otro
+      // operador acabe de configurar desde otra pestaña —ni una demora que el corte maestro esconde, ni el régimen de
+      // nacimiento, que es justo el que decide si el agente le escribe solo a un cliente—. La única excepción es
+      // `suggestions_enabled`, que va siempre porque la API lo pide `required`: no agregar más excepciones.
       const payload = {
         suggestions_enabled: self.local_suggestions_enabled,
-        // Va siempre, aunque el corte maestro esté apagado: el régimen de nacimiento es una perilla aparte y se
-        // tiene que poder cambiar sin prender las sugerencias.
-        require_verification: self.local_require_verification,
+      }
+      // No se condiciona por `local_suggestions_enabled`, a diferencia de las demoras: el régimen de nacimiento es una
+      // perilla aparte y se tiene que poder cambiar con el corte maestro apagado.
+      if (self.local_require_verification !== self.stored_require_verification) {
+        payload.require_verification = self.local_require_verification
       }
       if (self.local_suggestions_enabled && suggestion_delay !== self.stored_suggestion_delay) {
         payload.suggestion_delay = suggestion_delay
