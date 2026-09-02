@@ -17,6 +17,28 @@
       con el último mensaje.
     </p>
 
+    <div class="form-check mb-3">
+      <input
+        id="support_ai_require_verification"
+        v-model="local_require_verification"
+        class="form-check-input"
+        type="checkbox"
+        :disabled="loading || saving" />
+      <label class="form-check-label small" for="support_ai_require_verification">
+        Los tickets nuevos arrancan pidiendo verificación humana
+      </label>
+    </div>
+    <p class="text-muted small mb-2">
+      Decide con qué régimen nace cada ticket nuevo. Prendido, toda respuesta que el agente escriba en un ticket nuevo
+      queda esperando tu aprobación desde la conversación. Apagado, los tickets nuevos le contestan solos al cliente,
+      con la demora de «Tiempo de espera antes de enviar» si hay alguna, y el escalado sigue siendo la red para lo que
+      el agente no sabe responder.
+    </p>
+    <p class="text-muted small mb-3">
+      <strong>Cambiar esto no toca ningún ticket ya abierto.</strong> Cada conversación se queda con el régimen que
+      tenía, y solo lo cambia una persona con el botón del encabezado.
+    </p>
+
     <div v-if="local_suggestions_enabled" class="row g-2 align-items-end mb-2">
       <div class="col-sm-4">
         <label class="form-label small" for="support_ai_suggestion_delay">
@@ -69,8 +91,8 @@
     <p class="form-text small text-muted mb-2">
       Este check es el corte maestro: apagado, el agente no genera nada en ningún ticket. Prendido, cada conversación
       manda con sus dos botones propios, en el encabezado del ticket: uno prende o apaga el agente para ese cliente, y
-      el otro decide si sus respuestas necesitan tu aprobación antes de salir. Los tickets nuevos nacen
-      <strong>siempre con la verificación prendida</strong>.
+      el otro decide si sus respuestas necesitan tu aprobación antes de salir. Los tickets nuevos nacen con el régimen
+      que indique el check de arriba, y una vez abiertos no lo cambian solos.
     </p>
 
     <p v-if="loading" class="text-muted small mt-2 mb-0">Cargando…</p>
@@ -83,7 +105,8 @@
 import api from '@/utils/axios'
 
 /**
- * Sección en Cuenta: sugerencias IA automáticas, debounce previo a Claude y demora de envío en soporte WhatsApp.
+ * Sección en Cuenta: sugerencias IA automáticas, debounce previo a Claude, demora de envío y régimen con el que nacen
+ * los tickets nuevos en soporte WhatsApp.
  */
 export default {
   name: 'SupportAiSettingsSection',
@@ -95,10 +118,18 @@ export default {
       local_suggestion_delay: 0,
       /** Segundos antes del envío automático de la sugerencia generada (0 = inmediato). */
       local_auto_send_delay: 0,
+      /**
+       * Checkbox: régimen con el que nacen los tickets nuevos.
+       *
+       * Arranca en true y no en false porque este valor se muestra antes de que vuelva el GET: si la carga falla, el
+       * operador ve el estado seguro (todo espera aprobación) y no el que le manda respuestas al cliente sin leerlas.
+       */
+      local_require_verification: true,
       /** Valores persistidos en servidor. */
       stored_suggestions_enabled: false,
       stored_suggestion_delay: 0,
       stored_auto_send_delay: 0,
+      stored_require_verification: true,
       /** Carga inicial GET settings. */
       loading: true,
       /** PUT en curso. */
@@ -117,6 +148,14 @@ export default {
      */
     can_save() {
       if (this.local_suggestions_enabled !== this.stored_suggestions_enabled) {
+        if (!this.local_suggestions_enabled) {
+          return true
+        }
+        return this.is_suggestion_delay_valid() && this.is_auto_send_delay_valid()
+      }
+      // Se chequea antes del `return false` de abajo: con las sugerencias apagadas ese return deja el botón Guardar
+      // muerto, y entonces el régimen de nacimiento no se podría cambiar nunca sin prender el corte maestro.
+      if (this.local_require_verification !== this.stored_require_verification) {
         if (!this.local_suggestions_enabled) {
           return true
         }
@@ -172,8 +211,13 @@ export default {
           const enabled = !!data.suggestions_enabled
           const suggestion_delay = parseInt(data.suggestion_delay, 10)
           const auto_send_delay = parseInt(data.auto_send_delay, 10)
+          // Si la API todavía no manda el campo, se asume prendido: mostrarlo apagado y que el operador guarde sin
+          // querer daría vuelta el régimen de todos los tickets nuevos.
+          const require_verification = data.require_verification === undefined ? true : !!data.require_verification
           self.local_suggestions_enabled = enabled
           self.stored_suggestions_enabled = enabled
+          self.local_require_verification = require_verification
+          self.stored_require_verification = require_verification
           if (!isNaN(suggestion_delay)) {
             self.local_suggestion_delay = suggestion_delay
             self.stored_suggestion_delay = suggestion_delay
@@ -215,11 +259,17 @@ export default {
           suggestions_enabled: self.local_suggestions_enabled,
           suggestion_delay: self.local_suggestions_enabled ? suggestion_delay : self.stored_suggestion_delay,
           auto_send_delay: self.local_suggestions_enabled ? auto_send_delay : self.stored_auto_send_delay,
+          // Va siempre, aunque el corte maestro esté apagado: el régimen de nacimiento es una perilla aparte y se
+          // tiene que poder cambiar sin prender las sugerencias.
+          require_verification: self.local_require_verification,
         })
         .then(function (res) {
           const data = res.data || {}
           self.local_suggestions_enabled = !!data.suggestions_enabled
           self.stored_suggestions_enabled = self.local_suggestions_enabled
+          self.local_require_verification =
+            data.require_verification === undefined ? true : !!data.require_verification
+          self.stored_require_verification = self.local_require_verification
           const saved_suggestion_delay = parseInt(data.suggestion_delay, 10)
           const saved_auto_send_delay = parseInt(data.auto_send_delay, 10)
           if (!isNaN(saved_suggestion_delay)) {
