@@ -207,16 +207,39 @@ export function useLeadSocket(options) {
   }
 
   /**
-   * @param {Object} event_data
+   * Sugerencia nueva para un lead (.LeadSuggestionCreated).
+   *
+   * 🔴 El payload trae `lead_id` SIEMPRE y `lead` solo cuando entró en el presupuesto de
+   * Pusher (ver App\Support\BroadcastPayloadBudget en admin-api). Un lead con la demo
+   * resuelta pesa más de los 10240 bytes que admite Pusher, y hasta el 2/9/2026 eso no
+   * recortaba el payload: hacía explotar el broadcast entero, y la excepción se llevaba
+   * puesto el reporte de una sugerencia que sí se había generado y guardado.
+   *
+   * @param {Object} event_data Payload Echo: { lead_id, lead? }.
    * @returns {void}
    */
   function handle_suggestion_created(event_data) {
-    apply_lead_row(event_data ? event_data.lead : null)
+    if (!event_data) {
+      return
+    }
+    /* Id del lead: del modelo si vino, del campo suelto si el payload salió recortado. */
+    const lead_id = event_data.lead && event_data.lead.id != null
+      ? event_data.lead.id
+      : event_data.lead_id
+    if (event_data.lead) {
+      apply_lead_row(event_data.lead)
+    } else if (lead_id != null) {
+      /* Sin el modelo, la fila se refresca por API — mismo mecanismo que ya usa el
+       * listener de verificacion-agendamiento-alerts más abajo. */
+      schedule_list_row_refetch(lead_id)
+    }
     /* Una sugerencia nueva cambia el "sin responder" de la tarjeta de ese estado. */
     schedule_refresh_status_cards()
-    if (event_data && event_data.lead && event_data.lead.id != null) {
+    /* 🔴 El spinner se apaga leyendo `lead_id` y NO `event_data.lead.id`: con el payload
+     * recortado el modelo no viene, y la versión vieja dejaba el lead girando para siempre. */
+    if (lead_id != null) {
       const generating_id = store.state.lead.ai_generating_lead_id
-      if (generating_id != null && String(generating_id) === String(event_data.lead.id)) {
+      if (generating_id != null && String(generating_id) === String(lead_id)) {
         store.commit('lead/set_ai_generating_lead_id', null)
       }
     }

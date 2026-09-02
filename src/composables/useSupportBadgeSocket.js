@@ -21,6 +21,8 @@ export function useSupportBadgeSocket(options) {
   const channels_to_leave = []
   // Timer para agrupar fetch_unread_badges (inbox_nav + unread_totals).
   let unread_badges_debounce_timer = null
+  // Timer para agrupar el refresco de la bandeja cuando el payload llegó sin el ticket.
+  let inbox_refresh_debounce_timer = null
 
   /**
    * Programa GET /support-ticket/unread-badges (totales + filas por operador).
@@ -33,6 +35,26 @@ export function useSupportBadgeSocket(options) {
       unread_badges_debounce_timer = null
       store.dispatch('support_ticket/fetch_unread_badges')
     }, 450)
+  }
+
+  /**
+   * Recarga la bandeja completa cuando el evento llegó sin el ticket adentro.
+   *
+   * No hay nada que inventar acá: `get_models` es el mismo GET del listado que el store ya
+   * usa como reserva cuando una respuesta no trae `model` (ver `update_ticket` y `store` en
+   * src/store/support_ticket.js). Va con debounce porque un cambio de cabecera puede emitir
+   * varios eventos seguidos y no tiene sentido pedir el listado una vez por cada uno.
+   *
+   * @returns {void}
+   */
+  function schedule_refresh_inbox() {
+    if (inbox_refresh_debounce_timer) {
+      clearTimeout(inbox_refresh_debounce_timer)
+    }
+    inbox_refresh_debounce_timer = setTimeout(function () {
+      inbox_refresh_debounce_timer = null
+      store.dispatch('support_ticket/get_models')
+    }, 800)
   }
 
   /**
@@ -62,11 +84,22 @@ export function useSupportBadgeSocket(options) {
   /**
    * Ticket actualizado en servidor (p. ej. reasignación): fusiona fila en bandeja según filtro activo.
    *
-   * @param {Object} event_data Payload Echo (.SupportTicketUpdated)
+   * 🔴 El payload trae `support_ticket_id` SIEMPRE y `ticket` solo cuando entró en el
+   * presupuesto de Pusher (ver App\Support\BroadcastPayloadBudget en admin-api). El
+   * `lastMessage` que viaja adentro del ticket es texto libre escrito por un cliente, así que
+   * el tamaño lo termina fijando alguien de afuera: cuando no entra, el ticket se recorta y
+   * acá hay que ir a buscarlo. Antes de eso el broadcast entero explotaba.
+   *
+   * @param {Object} event_data Payload Echo (.SupportTicketUpdated): { support_ticket_id, ticket? }
    */
   function handle_ticket_updated(event_data) {
-    if (event_data && event_data.ticket) {
+    if (!event_data) {
+      return
+    }
+    if (event_data.ticket) {
       store.dispatch('support_ticket/apply_ticket_row', event_data.ticket)
+    } else if (event_data.support_ticket_id != null) {
+      schedule_refresh_inbox()
     }
     schedule_refresh_unread_badges()
   }
@@ -152,6 +185,10 @@ export function useSupportBadgeSocket(options) {
       if (unread_badges_debounce_timer) {
         clearTimeout(unread_badges_debounce_timer)
         unread_badges_debounce_timer = null
+      }
+      if (inbox_refresh_debounce_timer) {
+        clearTimeout(inbox_refresh_debounce_timer)
+        inbox_refresh_debounce_timer = null
       }
       let i = 0
       for (i = 0; i < channels_to_leave.length; i = i + 1) {

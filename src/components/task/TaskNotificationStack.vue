@@ -272,16 +272,45 @@ export default {
      * Handler del evento de websocket `.AdminTaskNotificationCreated`: agrega la
      * notificación recién creada al store y reproduce el sonido de aviso.
      *
-     * @param {Object} event_data  Payload Echo: { notification: {...} }.
+     * 🔴 El payload trae `notification_id` SIEMPRE y `notification` solo cuando entró en el
+     * presupuesto de Pusher (ver App\Support\BroadcastPayloadBudget en admin-api): `title` y
+     * `content` de la tarea son texto libre y pueden pasarse de los 10240 bytes que admite
+     * Pusher, y hasta el 2/9/2026 eso hacía explotar el broadcast entero en vez de recortarlo.
+     *
+     * 🔴 Cuando el aviso viene recortado NO se inventa un endpoint: admin-api no tiene ninguno
+     * que devuelva UNA notificación por id, así que se recarga la bandeja de pendientes con el
+     * mismo GET que ya corre al montar el componente. El sonido se toca únicamente si el aviso
+     * apareció de verdad en esa recarga — un sonido sobre una bandeja que no cambió sería
+     * peor que no sonar.
+     *
+     * @param {Object} event_data  Payload Echo: { notification_id, notification? }.
      * @returns {void}
      */
     handle_notification_created(event_data) {
-      const notification = event_data && event_data.notification ? event_data.notification : null
-      if (!notification || notification.id == null) {
+      if (!event_data) {
         return
       }
-      this.$store.commit('task_notification/add_model', notification)
-      play_notification_sound()
+      const notification = event_data.notification ? event_data.notification : null
+      if (notification && notification.id != null) {
+        this.$store.commit('task_notification/add_model', notification)
+        play_notification_sound()
+        return
+      }
+      const notification_id = event_data.notification_id
+      if (notification_id == null) {
+        return
+      }
+      const self = this
+      this.$store.dispatch('task_notification/fetch_pending').then(function () {
+        const llego = self.$store.state.task_notification.models.some(function (m) {
+          return String(m.id) === String(notification_id)
+        })
+        if (llego) {
+          play_notification_sound()
+        }
+      }).catch(function () {
+        return null
+      })
     },
     /**
      * Deja el canal privado suscripto (si había alguno) y limpia las referencias.
