@@ -131,23 +131,6 @@
         >
           <i class="bi bi-window-sidebar" aria-hidden="true" />
         </router-link>
-        <!-- Botón marcar leads pendientes de revisión (sin respuesta o con error de envío/generación).
-             No envía ni genera nada: solo marca para que aparezcan en rojo en la grilla. -->
-        <button
-          type="button"
-          class="btn btn-sm"
-          :class="marking_pending ? 'btn-warning' : 'btn-outline-warning'"
-          :disabled="marking_pending"
-          title="Marcar leads pendientes de revisión (sin respuesta o con envío fallido)"
-          aria-label="Marcar leads pendientes de revisión (sin respuesta o con envío fallido)"
-          @click="on_mark_pending_review"
-        >
-          <i
-            class="bi"
-            :class="marking_pending ? 'bi-hourglass-split' : 'bi-search'"
-            aria-hidden="true"
-          />
-        </button>
         <!-- Filtro rápido: ver solo leads calificados (separarlos visualmente de nuevo/contactado/etc.) -->
         <button
           type="button"
@@ -672,7 +655,6 @@ export default {
       /** true mientras el filtro rápido "solo calificados" está activo (toggle del botón). */
       only_calificados_active: false,
       /** Indica si el marcado de leads pendientes de revisión está en curso. */
-      marking_pending: false,
       /** Lead actualmente abierto en el sidebar lateral de conversación (null = cerrado). */
       sidebar_lead: null,
       /** Ids de leads con toggle de respuesta automática Claude en curso (evita doble clic). */
@@ -1879,39 +1861,6 @@ export default {
       if (status === 'ejecutandose' || status === 'sin_confirmar') return 'bg-warning text-dark'
       if (status === 'fallido') return 'bg-danger'
       return 'bg-secondary'
-    },
-    /**
-     * Marca como pendientes de revisión los leads sin responder o con un error de envío/generación
-     * sin resolver (backend: LeadPendingReviewService). No envía ni genera nada. Al terminar, refresca
-     * la lista para que las filas marcadas se pinten en rojo.
-     * @returns {void}
-     */
-    on_mark_pending_review() {
-      if (this.marking_pending) {
-        return
-      }
-      var self = this
-      this.marking_pending = true
-      api.post('/lead/mark-pending-review').then(function (res) {
-        var marcados = res.data && res.data.marcados != null ? res.data.marcados : 0
-        var ya = res.data && res.data.ya_marcados != null ? res.data.ya_marcados : 0
-        var msg = marcados === 0
-          ? (ya > 0
-            ? 'Sin nuevos pendientes (' + ya + ' ya estaban marcados).'
-            : 'No hay leads pendientes de revisión.')
-          : marcados + ' lead' + (marcados === 1 ? '' : 's') + ' marcado' + (marcados === 1 ? '' : 's') + ' para revisión.'
-        window.dispatchEvent(new CustomEvent('admin-spa-toast', { detail: { message: msg, variant: 'success' } }))
-        /* Refrescar la lista para traer pendiente_revision_at actualizado y repintar las filas. */
-        if (self.$store.state.lead.is_filtered) {
-          self.$store.dispatch('lead/run_filter', { page: self.$store.state.lead.filter_page })
-        } else {
-          self.$store.dispatch('lead/get_models')
-        }
-        self.marking_pending = false
-      }).catch(function () {
-        window.dispatchEvent(new CustomEvent('admin-spa-toast', { detail: { message: 'Error al marcar leads pendientes de revisión.', variant: 'danger' } }))
-        self.marking_pending = false
-      })
     },
   },
 }
