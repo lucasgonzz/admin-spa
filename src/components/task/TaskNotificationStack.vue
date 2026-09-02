@@ -272,18 +272,18 @@ export default {
      * Handler del evento de websocket `.AdminTaskNotificationCreated`: agrega la
      * notificación recién creada al store y reproduce el sonido de aviso.
      *
-     * 🔴 El payload trae `notification_id` SIEMPRE y `notification` solo cuando entró en el
-     * presupuesto de Pusher (ver App\Support\BroadcastPayloadBudget en admin-api): `title` y
+     * 🔴 El payload trae `notification_id` y NADA MÁS (decisión de Lucas, 2/9/2026). `title` y
      * `content` de la tarea son texto libre y pueden pasarse de los 10240 bytes que admite
-     * Pusher, y hasta el 2/9/2026 eso hacía explotar el broadcast entero en vez de recortarlo.
+     * Pusher —hasta ese día eso hacía explotar el broadcast entero—, y cargar el modelo era
+     * además una consulta por evento. La rama de `event_data.notification` se conserva solo
+     * como tolerancia hacia atrás contra una API vieja; ninguna versión actual la usa.
      *
-     * 🔴 Cuando el aviso viene recortado NO se inventa un endpoint: admin-api no tiene ninguno
-     * que devuelva UNA notificación por id, así que se recarga la bandeja de pendientes con el
-     * mismo GET que ya corre al montar el componente. El sonido se toca únicamente si el aviso
-     * apareció de verdad en esa recarga — un sonido sobre una bandeja que no cambió sería
-     * peor que no sonar.
+     * 🔴 Con solo el id NO se inventa un endpoint: admin-api no tiene ninguno que devuelva UNA
+     * notificación por id, así que se recarga la bandeja de pendientes con el mismo GET que ya
+     * corre al montar el componente. El sonido se toca únicamente si el aviso apareció de
+     * verdad en esa recarga — un sonido sobre una bandeja que no cambió sería peor que no sonar.
      *
-     * @param {Object} event_data  Payload Echo: { notification_id, notification? }.
+     * @param {Object} event_data  Payload Echo: { notification_id }.
      * @returns {void}
      */
     handle_notification_created(event_data) {

@@ -84,13 +84,16 @@ export function useSupportBadgeSocket(options) {
   /**
    * Ticket actualizado en servidor (p. ej. reasignación): fusiona fila en bandeja según filtro activo.
    *
-   * 🔴 El payload trae `support_ticket_id` SIEMPRE y `ticket` solo cuando entró en el
-   * presupuesto de Pusher (ver App\Support\BroadcastPayloadBudget en admin-api). El
-   * `lastMessage` que viaja adentro del ticket es texto libre escrito por un cliente, así que
-   * el tamaño lo termina fijando alguien de afuera: cuando no entra, el ticket se recorta y
-   * acá hay que ir a buscarlo. Antes de eso el broadcast entero explotaba.
+   * 🔴 El payload trae `support_ticket_id` y NADA MÁS (decisión de Lucas, 2/9/2026).
+   * `support.admins` es un canal público y la clave de Pusher está en este bundle: el ticket que
+   * viajaba adentro llevaba `client_user_email`, `whatsapp_phone` y el último mensaje del
+   * cliente, o sea datos de una empresa cliente saliendo sin ninguna autenticación. Y el tamaño
+   * tampoco lo acotaba nadie: el `lastMessage` es texto libre escrito por un cliente, así que
+   * los 10240 bytes de Pusher quedaban en manos de quien más escribiera — y el broadcast entero
+   * explotaba. La rama de `event_data.ticket` se conserva solo como tolerancia hacia atrás
+   * contra una API vieja; ninguna versión actual la usa.
    *
-   * @param {Object} event_data Payload Echo (.SupportTicketUpdated): { support_ticket_id, ticket? }
+   * @param {Object} event_data Payload Echo (.SupportTicketUpdated): { support_ticket_id }
    */
   function handle_ticket_updated(event_data) {
     if (!event_data) {

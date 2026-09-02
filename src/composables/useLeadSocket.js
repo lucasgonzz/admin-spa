@@ -15,6 +15,19 @@ const STATUS_CARDS_DEBOUNCE_MS = 1500
 const STATUS_CARDS_MAX_ESPERA_MS = 6000
 
 /**
+ * Debounce del GET /lead/{id} que refresca una fila de la grilla. Agrupa la ráfaga de eventos
+ * que produce un mismo lead (mensaje + sugerencia + estado de entrega llegan casi juntos).
+ */
+const LIST_ROW_REFETCH_DEBOUNCE_MS = 800
+
+/**
+ * Tope de espera del refresco de filas, con el mismo criterio que el de las tarjetas de estado:
+ * con varios leads conversando a la vez el timer se reprograma sin parar y la grilla se congela
+ * justo en el momento de mayor movimiento.
+ */
+const LIST_ROW_REFETCH_MAX_ESPERA_MS = 3200
+
+/**
  * Suscripción Pusher al canal compartido `leads.admins`.
  *
  * Eventos:
@@ -33,6 +46,13 @@ export function useLeadSocket(options) {
   let unread_badges_debounce_timer = null
   let conversation_refetch_debounce_timer = null
   let list_row_refetch_debounce_timer = null
+  /**
+   * Ids de lead esperando su GET /lead/{id}. Es un Set y no una variable con el último id
+   * justamente porque son varios: ver schedule_list_row_refetch.
+   */
+  let list_row_refetch_pendientes = new Set()
+  /** Momento del primer pedido de refresco de fila de la ráfaga actual (null si no hay ráfaga). */
+  let list_row_refetch_primer_pedido_at = null
   /** Debounce del POST mark-whatsapp-messages-read mientras el operador mira el hilo. */
   let mark_read_if_viewing_debounce_timer = null
   /** Debounce del GET /lead/status-cards (tarjetas de estado arriba de la grilla). */
@@ -96,28 +116,85 @@ export function useLeadSocket(options) {
   }
 
   /**
-   * GET /lead/{id} con debounce para actualizar unread_count en la grilla (payload Pusher mínimo).
+   * Programa el refresco por API de la fila de un lead (GET /lead/{id}).
+   *
+   * 🔴 ACUMULA LOS IDS PENDIENTES, no guarda el último. Hasta el 2/9/2026 esta función tenía un
+   * solo timer y ningún id: cada llamada hacía clearTimeout y reprogramaba con el lead nuevo, y
+   * el anterior se perdía sin dejar rastro. Con dos leads a menos de 800 ms —dos conversaciones
+   * activas, que es lo normal— la fila del primero se quedaba vieja en silencio. Eso antes era
+   * el camino raro; desde que los eventos mandan solo ids, es el ÚNICO camino: por acá pasa
+   * ahora todo refresco de fila.
+   *
+   * El tope de espera sigue el mismo criterio que schedule_refresh_status_cards: un debounce que
+   * se reprograma en cada evento se muere de hambre justo cuando más importa.
+   *
+   * El Set además dedupe: varios eventos del mismo lead en la ráfaga siguen siendo un solo GET,
+   * que era el motivo original del debounce (no disparar el throttle de Laravel). Lo que sí
+   * crece es la cantidad de leads distintos, y eso es inevitable: cada uno necesita su GET.
    *
    * @param {number|string} lead_id
    * @returns {void}
    */
   function schedule_list_row_refetch(lead_id) {
+    if (lead_id == null || lead_id === '') {
+      return
+    }
+    list_row_refetch_pendientes.add(String(lead_id))
+    if (list_row_refetch_primer_pedido_at == null) {
+      list_row_refetch_primer_pedido_at = Date.now()
+    }
+    if (Date.now() - list_row_refetch_primer_pedido_at >= LIST_ROW_REFETCH_MAX_ESPERA_MS) {
+      if (list_row_refetch_debounce_timer) {
+        clearTimeout(list_row_refetch_debounce_timer)
+        list_row_refetch_debounce_timer = null
+      }
+      flush_list_row_refetch()
+      return
+    }
     if (list_row_refetch_debounce_timer) {
       clearTimeout(list_row_refetch_debounce_timer)
     }
     list_row_refetch_debounce_timer = setTimeout(function () {
       list_row_refetch_debounce_timer = null
-      api.get('/lead/' + lead_id).then(function (res) {
-        const model = res.data && res.data.model ? res.data.model : null
-        if (model && model.id) {
-          store.dispatch('lead/upsert_model_in_lists', model)
-          /* Acá es donde puede haber cambiado el `status` del lead: refrescar las tarjetas. */
-          schedule_refresh_status_cards()
-        }
-      }).catch(function () {
-        return null
-      })
-    }, 800)
+      flush_list_row_refetch()
+    }, LIST_ROW_REFETCH_DEBOUNCE_MS)
+  }
+
+  /**
+   * Dispara el GET de todos los leads que quedaron pendientes en la ráfaga y vacía la cola.
+   *
+   * @returns {void}
+   */
+  function flush_list_row_refetch() {
+    list_row_refetch_primer_pedido_at = null
+    /** Copia de los pendientes: la cola se vacía ANTES de pedir, para que un evento que llegue
+     *  mientras los GET están en vuelo arranque una ráfaga nueva y no se pierda. */
+    const ids = Array.from(list_row_refetch_pendientes)
+    list_row_refetch_pendientes.clear()
+    let i = 0
+    for (i = 0; i < ids.length; i = i + 1) {
+      fetch_list_row(ids[i])
+    }
+  }
+
+  /**
+   * GET /lead/{id} y aplicación del modelo que devuelve, para un lead puntual.
+   *
+   * @param {number|string} lead_id
+   * @returns {void}
+   */
+  function fetch_list_row(lead_id) {
+    api.get('/lead/' + lead_id).then(function (res) {
+      const model = res.data && res.data.model ? res.data.model : null
+      if (!model || !model.id) {
+        return
+      }
+      apply_refetched_lead_row(model)
+      /* Acá es donde puede haber cambiado el `status` del lead: refrescar las tarjetas. */
+      schedule_refresh_status_cards()
+    }).catch(function () {
+      return null
+    })
   }
 
   /**
@@ -207,29 +284,72 @@ export function useLeadSocket(options) {
   }
 
   /**
+   * Aplica el lead que devolvió GET /lead/{id}: la fila de la grilla Y los flags de la
+   * conversación abierta.
+   *
+   * 🔴 LAS DOS COSAS, no solo la fila. Hasta el 2/9/2026 el camino del refetch hacía únicamente
+   * `upsert_model_in_lists` mientras que apply_lead_row (el camino que tenía el modelo en el
+   * evento) hacía además el commit de `update_lead_en_conversacion`. Resultado: el operador que
+   * tenía abierta la conversación de ese lead seguía viendo los flags viejos —
+   * `tiene_sugerencia_pendiente` entre ellos— hasta recargar. En los dos sitios de LeadAiService
+   * quedaba tapado de casualidad porque atrás venía un emit_conversation_updated; en los tres de
+   * LeadController, no. Y desde que el evento manda solo el id, este es el único camino.
+   *
+   * ⚠️ EL HILO DE MENSAJES SE SACA ANTES DE COMMITEAR, y esto no es una optimización. GET
+   * /lead/{id} pasa por `prepare_lead_for_detail_json()`, que marca `messages_scope = 'full'`, y
+   * la mutación `update_lead_en_conversacion` REEMPLAZA el hilo cuando ve esa marca y lo FUSIONA
+   * cuando no. Commitear el modelo tal cual convertiría un refresco de fila en un reemplazo del
+   * hilo abierto, tirando lo que el panel tenga en vuelo. Ese error ya está documentado en
+   * `LeadController::full_lead_with_demo_link()` de admin-api; sin `messages` ni
+   * `messages_scope`, la mutación toma la rama de fusión y `merge_conversation_messages()`
+   * devuelve el hilo previo intacto — que es exactamente lo que hacía el camino del modelo.
+   *
+   * La grilla sí recibe el modelo entero, igual que antes: ahí no hay hilo que preservar.
+   *
+   * @param {Object} model Lead completo tal como lo devuelve GET /lead/{id}.
+   * @returns {void}
+   */
+  function apply_refetched_lead_row(model) {
+    if (!model || !model.id) {
+      return
+    }
+    store.dispatch('lead/upsert_model_in_lists', model)
+    /** Mismo lead, sin el hilo ni su marca de alcance. */
+    const solo_flags = Object.assign({}, model)
+    delete solo_flags.messages
+    delete solo_flags.messages_scope
+    store.commit('lead/update_lead_en_conversacion', solo_flags)
+  }
+
+  /**
    * Sugerencia nueva para un lead (.LeadSuggestionCreated).
    *
-   * 🔴 El payload trae `lead_id` SIEMPRE y `lead` solo cuando entró en el presupuesto de
-   * Pusher (ver App\Support\BroadcastPayloadBudget en admin-api). Un lead con la demo
-   * resuelta pesa más de los 10240 bytes que admite Pusher, y hasta el 2/9/2026 eso no
-   * recortaba el payload: hacía explotar el broadcast entero, y la excepción se llevaba
-   * puesto el reporte de una sugerencia que sí se había generado y guardado.
+   * 🔴 El payload trae `lead_id` y NADA MÁS (decisión de Lucas, 2/9/2026). `leads.admins` es un
+   * canal público y la clave de Pusher está en este bundle, así que por ahí se suscribe
+   * cualquiera: el `Lead` que venía adentro publicaba teléfono, mail, notas y resúmenes de la
+   * llamada y de la demo. Además pesaba 23221 bytes con la demo resuelta, contra los 10240 que
+   * admite Pusher, y eso hacía explotar el broadcast entero — la excepción se llevaba puesto el
+   * reporte de una sugerencia que sí se había generado y guardado.
    *
-   * @param {Object} event_data Payload Echo: { lead_id, lead? }.
+   * La rama de `event_data.lead` se conserva a propósito, aunque hoy no la use ninguna versión
+   * de admin-api: es lo que hace que esta SPA siga andando contra una API vieja (que sí manda el
+   * modelo). Es tolerancia hacia atrás, no un camino vivo.
+   *
+   * @param {Object} event_data Payload Echo: { lead_id }.
    * @returns {void}
    */
   function handle_suggestion_created(event_data) {
     if (!event_data) {
       return
     }
-    /* Id del lead: del modelo si vino, del campo suelto si el payload salió recortado. */
+    /* Id del lead: del campo suelto, o del modelo si vino de una API vieja. */
     const lead_id = event_data.lead && event_data.lead.id != null
       ? event_data.lead.id
       : event_data.lead_id
     if (event_data.lead) {
       apply_lead_row(event_data.lead)
     } else if (lead_id != null) {
-      /* Sin el modelo, la fila se refresca por API — mismo mecanismo que ya usa el
+      /* El camino normal: la fila se refresca por API — mismo mecanismo que ya usa el
        * listener de verificacion-agendamiento-alerts más abajo. */
       schedule_list_row_refetch(lead_id)
     }
@@ -419,6 +539,8 @@ export function useLeadSocket(options) {
         clearTimeout(list_row_refetch_debounce_timer)
         list_row_refetch_debounce_timer = null
       }
+      list_row_refetch_pendientes.clear()
+      list_row_refetch_primer_pedido_at = null
       if (mark_read_if_viewing_debounce_timer) {
         clearTimeout(mark_read_if_viewing_debounce_timer)
         mark_read_if_viewing_debounce_timer = null
