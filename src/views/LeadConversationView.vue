@@ -233,6 +233,7 @@
             @guardar_y_enviar="on_guardar_y_enviar_sugerencia(msg.id, $event)"
             @aprobar_con_acciones="on_aprobar_con_acciones(msg.id, $event)"
             @cancelar_envio_automatico="on_cancelar_envio_automatico(msg.id)"
+            @descartar_sugerencia="on_descartar_sugerencia(msg.id)"
             @toggle_deleted_from_context="on_toggle_deleted_from_context(msg.id)"
             @reaccionar="on_reaccionar_mensaje(msg.id, $event)"
           />
@@ -2329,6 +2330,32 @@ export default {
       this.busy_message_id = message_id
       this.$store
         .dispatch('lead/cancel_auto_send_message', message_id)
+        .then(function (model) {
+          self.busy_message_id = null
+          self.on_record_updated(model)
+          self.sync_countdown_clock()
+        })
+        .catch(function () {
+          self.busy_message_id = null
+        })
+    },
+
+    /**
+     * Descarta una sugerencia sin enviarla: queda en estado rechazado y el lead deja de figurar
+     * con una respuesta pendiente.
+     *
+     * Es distinto de `on_cancelar_envio_automatico`, que solo frena el timer del auto-envío y deja
+     * la sugerencia viva, y de `on_toggle_deleted_from_context`, que la saca del historial de
+     * Claude pero tampoco la resuelve.
+     *
+     * @param {number} message_id Id del mensaje a descartar.
+     * @returns {void}
+     */
+    on_descartar_sugerencia(message_id) {
+      const self = this
+      this.busy_message_id = message_id
+      this.$store
+        .dispatch('lead/reject_message', message_id)
         .then(function (model) {
           self.busy_message_id = null
           self.on_record_updated(model)
