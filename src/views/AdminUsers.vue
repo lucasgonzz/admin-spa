@@ -238,7 +238,7 @@
                 Notificar escalaciones por WhatsApp
               </label>
               <div class="form-text text-muted">
-                Recibís un WhatsApp cuando el agente no puede resolver algo solo y necesita que un humano intervenga en la conversación (una pregunta fuera de lo habitual, un pedido inusual, una objeción que requiere criterio). También te llega este mismo aviso cuando un lead confirma que terminó la demo y ya está listo para la llamada del closer — comparte este flag con la escalación general.
+                Este aviso ya NO gobierna los escalados de conversaciones de leads: desde el ruteo por rol, cuando el agente no puede resolver una conversación el aviso va siempre al setter, esté marcada o no esta casilla. Lo que sí seguís recibiendo por acá es el aviso de que un lead confirmó que terminó la demo y ya está listo para la llamada del closer, el del seguimiento post-demo y el de la llamada agendada. Es la casilla del closer, no la de los escalados.
               </div>
             </div>
 
