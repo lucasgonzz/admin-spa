@@ -83,12 +83,57 @@
     </div>
 
     <!-- g) La instancia se está armando (o está por hacerlo) y el video ya no es
-         un obstáculo. Copy de la misión 46, pieza 3. -->
+         un obstáculo. Copy de la misión 46, pieza 3, ahora con la espera CONTADA:
+         el demo setup tarda ~9,4 minutos medidos contra un video de ~7, así que el
+         lead que mira el video hasta el final llega acá y espera de verdad. Hasta
+         hoy veía un cartel quieto -- y si el poleo se agotaba a los 20 minutos, lo
+         seguía viendo para siempre.
+
+         Las cuatro variantes salen de `espera_variante`. La que manda cuando el
+         payload no trae los campos nuevos es el texto de siempre: entre el merge y
+         el deploy este front convive con la API vieja, y esa convivencia no puede
+         verse rota ni tirar nada por consola. -->
     <div v-else class="demo-boton-acceso__bloque">
-      <p class="demo-boton-acceso__titulo"><strong>Estamos preparando tu demo.</strong></p>
-      <p class="demo-boton-acceso__nota">
-        En un momento se habilita el ingreso.
-      </p>
+      <!-- g.1) El poleo se agotó (20 min sin novedad). Ya no va a llegar ningún
+           payload nuevo, así que este texto es el último que el lead va a ver: tiene
+           que darle una salida. Mismo tono que el bloque d) de setup fallido. -->
+      <template v-if="espera_variante === 'agotada'">
+        <p class="demo-boton-acceso__titulo"><strong>Se está demorando más de lo esperable.</strong></p>
+        <p class="demo-boton-acceso__nota">
+          Escribinos por WhatsApp y lo destrabamos.
+        </p>
+      </template>
+
+      <!-- g.2) Se pasó del estimado pero el poleo sigue vivo. Se cambia el texto en
+           vez de repetir "en un momento", que a los doce minutos ya suena a mentira. -->
+      <template v-else-if="espera_variante === 'demorada'">
+        <p class="demo-boton-acceso__titulo"><strong>Está tardando un poco más de lo normal.</strong></p>
+        <p class="demo-boton-acceso__nota">
+          En cuanto esté, el botón se habilita solo.
+        </p>
+      </template>
+
+      <!-- g.3) Espera contada. La barra es lo que avanza cada 10 segundos, porque
+           cada poleo trae un `iniciado_hace_seg` fresco; los minutos cambian una vez
+           por minuto. 🔴 Acá NO hay ningún timer nuevo: el número es una función pura
+           del payload, y el `setInterval` que existe en este componente es el de la
+           cuenta regresiva del turno, que no se toca. -->
+      <template v-else-if="espera_variante === 'contando'">
+        <p class="demo-boton-acceso__titulo"><strong>Estamos preparando tu demo.</strong></p>
+        <div class="demo-boton-acceso__barra" role="presentation">
+          <div class="demo-boton-acceso__barra-avance" :style="{ width: espera_pct + '%' }"></div>
+        </div>
+        <p class="demo-boton-acceso__nota">{{ espera_restante_texto }}</p>
+      </template>
+
+      <!-- g.4) Default seguro: sin `iniciado_hace_seg` va el texto de siempre, sin
+           contador y sin cuentas. Es el estado del front nuevo contra la API vieja. -->
+      <template v-else>
+        <p class="demo-boton-acceso__titulo"><strong>Estamos preparando tu demo.</strong></p>
+        <p class="demo-boton-acceso__nota">
+          En un momento se habilita el ingreso.
+        </p>
+      </template>
     </div>
   </section>
 </template>
@@ -97,9 +142,20 @@
 import { hay_bloque_de_turno } from './estados-turno'
 
 /**
+ * Cuánto se estima que tarda un demo setup, en segundos. Es el MISMO número que
+ * `RunDemoSetupService::DURACION_ESTIMADA_SEGUNDOS` del admin-api, que es quien lo
+ * manda en `setup.duracion_estimada_seg`. Acá vive sólo como red: si un payload
+ * trajera `iniciado_hace_seg` sin la duración, la cuenta igual se puede hacer en
+ * vez de mostrar una barra sin escala. No gobierna ninguna puerta -- la puerta es
+ * `puede_ingresar` y la calcula el backend.
+ */
+const DURACION_ESTIMADA_FALLBACK_SEG = 600
+
+/**
  * Botón de acceso a la demo (Grupo 300 · pagina-inmersiva-demo, prompt 05).
  * Siete bloques excluyentes, con los textos de contexto/demo_pagina.md §4 y de
- * la misión 46 -- se transcriben, no se reescriben.
+ * la misión 46 -- se transcriben, no se reescriben. El último, el de "preparando",
+ * tiene adentro cuatro variantes de espera (ver el comentario del bloque g).
  *
  * 🔴 QUIÉN DECIDE QUE SE PUEDE ENTRAR (misión 46, pieza 3): el flag
  * `puede_ingresar` del payload, y sólo él. Lo calcula el backend en un único
@@ -137,12 +193,30 @@ export default {
       type: Boolean,
       default: false,
     },
-    /** { estado } del demo setup: pendiente | ejecutandose | exitoso | fallido. */
+    /**
+     * { estado, iniciado_hace_seg, duracion_estimada_seg } del demo setup.
+     * `estado`: pendiente | ejecutandose | exitoso | fallido.
+     * `iniciado_hace_seg`: segundos desde que arrancó el armado, medidos por el
+     * backend con SU reloj, o null si todavía no arrancó. Puede no venir: una API
+     * anterior a esta misión no lo manda, y ese caso es el default seguro del
+     * bloque g).
+     * `duracion_estimada_seg`: el estimado con el que se cuenta la espera.
+     */
     setup: {
       type: Object,
       default: function () {
         return {}
       },
+    },
+    /**
+     * true cuando el contenedor (ExperienciaDemo.vue) ya agotó el tope del poleo:
+     * dejó de pedir el payload, así que esta pantalla no se va a actualizar sola
+     * nunca más. Es lo único que justifica mandar al lead a WhatsApp mientras el
+     * armado, en teoría, sigue corriendo.
+     */
+    espera_agotada: {
+      type: Boolean,
+      default: false,
     },
     /** { visto_pct, umbral_pct, obligatorio } del video de introducción. */
     intro: {
@@ -235,6 +309,112 @@ export default {
      */
     setup_fallido() {
       return this.setup_estado === 'fallido'
+    },
+
+    /**
+     * Segundos desde que arrancó el demo setup, tal como los manda el backend en
+     * `setup.iniciado_hace_seg`, o null cuando no hay dato utilizable.
+     *
+     * 🔴 Null es un caso NORMAL, no un borde defensivo: el backend manda null
+     * mientras el armado todavía no arrancó, y una API anterior a esta misión no
+     * manda el campo en absoluto (es exactamente lo que pasa entre el merge y el
+     * deploy). En los dos casos el bloque g) cae al texto de siempre.
+     *
+     * El número lo mide el servidor con su propio reloj: acá nunca se hace un
+     * `Date.now()` para esto. El del navegador ya nos costó una puerta mal abierta
+     * en la misión 46.
+     *
+     * @returns {number|null}
+     */
+    setup_iniciado_hace_seg() {
+      const crudo = this.setup ? this.setup.iniciado_hace_seg : null
+      if (crudo === null || crudo === undefined || crudo === '') {
+        return null
+      }
+      const segundos = Number(crudo)
+      if (!Number.isFinite(segundos) || segundos < 0) {
+        return null
+      }
+      return segundos
+    },
+
+    /**
+     * Cuánto se estima que dura el armado, en segundos. Lo manda el backend; si no
+     * viene (o viene en cero, que dividiría por nada) se usa la red del módulo.
+     *
+     * @returns {number}
+     */
+    setup_duracion_estimada_seg() {
+      const segundos = Number(this.setup ? this.setup.duracion_estimada_seg : null)
+      if (!Number.isFinite(segundos) || segundos <= 0) {
+        return DURACION_ESTIMADA_FALLBACK_SEG
+      }
+      return segundos
+    },
+
+    /**
+     * Cuál de las cuatro variantes del bloque g) corresponde:
+     *
+     *  - 'agotada'   el poleo se terminó: la pantalla ya no se actualiza sola.
+     *  - 'sin_datos' no hay `iniciado_hace_seg`: texto de siempre, sin contador.
+     *  - 'demorada'  se pasó del estimado y el poleo sigue vivo.
+     *  - 'contando'  espera normal, con la barra avanzando cada poleo.
+     *
+     * El orden importa: 'agotada' gana sobre todo lo demás, porque cuando el poleo
+     * murió el contador es una promesa que ya nadie va a cumplir.
+     *
+     * @returns {string}
+     */
+    espera_variante() {
+      if (this.espera_agotada) {
+        return 'agotada'
+      }
+      const iniciado = this.setup_iniciado_hace_seg
+      if (iniciado === null) {
+        return 'sin_datos'
+      }
+      if (iniciado >= this.setup_duracion_estimada_seg) {
+        return 'demorada'
+      }
+      return 'contando'
+    },
+
+    /**
+     * Ancho de la barra de avance, en porcentaje.
+     *
+     * Se topea en 95 a propósito: la barra NUNCA llega a 100. Llegar sería decir
+     * "listo" desde el navegador, y quien dice listo es `puede_ingresar` -- cuando
+     * eso pase, este bloque desaparece entero y aparece el botón. El piso de 5 es
+     * para que a los diez segundos se vea que algo arrancó, en vez de una barra
+     * vacía que se lee como rota.
+     *
+     * @returns {number}
+     */
+    espera_pct() {
+      const iniciado = this.setup_iniciado_hace_seg
+      if (iniciado === null) {
+        return 0
+      }
+      const pct = (iniciado / this.setup_duracion_estimada_seg) * 100
+      return Math.max(5, Math.min(95, Math.round(pct)))
+    },
+
+    /**
+     * Los minutos que faltan, redondeados hacia arriba para no prometer de menos.
+     * Cadena vacía si no hay dato (esa variante no muestra esta línea).
+     *
+     * @returns {string}
+     */
+    espera_restante_texto() {
+      const iniciado = this.setup_iniciado_hace_seg
+      if (iniciado === null) {
+        return ''
+      }
+      const minutos = Math.max(1, Math.ceil((this.setup_duracion_estimada_seg - iniciado) / 60))
+      if (minutos === 1) {
+        return 'Falta alrededor de 1 min.'
+      }
+      return 'Faltan alrededor de ' + minutos + ' min.'
     },
 
     /**
@@ -481,6 +661,26 @@ export default {
   color: var(--demo-color-texto-suave);
   font-size: 0.95rem;
   margin: 0;
+}
+
+/* Barra de avance de la espera del armado. Es el único elemento de esta pantalla
+   que se mueve solo, y se mueve porque cambia el ancho con cada poleo: la
+   transición suaviza el salto de diez segundos para que se lea como avance y no
+   como parpadeo. */
+.demo-boton-acceso__barra {
+  width: 100%;
+  max-width: 260px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(28, 35, 51, 0.12);
+  overflow: hidden;
+}
+
+.demo-boton-acceso__barra-avance {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--demo-gradient-marca);
+  transition: width 0.6s ease;
 }
 
 .demo-boton-acceso__boton {

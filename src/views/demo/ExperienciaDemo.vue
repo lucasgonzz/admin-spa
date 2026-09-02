@@ -140,6 +140,7 @@
             :puede_ingresar="puede_ingresar"
             :setup="setup"
             :intro="intro"
+            :espera_agotada="espera_agotada"
             :refrescar="consultar_estado"
             :ingresar="ingresar"
             class="demo-experiencia-page__turno"
@@ -258,6 +259,18 @@ export default {
       poleo_id: null,
       /** Momento (ms) en que arrancó el poleo, para cortarlo a los POLEO_TOPE_MS. */
       poleo_desde_ms: 0,
+      /**
+       * true cuando el poleo se cortó por haber llegado al tope de POLEO_TOPE_MS sin
+       * que la demo se habilitara. Es lo que le permite a BotonAcceso dejar de decir
+       * "en un momento" y mandar al lead a WhatsApp: desde ese instante esta página
+       * no se actualiza más sola, así que el cartel que quede es el definitivo.
+       *
+       * 🔴 Se prende SOLO en el tick del poleo, donde se detecta el tope -- nunca en
+       * frenar_poleo(), que también corre cuando la demo ya está lista (debe_polear
+       * pasa a false) y en beforeUnmount. Prenderla ahí le mostraría "se está
+       * demorando" a un lead que entró perfecto.
+       */
+      espera_agotada: false,
       /**
        * true cuando la carga inicial encontró el formulario ya completado y hay
        * que correr la secuencia de la confirmación al retirar la pantalla de
@@ -849,9 +862,16 @@ export default {
 
       const self = this
       self.poleo_desde_ms = Date.now()
+      /* Ventana nueva de poleo, marca de agotamiento en cero: si esto vuelve a
+         arrancar es porque hay algo que esperar otra vez. */
+      self.espera_agotada = false
       self.poleo_id = window.setInterval(function () {
-        /* Tope duro: 20 minutos y se corta. */
+        /* Tope duro: 20 minutos y se corta. La marca se prende ACÁ, que es el único
+           lugar donde el corte significa "se agotó la espera". frenar_poleo() se
+           llama además cuando la demo se habilitó y al desmontar: prenderla adentro
+           de ese método le mostraría el cartel de demora a alguien que entró bien. */
         if (Date.now() - self.poleo_desde_ms > POLEO_TOPE_MS) {
+          self.espera_agotada = true
           self.frenar_poleo()
           return
         }
