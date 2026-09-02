@@ -1110,6 +1110,25 @@ export default __base_store({
       })
     },
     /**
+     * Alterna la marca "el lead ya no recibe mensajes" (numero bloqueado o dado de baja).
+     *
+     * Saca al lead del rojo de la grilla: ese color esta reservado para los errores de entrega
+     * que se pueden reintentar. Es un toggle, porque un numero puede volver a andar.
+     *
+     * @param {Object} context
+     * @param {number} lead_id id del lead
+     * @returns {Promise<Object>} modelo lead actualizado
+     */
+    toggle_no_recibe_mensajes(context, lead_id) {
+      const commit = context.commit
+      return api.put('/lead/' + lead_id + '/toggle-no-recibe-mensajes').then((res) => {
+        const model = res.data.model
+        commit('update_lead_en_conversacion', model)
+        context.dispatch('upsert_model_in_lists', model)
+        return model
+      })
+    },
+    /**
      * Rechaza un mensaje sugerido por IA.
      * @param {Object} context
      * @param {number} message_id id de lead_messages

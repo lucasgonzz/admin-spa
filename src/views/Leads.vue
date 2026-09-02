@@ -218,6 +218,30 @@
                 >{{ format_status_nav_unread_count(status_group_unread_count(group.name)) }}</span>
               </button>
             </div>
+
+            <!--
+              Referencia de los colores de la fila. Va acá, a la derecha de los grupos, porque es
+              la primera fila que se mira al entrar y el color de la grilla es lo primero que se ve.
+              El detalle sale al pasar el mouse (y al enfocar con teclado): en reposo son dos
+              cuadraditos y una palabra, para no competir con los filtros.
+            -->
+            <div class="lead-color-legend ms-auto d-flex align-items-center gap-2">
+              <span
+                v-for="ref in row_color_legend"
+                :key="'legend-' + ref.key"
+                class="lead-color-legend__item d-inline-flex align-items-center"
+                tabindex="0"
+                role="note"
+                :aria-label="ref.label + ': ' + ref.detail"
+              >
+                <span class="lead-color-legend__swatch" :class="ref.swatch_class" aria-hidden="true" />
+                <span class="lead-color-legend__label">{{ ref.label }}</span>
+                <span class="lead-color-legend__popup" role="tooltip">
+                  <strong>{{ ref.label }}</strong>
+                  <span>{{ ref.detail }}</span>
+                </span>
+              </span>
+            </div>
           </div>
 
           <!-- Fila 2: estados del grupo activo (scroll horizontal si no entran en una línea) -->
@@ -772,11 +796,52 @@ export default {
     },
 
     /**
-     * Ids de los leads visibles que deben pintarse en rojo.
-     * Incluye leads pendientes de revisión manual (pendiente_revision_at seteado)
-     * y leads con al menos un mensaje saliente con error de envío sin resolver (failed_send_count > 0).
-     * El rojo tiene precedencia sobre el amarillo (sugerencia de IA) por diseño en row_highlight_classes.
-     * Se pasan a la grilla para pintar esas filas en rojo (mismo mecanismo que highlighted_row_id).
+     * Referencia de los colores de la fila, para la leyenda de la barra de grupos.
+     *
+     * El texto describe la condición REAL que evalúa el backend, no una aproximación: amarillo es
+     * `row_warning` (Lead::scopeWithUnreadLeadMessagesCount) y rojo es `failed_send_count`
+     * descontando los marcados como inalcanzables (ver danger_row_ids). Si alguna de las dos
+     * definiciones cambia, este texto cambia con ella.
+     *
+     * @returns {Array<Object>}
+     */
+    row_color_legend() {
+      return [
+        {
+          key: 'warning',
+          label: 'Sin responder',
+          swatch_class: 'lead-color-legend__swatch--warning',
+          detail: 'El lead escribió último y todavía no le salió ninguna respuesta, o hay un mensaje '
+            + 'de la IA esperando que lo verifiques antes de enviarse. Hay alguien esperando.',
+        },
+        {
+          key: 'danger',
+          label: 'Error de entrega',
+          swatch_class: 'lead-color-legend__swatch--danger',
+          detail: 'Se le respondió, pero el mensaje falló al enviarse — por el sistema o porque Meta '
+            + 'lo rechazó. Se puede reintentar. Los leads marcados como "ya no recibe mensajes" no '
+            + 'aparecen acá: eso no se reintenta.',
+        },
+      ]
+    },
+    /**
+     * Ids de los leads visibles que deben pintarse en ROJO.
+     *
+     * Definición de Lucas (2/9/2026): rojo = hubo un error de entrega, del sistema o de Meta, y por
+     * lo tanto se puede REINTENTAR. Es `failed_send_count > 0`, o sea un error de envío o una
+     * entrega rechazada por Meta sin actividad real posterior.
+     *
+     * 🔴 Dos cosas que cambiaron acá:
+     *
+     * - Sale `pendiente_revision_at` de la condición. Esa marca la pone el botón de revisión y se
+     *   borra al abrir la conversación, así que pintaba de rojo cosas que hoy son amarillas (un
+     *   lead sin responder) y dejaba de pintarlas apenas se miraba la conversación. Con el amarillo
+     *   calculado en vivo por el backend, la marca ya no aporta color.
+     * - Los leads marcados como "ya no recibe mensajes" quedan afuera: el número bloqueó o no
+     *   existe más, no hay nada que reintentar, y pintarlos sería ruido permanente sobre una fila
+     *   que nunca se va a poder resolver.
+     *
+     * El rojo tiene precedencia sobre el amarillo por diseño en row_highlight_classes.
      * @returns {Array<number>}
      */
     danger_row_ids() {
@@ -786,7 +851,10 @@ export default {
       var ids = []
       var self = this
       rows.forEach(function (row) {
-        if (row && (row.pendiente_revision_at || self.failed_send_count_of(row) > 0)) {
+        if (!row || row.no_recibe_mensajes_at) {
+          return
+        }
+        if (self.failed_send_count_of(row) > 0) {
           ids.push(row.id)
         }
       })
@@ -1893,6 +1961,104 @@ export default {
 @media (min-width: 768px) {
   .demos-grupos-grid {
     grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
+/* Fila de grupos: flex para poder empujar la leyenda de colores contra el borde derecho.
+   `width: 100%` es lo que hace que el `ms-auto` de la leyenda tenga a dónde empujar: `.lead-status-nav`
+   es flex, así que sin ancho explícito esta fila se encoge al contenido y el margen automático
+   resuelve en cero (medido: la fila quedaba en 564px de 1352 y la leyenda pegada a los botones).
+   Con wrap, en pantallas angostas la leyenda baja sola debajo de los botones en vez de comprimirlos
+   o empujar scroll horizontal. */
+.lead-status-nav__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+/* Referencia de colores: discreta en reposo, el detalle sale al pasar el mouse. */
+.lead-color-legend {
+  font-size: 0.78rem;
+  color: #6c757d;
+}
+
+.lead-color-legend__item {
+  position: relative;
+  gap: 0.3rem;
+  cursor: help;
+}
+
+.lead-color-legend__swatch {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 0.2rem;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  flex: 0 0 auto;
+}
+
+/* Los mismos amarillo y rojo que pinta la grilla (ver table/body/Index.vue). */
+.lead-color-legend__swatch--warning {
+  background-color: #ffe08a;
+}
+
+.lead-color-legend__swatch--danger {
+  background-color: #f5b7b7;
+}
+
+/* Globo explicativo. Sale con hover y también con foco de teclado, para que se pueda leer
+   sin mouse. `pointer-events: none` para que no se interponga con los botones de abajo. */
+.lead-color-legend__popup {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  z-index: 20;
+  display: none;
+  width: 17rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #dee2e6;
+  border-radius: 0.375rem;
+  background-color: #fff;
+  box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.12);
+  color: #212529;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  pointer-events: none;
+}
+
+.lead-color-legend__popup strong {
+  display: block;
+  margin-bottom: 0.15rem;
+}
+
+.lead-color-legend__item:hover .lead-color-legend__popup,
+.lead-color-legend__item:focus .lead-color-legend__popup,
+.lead-color-legend__item:focus-visible .lead-color-legend__popup {
+  display: block;
+}
+
+/* En teléfono la leyenda arranca a la izquierda (el ms-auto no tiene a dónde empujar) y el globo
+   se ancla al BORDE IZQUIERDO DE LA LEYENDA, no al del ítem.
+   Anclarlo al ítem no alcanza: el segundo ítem empieza pasada la mitad de la pantalla, así que un
+   globo de 17rem que arranca ahí se sale por la derecha (medido a 360px: llegaba a 399). Poniendo
+   el ítem en `static`, el `absolute` del globo resuelve contra `.lead-color-legend`. */
+@media (max-width: 575.98px) {
+  .lead-color-legend {
+    position: relative;
+    margin-left: 0 !important;
+  }
+
+  .lead-color-legend__item {
+    position: static;
+  }
+
+  .lead-color-legend__popup {
+    right: auto;
+    left: 0;
+    width: min(17rem, calc(100vw - 2.5rem));
   }
 }
 </style>

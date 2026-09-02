@@ -233,7 +233,9 @@
             @guardar_y_enviar="on_guardar_y_enviar_sugerencia(msg.id, $event)"
             @aprobar_con_acciones="on_aprobar_con_acciones(msg.id, $event)"
             @cancelar_envio_automatico="on_cancelar_envio_automatico(msg.id)"
+            :lead_no_recibe_mensajes="Boolean(effective_record && effective_record.no_recibe_mensajes_at)"
             @descartar_sugerencia="on_descartar_sugerencia(msg.id)"
+            @toggle_no_recibe_mensajes="on_toggle_no_recibe_mensajes(msg.id)"
             @toggle_deleted_from_context="on_toggle_deleted_from_context(msg.id)"
             @reaccionar="on_reaccionar_mensaje(msg.id, $event)"
           />
@@ -2360,6 +2362,34 @@ export default {
           self.busy_message_id = null
           self.on_record_updated(model)
           self.sync_countdown_clock()
+        })
+        .catch(function () {
+          self.busy_message_id = null
+        })
+    },
+
+    /**
+     * Alterna la marca "el lead ya no recibe mensajes" (número bloqueado o dado de baja).
+     *
+     * Saca al lead del rojo de la grilla, que está reservado para los errores de entrega que se
+     * pueden reintentar. El mensaje que dispara la acción se usa solo para el estado de "ocupado":
+     * la marca es del lead, no del mensaje.
+     *
+     * @param {number} message_id Mensaje desde cuyo banner se dispara (para el spinner).
+     * @returns {void}
+     */
+    on_toggle_no_recibe_mensajes(message_id) {
+      const self = this
+      const lead_id = this.effective_record ? this.effective_record.id : null
+      if (!lead_id) {
+        return
+      }
+      this.busy_message_id = message_id
+      this.$store
+        .dispatch('lead/toggle_no_recibe_mensajes', lead_id)
+        .then(function (model) {
+          self.busy_message_id = null
+          self.on_record_updated(model)
         })
         .catch(function () {
           self.busy_message_id = null

@@ -498,6 +498,26 @@
           <div v-if="delivery_error_time" class="wa-delivery-error-detail">
             {{ delivery_error_time }}
           </div>
+          <!--
+            Marca de "este lead ya no recibe mensajes". Va acá, pegada al fallo, porque es el
+            único lugar donde el operador tiene delante la evidencia para decidirlo. Con la
+            marca puesta, el lead sale del rojo de la grilla: el rojo está para lo que se
+            puede reintentar, y un número bloqueado o dado de baja no se reintenta.
+          -->
+          <button
+            v-if="show_marcar_no_recibe"
+            type="button"
+            class="btn btn-link btn-sm p-0 wa-delivery-error-action"
+            :disabled="busy"
+            :title="lead_no_recibe_mensajes
+              ? 'Volver a tratar a este lead como alcanzable'
+              : 'Marcar que este lead ya no recibe mensajes y sacarlo del rojo de la grilla'"
+            @click="on_toggle_no_recibe_mensajes"
+          >
+            {{ lead_no_recibe_mensajes
+              ? 'El número volvió a andar: quitar la marca'
+              : 'Este lead ya no recibe mensajes' }}
+          </button>
         </div>
         <!--
           Distintivo de envío parcial (grupo 186, prompt 03): la sugerencia salió, pero solo
@@ -739,6 +759,9 @@ export default {
     lead_status: { type: String, default: '' },
     /** true si la ventana de 24hs de Meta sigue abierta; con la ventana cerrada no se puede reaccionar. */
     whatsapp_window_open: { type: Boolean, default: true },
+    /* true si el lead esta marcado como "ya no recibe mensajes" (numero bloqueado o dado de baja).
+       Cambia el texto del banner de fallo y saca al lead del rojo de la grilla. */
+    lead_no_recibe_mensajes: { type: Boolean, default: false },
   },
   data() {
     return {
@@ -1206,10 +1229,25 @@ export default {
      * @returns {string}
      */
     delivery_error_title() {
+      /* Con el lead marcado como inalcanzable, el fallo deja de leerse como un problema del
+         sistema o de Meta: no hay nada roto ni nada para reintentar, el destinatario ya no
+         recibe. Decirlo con todas las letras evita que alguien lo reintente otra vez. */
+      if (this.lead_no_recibe_mensajes && this.message.whatsapp_delivery_status === 'fallido') {
+        return 'El lead ya no recibe mensajes'
+      }
       if (this.message.whatsapp_delivery_status === 'fallido') {
         return 'Falló la entrega por WhatsApp'
       }
       return 'No enviado por WhatsApp'
+    },
+    /**
+     * La acción de marcar/desmarcar solo aparece sobre una entrega que Meta rechazó. En un mensaje
+     * que nunca se despachó (sin wamid) el problema es nuestro, no del número del lead, y ofrecer
+     * ahí "este lead ya no recibe mensajes" invitaría a tapar un error propio.
+     * @returns {boolean}
+     */
+    show_marcar_no_recibe() {
+      return this.message.whatsapp_delivery_status === 'fallido'
     },
     /**
      * Momento del fallo de entrega, legible. Solo para el caso 'fallido' (el evento failed del
@@ -2085,6 +2123,14 @@ export default {
      */
     on_descartar() {
       this.$emit('descartar_sugerencia')
+    },
+    /**
+     * Pide al padre alternar la marca "el lead ya no recibe mensajes".
+     *
+     * @returns {void}
+     */
+    on_toggle_no_recibe_mensajes() {
+      this.$emit('toggle_no_recibe_mensajes')
     },
     /**
      * Solicita al padre alternar si el mensaje se incluye o excluye del contexto de Claude.
