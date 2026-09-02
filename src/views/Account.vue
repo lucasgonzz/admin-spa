@@ -273,7 +273,7 @@
           Las otras tres con dirty-check quedan en v-if a propósito:
             - implementation-settings: hace 10 GET en mounted, el 38% de la ráfaga, y cada uno de
               sus 9 campos tiene su propio botón Guardar.
-            - support-ai-settings (1 checkbox + 2 números) y support-alert-settings (1 número):
+            - support-ai-settings (2 checkboxes + 2 números) y support-alert-settings (1 número):
               retipearlos son segundos, no vale montarlos siempre.
 
           Las 12 secciones restantes van con v-if porque con todas en v-show se montaban las 16 al

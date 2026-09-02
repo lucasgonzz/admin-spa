@@ -29,10 +29,11 @@
       </label>
     </div>
     <p class="text-muted small mb-2">
-      Decide con qué régimen nace cada ticket nuevo. Prendido, toda respuesta que el agente escriba en un ticket nuevo
-      queda esperando tu aprobación desde la conversación. Apagado, los tickets nuevos le contestan solos al cliente,
-      con la demora de «Tiempo de espera antes de enviar» si hay alguna, y el escalado sigue siendo la red para lo que
-      el agente no sabe responder.
+      Decide con qué régimen nace cada ticket nuevo. Tildado, toda respuesta que el agente escriba en un ticket nuevo
+      queda esperando tu aprobación desde la conversación. Destildado, los tickets nuevos le contestan solos al cliente,
+      tras el tiempo de espera que tengas configurado para el envío automático, y el escalado sigue siendo la red para
+      lo que el agente no sabe responder. Mientras «Activar sugerencias automáticas de IA para soporte» esté apagado el
+      agente no genera ninguna respuesta, así que este régimen recién se nota cuando lo prendas.
     </p>
     <p class="text-muted small mb-3">
       <strong>Cambiar esto no toca ningún ticket ya abierto.</strong> Cada conversación se queda con el régimen que
@@ -89,10 +90,11 @@
       salga; si el operador responde a mano antes, se cancela el envío automático.
     </p>
     <p class="form-text small text-muted mb-2">
-      Este check es el corte maestro: apagado, el agente no genera nada en ningún ticket. Prendido, cada conversación
-      manda con sus dos botones propios, en el encabezado del ticket: uno prende o apaga el agente para ese cliente, y
-      el otro decide si sus respuestas necesitan tu aprobación antes de salir. Los tickets nuevos nacen con el régimen
-      que indique el check de arriba, y una vez abiertos no lo cambian solos.
+      «Activar sugerencias automáticas de IA para soporte» es el corte maestro: apagado, el agente no genera nada en
+      ningún ticket. Prendido, cada conversación manda con sus dos botones propios, en el encabezado del ticket: uno
+      prende o apaga el agente para ese cliente, y el otro decide si sus respuestas necesitan tu aprobación antes de
+      salir. Los tickets nuevos nacen con el régimen que indique «Los tickets nuevos arrancan pidiendo verificación
+      humana», y una vez abiertos no lo cambian solos.
     </p>
 
     <p v-if="loading" class="text-muted small mt-2 mb-0">Cargando…</p>
@@ -132,6 +134,14 @@ export default {
       stored_require_verification: true,
       /** Carga inicial GET settings. */
       loading: true,
+      /**
+       * La carga inicial falló.
+       *
+       * Bloquea el guardado. El catch de load_setting() deja los checkboxes habilitados con los valores del data(),
+       * que no son los del servidor sino los de arranque: sin ese bloqueo, tocar un check y guardar mandaría en el
+       * mismo PUT tres claves que el operador nunca vio, y una de ellas apaga el agente para todos los clientes.
+       */
+      load_failed: false,
       /** PUT en curso. */
       saving: false,
       /** Mensaje de éxito tras guardar. */
@@ -147,6 +157,11 @@ export default {
      * @returns {boolean}
      */
     can_save() {
+      // Sin carga válida no hay con qué comparar: los `stored_` serían los defaults del data() y no lo que hay en el
+      // servidor, así que cualquier guardado sería a ciegas sobre valores que el operador nunca llegó a ver.
+      if (this.load_failed) {
+        return false
+      }
       if (this.local_suggestions_enabled !== this.stored_suggestions_enabled) {
         if (!this.local_suggestions_enabled) {
           return true
@@ -214,6 +229,7 @@ export default {
           // Si la API todavía no manda el campo, se asume prendido: mostrarlo apagado y que el operador guarde sin
           // querer daría vuelta el régimen de todos los tickets nuevos.
           const require_verification = data.require_verification === undefined ? true : !!data.require_verification
+          self.load_failed = false
           self.local_suggestions_enabled = enabled
           self.stored_suggestions_enabled = enabled
           self.local_require_verification = require_verification
@@ -229,6 +245,7 @@ export default {
         })
         .catch(function () {
           self.error_message = 'No se pudo cargar la configuración.'
+          self.load_failed = true
         })
         .then(function () {
           self.loading = false
@@ -254,15 +271,24 @@ export default {
       self.saving = true
       self.saved_message = ''
       self.error_message = ''
+      // El payload lleva solo lo que cambió. Las dos demoras son `nullable` del lado de la API y, si no vienen, caen
+      // en el valor que ya está guardado: omitirlas cuando no cambiaron evita que tocar un check pise la demora que
+      // otro operador acaba de configurar desde otra pestaña, que ni siquiera está en pantalla con el corte maestro
+      // apagado. `suggestions_enabled` es el único que se manda incondicionalmente, porque la API lo pide `required`.
+      const payload = {
+        suggestions_enabled: self.local_suggestions_enabled,
+        // Va siempre, aunque el corte maestro esté apagado: el régimen de nacimiento es una perilla aparte y se
+        // tiene que poder cambiar sin prender las sugerencias.
+        require_verification: self.local_require_verification,
+      }
+      if (self.local_suggestions_enabled && suggestion_delay !== self.stored_suggestion_delay) {
+        payload.suggestion_delay = suggestion_delay
+      }
+      if (self.local_suggestions_enabled && auto_send_delay !== self.stored_auto_send_delay) {
+        payload.auto_send_delay = auto_send_delay
+      }
       api
-        .put('/settings/support-ai', {
-          suggestions_enabled: self.local_suggestions_enabled,
-          suggestion_delay: self.local_suggestions_enabled ? suggestion_delay : self.stored_suggestion_delay,
-          auto_send_delay: self.local_suggestions_enabled ? auto_send_delay : self.stored_auto_send_delay,
-          // Va siempre, aunque el corte maestro esté apagado: el régimen de nacimiento es una perilla aparte y se
-          // tiene que poder cambiar sin prender las sugerencias.
-          require_verification: self.local_require_verification,
-        })
+        .put('/settings/support-ai', payload)
         .then(function (res) {
           const data = res.data || {}
           self.local_suggestions_enabled = !!data.suggestions_enabled
@@ -287,6 +313,10 @@ export default {
             (err.response && err.response.data && err.response.data.message) ||
             'No se pudo guardar.'
           self.error_message = msg
+          // La pantalla vuelve a mostrar lo que hay en el servidor. Dejar el check como lo dejó el operador lo haría
+          // irse creyendo que los tickets nuevos ya esperan su aprobación cuando en el servidor siguen contestando
+          // solos: de todas las formas de fallar, esa es la única que miente hacia el lado peligroso.
+          self.local_require_verification = self.stored_require_verification
         })
         .then(function () {
           self.saving = false
