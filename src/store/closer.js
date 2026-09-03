@@ -92,6 +92,10 @@ export default {
     para_llamar: [],
     /** Columna 3: ya tuvieron al menos una llamada y todavía no cerraron. */
     seguimiento: [],
+    /** Tarjetas de resumen (agendadas/para_llamar/seguimiento) desde GET /closer/panel. */
+    cards: [],
+    /** Sección mostrada ahora en el panel: 'agendadas' | 'para_llamar' | 'seguimiento'. */
+    active_section: 'agendadas',
     /** Settings de timing de alertas (desde GET /closer/panel). */
     settings: {},
     /** true durante la carga inicial o refresh explícito con indicador. */
@@ -101,7 +105,8 @@ export default {
     /**
      * Criterio de ordenamiento de la sección "En seguimiento".
      * 'suggestion' → leads con sugerencia pendiente primero.
-     * 'date'       → más reciente (por closer_called_at) primero.
+     * 'last_call'  → más reciente (por la última llamada realizada) primero.
+     * 'first_call' → más reciente (por la primera llamada, la que marcó el ingreso a seguimiento) primero.
      */
     followup_sort: 'suggestion',
   },
@@ -117,6 +122,7 @@ export default {
       state.agendadas = payload.agendadas || []
       state.para_llamar = payload.para_llamar || []
       state.seguimiento = payload.seguimiento || []
+      state.cards = payload.cards || []
       state.settings = payload.settings || {}
       state.last_fetched_at = new Date().toISOString()
     },
@@ -158,12 +164,24 @@ export default {
      * Actualiza el criterio de ordenamiento de la sección "En seguimiento".
      *
      * @param {Object} state
-     * @param {'suggestion'|'date'} value Nuevo criterio de orden.
+     * @param {'suggestion'|'last_call'|'first_call'} value Nuevo criterio de orden.
      * @returns {void}
      */
     set_followup_sort(state, value) {
-      if (value === 'suggestion' || value === 'date') {
+      if (value === 'suggestion' || value === 'last_call' || value === 'first_call') {
         state.followup_sort = value
+      }
+    },
+    /**
+     * Cambia la sección mostrada en el panel (disparada por LeadStatusCards).
+     *
+     * @param {Object} state
+     * @param {'agendadas'|'para_llamar'|'seguimiento'} value Sección a mostrar.
+     * @returns {void}
+     */
+    set_active_section(state, value) {
+      if (value === 'agendadas' || value === 'para_llamar' || value === 'seguimiento') {
+        state.active_section = value
       }
     },
     /**

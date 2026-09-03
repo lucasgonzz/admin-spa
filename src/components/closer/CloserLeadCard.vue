@@ -1,5 +1,5 @@
 <template>
-  <div class="closer-lead-card card border-0 shadow-sm mb-3">
+  <div class="closer-lead-card card mb-3">
     <div class="card-body p-3">
       <!-- Encabezado: nombre, indicador en vivo y badge de estado -->
       <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
@@ -170,24 +170,12 @@
 
         <button
           type="button"
-          class="btn btn-sm"
-          :class="section === 'agendadas' ? 'btn-primary' : 'btn-outline-secondary'"
-          @click="go_to_conversation"
-        >
-          <i class="bi bi-chat-dots me-1" aria-hidden="true" />
-          Ver conversación
-        </button>
-
-        <a
-          v-if="section !== 'agendadas' && whatsapp_href"
-          :href="whatsapp_href"
-          target="_blank"
-          rel="noopener noreferrer"
           class="btn btn-sm btn-success"
+          @click="$emit('open-conversation', lead)"
         >
           <i class="bi bi-whatsapp me-1" aria-hidden="true" />
           WhatsApp
-        </a>
+        </button>
       </div>
     </div>
   </div>
@@ -460,14 +448,6 @@ export default {
       })
     },
     /**
-     * Link wa.me del lead para la sección seguimiento.
-     *
-     * @returns {string}
-     */
-    whatsapp_href() {
-      return this.build_whatsapp_href(this.lead.phone)
-    },
-    /**
      * true si la hora actual cae dentro del slot de demo (inicio + 60 min, hoy).
      *
      * @returns {boolean}
@@ -478,14 +458,6 @@ export default {
   },
 
   methods: {
-    /**
-     * Emite el evento para que el panel abra la conversación (sidebar en desktop, ruta en mobile).
-     *
-     * @returns {void}
-     */
-    go_to_conversation() {
-      this.$emit('open-conversation', this.lead)
-    },
     /**
      * Emite hacia el panel el pedido de abrir el modal de detalle completo del lead
      * (el mismo modal del módulo de Leads), delegando la navegación al padre.
@@ -697,9 +669,11 @@ export default {
 
 <style lang="sass" scoped>
 .closer-lead-card
+	border: 1px solid rgba(0, 0, 0, 0.09)
+	box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.07)
 	transition: box-shadow 0.15s ease
 	&:hover
-		box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.08) !important
+		box-shadow: 0 0.35rem 0.9rem rgba(0, 0, 0, 0.1)
 
 .closer-lead-name-link
 	color: inherit

@@ -30,34 +30,57 @@
       </div>
     </div>
 
-    <!-- Toggle resumen (solo si hay resumen) -->
+    <!-- Toggle resumen (solo si hay resumen): abre modal en vez de expandir inline -->
     <div v-if="call.call_summary" class="mt-2">
       <button
         type="button"
         class="btn btn-link btn-sm p-0 text-decoration-none"
-        @click="summary_expanded = !summary_expanded"
+        @click="summary_expanded = true"
       >
-        <i class="bi me-1" :class="summary_expanded ? 'bi-chevron-down' : 'bi-chevron-right'" aria-hidden="true" />
+        <i class="bi bi-chevron-right me-1" aria-hidden="true" />
         Resumen de la llamada
       </button>
-      <div v-show="summary_expanded" class="mt-2">
+      <BaseModal
+        :show="summary_expanded"
+        title="Resumen de la llamada"
+        size="lg"
+        @update:show="v => summary_expanded = v"
+        @close="summary_expanded = false"
+      >
         <CallSummaryPanel :call_summary="call.call_summary" />
-      </div>
+      </BaseModal>
     </div>
 
-    <!-- Toggle transcripción completa (solo si existe) -->
+    <!-- Toggle transcripción completa (solo si existe): abre modal en vez de expandir inline -->
     <div v-if="call.transcript" class="mt-2">
       <button
         type="button"
         class="btn btn-link btn-sm p-0 text-decoration-none"
-        @click="transcript_expanded = !transcript_expanded"
+        @click="transcript_expanded = true"
       >
-        <i class="bi me-1" :class="transcript_expanded ? 'bi-chevron-down' : 'bi-chevron-right'" aria-hidden="true" />
+        <i class="bi bi-chevron-right me-1" aria-hidden="true" />
         Transcripción completa
       </button>
-      <div v-show="transcript_expanded" class="mt-2 p-2 bg-light rounded small" style="white-space: pre-line; max-height: 300px; overflow-y: auto;">
-        {{ call.transcript }}
-      </div>
+      <BaseModal
+        :show="transcript_expanded"
+        title="Transcripción completa"
+        size="lg"
+        @update:show="v => transcript_expanded = v"
+        @close="transcript_expanded = false"
+      >
+        <button
+          type="button"
+          class="btn btn-sm mb-2"
+          :class="copied_feedback ? 'btn-success' : 'btn-outline-secondary'"
+          @click="on_copy_transcript"
+        >
+          <i class="bi" :class="copied_feedback ? 'bi-check-lg' : 'bi-clipboard'" aria-hidden="true" />
+          {{ copied_feedback ? 'Copiado' : 'Copiar' }}
+        </button>
+        <div class="p-2 bg-light rounded small" style="white-space: pre-line; max-height: 60vh; overflow-y: auto;">
+          {{ call.transcript }}
+        </div>
+      </BaseModal>
     </div>
 
     <!-- Socios detectados/cargados en ESTA llamada -->
@@ -87,7 +110,9 @@
 <script>
 import CallSummaryPanel from '@/components/lead/resumen/CallSummaryPanel.vue'
 import CloserPartnerRow from './CloserPartnerRow.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
 import { with_authuser } from '@/utils/meet'
+import { copy_text_to_clipboard } from '@/utils/version_notification_clipboard'
 
 /**
  * Fila de una llamada del closer con un lead, dentro de la sección "Seguimiento".
@@ -100,6 +125,7 @@ export default {
   components: {
     CallSummaryPanel,
     CloserPartnerRow,
+    BaseModal,
   },
 
   emits: ['partner-click'],
@@ -119,10 +145,21 @@ export default {
 
   data() {
     return {
-      /** Controla visibilidad del CallSummaryPanel de esta llamada. */
+      /** Controla visibilidad del modal de resumen de esta llamada. */
       summary_expanded: false,
-      /** Controla visibilidad de la transcripción completa de esta llamada. */
+      /** Controla visibilidad del modal de transcripción completa de esta llamada. */
       transcript_expanded: false,
+      /** true mientras se muestra el feedback "Copiado" tras copiar la transcripción. */
+      copied_feedback: false,
+      /** Id del setTimeout que apaga el feedback, para poder cancelarlo si se copia de nuevo. */
+      copied_feedback_timer: null,
+    }
+  },
+
+  beforeUnmount() {
+    /* Limpiar el timer del feedback para no dejarlo apuntando a un componente muerto. */
+    if (this.copied_feedback_timer) {
+      clearTimeout(this.copied_feedback_timer)
     }
   },
 
@@ -210,6 +247,31 @@ export default {
      */
     on_send_bot() {
       this.$store.dispatch('closer/send_bot_for_call', { lead_id: this.lead_id, call_id: this.call.id })
+    },
+    /**
+     * Copia la transcripción completa al portapapeles y muestra feedback por 2 segundos.
+     * Mismo patrón que `DemoIngresoLink.vue`.
+     * @returns {void}
+     */
+    on_copy_transcript() {
+      var self = this
+      if (!this.call.transcript) {
+        return
+      }
+      copy_text_to_clipboard(this.call.transcript)
+        .then(function () {
+          self.copied_feedback = true
+          if (self.copied_feedback_timer) {
+            clearTimeout(self.copied_feedback_timer)
+          }
+          self.copied_feedback_timer = setTimeout(function () {
+            self.copied_feedback = false
+            self.copied_feedback_timer = null
+          }, 2000)
+        })
+        .catch(function () {
+          alert('No se pudo copiar la transcripción al portapapeles.')
+        })
     },
   },
 }
