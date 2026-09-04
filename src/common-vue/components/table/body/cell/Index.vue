@@ -156,6 +156,10 @@ export default {
       if (k == 'to_version_id' && this.row.to_version) {
         return this.row.to_version.version
       }
+      /* DemoUpdate.version_id (Actualizaciones > Demo): único modelo que usa esta key. */
+      if (k == 'version_id' && this.row.version) {
+        return this.row.version.version
+      }
       if (k == 'from_version_id' && this.row.from_version) {
         return this.row.from_version ? this.row.from_version.version : ''
       }
