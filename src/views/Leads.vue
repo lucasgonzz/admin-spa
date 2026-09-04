@@ -1410,6 +1410,30 @@ export default {
       return 'Ver solo leads en ' + opt.text
     },
     /**
+     * Busca, entre `lead_status_cards`, una tarjeta AGRUPADA (con `.slugs`, ej. "Demo": 3 estados)
+     * cuyo conjunto de slugs sea EXACTAMENTE el mismo que `value` -- comparando como sets, sin
+     * importar orden ni tamaño relativo a los grupos reales del catálogo. Devuelve la tarjeta o
+     * `null`.
+     * @param {Array<string>} value
+     * @returns {Object|null}
+     */
+    find_status_card_by_slugs(value) {
+      var cards = this.lead_status_cards
+      var found = null
+      cards.forEach(function (card) {
+        if (!card || !Array.isArray(card.slugs) || !card.slugs.length) {
+          return
+        }
+        var same_set = card.slugs.length === value.length && card.slugs.every(function (s) {
+          return value.indexOf(s) !== -1
+        })
+        if (same_set) {
+          found = card
+        }
+      })
+      return found
+    },
+    /**
      * Reconstruye la selección activa de la barra de navegación de estados a partir del
      * filtro `status` en el store (si existe) — sin importar si lo generó esta barra, el
      * modal de filtro por columna "Estado" de la tabla, u otro control. Mismo patrón que
@@ -1436,6 +1460,19 @@ export default {
       var value = status_filter.igual_que
 
       if (Array.isArray(value)) {
+        // Antes de intentar matchear contra un grupo REAL del catálogo (lead_status_groups), hay
+        // que descartar el caso de una tarjeta agrupada (ej. "Demo": 3 slugs) -- su `.group` no es
+        // ninguno de esos grupos reales aunque comparta label con uno (el grupo real "Demo" del
+        // catálogo tiene 5 slugs, no 3). Sin este chequeo, ninguna igualdad de tamaño matchea,
+        // sync_status_nav_from_store() termina en null/null, y la tarjeta pierde el resaltado
+        // apenas se la clickea.
+        var matched_card = this.find_status_card_by_slugs(value)
+        if (matched_card) {
+          this.active_status_group = null
+          this.active_status_slug = matched_card.value
+          return
+        }
+
         var matched_group = null
         this.lead_status_groups.forEach(function (g) {
           var slugs = g.options.map(function (o) { return o.value })
