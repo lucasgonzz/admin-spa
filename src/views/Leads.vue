@@ -1538,11 +1538,25 @@ export default {
      * Volver a clickear la misma tarjeta re-ejecuta el filtro, no lo apaga: idéntico al botón
      * de estado de la barra. Para sacar el filtro está "Todos".
      *
-     * @param {{ value: string, text: string, color: string, group: string|null }} card
+     * La tarjeta "Demo" (misión demo-v2-estados-automaticos, 4/9/2026) es agrupada: su `value`
+     * ("demo") no es un slug real de `lead_status_options`, así que buscarla ahí no matchea nada
+     * y el fallback de abajo filtraría por `status = 'demo'` (roto: ningún lead tiene ese status).
+     * Cuando la tarjeta trae `slugs`, se reusa el mismo mecanismo de filtro por array que ya usa
+     * `on_select_status_group()` — no hay que inventar nada nuevo.
+     *
+     * @param {{ value: string, text: string, color: string, group: string|null, slugs?: string[] }} card
      * @returns {void}
      */
     on_select_status_card(card) {
       if (!card || !card.value) {
+        return
+      }
+      if (Array.isArray(card.slugs) && card.slugs.length) {
+        this.active_status_group = card.group || null
+        this.active_status_slug = card.value
+        this.$store.commit('lead/add_filter', { type: 'select', key: 'status', igual_que: card.slugs })
+        this.$store.commit('lead/set_filter_page', 1)
+        this.$store.dispatch('lead/run_filter', { page: 1 })
         return
       }
       var opciones = this.lead_status_options
