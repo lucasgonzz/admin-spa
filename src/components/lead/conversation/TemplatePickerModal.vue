@@ -593,8 +593,15 @@ export default {
 
       /* Recorrer las variables de la plantilla y detectar cuáles faltan resolver. */
       this.active_variables.forEach(({ placeholder, field, label, ai_suggestable }) => {
-        /* Si tiene field y el lead trae el dato, se resuelve sola: no se pide nada al admin. */
-        const value = field ? (this.lead?.[field] || '') : ''
+        /*
+         * Mismo resolver que preview_text()/resolved_variables(): si contact_name es de puros
+         * espacios, el valor resuelto REAL es '' (recortado), no el string de espacios crudo.
+         * Antes de conectar este tercer punto a resolve_lead_field_value(), ese caso quedaba sin
+         * detectar acá (el string de espacios es truthy en JS) y el admin nunca veía el campo
+         * para completarlo a mano: la plantilla salía con {{1}} vacío — el mismo bug de Meta
+         * #131008 que el backend ya blinda, pero reabierto del lado del envío manual.
+         */
+        const value = resolve_lead_field_value(this.lead, field)
         if (!value) {
           this.empty_variables.push({
             placeholder,
