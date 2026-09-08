@@ -34,27 +34,8 @@
            controles de abajo al fondo y la conversación no entraba en pantalla, que es justo para
            lo que existe este panel. Vive en la pestaña Operaciones del modal del lead
            (`components/lead/extra-props/Index.vue`), debajo del pipeline, que es donde ya estaba
-           el resto de la información de la demo. Los dos controles que siguen son cortos y no
-           tapan nada: esos sí se quedan. -->
-
-      <!-- Acceso a la demo: link directo, reemitir y revocar (grupo 233, prompt 06).
-           Se muestra junto a la información de la demo agendada, antes del cuerpo de la
-           conversación, y solo si el lead tiene demo asignada (un lead sin demo no debe
-           ver un bloque de acceso vacío). -->
-      <demo-acceso-control
-        v-if="lead && lead.demo_id"
-        :lead="lead"
-        @record-updated="on_record_updated"
-      />
-
-      <!-- Dinámica de demo del lead (grupo 293, prompt 04): a diferencia del control de
-           arriba, este SÍ se muestra sin demo asignada — la dinámica se decide antes de
-           agendar, así que los leads sin demo son justamente los candidatos a piloto. -->
-      <demo-experiencia-control
-        v-if="lead"
-        :lead="lead"
-        @record-updated="on_record_updated"
-      />
+           el resto de la información de la demo. Las filas de acceso y dinámica de demo que vivían
+           acá se sacaron por el mismo motivo de espacio (misión cerrar-sidebar-whatsapp-escape). -->
 
       <!-- Cuerpo: contiene la vista de conversación embebida -->
       <div class="lead-sidebar__body">
@@ -71,8 +52,6 @@
 
 <script>
 import LeadConversationView from '@/views/LeadConversationView.vue'
-import DemoAccesoControl from '@/components/lead/DemoAccesoControl.vue'
-import DemoExperienciaControl from '@/components/lead/DemoExperienciaControl.vue'
 
 /**
  * Panel lateral deslizable que muestra la conversación WhatsApp de un lead
@@ -91,7 +70,7 @@ import DemoExperienciaControl from '@/components/lead/DemoExperienciaControl.vue
 export default {
   name: 'LeadConversationSidebar',
 
-  components: { LeadConversationView, DemoAccesoControl, DemoExperienciaControl },
+  components: { LeadConversationView },
 
   props: {
     /**
@@ -150,17 +129,31 @@ export default {
     /* Registrar listeners de mousemove/mouseup en el document para capturar drag fuera del handle. */
     this._on_mousemove = this.on_resize_mousemove.bind(this)
     this._on_mouseup = this.on_resize_mouseup.bind(this)
+    this._on_keydown = this.on_keydown.bind(this)
     document.addEventListener('mousemove', this._on_mousemove)
     document.addEventListener('mouseup', this._on_mouseup)
+    document.addEventListener('keydown', this._on_keydown)
   },
 
   beforeUnmount() {
     /* Limpiar listeners globales al desmontar para evitar memory leaks. */
     document.removeEventListener('mousemove', this._on_mousemove)
     document.removeEventListener('mouseup', this._on_mouseup)
+    document.removeEventListener('keydown', this._on_keydown)
   },
 
   methods: {
+    /**
+     * Cierra el sidebar al presionar Escape, mientras esté visible.
+     * @param {KeyboardEvent} e Evento keydown del document.
+     * @returns {void}
+     */
+    on_keydown(e) {
+      if (e.key === 'Escape' && this.visible) {
+        this.$emit('close')
+      }
+    },
+
     /**
      * Inicia el drag de resize al presionar el handle izquierdo.
      * Guarda posición inicial y ancho de referencia para calcular el delta.

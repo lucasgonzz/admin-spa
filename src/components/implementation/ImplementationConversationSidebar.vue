@@ -124,17 +124,31 @@ export default {
     /* Registrar listeners de mousemove/mouseup en el document para capturar drag fuera del handle. */
     this._on_mousemove = this.on_resize_mousemove.bind(this)
     this._on_mouseup = this.on_resize_mouseup.bind(this)
+    this._on_keydown = this.on_keydown.bind(this)
     document.addEventListener('mousemove', this._on_mousemove)
     document.addEventListener('mouseup', this._on_mouseup)
+    document.addEventListener('keydown', this._on_keydown)
   },
 
   beforeUnmount() {
     /* Limpiar listeners globales al desmontar para evitar memory leaks. */
     document.removeEventListener('mousemove', this._on_mousemove)
     document.removeEventListener('mouseup', this._on_mouseup)
+    document.removeEventListener('keydown', this._on_keydown)
   },
 
   methods: {
+    /**
+     * Cierra el sidebar al presionar Escape, mientras esté visible.
+     * @param {KeyboardEvent} e Evento keydown del document.
+     * @returns {void}
+     */
+    on_keydown(e) {
+      if (e.key === 'Escape' && this.visible) {
+        this.$emit('close')
+      }
+    },
+
     /**
      * Inicia el drag de resize al presionar el handle izquierdo.
      * Guarda posición inicial y ancho de referencia para calcular el delta.
