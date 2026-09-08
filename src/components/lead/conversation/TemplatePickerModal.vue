@@ -222,6 +222,22 @@ const FALLBACK_VARIABLE_MAP = [
   { placeholder: '{{2}}', field: 'demo_start_time', label: 'Hora de la demo (HH:MM)',  ai_suggestable: false },
 ]
 
+/**
+ * Valor para un placeholder de plantilla resuelto desde el lead. El campo contact_name se
+ * recorta a la primera palabra: es el nombre que ve el LEAD en el saludo, y no mandamos el
+ * apellido (decisión de Lucas, 8/9/2026) — espeja Lead::getContactFirstNameAttribute() del
+ * backend. Se resuelve acá, en el frontend, porque LeadController::send_template_json() no
+ * vuelve a tocar `variables` server-side: manda tal cual lo que arma este modal.
+ */
+function resolve_lead_field_value(lead, field) {
+  if (!field) return ''
+  const raw = lead?.[field] || ''
+  if (field === 'contact_name') {
+    return String(raw).trim().split(/\s+/)[0] || ''
+  }
+  return raw
+}
+
 export default {
   name: 'TemplatePickerModal',
 
@@ -386,7 +402,7 @@ export default {
 
       this.active_variables.forEach(({ placeholder, field }) => {
         /* Valor resuelto automáticamente desde el lead (si corresponde). */
-        let value = field ? (this.lead?.[field] || '') : ''
+        let value = field ? resolve_lead_field_value(this.lead, field) : ''
 
         /* Los overrides manuales/IA cargados en empty_variables tienen prioridad. */
         const override = this.empty_variables.find((v) => v.placeholder === placeholder)
@@ -420,7 +436,7 @@ export default {
         if (manual) {
           result.push(manual.value || '')
         } else {
-          result.push(field ? (this.lead?.[field] || '') : '')
+          result.push(field ? resolve_lead_field_value(this.lead, field) : '')
         }
       })
 
