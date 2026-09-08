@@ -169,6 +169,17 @@ export default {
       image_loading: false,
       /** Mensaje si falla la carga. */
       image_error: null,
+      /**
+       * Contador que identifica la carga de imagen en curso. `open_image_editor()` (en el padre)
+       * cambia `source_file` y `show` en el mismo tick, y eso dispara los DOS watchers de abajo
+       * en el mismo flush de Vue: cada uno llama a `load_source_image()`, así que se arrancan dos
+       * `Image()` en paralelo y el segundo revoca el object URL del primero a mitad de la carga.
+       * Ese primer `Image` termina en `onerror` y, si llega después de que el segundo ya cargó
+       * bien, pisa el estado con "No se pudo cargar la imagen" aunque el archivo sea válido. El
+       * token deja que solo el callback de la carga MÁS RECIENTE toque `image_loading`/
+       * `image_error`/`background_image` — los `onload`/`onerror` de una carga vieja se ignoran.
+       */
+      load_token: 0,
       /** Evita doble clic en Usar imagen. */
       exporting: false,
       /** Paleta de colores tipo WhatsApp. */
@@ -276,6 +287,10 @@ export default {
      */
     load_source_image() {
       const self = this
+      /* Identifica esta carga puntual; ver el comentario de `load_token` en data(). */
+      this.load_token += 1
+      const my_token = this.load_token
+
       this.reset_editor_state()
       this.image_loading = true
       this.image_error = null
@@ -291,6 +306,10 @@ export default {
 
       const img = new Image()
       img.onload = function () {
+        /* Si mientras tanto arrancó una carga más nueva, esta ya quedó obsoleta: no tocar el estado. */
+        if (my_token !== self.load_token) {
+          return
+        }
         self.background_image = img
         self.fit_canvas_to_image(img.naturalWidth, img.naturalHeight)
         self.image_loading = false
@@ -299,6 +318,9 @@ export default {
         })
       }
       img.onerror = function () {
+        if (my_token !== self.load_token) {
+          return
+        }
         self.image_loading = false
         self.image_error = 'No se pudo cargar la imagen.'
       }
