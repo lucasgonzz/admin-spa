@@ -269,9 +269,13 @@ export default {
     },
 
     /**
-     * Limpia estado al cerrar el modal.
+     * Limpia estado al cerrar el modal. También invalida (vía `load_token`) cualquier carga de
+     * imagen que haya quedado en vuelo: si no se subiera acá, cerrar el modal mientras `Image()`
+     * todavía está decodificando dejaría que su `onerror` (dispara porque este mismo método ya
+     * revocó el object URL) le setee `image_error` a un editor ya oculto.
      */
     reset_editor_state() {
+      this.load_token += 1
       this.strokes = []
       this.current_stroke = null
       this.is_drawing = false
@@ -287,11 +291,10 @@ export default {
      */
     load_source_image() {
       const self = this
-      /* Identifica esta carga puntual; ver el comentario de `load_token` en data(). */
-      this.load_token += 1
-      const my_token = this.load_token
-
       this.reset_editor_state()
+      /* Identifica esta carga puntual; ver el comentario de `load_token` en data(). Va DESPUÉS
+         de reset_editor_state() porque ese método también sube el token (ver su comentario). */
+      const my_token = this.load_token
       this.image_loading = true
       this.image_error = null
 
