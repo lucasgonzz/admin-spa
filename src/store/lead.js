@@ -977,6 +977,46 @@ export default __base_store({
         })
     },
     /**
+     * Botón "Ofrecer/agendar demo" del sidebar: fuerza la intención del turno hacia la demo
+     * (ver LeadController::offer_demo_json). Comparte el mismo lock de IA en curso
+     * (ai_generating_lead_id) que request_ai_suggestion, a propósito: las dos operaciones piden
+     * a Claude que genere un mensaje para el mismo lead y no tiene sentido correrlas en paralelo.
+     *
+     * A diferencia de request_ai_suggestion, devuelve el objeto completo de la respuesta (no solo
+     * el modelo): habia_sugerencia_pendiente le indica al componente si tiene que avisar que había
+     * una sugerencia sin aprobar antes de esta — el backend no bloquea por eso, solo informa.
+     *
+     * @param {Object} context
+     * @param {number} lead_id
+     * @returns {Promise<{model: Object, habia_sugerencia_pendiente: boolean}>}
+     */
+    offer_demo(context, lead_id) {
+      const commit = context.commit
+      commit('set_ai_generating_lead_id', lead_id)
+      commit('set_ai_error', null)
+      return api
+        .post('/lead/' + lead_id + '/offer-demo')
+        .then((res) => {
+          const model = res.data.model
+          commit('set_ai_generating_lead_id', null)
+          commit('update_lead_en_conversacion', model)
+          context.dispatch('upsert_model_in_lists', model)
+          return {
+            model: model,
+            habia_sugerencia_pendiente: !!res.data.habia_sugerencia_pendiente,
+          }
+        })
+        .catch((err) => {
+          commit('set_ai_generating_lead_id', null)
+          const msg =
+            err && err.response && err.response.data && err.response.data.message
+              ? String(err.response.data.message)
+              : 'Error al ofrecer/agendar la demo'
+          commit('set_ai_error', msg)
+          return Promise.reject(err)
+        })
+    },
+    /**
      * Cancela el debounce automático antes de pedir sugerencia IA a Claude.
      *
      * @param {Object} context

@@ -8,7 +8,7 @@
   >
 
     <!-- ====================================================
-         HEADER FIJO: atrás | nombre del lead | 5 botones icono
+         HEADER FIJO: atrás | nombre del lead | 7 botones icono
          ==================================================== -->
     <div class="conversation-header d-flex align-items-center justify-content-between px-3 py-2 border-bottom bg-white">
 
@@ -46,8 +46,8 @@
         </span>
       </div>
 
-      <!-- Derecha: 5 botones de acción (solo ícono) -->
-      <div class="d-flex align-items-center gap-1 flex-shrink-0">
+      <!-- Derecha: 7 botones de acción (solo ícono) -->
+      <div class="d-flex align-items-center gap-1 flex-shrink-0 conversation-header-actions">
 
         <!-- Resumen del lead -->
         <button
@@ -124,6 +124,25 @@
           <i v-else class="bi bi-lightning-charge" aria-hidden="true" />
         </button>
 
+        <!-- Ofrecer/agendar demo: fuerza el turno hacia la demo, sin esperar sugerencia -->
+        <button
+          type="button"
+          class="icon-btn"
+          :class="can_offer_demo ? 'text-primary' : 'text-muted'"
+          :title="offer_demo_button_title"
+          aria-label="Ofrecer o agendar la demo de este lead"
+          :disabled="!can_offer_demo"
+          @click="on_offer_demo"
+        >
+          <span
+            v-if="ai_suggestion_request_loading"
+            class="spinner-border spinner-border-sm"
+            role="status"
+            aria-hidden="true"
+          />
+          <i v-else class="bi bi-calendar-heart" aria-hidden="true" />
+        </button>
+
         <!-- Toggle respuesta automática de Claude por lead -->
         <button
           type="button"
@@ -171,6 +190,16 @@
         </button>
 
       </div>
+    </div>
+
+    <!-- Aviso breve: había una sugerencia sin aprobar cuando se usó "Ofrecer/agendar demo".
+         No bloquea (decisión de Lucas, 8/9/2026) -- solo informa; se limpia solo. -->
+    <div
+      v-if="offer_demo_notice"
+      class="alert alert-warning py-1 px-3 small mb-0 rounded-0 border-start-0 border-end-0"
+      role="status"
+    >
+      {{ offer_demo_notice }}
     </div>
 
     <!-- ====================================================
@@ -692,6 +721,12 @@ export default {
       /** Timer para resetear el feedback del botón de exportación. */
       export_conversation_feedback_timer: null,
 
+      /** Texto del aviso breve tras "Ofrecer/agendar demo" (vacío = sin aviso). */
+      offer_demo_notice: '',
+
+      /** Timer que limpia offer_demo_notice solo. */
+      offer_demo_notice_timer: null,
+
       /** true mientras se envía el audio al backend. */
       enviando_audio: false,
 
@@ -1104,6 +1139,46 @@ export default {
     },
 
     /**
+     * true si se puede usar el botón "Ofrecer/agendar demo".
+     *
+     * A propósito más laxo que can_request_ai_suggestion: no exige mensajes del lead sin
+     * responder (es el caso de uso -- el operador ya respondió otra cosa y ahora quiere avanzar
+     * la demo aparte) ni un mínimo de mensajes entrantes. Solo mira que el lead exista, que no
+     * haya otra operación de IA en curso para él, y que no esté en un estado terminal.
+     *
+     * @returns {boolean}
+     */
+    can_offer_demo() {
+      if (!this.effective_record || !this.effective_record.id) {
+        return false
+      }
+      if (this.ai_suggestion_request_loading) {
+        return false
+      }
+      const status = this.effective_record.status
+      if (status === 'cerrado_ganado' || status === 'cerrado_perdido') {
+        return false
+      }
+      return true
+    },
+
+    /**
+     * Tooltip del botón "Ofrecer/agendar demo" según el estado actual.
+     *
+     * @returns {string}
+     */
+    offer_demo_button_title() {
+      if (this.ai_suggestion_request_loading) {
+        return 'Consultando a Claude…'
+      }
+      const status = this.effective_record ? this.effective_record.status : ''
+      if (status === 'cerrado_ganado' || status === 'cerrado_perdido') {
+        return 'La demo no aplica a un lead cerrado.'
+      }
+      return 'Ofrecer la demo, o agendarla y mandar el link si el lead ya aceptó un horario.'
+    },
+
+    /**
      * true si la ventana de mensajería libre de WhatsApp (24hs desde el último inbound
      * del lead con status 'enviado') sigue abierta. Sin inbound previo o con 24hs o más
      * desde ese mensaje, Meta exige plantilla y este computed es false.
@@ -1379,6 +1454,10 @@ export default {
     if (this.export_conversation_feedback_timer) {
       clearTimeout(this.export_conversation_feedback_timer)
       this.export_conversation_feedback_timer = null
+    }
+    if (this.offer_demo_notice_timer) {
+      clearTimeout(this.offer_demo_notice_timer)
+      this.offer_demo_notice_timer = null
     }
     /* Liberar el micrófono si la vista se destruye mientras graba: lo hace el
        beforeUnmount del mixin audio_recorder_button (en Vue 3 corren los dos,
@@ -2194,6 +2273,44 @@ export default {
     },
 
     /**
+     * Botón "Ofrecer/agendar demo": fuerza el turno hacia la demo sin esperar a que haya un
+     * mensaje del lead sin responder. Si ya había una sugerencia pendiente, no bloquea -- el
+     * backend le apaga el auto-envío de respaldo (no se le puede escapar un WhatsApp viejo al
+     * lead) y acá se avisa con un banner breve (offer_demo_notice) para que el operador sepa que
+     * quedó una sugerencia vieja en la conversación, revisable a mano si hace falta.
+     *
+     * @returns {void}
+     */
+    on_offer_demo() {
+      const self = this
+      const rec = this.effective_record
+      if (!rec || !rec.id || !this.can_offer_demo) {
+        return
+      }
+      this.$store
+        .dispatch('lead/offer_demo', rec.id)
+        .then(function (result) {
+          self.ai_auto_consult_cancelled = false
+          self.on_record_updated(result.model)
+          self.schedule_scroll_to_bottom()
+          self.sync_countdown_clock()
+          if (result.habia_sugerencia_pendiente) {
+            self.offer_demo_notice = 'Había una sugerencia sin aprobar de este lead — se canceló su envío automático, quedó en la conversación por si querés revisarla igual.'
+            if (self.offer_demo_notice_timer) {
+              clearTimeout(self.offer_demo_notice_timer)
+            }
+            self.offer_demo_notice_timer = setTimeout(function () {
+              self.offer_demo_notice = ''
+              self.offer_demo_notice_timer = null
+            }, 8000)
+          }
+        })
+        .catch(function () {
+          /* ai_error queda en store por si otro flujo lo necesita. */
+        })
+    },
+
+    /**
      * Activa o desactiva la respuesta automática de Claude para este lead.
      *
      * @returns {void}
@@ -2730,10 +2847,40 @@ export default {
   padding: 1.25rem 1.5rem;
 }
 
-/* Limita el ancho de la sección izquierda del header (nombre del lead) para
-   dejar espacio al badge de demo en el centro. */
+/* Limita el ancho de la sección izquierda del header (nombre del lead) para dejar espacio al
+   badge de demo en el centro y a los botones de acción de la derecha, que no ceden (flex-shrink-0
+   con ancho fijo en px). 30% y no 40%: con 7 botones (se sumó "Ofrecer/agendar demo", 8/9/2026) el
+   40% original dejaba el séptimo fuera del sidebar en su ancho por defecto (440px) -- medido con
+   un nombre de longitud media, se cortaba por ~20px. */
 .conversation-header-left {
-  max-width: 40%;
+  max-width: 30%;
+}
+
+/* En teléfono (modo standalone, con el botón "volver" sumado a la izquierda) el 30% de arriba no
+   alcanza: los 7 botones de 2.2rem no entran junto a flecha+nombre en ~375px de ancho total.
+   Medido con Playwright el 8/9/2026 -- el séptimo (verificación) quedaba cortado. Se achican los
+   botones y su separación solo acá, no en escritorio/tablet donde ya entran holgados. */
+@media (max-width: 480px) {
+  .icon-btn {
+    width: 1.9rem;
+    height: 1.9rem;
+    font-size: 0.95rem;
+  }
+  .conversation-header-actions {
+    gap: 0.15rem !important;
+  }
+  .conversation-header-left {
+    max-width: 90px;
+  }
+  /* El badge de fecha/hora de demo (centro) ya no tiene dónde comprimirse con los 7 botones más
+     el nombre en ~375px -- quedaba superpuesto al nombre truncado, ilegible. La fecha de la demo
+     sigue disponible dentro de la conversación; acá se prioriza que el nombre y los botones de
+     acción se vean bien. */
+  .demo-date-badge-wrapper {
+    /* !important: la regla base (más abajo en este archivo) define display:flex con la misma
+       especificidad -- sin esto, gana ella por orden de cascada y el badge sigue ahí. */
+    display: none !important;
+  }
 }
 
 /* Wrapper del badge de demo: ocupa todo el espacio disponible entre nombre y botones */
