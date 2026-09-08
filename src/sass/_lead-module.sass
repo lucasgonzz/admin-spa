@@ -285,18 +285,29 @@
 		font-size: 0.72rem
 		line-height: 1.1
 
-	// A partir de 576px entran dos por fila; de 992 para arriba, las cuatro en una sola.
-	// O sea que en tablet angosta (768-991) son dos columnas y en tablet ancha (992-1024) ya son cuatro.
-	@media (min-width: 576px)
-		.lead-status-cards
-			grid-template-columns: repeat(2, minmax(0, 1fr))
-
-	// Escritorio (>=992): las cuatro en una fila.
+	// Tablet (576-1199): tres columnas. Con las 5 tarjetas de hoy da 3+2 -- la última fila queda
+	// con un hueco de UN carril, no el resto de la fila vacío.
+	// 🔴 Se probó "repeat(auto-fit, minmax(200px, 1fr))" (ancho fluido, sin hardcodear cantidad)
+	// y quedó peor: en algún punto del rango el ancho disponible entra justo en CUATRO columnas
+	// de 200px, que es el peor reparto posible para 5 tarjetas (la 5ta sola, 3/4 de la fila
+	// vacíos) -- pasaba exactamente a 1000px, adentro del rango de tablet que exige el CLAUDE.md.
+	// Angostar el mínimo para esquivar el "4" en un tramo lo vuelve a tocar en otro: no hay un
+	// solo ancho mínimo de tarjeta que evite el 4 en TODO el rango 576-1365px. Con columnas fijas
+	// el "4" no aparece nunca, a costa de no ser 100% fluido.
 	// En telefono quedan apiladas (grid de 1fr), nunca en carrusel: la barra de estados ya
 	// scrollea horizontal y dos scrollers apilados son imposibles de operar con el pulgar.
-	@media (min-width: 992px)
+	@media (min-width: 576px)
 		.lead-status-cards
-			grid-template-columns: repeat(4, minmax(0, 1fr))
+			grid-template-columns: repeat(3, minmax(0, 1fr))
+
+	// Escritorio (>=1200): las cinco en una sola fila. El breakpoint queda con margen antes del
+	// piso de "escritorio" que pide el CLAUDE.md (1366px), para no aparecer justo en el límite.
+	// 🔴 Si el backend vuelve a cambiar la cantidad de tarjetas, este archivo hay que revisarlo
+	// de nuevo -- exactamente como esta vez (misión tarjeta-otros-leads, 8/9/2026, de 4 a 5) --,
+	// verificando en los tres anchos de siempre antes de dar el cambio por terminado.
+	@media (min-width: 1200px)
+		.lead-status-cards
+			grid-template-columns: repeat(5, minmax(0, 1fr))
 
 	/* Fila del lead cuya conversación WhatsApp está abierta en el sidebar lateral. */
 	.table tbody tr.table-success > *
