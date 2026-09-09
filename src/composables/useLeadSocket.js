@@ -132,6 +132,17 @@ export function useLeadSocket(options) {
    * que era el motivo original del debounce (no disparar el throttle de Laravel). Lo que sí
    * crece es la cantidad de leads distintos, y eso es inevitable: cada uno necesita su GET.
    *
+   * 🔴 Dispara schedule_refresh_status_cards() ACÁ, no adentro del .then() de fetch_list_row.
+   * Hasta el 9/9/2026 el refresco de tarjetas estaba encadenado DESPUÉS de que el GET /lead/{id}
+   * de la fila resolviera: la grilla ya mostraba el lead en su estado nuevo varios segundos antes
+   * de que la tarjeta ni siquiera empezara a esperar su propio debounce (el segundo call, adentro
+   * del .then(), reiniciaba el timer de 1500 ms desde ese momento en vez de sumarse al que ya
+   * venía corriendo desde acá). Disparar los dos refrescos desde el mismo trigger, en paralelo,
+   * los acota a que corran por sus propios debounce/tope de siempre en vez de uno esperando al
+   * otro. Es también el único punto de entrada para refrescar una fila: cubre solo los cuatro
+   * call sites (mensaje nuevo, entrega fallida, evento genérico, alerta de verificación) sin
+   * tener que repetir la llamada en cada uno.
+   *
    * @param {number|string} lead_id
    * @returns {void}
    */
@@ -139,6 +150,7 @@ export function useLeadSocket(options) {
     if (lead_id == null || lead_id === '') {
       return
     }
+    schedule_refresh_status_cards()
     list_row_refetch_pendientes.add(String(lead_id))
     if (list_row_refetch_primer_pedido_at == null) {
       list_row_refetch_primer_pedido_at = Date.now()
@@ -180,6 +192,10 @@ export function useLeadSocket(options) {
   /**
    * GET /lead/{id} y aplicación del modelo que devuelve, para un lead puntual.
    *
+   * 🔴 NO dispara schedule_refresh_status_cards() acá: el `status` que puede haber cambiado ya
+   * se cubre desde schedule_list_row_refetch(), en paralelo con este GET y no encadenado después
+   * de que resuelva — ver el comentario de esa función.
+   *
    * @param {number|string} lead_id
    * @returns {void}
    */
@@ -190,8 +206,6 @@ export function useLeadSocket(options) {
         return
       }
       apply_refetched_lead_row(model)
-      /* Acá es donde puede haber cambiado el `status` del lead: refrescar las tarjetas. */
-      schedule_refresh_status_cards()
     }).catch(function () {
       return null
     })
