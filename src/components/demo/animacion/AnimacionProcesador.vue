@@ -402,9 +402,13 @@ const TEXTOS = {
   ia: 'Todo asistido por IA, nunca fue tan fácil',
 }
 
+/* 🔴 Este texto es lo que un lector de pantalla lee EN LUGAR de toda la animación, así que
+   dice lo mismo que TEXTOS. Hasta el 10/9/2026 decía el copy viejo del export --el que
+   Lucas descartó-- porque al corregir el copy visible nadie miró acá: se arregló lo que se
+   ve y quedó vivo lo que se lee. Si TEXTOS cambia, esto cambia con él. */
 const ETIQUETA_ACCESIBLE =
-  'ComercioCity: cargá una vez, vendé en todos lados. Tienda online, atención por ' +
-  'WhatsApp y un sistema de gestión completo, todo asistido por IA.'
+  'ComercioCity: cargá una vez, vendé en todos lados. Imágenes y tienda online, ' +
+  'WhatsApp y carga de facturas, todo asistido por IA, nunca fue tan fácil.'
 
 /** Las seis cosas sueltas que hoy el comerciante maneja por separado. */
 const TARJETAS = [
