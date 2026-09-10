@@ -10,11 +10,18 @@
           <!-- Encabezado: deja claro de una que el mensaje TODAVÍA no salió -->
           <div class="wa-scheduled-head">
             <i
+              v-if="is_sending"
+              class="spinner-border spinner-border-sm wa-scheduled-head-spinner"
+              role="status"
+              aria-hidden="true"
+            />
+            <i
+              v-else
               class="bi"
               :class="is_error ? 'bi-exclamation-triangle-fill' : 'bi-clock'"
               aria-hidden="true"
             />
-            <span>{{ is_error ? 'No se pudo enviar' : 'Programado — todavía no se envió' }}</span>
+            <span>{{ head_label }}</span>
           </div>
 
           <div class="message-text">{{ scheduled.content }}</div>
@@ -64,14 +71,19 @@
                 role="status"
                 aria-hidden="true"
               />
-              <template v-else>
-                <!-- Un programado en error ya no se va a enviar: editarlo no tiene sentido -->
+              <!-- Mientras se está mandando no se ofrece ni editar ni cancelar: el backend los
+                   rechaza con 422 porque el envío ya está en vuelo, y un botón que sólo puede
+                   fallar es peor que ningún botón. -->
+              <template v-else-if="!is_sending">
+                <!-- 🔴 En `error` TAMBIÉN se puede editar, y es el caso que más se va a usar: el
+                     mensaje quedó sin salir porque se cerró la ventana, y lo natural es corregirle
+                     la fecha o pasarlo a plantilla, no copiar el texto a mano y empezar de cero.
+                     Al guardar vuelve a `pendiente` y el comando lo levanta como cualquier otro. -->
                 <button
-                  v-if="!is_error"
                   type="button"
                   class="btn btn-link p-0 wa-scheduled-action"
-                  title="Editar el mensaje programado"
-                  aria-label="Editar el mensaje programado"
+                  :title="is_error ? 'Corregir y volver a programar' : 'Editar el mensaje programado'"
+                  :aria-label="is_error ? 'Corregir y volver a programar' : 'Editar el mensaje programado'"
                   @click="$emit('editar')"
                 >
                   <i class="bi bi-pencil" aria-hidden="true" />
@@ -212,6 +224,33 @@ export default {
      */
     is_error() {
       return this.scheduled.status === 'error'
+    },
+
+    /**
+     * true si una corrida del despacho lo tomó y lo está mandando en este momento.
+     *
+     * Es un estado de segundos, pero se muestra: es lo que explica por qué desaparecieron los
+     * botones de editar y cancelar, que en ese momento el backend rechaza.
+     *
+     * @returns {boolean}
+     */
+    is_sending() {
+      return this.scheduled.status === 'enviando'
+    },
+
+    /**
+     * Encabezado de la burbuja según el estado.
+     *
+     * @returns {string}
+     */
+    head_label() {
+      if (this.is_error) {
+        return 'No se pudo enviar'
+      }
+      if (this.is_sending) {
+        return 'Enviándose ahora…'
+      }
+      return 'Programado — todavía no se envió'
     },
 
     /**

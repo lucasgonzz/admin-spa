@@ -52,9 +52,12 @@
           </div>
           <div v-else class="alert alert-warning py-2 px-3 small mb-3" role="status">
             <i class="bi bi-lock me-1" aria-hidden="true" />
-            <template v-if="window_expires_at_ms">
-              Fuera de la ventana de 24 hs (venció {{ window_expires_label }}) — Meta solo permite
-              una plantilla aprobada.
+            <template v-if="effective_window_expires_at_ms">
+              <!-- "vence" o "venció" según el vencimiento sea futuro o pasado. La ventana puede
+                   estar ABIERTA ahora mismo y aun así la fecha elegida caer afuera: ahí decir
+                   "venció mañana a las 17:00" es literalmente falso. -->
+              Fuera de la ventana de 24 hs ({{ window_expired_already ? 'venció' : 'vence' }}
+              {{ window_expires_label }}) — Meta solo permite una plantilla aprobada.
             </template>
             <template v-else>
               El lead nunca escribió, así que la ventana de 24 hs está cerrada — Meta solo permite
@@ -441,6 +444,9 @@ export default {
       guardando: false,
       /* Mensaje de error del backend (422) mostrado adentro del modal. */
       error_message: '',
+      /* Vencimiento de la ventana que dijo el backend en un 422, en ms. 0/null = todavía no se
+         pronunció y vale el cálculo del front (ver effective_window_expires_at_ms). */
+      window_expires_override_ms: 0,
       /* Texto del buscador de plantillas. */
       search_text: '',
       /* Estado de apertura de cada grupo de categoría. */
@@ -476,13 +482,46 @@ export default {
     },
 
     /**
+     * Vencimiento de la ventana que efectivamente se usa: el del backend si ya se pronunció.
+     *
+     * 🔴 La prop viene de un cálculo del front (último entrante del lead + 24 hs) y el backend usa
+     * otro (el entrante más reciente de leads, soporte e implementación, buscado por teléfono). Los
+     * dos son razonables leídos por separado y pueden no coincidir — es la clase de error
+     * "el mismo invariante decidido con dos criterios distintos" que ya está escrita en
+     * APRENDER_NO_PARCHEAR.md.
+     *
+     * Cuando difieren, el que tiene razón es el backend: es el único que además corre en el
+     * despacho, donde no hay front. Por eso, apenas un 422 nos dice cuándo vence de verdad, ese
+     * valor manda y el modal se reacomoda solo, en vez de seguir mostrando una hora que el
+     * servidor ya rechazó y dejar al operador adivinando a prueba y error.
+     *
+     * @returns {number} milisegundos, o 0
+     */
+    effective_window_expires_at_ms() {
+      if (this.window_expires_override_ms) {
+        return this.window_expires_override_ms
+      }
+      return this.window_expires_at_ms
+    },
+
+    /**
+     * true si la ventana ya está vencida AHORA (distinto de que la fecha elegida caiga afuera).
+     *
+     * @returns {boolean}
+     */
+    window_expired_already() {
+      const vence = this.effective_window_expires_at_ms
+      return Boolean(vence) && vence <= Date.now()
+    },
+
+    /**
      * 🔴 El modo se decide solo: dentro de la ventana se puede texto libre, fuera solo plantilla.
      *
      * @returns {boolean}
      */
     is_within_window() {
-      if (!this.window_expires_at_ms || !this.scheduled_at_ms) return false
-      return this.scheduled_at_ms < this.window_expires_at_ms
+      if (!this.effective_window_expires_at_ms || !this.scheduled_at_ms) return false
+      return this.scheduled_at_ms < this.effective_window_expires_at_ms
     },
 
     /**
@@ -496,7 +535,7 @@ export default {
 
     /** Cuándo vence la ventana de 24 hs, en texto. @returns {string} */
     window_expires_label() {
-      return format_when(this.window_expires_at_ms)
+      return format_when(this.effective_window_expires_at_ms)
     },
 
     /** Mínimo del input: el momento en que se abrió el modal. @returns {string} */
@@ -736,6 +775,9 @@ export default {
       this.editing_id = null
       this.guardando = false
       this.error_message = ''
+      /* El vencimiento que dijo el backend vale para la sesión de este modal, no para la próxima:
+         entre una apertura y otra el lead pudo escribir de nuevo y correr la ventana. */
+      this.window_expires_override_ms = 0
       this.search_text = ''
       this.pending_template_name = ''
       this.pending_template_variables = null
@@ -751,7 +793,7 @@ export default {
      */
     default_send_at_ms() {
       const in_three_hours = Date.now() + 3 * 3600000
-      if (this.window_expires_at_ms && in_three_hours < this.window_expires_at_ms) {
+      if (this.effective_window_expires_at_ms && in_three_hours < this.effective_window_expires_at_ms) {
         return in_three_hours
       }
       return Date.now() + 24 * 3600000
@@ -902,10 +944,19 @@ export default {
         })
         .catch((err) => {
           /* 422 de los frenos del backend: se muestra adentro y el modal NO se cierra. */
-          this.error_message =
-            err?.response?.data?.message
-            || err?.message
-            || 'No se pudo programar el envío.'
+          const datos = err?.response?.data
+          this.error_message = datos?.message || err?.message || 'No se pudo programar el envío.'
+
+          /* 🔴 El backend manda en el 422 cuándo vence la ventana DE VERDAD, y hasta el 10/9/2026
+             la SPA lo tiraba a la basura: seguía mostrando su propia hora —la que el servidor
+             acababa de rechazar— y el operador tenía que encontrar la buena a prueba y error.
+             Los dos criterios pueden diferir legítimamente (el backend mira también soporte e
+             implementación, y busca por teléfono), así que cuando el servidor se pronuncia, gana
+             él: se adopta su vencimiento y el formulario se reacomoda solo. */
+          if (Object.prototype.hasOwnProperty.call(datos || {}, 'ventana_expira_at')) {
+            const vence = datos.ventana_expira_at ? new Date(datos.ventana_expira_at).getTime() : 0
+            this.window_expires_override_ms = isNaN(vence) ? 0 : vence
+          }
         })
         .finally(() => {
           this.guardando = false
