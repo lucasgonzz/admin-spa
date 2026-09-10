@@ -689,14 +689,15 @@ export default {
 /* Full-bleed (grupo 370, correctivo 8, prompt 03): reemplaza a la excepción vieja por
    variante (--apertura/--interludio), que forzaba `padding: 0` sobre EL HIJO. Eso
    estaba bien mientras el hijo full-bleed era markup sin padding propio (el header de
-   la apertura), pero desde que el interludio pasó a alojar <EscenaHero> (grupo 369,
-   prompt 05) -- un componente que declara SU PROPIO padding en `.hero-escena` -- ese
+   la apertura), pero desde que una sección full-bleed pasó a alojar un componente que
+   declara SU PROPIO padding -- era `.hero-escena` de <EscenaHero>, hoy es
+   <AnimacionProcesador> con el mismo patrón (misión experiencia-nueva, 10/9/2026) -- ese
    `padding: 0` le ganaba en la cascada y lo dejaba en cero: (0,3,0) contra (0,2,0).
    La cuenta, verificada compilando el selector con el @vue/compiler-sfc de este mismo
    proyecto en vez de suponerla: Vue pega el atributo de scope UNA sola vez, en el
    compound anterior al `>` -- o sea `.demo-fondo-seccion--interludio
    .demo-fondo-seccion__contenido[data-v-x] > *` son dos clases + UN atributo, no dos,
-   contra la clase + atributo de `.hero-escena[data-v-y]` del propio EscenaHero.vue.
+   contra la clase + atributo del selector raíz del propio componente hijo.
 
    🔴 MEDIDO en el navegador (prompt 03), no asumido, y el diagnóstico original del
    prompt NO se sostuvo: no era un problema de overflow. Con la regla vieja,
@@ -710,11 +711,14 @@ export default {
    Por eso acá NO se fuerza `padding` sobre el hijo full-bleed: solo se le saca la
    caja angosta de 1080px y se le da el alto completo, y el padding queda enteramente
    en manos de lo que vive adentro (el header de la apertura, que no declara padding
-   propio y por lo tanto no cambia; `.hero-escena` en EscenaHero.vue, que sí declara
-   el suyo). Si el día de mañana alguien "limpia" esto agregando de nuevo
-   `padding: 0` acá pensando que es simetría con `max-width` y `height`, vuelve a
-   ganarle por especificidad al padding de EscenaHero.vue y el título vuelve a
-   quedar pegado al borde -- sin que exista ningún overflow real que lo explique. */
+   propio y por lo tanto no cambia; el componente de la animación, que sí declara el
+   suyo). Si el día de mañana alguien "limpia" esto agregando de nuevo `padding: 0` acá
+   pensando que es simetría con `max-width` y `height`, vuelve a ganarle por
+   especificidad al padding del hijo y el contenido vuelve a quedar pegado al borde --
+   sin que exista ningún overflow real que lo explique.
+
+   🔴 <EscenaHero> ya no existe (se borró el 10/9/2026), pero el mecanismo es el mismo
+   y el riesgo también: no borres esta nota porque el componente que la motivó no esté. */
 .demo-fondo-seccion__contenido--full-bleed {
 	padding: 0;
 }

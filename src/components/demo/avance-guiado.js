@@ -41,7 +41,21 @@ const PX_POR_LINEA = 16
 /* Los elementos que declaran un punto de enganche en el CSS. Es una sola lista porque
    dos preguntas distintas la necesitan: a dónde se puede ir (destinos) y si la sección
    donde estoy todavía tiene contenido sin ver (hay_contenido_sin_ver). */
-const SELECTOR_DESTINOS = '.demo-fondo-seccion__snap, .demo-cierre, .demo-formulario'
+/* 🔴 Las secciones que NO viven dentro de un FondoSeccionSticky se nombran de a una acá.
+   Es el acoplamiento que más fácil se rompe en silencio: una sección nueva que no esté en
+   esta lista no es destino del avance por gesto, y el lead la pasa de largo sin que nada
+   falle -- no hay error, no hay log, simplemente el gesto salta por encima.
+   `.demo-cierre` se renombró a `.demo-hitos` el 10/9/2026, y en la misma misión entraron
+   las cuatro secciones nuevas, que traen su propio pin. */
+const SELECTOR_DESTINOS = [
+  '.demo-fondo-seccion__snap',
+  '.demo-hitos',
+  '.demo-clientes',
+  '.demo-cubo',
+  '.demo-nueva-era',
+  '.demo-resenas',
+  '.demo-formulario',
+].join(', ')
 
 /* Cerrojo por TIEMPO desde que arranca un avance. Cubre lo que dura el
    desplazamiento suave más un margen: mientras corre, todo gesto nuevo se ignora. */

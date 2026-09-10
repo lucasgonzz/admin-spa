@@ -176,16 +176,9 @@
 }
 
 .demo-experiencia-page {
-	// El texto y la pieza de cada bloque los anima el progreso de su sección, con
-	// `:style` inline (ScrollDolor.vue, grupo 348 prompt 03). Acá solo queda el
-	// will-change, que ahora es permanente y no hace falta administrar a mano: con
-	// el progreso manejando todo el recorrido no hay un "terminó" en el que sacarlo.
-	// Nada de opacity: 0 de base -- si el JS no llegara a aplicar estilos (navegador
-	// viejo, error), el contenido tiene que quedar VISIBLE, no invisible.
-	.demo-scroll-dolor__bloque-texto,
-	.demo-scroll-dolor__bloque-pieza {
-		will-change: opacity, transform;
-	}
+	// ⛔ RETIRADO (10/9/2026, misión experiencia-nueva): el will-change de
+	// .demo-scroll-dolor__bloque-texto / __bloque-pieza. Los cinco bloques de dolor
+	// que animaba ya no existen.
 }
 
 // ---------------------------------------------------------------------------
@@ -220,36 +213,17 @@
 		radial-gradient(100% 80% at 85% 90%, rgba(58, 49, 252, 0.3), transparent 55%);
 }
 
-// Bloques 1-5 y cierre: mismos dos radial-gradient, mucho más sutiles -- estas
-// secciones tienen texto y pieza multimedia encima y no pueden competir con el fondo.
-.demo-fondo-seccion--bloque-1 .demo-fondo-seccion__fondo {
-	background-image:
-		radial-gradient(90% 70% at 80% 10%, rgba(11, 132, 248, 0.16), transparent 55%),
-		radial-gradient(80% 60% at 15% 85%, rgba(58, 49, 252, 0.12), transparent 55%);
-}
-
-.demo-fondo-seccion--bloque-2 .demo-fondo-seccion__fondo {
-	background-image:
-		radial-gradient(85% 65% at 12% 20%, rgba(58, 49, 252, 0.15), transparent 55%),
-		radial-gradient(90% 70% at 90% 80%, rgba(11, 132, 248, 0.13), transparent 55%);
-}
-
-.demo-fondo-seccion--bloque-3 .demo-fondo-seccion__fondo {
-	background-image:
-		radial-gradient(95% 75% at 75% 25%, rgba(11, 132, 248, 0.17), transparent 60%),
-		radial-gradient(75% 55% at 20% 75%, rgba(58, 49, 252, 0.11), transparent 50%);
-}
-
-.demo-fondo-seccion--bloque-4 .demo-fondo-seccion__fondo {
-	background-image:
-		radial-gradient(80% 60% at 25% 15%, rgba(58, 49, 252, 0.16), transparent 55%),
-		radial-gradient(90% 70% at 85% 85%, rgba(11, 132, 248, 0.12), transparent 55%);
-}
-
-.demo-fondo-seccion--bloque-5 .demo-fondo-seccion__fondo {
-	background-image:
-		radial-gradient(90% 70% at 85% 20%, rgba(11, 132, 248, 0.15), transparent 55%),
-		radial-gradient(80% 60% at 15% 80%, rgba(58, 49, 252, 0.13), transparent 55%);
+// La sección de la animación del procesador (misión experiencia-nueva, 10/9/2026).
+// Reemplaza a las cinco variantes --bloque-1..5 de los dolores y a --interludio.
+//
+// 🔴 Va OSCURA, no con los radial-gradient de la paleta clara del resto de la página.
+// La animación pinta su propio fondo (#04060b con las líneas de circuito) a sangre
+// completa por encima de éste, así que en régimen no se ve; esto existe para que no
+// haya un destello del fondo claro entre que la sección monta y el componente pinta,
+// que en un scroll rápido se lee como un parpadeo blanco.
+.demo-fondo-seccion--animacion .demo-fondo-seccion__fondo {
+	background-color: #04060b;
+	background-image: none;
 }
 
 // Puente al formulario (grupo 355, prompt 08): era la única sección del recorrido sin
@@ -301,7 +275,7 @@
 //
 // CORRECTIVO (grupo 370, correctivo 8, prompt 05). El diagnóstico del prompt ("el
 // cierre no tiene punto de snap") NO se sostuvo -- medido en el navegador, no
-// asumido: `.demo-cierre` YA está en SELECTOR_DESTINOS de avance-guiado.js y YA
+// asumido: `.demo-cierre` (hoy `.demo-hitos`) YA está en SELECTOR_DESTINOS de avance-guiado.js y YA
 // recibe `scroll-snap-align: center` de acá abajo, así que el avance guiado SÍ lo
 // tiene registrado como destino. El bug real es otro: sin un `min-height` propio,
 // esta sección mide sólo lo que ocupa la tarjeta más su padding -- en desktop,
@@ -326,7 +300,7 @@
 // 100dvh preferido con 100vh de fallback, mismo orden que
 // .demo-experiencia-page__video-intro y el resto de la página: un navegador sin
 // soporte de dvh ignora esa declaración entera y se queda con la de arriba.
-.demo-cierre {
+.demo-hitos {
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -336,7 +310,7 @@
 	min-height: 100dvh;
 }
 
-.demo-cierre__tarjeta {
+.demo-hitos__tarjeta {
 	width: 100%;
 	max-width: 1100px;
 	// El fondo semitransparente venía de cuando la tarjeta se leía SOBRE la escena
@@ -409,8 +383,19 @@
 // de este grupo; ahora que está adentro de un FondoSeccionSticky recibe el punto de
 // la sección como todos los demás, y dejarle este además sería un segundo punto de
 // snap a media pantalla del primero.
-.demo-scroll-guiado .demo-cierre {
+.demo-scroll-guiado .demo-hitos,
+.demo-scroll-guiado .demo-nueva-era,
+.demo-scroll-guiado .demo-resenas {
 	scroll-snap-align: center;
+}
+
+// Las dos secciones con pin propio (clientes y cubo) alinean por ARRIBA y no al centro:
+// miden varias pantallas de alto, así que "centrarlas" dejaría al lead entrando por la
+// mitad de su recorrido, con la animación empezada. Es el mismo motivo por el que el
+// interludio usaba snap_progreso 0.
+.demo-scroll-guiado .demo-clientes,
+.demo-scroll-guiado .demo-cubo {
+	scroll-snap-align: start;
 }
 
 // El formulario alinea por arriba y no centrado, con aire para que el encabezado se
@@ -459,8 +444,6 @@
 	// autor, esta regla gana igual.
 	.demo-scroll-dolor__apertura-titulo,
 	.demo-scroll-dolor__apertura-subtitulo,
-	.demo-scroll-dolor__bloque-texto,
-	.demo-scroll-dolor__bloque-pieza,
 	.demo-scroll-dolor__puente,
 	// El renglón, no solo el contenedor: desde el grupo 355 (prompt 08) el `:style`
 	// por progreso lo lleva cada línea. Hoy es defensa en profundidad -- estilo_puente

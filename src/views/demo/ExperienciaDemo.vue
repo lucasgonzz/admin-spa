@@ -46,7 +46,6 @@
       <template v-if="!intro_desbloqueada">
         <scroll-dolor
           :perfil="lead.perfil"
-          :media="media"
           :emitir_evento="emitir_evento"
         />
 

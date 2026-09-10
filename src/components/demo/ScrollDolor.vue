@@ -4,6 +4,41 @@
          decisión de Lucas tras ver la escena cinematográfica implementada -- ver nota
          de reversión en demo_experiencia.md §3.18-bis). Ya no arma su propia
          FondoSeccionSticky: la de acá abajo hace todo el trabajo de pin/fondo. -->
+    <!-- LA ANIMACIÓN DEL PROCESADOR (misión experiencia-nueva, 10/9/2026). Es lo primero
+         que ve el lead. Portada del export de Claude Design a Vue nativo -- la fuente
+         desempaquetada y el porqué del port (contra embeber el bundle o filmarlo a WebP)
+         están en marca/animacion-procesador/ del repo de conocimiento.
+
+         Reemplaza a <escena-hero>, que contaba lo mismo -- problemas sueltos, procesador,
+         solución -- y se borró con sus 2,8 MB de WebP animado (decisión de Lucas, 10/9).
+
+         Las cuatro props del FondoSeccionSticky son las que tenía el interludio, por los
+         mismos motivos: snap_progreso 0 para que el lead aterrice con la animación SIN
+         empezar; snap_libre_mientras_ocupa para que el avance por gesto no la intercepte;
+         boton_avance false porque un botón que se la saltea contradice lo anterior; y
+         contenido_full_bleed true porque sin eso el max-width: 1080px que el padre le pone
+         a cualquier hijo "de columna" le come el fondo a sangre.
+
+         🔴 El progreso NO va por el slot escopeado: va por el evento y de ahí a un método
+         del hijo, vía ref. Atarlo al template ata cada frame de scroll a un render de Vue,
+         y acá lo único que cambia son estilos que el reloj escribe a mano.
+
+         🔴 Y solo ADELANTA: la animación corre sola a su ritmo (24,4 s) y el scroll la
+         empuja hacia adelante, nunca hacia atrás. Es lo que pidió Lucas -- el que tiene
+         paciencia la ve entera, el que no, llega al mensaje sin frustrarse. -->
+    <fondo-seccion-sticky
+      variante="animacion"
+      :recorrido_vh="320"
+      :snap_progreso="0"
+      :snap_libre_mientras_ocupa="true"
+      :boton_avance="false"
+      :contenido_full_bleed="true"
+      @progreso="on_progreso_animacion"
+    >
+      <animacion-procesador ref="animacion" />
+    </fondo-seccion-sticky>
+
+
     <fondo-seccion-sticky variante="apertura" :contenido_full_bleed="true" v-slot="{ progreso }">
       <header
         class="demo-scroll-dolor__apertura"
@@ -28,145 +63,62 @@
       </header>
     </fondo-seccion-sticky>
 
-    <!-- Bloques 1 a 5: párrafo(s) de dolor + línea de alivio resaltada + pieza multimedia -->
-    <fondo-seccion-sticky
-      v-for="(bloque, indice) in contenido.bloques"
-      :key="bloque.id"
-      :variante="'bloque-' + (indice + 1)"
-      v-slot="{ progreso }"
-      @progreso="on_progreso_bloque($event, bloque.id)"
-    >
-      <article class="demo-scroll-dolor__bloque" :data-bloque-id="bloque.id">
-        <div class="demo-scroll-dolor__bloque-texto" :style="estilo_bloque(progreso, false, indice)">
-          <!-- Ícono por dolor (grupo 370, prompt 02; desde el grupo 374 es una marca de
-               agua grande detrás del texto, ver el <style>). Va DENTRO del mismo div con
-               :style por progreso que el texto -- así se mueve exactamente igual que el
-               párrafo, sin animación propia que pueda desincronizarse (criterio 4 del
-               prompt). Sigue siendo el primer hijo aunque ya no esté en el flujo: el
-               orden del markup no lo posiciona, lo posiciona el centrado absoluto.
-               No se cablea por índice: sale de bloque.icono, al lado de marco y
-               titulo_pieza en CONTENIDO_POR_PERFIL, así que un bloque agregado o
-               reordenado no rompe nada acá. -->
-          <i
-            class="bi demo-scroll-dolor__icono-dolor"
-            :class="bloque.icono"
-            aria-hidden="true"
-          />
-          <p v-for="(linea, indice2) in bloque.texto" :key="indice2" class="demo-scroll-dolor__parrafo">
-            {{ linea }}
-          </p>
-          <p class="demo-scroll-dolor__resaltado">{{ bloque.resaltado }}</p>
-        </div>
+    <!-- LOS CLIENTES (misión experiencia-nueva, 10/9/2026). Reemplaza a los cinco
+         bloques de dolor, que se sacaron enteros con sus piezas multimedia por pedido
+         de Lucas: "las secciones de dolores las sacaría, quiero en lugar de eso hacer
+         una animación estilo la página de Apple y mostrar sobre los clientes que
+         tenemos".
 
-        <div class="demo-scroll-dolor__bloque-pieza" :style="estilo_bloque(progreso, true, indice)">
-          <marco-dispositivo :tipo="bloque.marco">
-            <!-- Único bloque con marco combinado (scroll.2): UNA PIEZA POR PANTALLA.
-                 El mensaje del bloque es que el mismo artículo está en los dos lados —el
-                 sistema y la tienda—, así que las dos pantallas no pueden mostrar el mismo
-                 video: la computadora lleva `bloque.id` (scroll.2) y el teléfono
-                 `bloque.id_telefono` (scroll.2-tel).
-                 El `|| bloque.id` no es defensivo por las dudas: es lo que mantiene el
-                 componente compatible con cualquier bloque combinado que no declare pieza
-                 propia de teléfono, que es como se comportaba hasta ahora. -->
-            <template v-if="bloque.marco === 'computadora+telefono'" #computadora>
-              <pieza-multimedia :slot_id="bloque.id" :titulo="bloque.titulo_pieza" :media="media" />
-            </template>
-            <template v-if="bloque.marco === 'computadora+telefono'" #telefono>
-              <pieza-multimedia
-                :slot_id="bloque.id_telefono || bloque.id"
-                :titulo="bloque.titulo_pieza_telefono || bloque.titulo_pieza"
-                :media="media"
-              />
-            </template>
-            <pieza-multimedia
-              v-if="bloque.marco !== 'computadora+telefono'"
-              :slot_id="bloque.id"
-              :titulo="bloque.titulo_pieza"
-              :media="media"
-            />
-          </marco-dispositivo>
-        </div>
-      </article>
-    </fondo-seccion-sticky>
+         🔴 Va SUELTA en el scroll, NO dentro de un <fondo-seccion-sticky>: trae su
+         propio pin. Dos sticky anidados es el bug de los grupos 322/325. -->
+    <seccion-clientes />
 
-    <!-- LA ESCENA CENTRAL (grupo 369, prompts 05 y 06). Reemplaza al portal de arcos SVG
-         que vivía acá desde el grupo 325: Lucas la rehízo desde cero el 5/8/2026 ("la
-         idea es reemplazar toda la animación con la nueva") y el componente del portal se
-         borró del repo, no se dejó comentado.
+    <!-- EL CUBO (misión experiencia-nueva, 10/9/2026). Portado del export de Claude
+         Design que hizo Lucas; la fuente desempaquetada y el análisis están en
+         marca/animacion-cubo/ del repo de conocimiento.
 
-         Las cuatro props son las mismas que tenía el portal y por los mismos motivos:
-         · recorrido_vh 420 -- calibrado en el grupo 348 (prompt 04). El progreso 0→1 se
-           recorre en 320vh, porque el pin ocupa 100vh fijos.
-         · snap_progreso 0 -- el lead tiene que aterrizar con la coreografía SIN empezar,
-           no a mitad de camino ("debería dejar la animación en el punto inicial y ahí sí
-           darle control total al usuario", Lucas, 5/8/2026).
-         · snap_libre_mientras_ocupa -- adentro el scroll es libre, así se recorre la
-           escena a pulso; el avance por gesto (prompt 02) no la intercepta.
-         · boton_avance false -- un botón que se saltea la escena entera contradice todo
-           lo anterior.
+         Trae adentro su propia portada con "Nada de esto es sobre el sistema. Es sobre
+         dejar de ser el único que sabe." -- el mensaje que Lucas pidió conservar. Por
+         eso ese titular ya NO vive acá: si se repone en esta plantilla, se dice dos
+         veces seguidas.
 
-         🔴 contenido_full_bleed true (grupo 370, correctivo 8, prompt 03) -- sin esto, el
-         `padding: 0 20px` y el `max-width: 1080px` que FondoSeccionSticky le pone a
-         cualquier hijo "de columna" le ganan por especificidad al padding propio de
-         EscenaHero.vue (.hero-escena) y lo dejan en cero: el título queda pegado al
-         borde, no por overflow -- medido, no hay ningún recorte -- sino por ese padding
-         pisado. Ver el comentario largo en el <style> de FondoSeccionSticky.vue.
+         🔴 Igual que la sección de clientes: trae su propio pin, no lo envuelvas. -->
+    <cubo-procesador :titulos="contenido.hitos.titulo_portada" />
 
-         🔴 El progreso NO va por el slot escopeado ni por una prop reactiva: va por el
-         evento y de ahí a un método del hijo, vía ref. Es el mismo motivo por el que el
-         portal lo hacía así (ver FondoSeccionSticky): consumir el progreso desde el
-         template ata cada frame de scroll a un render de Vue, y acá el hijo tiene ~40
-         nodos que no dependen del progreso para nada -- lo único que cambia son estilos
-         que la coreografía escribe a mano. -->
-    <fondo-seccion-sticky
-      variante="interludio"
-      :recorrido_vh="420"
-      :snap_progreso="0"
-      :snap_libre_mientras_ocupa="true"
-      :boton_avance="false"
-      :contenido_full_bleed="true"
-      @progreso="on_progreso_escena"
-    >
-      <escena-hero ref="escena_hero" :progreso_amortiguado="true" />
-    </fondo-seccion-sticky>
+    <!-- LOS HITOS. Vivían dentro del cierre, debajo del titular que ahora abre el cubo.
+         Lucas pidió sacar los DOLORES, no estos: son copy validado (marca/cliente_ideal.md)
+         y siguen siendo por perfil. Quedan acá, como línea de tiempo del valor y entrada
+         a "Bienvenido a la nueva era".
 
-    <!-- El cierre, en flujo normal y sin techo de alto. Sin `:style` por progreso, a
-         diferencia de los bloques 1-5: no vive dentro de un FondoSeccionSticky, así
-         que no hay progreso de sección del que colgarse. Queda visible y estático,
-         como el puente de acá abajo. -->
-    <section class="demo-cierre">
-        <article
-          class="demo-scroll-dolor__bloque demo-scroll-dolor__cierre demo-cierre__tarjeta"
-          :data-bloque-id="contenido.cierre.id"
-        >
-          <div class="demo-scroll-dolor__bloque-texto">
-            <h2 v-for="(linea, indice) in contenido.cierre.titulos" :key="indice" class="demo-scroll-dolor__cierre-titulo">
-              {{ linea }}
-            </h2>
+         En flujo normal y sin techo de alto, igual que estaba el cierre: no vive dentro
+         de un FondoSeccionSticky, así que no hay progreso de sección del que colgarse. -->
+    <section class="demo-hitos">
+      <div class="demo-hitos__tarjeta">
+        <ul class="demo-scroll-dolor__hitos">
+          <li v-for="(hito, indice) in contenido.hitos.lista" :key="indice">
+            <strong>{{ hito.momento }}</strong> {{ hito.texto }}
+          </li>
+        </ul>
 
-            <ul class="demo-scroll-dolor__hitos">
-              <li v-for="(hito, indice) in contenido.cierre.hitos" :key="indice">
-                <strong>{{ hito.momento }}</strong> {{ hito.texto }}
-              </li>
-            </ul>
-
-            <!-- Versión dueño: frase corta de cierre -->
-            <p v-if="contenido.cierre.frase_final" class="demo-scroll-dolor__frase-final">
-              {{ contenido.cierre.frase_final }}
-            </p>
-            <!-- Versión campeón: párrafo largo ya validado por Lucas (marca/cliente_ideal.md) -->
-            <p v-if="contenido.cierre.parrafo_final" class="demo-scroll-dolor__parrafo-final">
-              {{ contenido.cierre.parrafo_final }}
-            </p>
-          </div>
-
-          <div class="demo-scroll-dolor__bloque-pieza">
-            <marco-dispositivo :tipo="contenido.cierre.marco">
-              <pieza-multimedia :slot_id="contenido.cierre.id" :titulo="contenido.cierre.titulo_pieza" :media="media" />
-            </marco-dispositivo>
-          </div>
-        </article>
+        <!-- Versión dueño: frase corta de cierre -->
+        <p v-if="contenido.hitos.frase_final" class="demo-scroll-dolor__frase-final">
+          {{ contenido.hitos.frase_final }}
+        </p>
+        <!-- Versión campeón: párrafo largo ya validado por Lucas (marca/cliente_ideal.md) -->
+        <p v-if="contenido.hitos.parrafo_final" class="demo-scroll-dolor__parrafo-final">
+          {{ contenido.hitos.parrafo_final }}
+        </p>
+      </div>
     </section>
+
+    <!-- "Bienvenido a la nueva era" + los tres pilares de la implementación. -->
+    <seccion-nueva-era />
+
+    <!-- Las reseñas de Google. 🔴 HOY NO RENDERIZA NADA: el array está vacío a propósito
+         porque no hay ninguna fuente de reseñas todavía (se le pidió a Lucas el link de
+         su perfil el 10/9/2026 y no llegó). No se inventan reseñas ni promedio. -->
+    <seccion-resenas />
+
 
     <!-- Puente al formulario (el formulario lo renderiza ExperienciaDemo.vue justo
          después de esta sección). Desde el grupo 355 (prompt 08) vive adentro de un
@@ -191,26 +143,28 @@
 </template>
 
 <script>
-import MarcoDispositivo from './MarcoDispositivo.vue'
-import PiezaMultimedia from './PiezaMultimedia.vue'
 import FondoSeccionSticky from './FondoSeccionSticky.vue'
-import EscenaHero from './EscenaHero.vue'
-import { precargar_maquina } from './maquina-animacion'
+import AnimacionProcesador from './animacion/AnimacionProcesador.vue'
+import SeccionClientes from './SeccionClientes.vue'
+import CuboProcesador from './CuboProcesador.vue'
+import SeccionNuevaEra from './SeccionNuevaEra.vue'
+import SeccionResenas from './SeccionResenas.vue'
 
 /**
- * Copy completo del scroll de dolor, transcripto palabra por palabra desde
+ * Copy por perfil de la página, transcripto palabra por palabra desde
  * contexto/demo_pagina.md §1 (versión dueño) y §2 (versión campeón) del repo
  * claude-comerciocity. No parafrasear ni ajustar acá: cualquier cambio de
  * texto se hace en ese archivo, no en este componente.
  *
- * Las piezas multimedia y su marco de dispositivo son las mismas en las dos
- * versiones (contexto/demo_experiencia.md §3.18); lo único que cambia entre
- * dueño y campeón es el texto.
+ * 🔴 De los cinco bloques de dolor y sus siete slots multimedia (`scroll.1` a
+ * `scroll.6` más `scroll.2-tel`) NO queda nada: se sacaron enteros el 10/9/2026
+ * (misión experiencia-nueva) por pedido de Lucas, y las piezas se descartaron.
+ * Siguen cargadas en el admin y en R2, sin nadie que las consuma. Si alguna vez
+ * vuelven, salen de ahí; no hace falta volver a filmarlas.
  *
- * Son SIETE slots para seis bloques: `scroll.1` a `scroll.6`, más `scroll.2-tel`.
- * El bloque 2 es el único con marco combinado y lleva una pieza por pantalla —el
- * artículo en el sistema y el mismo artículo en la tienda—, porque ahí el mensaje
- * ES que el dato está en los dos lados.
+ * Lo que queda por perfil son tres cosas: la `apertura`, los `hitos` -- que
+ * incluyen el `titulo_portada` con el que abre el cubo, y que NO es el mismo texto
+ * en los dos perfiles -- y el `puente` al formulario.
  */
 const CONTENIDO_POR_PERFIL = {
   dueno: {
@@ -218,86 +172,12 @@ const CONTENIDO_POR_PERFIL = {
       titulo: 'Tu negocio funciona porque vos te acordás.',
       subtitulo: 'Y eso tiene un límite.',
     },
-    bloques: [
-      {
-        id: 'scroll.1',
-        marco: 'computadora',
-        titulo_pieza: 'Stock real por depósito',
-        // Ícono por dolor (grupo 370, prompt 02): depósito/stock -- la promesa que se
-        // rompe es justamente que lo que se ofrece no está en el depósito.
-        icono: 'bi-box-seam',
-        texto: [
-          'Le prometés a un cliente algo que creés que tenés.',
-          'Vas al depósito y no está.',
-        ],
-        resaltado: 'Ahora lo mirás antes de prometer.',
-      },
-      {
-        id: 'scroll.2',
-        marco: 'computadora+telefono',
-        titulo_pieza: 'El artículo, cargado en el sistema',
-        /*
-         * Único bloque con DOS piezas, una por pantalla. Es a propósito y es todo el
-         * mensaje del bloque: el mismo artículo, cargado una sola vez, visible en el
-         * sistema y en la tienda (contexto/demo_experiencia.md §3.18 -- el par
-         * computadora+teléfono aparece una sola vez en el scroll, y justamente acá).
-         * Mostrar el mismo video en las dos pantallas decía lo contrario.
-         */
-        id_telefono: 'scroll.2-tel',
-        titulo_pieza_telefono: 'El mismo artículo, ya en la tienda',
-        // Duplicación: el mismo artículo cargado tres veces en tres lugares distintos.
-        icono: 'bi-copy',
-        texto: [
-          'El mismo artículo, cargado tres veces: en el sistema, en el Excel, en la página.',
-        ],
-        resaltado: 'Ahora lo cargás una sola vez.',
-      },
-      {
-        id: 'scroll.3',
-        marco: 'computadora',
-        titulo_pieza: 'Actualización masiva de precios aplicándose',
-        // Lista de precios: el dolor es el precio, no el mecanismo de carga masiva.
-        icono: 'bi-tag',
-        texto: [
-          'Llega la lista nueva del proveedor y la vas a cargar cuando puedas.',
-          'Mientras tanto seguís vendiendo al precio de antes.',
-        ],
-        resaltado: 'Ahora es cuestión de minutos.',
-      },
-      {
-        id: 'scroll.4',
-        marco: 'computadora',
-        titulo_pieza: 'La venta que se factura en el mismo acto',
-        // Comprobante/factura: cargar la venta y volver a cargarla en ARCA.
-        icono: 'bi-receipt',
-        texto: [
-          'Cargás la venta. Y después la volvés a cargar en ARCA.',
-        ],
-        resaltado: 'Ahora facturás donde la venta ya está.',
-      },
-      {
-        id: 'scroll.5',
-        marco: 'computadora',
-        titulo_pieza: 'Cuenta corriente con los comprobantes detrás',
-        // Cuenta corriente/deuda: quién debe, no el comprobante en sí (ese ya es el
-        // ícono del bloque 4) -- por eso billetera y no recibo.
-        icono: 'bi-wallet2',
-        texto: [
-          'Quién te debe. Desde cuándo. Por qué comprobante.',
-          'Hoy eso vive en una libreta y en tu cabeza.',
-        ],
-        resaltado: 'Ahora vive en un solo lugar, con el comprobante detrás de cada número.',
-      },
-    ],
-    cierre: {
-      id: 'scroll.6',
-      marco: 'telefono',
-      titulo_pieza: 'Consultar un dato desde afuera del local',
-      titulos: [
+    hitos: {
+      titulo_portada: [
         'Nada de esto es sobre el sistema.',
         'Es sobre dejar de ser el único que sabe.',
       ],
-      hitos: [
+      lista: [
         { momento: 'El primer día', texto: 'dejás de cargar lo mismo dos veces.' },
         { momento: 'El primer mes', texto: 'dejás de suponer: el stock, los precios y las deudas son los de verdad.' },
         { momento: 'A los doce meses', texto: 'el sistema ya sabe qué vendiste en cada época — y te dice qué comprar antes de que te falte.' },
@@ -315,85 +195,11 @@ const CONTENIDO_POR_PERFIL = {
       titulo: 'Vos ya sabés que así no se puede seguir.',
       subtitulo: 'Lo difícil es demostrarlo.',
     },
-    bloques: [
-      {
-        id: 'scroll.1',
-        marco: 'computadora',
-        titulo_pieza: 'Stock real por depósito',
-        // Ícono por dolor (grupo 370, prompt 02): depósito/stock -- la promesa que se
-        // rompe es justamente que lo que se ofrece no está en el depósito.
-        icono: 'bi-box-seam',
-        texto: [
-          'Ves que se prometen cosas que no hay en el depósito.',
-          'Y que el problema no es de nadie en particular.',
-        ],
-        resaltado: 'Es del sistema. Y se arregla.',
-      },
-      {
-        id: 'scroll.2',
-        marco: 'computadora+telefono',
-        titulo_pieza: 'El artículo, cargado en el sistema',
-        /*
-         * Único bloque con DOS piezas, una por pantalla. Es a propósito y es todo el
-         * mensaje del bloque: el mismo artículo, cargado una sola vez, visible en el
-         * sistema y en la tienda (contexto/demo_experiencia.md §3.18 -- el par
-         * computadora+teléfono aparece una sola vez en el scroll, y justamente acá).
-         * Mostrar el mismo video en las dos pantallas decía lo contrario.
-         */
-        id_telefono: 'scroll.2-tel',
-        titulo_pieza_telefono: 'El mismo artículo, ya en la tienda',
-        // Duplicación: el mismo artículo cargado tres veces en tres lugares distintos.
-        icono: 'bi-copy',
-        texto: [
-          'Contás las veces que la misma información se carga de nuevo.',
-          'Nadie más las cuenta.',
-        ],
-        resaltado: 'Acá se carga una sola vez.',
-      },
-      {
-        id: 'scroll.3',
-        marco: 'computadora',
-        titulo_pieza: 'Actualización masiva de precios aplicándose',
-        // Lista de precios: el dolor es el precio, no el mecanismo de carga masiva.
-        icono: 'bi-tag',
-        texto: [
-          'Sabés que se está vendiendo con precios viejos.',
-          'Explicar cuánto cuesta eso es otra historia.',
-        ],
-        resaltado: 'Esto se ve mejor que se explica.',
-      },
-      {
-        id: 'scroll.4',
-        marco: 'computadora',
-        titulo_pieza: 'La venta que se factura en el mismo acto',
-        // Comprobante/factura: cargar la venta y volver a cargarla en ARCA.
-        icono: 'bi-receipt',
-        texto: [
-          'Ves cargar la misma venta dos veces, todos los días.',
-        ],
-        resaltado: 'Acá se carga una y se factura ahí mismo.',
-      },
-      {
-        id: 'scroll.5',
-        marco: 'computadora',
-        titulo_pieza: 'Cuenta corriente con los comprobantes detrás',
-        // Cuenta corriente/deuda: quién debe, no el comprobante en sí (ese ya es el
-        // ícono del bloque 4) -- por eso billetera y no recibo.
-        icono: 'bi-wallet2',
-        texto: [
-          'Preguntás quién debe qué, y la respuesta es una libreta.',
-        ],
-        resaltado: 'Acá la respuesta está en pantalla, con el comprobante detrás.',
-      },
-    ],
-    cierre: {
-      id: 'scroll.6',
-      marco: 'telefono',
-      titulo_pieza: 'Consultar un dato desde afuera del local',
-      titulos: [
+    hitos: {
+      titulo_portada: [
         'No hace falta que lo expliques vos.',
       ],
-      hitos: [
+      lista: [
         { momento: 'El primer día', texto: 'deja de cargarse lo mismo dos veces.' },
         { momento: 'El primer mes', texto: 'las decisiones se toman mirando, no suponiendo.' },
         { momento: 'A los doce meses', texto: 'el sistema sabe qué se vendió en cada época y avisa qué comprar.' },
@@ -478,13 +284,14 @@ const ENTRADA_X = 80
    escena. */
 const ENTRADA_Y_PUENTE = 40
 const SALIDA_Y = -48
-/* La salida no llega a 0: ver el comentario de estilo_bloque(). */
+/* La salida no llega a 0: un bloque que se va del todo deja un hueco blanco en medio
+   del recorrido. Lo usa estilo_puente(). */
 const SALIDA_OPACIDAD = 0.35
 
 /**
- * La curva de toda la página: 1 - (1-t)³. La misma que usaba la escena del interludio y
- * la que usa la coreografía de la escena nueva (out_cubic en escena-coreografia.js). Dos
- * curvas distintas en la misma página se notan.
+ * La curva de toda la página: 1 - (1-t)³. La misma que usaba la escena del interludio,
+ * y la misma familia que el easeOutCubic del motor de la animación del procesador
+ * (animacion/motor-tiempo.js). Dos curvas distintas en la misma página se notan.
  *
  * @param {number} t
  * @returns {number}
@@ -494,12 +301,18 @@ function ease_out(t) {
 }
 
 /**
- * Scroll de dolor de la página inmersiva de demo: seis bloques de dolor +
- * alivio, cada uno con su pieza multimedia dentro de un marco de dispositivo,
- * más apertura y puente al formulario. Renderiza la versión dueño o campeón
- * según `perfil` (contexto/demo_experiencia.md §3.17).
+ * El recorrido de la página inmersiva de demo, rehecho el 10/9/2026 (misión
+ * experiencia-nueva): la animación del procesador, la apertura, los clientes, el
+ * cubo, los hitos, "Bienvenido a la nueva era", las reseñas y el puente al
+ * formulario. Renderiza la versión dueño o campeón según `perfil`
+ * (contexto/demo_experiencia.md §3.17).
  *
- * Instrumentación mínima (§6 del prompt): cada bloque, al terminar de entrar,
+ * ⚠️ El nombre del componente quedó viejo: ya no hay ningún "scroll de dolor". Se
+ * conserva porque renombrarlo toca la ruta, el SCSS compartido y una docena de
+ * selectores `demo-scroll-dolor__*` que siguen siendo los correctos para lo que sí
+ * sobrevivió (apertura, hitos y puente).
+ *
+ * Instrumentación mínima (§6 del prompt): al terminar de entrar, una sección
  * dispara `emitir_evento` -- método centralizado en el contenedor
  * (ExperienciaDemo.vue) que hoy solo hace console.debug y mañana se conecta
  * al bus de eventos real sin tener que volver a tocar este componente.
@@ -518,10 +331,12 @@ export default {
   name: 'ScrollDolor',
 
   components: {
-    MarcoDispositivo,
-    PiezaMultimedia,
     FondoSeccionSticky,
-    EscenaHero,
+    AnimacionProcesador,
+    SeccionClientes,
+    CuboProcesador,
+    SeccionNuevaEra,
+    SeccionResenas,
   },
 
   props: {
@@ -534,13 +349,6 @@ export default {
     perfil: {
       type: String,
       default: 'dueno',
-    },
-    /** Mapa { slot_id: url } de piezas multimedia, tal como llega del payload. */
-    media: {
-      type: Object,
-      default: function () {
-        return {}
-      },
     },
     /**
      * Método centralizado de tracking, inyectado por el contenedor.
@@ -583,8 +391,8 @@ export default {
        * Cualquier reintroducción de una condición de scroll acá revive ese bug.
        */
       apertura_entrada_terminada: false,
-      /** Ids de bloque cuyo evento de tracking ya se emitió (una vez por bloque). */
-      bloques_trackeados: {},
+      /** true una vez emitido el evento de que el lead vio la animación entera. */
+      animacion_trackeada: false,
     }
   },
 
@@ -644,6 +452,36 @@ export default {
 
   methods: {
     /**
+     * Progreso de la sección de la animación de apertura.
+     *
+     * 🔴 Solo ADELANTA. La animación corre sola a su ritmo (24,4 s) y esto la empuja
+     * hacia adelante; nunca la rebobina. Es la decisión de Lucas del 10/9/2026: el lead
+     * con paciencia la ve entera, y el que no la tiene llega al mensaje sin frustrarse.
+     * `adelantar_desde_scroll()` ya ignora un progreso menor al del reloj, así que acá
+     * no hace falta compararlo.
+     *
+     * Va por `ref` y no por el slot escopeado a propósito, igual que hacía el interludio:
+     * consumir el progreso desde el template ata cada frame de scroll a un render de Vue,
+     * y lo único que cambia acá son estilos que el reloj del hijo escribe a mano.
+     *
+     * @param {number} p Progreso [0,1] de la sección, ya amortiguado por el componente.
+     * @returns {void}
+     */
+    on_progreso_animacion(p) {
+      const animacion = this.$refs.animacion
+      if (animacion) {
+        animacion.adelantar_desde_scroll(p)
+      }
+      if (p >= 0.94 && !this.animacion_trackeada) {
+        this.animacion_trackeada = true
+        this.emitir_evento('scroll_bloque_visible', {
+          bloque_id: 'animacion.procesador',
+          perfil: this.perfil,
+        })
+      }
+    },
+
+    /**
      * Normaliza `p` al rango [0,1] dentro de [inicio, fin] -- misma función que
      * usa la coreografía de la escena central, para no tener dos formas de recortar tramos.
      *
@@ -663,61 +501,11 @@ export default {
     },
 
     /**
-     * Estilo de un bloque 1-5 para el progreso `p` de su propia sección. Tres
-     * tramos: entrada (0 -> ENTRADA_FIN, hoy 0.42), meseta (la sección está para leerse
-     * quieta) y salida parcial (0.72 -> 1). Medidos en scroll con las secciones de 160vh:
-     * entrada 25,2vh, meseta 18vh, salida 16,8vh.
-     *
-     * La salida es PARCIAL a propósito (hasta 0.35 de opacidad, no hasta 0): que
-     * el contenido se desvanezca del todo antes de irse de pantalla se lee como
-     * un bug, no como una transición.
-     *
-     * Es función pura del progreso, así que la reversa al subir sale gratis: el
-     * progreso baja y los mismos valores se recorren al revés. Si alguna vez
-     * aparece acá un `if (subiendo)`, el enfoque está mal.
-     *
-     * @param {number} p Progreso [0,1] de la sección.
-     * @param {boolean} secundario true para la pieza multimedia, que va desfasada
-     *                             ~0.05 de progreso respecto del texto ("primero
-     *                             se lee, después se ve" -- es el mismo desfasaje
-     *                             que daba el animation-delay de 0.18s).
-     * @param {number} indice Índice del bloque en el v-for (0-based), para saber de
-     *                        qué lado entra cada mitad. Ver bloque_invertido().
-     * @returns {object}
-     */
-    estilo_bloque(p, secundario, indice) {
-      if (this.reduced_motion) {
-        /* Sin estilos inline: manda el CSS, que bajo esta media query deja todo
-         * plenamente visible y estático. */
-        return {}
-      }
-
-      const desfase = secundario ? DESFASE_PIEZA : 0
-      const entrada = ease_out(this.normalizar(p, desfase, ENTRADA_FIN + desfase))
-      const salida = ease_out(this.normalizar(p, SALIDA_INICIO + desfase, 1))
-
-      const opacidad = entrada - salida * (1 - SALIDA_OPACIDAD)
-      /* Cada mitad entra desde el lado donde REALMENTE está: en un bloque normal el
-       * texto viene de la izquierda y la pieza de la derecha; en uno invertido, al
-       * revés. Con un desplazamiento fijo, en los invertidos cada mitad entraría
-       * cruzando por encima de la otra. */
-      const desde_la_derecha = secundario ? !this.bloque_invertido(indice) : this.bloque_invertido(indice)
-      const x = (1 - entrada) * ENTRADA_X * (desde_la_derecha ? 1 : -1)
-      /* La salida sigue siendo vertical y no se toca. */
-      const y = salida * SALIDA_Y
-
-      return {
-        opacity: String(opacidad),
-        transform: 'translate(' + x + 'px, ' + y + 'px)',
-      }
-    },
-
-    /**
      * Estilo de un renglón del puente para el progreso `p` de su sección (grupo 355,
      * prompt 08). Mismos tramos, misma curva y mismo desfase que los bloques, pero
      * con desplazamiento VERTICAL: los dos renglones están centrados uno debajo del
      * otro, así que hacerlos entrar de costados opuestos como a un bloque los
-     * cruzaría en el aire. Igual que estilo_bloque, es función pura del progreso: la
+     * cruzaría en el aire. Es función pura del progreso: la
      * reversa al subir sale gratis.
      *
      * @param {number} p Progreso [0,1] de la sección.
@@ -802,76 +590,6 @@ export default {
      */
     on_entrada_apertura_terminada() {
       this.apertura_entrada_terminada = true
-    },
-
-    /**
-     * Tracking de bloque visible: reemplaza al que emitía el IntersectionObserver,
-     * en el mismo momento aproximado (el bloque terminó de entrar) y con el mismo
-     * evento y payload. Una sola vez por bloque, aunque el lead suba y vuelva a
-     * bajar diez veces: es un evento de "lo vio", no de "lo está viendo".
-     *
-     * @param {number} p
-     * @param {string} bloque_id
-     * @returns {void}
-     */
-    on_progreso_bloque(p, bloque_id) {
-      /* 🔴 Acá arranca la descarga de la máquina de la escena central (misión 12, pieza
-         1). Es el pedido de Lucas del 7/8/2026 -- "que se precargue mientras estoy
-         viendo los dolores" -- y el lugar exacto importa: desde el primer bloque de
-         dolor hasta la escena hay CUATRO pantallas, que es el tiempo que la tira de
-         ~1,3 MB necesita para bajar y decodificarse sin que el lead vea nada.
-         `precargar_maquina()` es idempotente, así que llamarla en cada cuadro de scroll
-         de este bloque no dispara más de una descarga. Va antes del corte de abajo a
-         propósito: el tracking espera a que el bloque termine de entrar, la precarga no
-         tiene por qué.
-
-         🔴 El `p > 0` no es una precaución: FondoSeccionSticky emite una vez al montar,
-         con el progreso real (0 si su sección todavía está más abajo). Sin esta guarda
-         la máquina se pedía apenas cargaba la página -- o sea compitiendo por el ancho
-         de banda con la primera pantalla, que es exactamente lo contrario de lo que se
-         buscaba. */
-      if (p > 0 && this.contenido.bloques.length && bloque_id === this.contenido.bloques[0].id) {
-        precargar_maquina()
-      }
-
-      if (p < ENTRADA_FIN || this.bloques_trackeados[bloque_id]) {
-        return
-      }
-      this.bloques_trackeados[bloque_id] = true
-      this.emitir_evento('scroll_bloque_visible', { bloque_id: bloque_id, perfil: this.perfil })
-    },
-
-    /**
-     * El progreso de la sección de la escena central, que hace dos cosas.
-     *
-     * 1. Mover la escena. Se le pasa al hijo por un método y no por una prop reactiva:
-     *    ver el comentario del template.
-     *
-     * 2. Disparar el tracking del bloque de cierre, que no tiene observador propio
-     *    (grupo 322, prompt 05). Lo disparaba la escena vieja del interludio al llegar su
-     *    progreso a 0.94; con el portal borrado (grupo 369, prompt 06) se muda acá,
-     *    con el MISMO umbral, para no perder cobertura ni cambiar el significado del
-     *    dato en el medio de una migración.
-     *    El 0.94 es un proxy desde el grupo 355 (prompt 06), cuando el cierre dejó de
-     *    estar adentro de la escena y pasó a ser la sección siguiente: se adelanta ~30vh
-     *    de scroll a que la tarjeta se vea de verdad. Si algún día el dato tiene que ser
-     *    exacto, lo correcto es un IntersectionObserver sobre .demo-cierre, que existe
-     *    como sección propia.
-     *
-     * @param {number} p Progreso [0,1] de la sección, ya amortiguado por el componente.
-     * @returns {void}
-     */
-    on_progreso_escena(p) {
-      if (this.$refs.escena_hero) {
-        this.$refs.escena_hero.aplicar_progreso(p)
-      }
-      if (p >= 0.94 && !this.bloques_trackeados[this.contenido.cierre.id]) {
-        this.bloques_trackeados[this.contenido.cierre.id] = true
-        this.emitir_evento('scroll_bloque_visible', {
-          bloque_id: this.contenido.cierre.id,
-          perfil: this.perfil,
-        })
-      }
     },
 
   },
@@ -1026,133 +744,19 @@ export default {
   }
 }
 
-/* Bloques 1-6: texto + pieza, en columnas en desktop, apiladas en móvil */
-.demo-scroll-dolor__bloque {
-  display: grid;
-  grid-template-columns: minmax(260px, 420px) 1fr;
-  gap: 40px;
-  align-items: center;
+/* La tarjeta de los hitos. Antes esto era el CIERRE: mismo lugar en la página, pero
+   con el titular arriba ("Nada de esto es sobre el sistema...") y una pieza multimedia
+   al lado, en una grilla de dos columnas. Desde el 10/9/2026 el titular abre el cubo y
+   la pieza se descartó, así que queda una sola columna centrada -- no una grilla de dos
+   con una celda vacía. */
+.demo-hitos__tarjeta {
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
 }
 
-/* Alterna el orden visual texto/pieza para dar ritmo al scroll sin animación extra.
-   Antes era :nth-child(even) sobre los hermanos directos de .demo-scroll-dolor; desde
-   que cada <article> vive dentro de su propio <fondo-seccion-sticky> (grupo 322,
-   prompt 01) ya no son hermanos entre sí, así que la alternancia se selecciona por la
-   variante del wrapper (bloque-2 y bloque-4 son los "pares" de los cinco bloques). */
-.demo-fondo-seccion--bloque-2 .demo-scroll-dolor__bloque,
-.demo-fondo-seccion--bloque-4 .demo-scroll-dolor__bloque {
-  direction: rtl;
-}
-
-.demo-fondo-seccion--bloque-2 .demo-scroll-dolor__bloque > *,
-.demo-fondo-seccion--bloque-4 .demo-scroll-dolor__bloque > * {
-  direction: ltr;
-}
-
-/* Ícono por dolor. Grupo 374 (prompt 02) lo saca del flujo y lo convierte en MARCA DE
-   AGUA: hasta el grupo 370 eran 28px en bloque, arriba del primer párrafo y alineado
-   con él, y a Lucas le quedaba "como una viñeta suelta" (7/8/2026) -- ni acompañaba al
-   texto ni tenía entidad propia. Ahora es una textura de fondo de la columna de texto:
-   grande, centrada y detrás del párrafo.
-
-   Se probó primero esta opción y no hizo falta la segunda que daba el prompt (48px
-   centrado SOBRE el texto): con 0.08 de opacidad el glifo aporta silueta y color sin
-   ensuciar los párrafos de dos líneas.
-
-   MEDIDO (no estimado) sobre --demo-color-fondo #f8f9fc, que es la peor parte del
-   recorrido para el contraste porque los radial-gradient de la sección solo oscurecen:
-   el párrafo (--demo-color-texto-suave) pasa de 5,97:1 sin marca de agua a 5,45:1 con
-   ella, y el resaltado de 14,91:1 a 13,61:1. Los dos siguen bien por encima del 4,5:1
-   de AA. Para referencia de cuánto margen hay: al 0,10 el párrafo da 5,30:1, y con la
-   opacidad vieja de 0,55 (cuando el ícono era un pictograma y no tapaba texto) daría
-   3,02:1 -- o sea que esta opacidad no se puede subir "un poquito" sin volver a medir.
-
-   El centrado es absoluto respecto del contenedor de texto, así que NO depende de la
-   dirección: por eso desapareció la regla que en los bloques 2 y 4 (los que el scss da
-   vuelta con `direction: rtl`) lo mandaba a `text-align: right`. Centrado es centrado
-   en los cinco bloques.
-
-   z-index explícito en los dos lados y no `z-index: -1` en el ícono: el contenedor de
-   texto ya crea su propio stacking context (`will-change: transform` en
-   demo-experiencia.scss), así que un valor negativo funcionaría, pero el día que ese
-   will-change se saque el ícono se iría detrás del fondo de la sección y desaparecería
-   sin que nada avise. Con el ícono en 0 y el texto en 1 el orden no depende de eso.
-
-   rgba(11, 132, 248, ...) y no color-mix() sobre --demo-color-azul: el resto de este
-   archivo (los radial-gradient de abajo) ya resuelve la opacidad de este mismo azul
-   como literal en vez de con la variable, por soporte de navegador -- una sola forma
-   de hacerlo en el archivo compartido. */
-.demo-scroll-dolor__bloque-texto {
-  position: relative;
-}
-
-.demo-scroll-dolor__icono-dolor {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: clamp(96px, 9vw, 140px);
-  line-height: 1;
-  color: rgba(11, 132, 248, 0.08);
-  z-index: 0;
-  /* Es decoración: no tiene que comerse ningún click ni selección de texto. */
-  pointer-events: none;
-}
-
-/* El texto, por encima de la marca de agua. Va acá y no en el contenedor porque el
-   z-index solo lo respetan los elementos posicionados. */
-.demo-scroll-dolor__parrafo,
-.demo-scroll-dolor__resaltado {
-  position: relative;
-  z-index: 1;
-}
-
-.demo-scroll-dolor__parrafo {
-  font-size: clamp(1.05rem, 1.6vw, 1.25rem);
-  line-height: 1.5;
-  color: var(--demo-color-texto-suave);
-  margin: 0 0 8px;
-}
-
-.demo-scroll-dolor__resaltado {
-  font-size: clamp(1.2rem, 1.9vw, 1.5rem);
-  font-weight: 600;
-  color: var(--demo-color-texto);
-  margin: 12px 0 0;
-}
-
-/* Cierre: texto centrado y más ancho, sin la alternancia rtl de los bloques anteriores */
-.demo-scroll-dolor__cierre {
-  grid-template-columns: minmax(260px, 480px) 1fr;
-  direction: ltr !important;
-}
-
-.demo-scroll-dolor__cierre-titulo {
-  font-size: clamp(1.5rem, 3vw, 2.1rem);
-  font-weight: 700;
-  line-height: 1.25;
-  /* Tracking negativo en texto display grande (§15 de apple-design/SKILL.md). */
-  letter-spacing: -0.02em;
-  margin: 0 0 4px;
-  background: var(--demo-gradient-marca);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-/* El degradé recortado en texto se come a sí mismo cuando el título va sobre una
-   tarjeta clara -- pasa a color sólido. Nació para el cierre superpuesto sobre la
-   escena animada del portal (grupo 322, prompt 05); desde el grupo 355 (prompt 06) el
-   cierre es su propia pantalla y la clase que lo identifica es .demo-cierre__tarjeta,
-   pero el motivo es el mismo y el selector sigue siendo de 3 clases a propósito: más
-   específico que la regla base de arriba (2 clases), así gana siempre dentro de este
-   mismo archivo, sin depender del orden de carga entre bundles. */
-.demo-scroll-dolor__cierre.demo-cierre__tarjeta .demo-scroll-dolor__cierre-titulo {
-  background: none;
-  -webkit-background-clip: initial;
-  background-clip: initial;
-  color: var(--demo-color-texto);
-}
 
 .demo-scroll-dolor__hitos {
   list-style: none;
@@ -1236,29 +840,6 @@ export default {
 }
 
 @media (max-width: 767.98px) {
-  .demo-scroll-dolor__bloque,
-  .demo-scroll-dolor__cierre {
-    grid-template-columns: 1fr;
-    direction: ltr !important;
-  }
-
-  /* La marca de agua, a escala del teléfono (grupo 374, prompt 02). El clamp de desktop
-     acá se clavaría en su mínimo -- 9vw sobre 390px da 35px --, o sea 96px fijos en
-     todas las pantallas chicas. El término central se recalibra a 24vw (93,6px en 390px,
-     76,8px en 320px) para que el glifo acompañe el ancho disponible en vez de quedar
-     siempre del mismo tamaño.
-
-     No desborda por construcción: está centrado con position absolute, así que aunque el
-     glifo midiera más que la columna sobresaldría medio de cada lado -- y el contenedor
-     de texto no tiene overflow visible hacia afuera de la sección, que ya recorta en el
-     pin. Con 120px de techo contra los ~350px de columna útil, no llega ni cerca.
-
-     La regla vieja de desktop que en los bloques 2 y 4 lo mandaba a la derecha ya no
-     existe, así que acá tampoco hace falta desandarla con text-align. */
-  .demo-scroll-dolor__icono-dolor {
-    font-size: clamp(84px, 24vw, 120px);
-  }
-
   /* Apertura más grande y más separada en teléfono (grupo 369, prompt 01, pedido de
      Lucas: "en teléfono los dos sean un poco más grandes y estén más separados").
 
