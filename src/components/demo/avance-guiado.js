@@ -41,7 +41,25 @@ const PX_POR_LINEA = 16
 /* Los elementos que declaran un punto de enganche en el CSS. Es una sola lista porque
    dos preguntas distintas la necesitan: a dónde se puede ir (destinos) y si la sección
    donde estoy todavía tiene contenido sin ver (hay_contenido_sin_ver). */
-const SELECTOR_DESTINOS = '.demo-fondo-seccion__snap, .demo-cierre, .demo-formulario'
+/* 🔴 Las secciones que NO viven dentro de un FondoSeccionSticky se nombran de a una acá.
+   Es el acoplamiento que más fácil se rompe en silencio: una sección nueva que no esté en
+   esta lista no es destino del avance por gesto, y el lead la pasa de largo sin que nada
+   falle -- no hay error, no hay log, simplemente el gesto salta por encima.
+   `.demo-cierre` se renombró a `.demo-hitos` el 10/9/2026, y en la misma misión entraron
+   las cuatro secciones nuevas, que traen su propio pin. */
+const SELECTOR_DESTINOS = [
+  '.demo-fondo-seccion__snap',
+  '.demo-hitos',
+  /* 🔴 `.demo-clientes` NO va acá, y sacarla fue un arreglo medido el 10/9/2026: el borde
+     de esa sección es una pantalla EN BLANCO (su primer momento entra entre progreso 0,0
+     y 0,07), así que tenerla como destino depositaba al lead mirando la nada. Su destino
+     real es el `.demo-fondo-seccion__snap` que lleva adentro, que ya entra por la primera
+     línea de esta lista. Lo mismo vale para el cubo, que trae el suyo en la portada. */
+  '.demo-cubo',
+  '.demo-nueva-era',
+  '.demo-resenas',
+  '.demo-formulario',
+].join(', ')
 
 /* Cerrojo por TIEMPO desde que arranca un avance. Cubre lo que dura el
    desplazamiento suave más un margen: mientras corre, todo gesto nuevo se ignora. */
@@ -151,17 +169,24 @@ export default function crear_avance_guiado(scroller) {
    * nunca cacheados: las secciones miden en vh y una rotación de teléfono los mueve
    * todos.
    *
-   * La lista NO se hardcodea ni se cuenta a mano. Sale de los mismos elementos que ya
-   * declaran el enganche en CSS:
-   *   - `.demo-fondo-seccion__snap`, el div que cada FondoSeccionSticky planta a
-   *     `snap_progreso` de su alto pinneable (ver el comentario en ese archivo: el
-   *     punto NO está en el borde de la sección, está donde la entrada ya terminó).
-   *   - `.demo-cierre` y `.demo-formulario`, que reciben su `scroll-snap-align` en
-   *     demo-experiencia.scss porque no viven dentro de un pin.
-   * Si mañana aparece otra sección con enganche, entra sola por acá.
+   * 🔴 La lista sale de SELECTOR_DESTINOS, y ESO NO ES AUTOMÁTICO. Hasta el 10/9/2026
+   * este comentario decía lo contrario ("la lista NO se hardcodea", "si mañana aparece
+   * otra sección con enganche, entra sola por acá") y era falso: es justamente la
+   * creencia que produce el bug. Sólo una de las entradas es genérica:
+   *   - `.demo-fondo-seccion__snap` SÍ entra sola: es el div que cada
+   *     FondoSeccionSticky planta a `snap_progreso` de su alto pinneable (ver el
+   *     comentario en ese archivo: el punto NO está en el borde de la sección, está
+   *     donde la entrada ya terminó). Toda sección que viva dentro de un pin queda
+   *     cubierta por esta línea sin tocar nada.
+   *   - Las que NO viven dentro de un pin —hoy `.demo-hitos`, `.demo-cubo`,
+   *     `.demo-nueva-era`, `.demo-resenas` y `.demo-formulario`— se nombran DE A UNA en
+   *     SELECTOR_DESTINOS. Reciben su `scroll-snap-align` en demo-experiencia.scss (o,
+   *     como el cubo, en su propio `<style>`), pero eso no las mete acá: son dos listas
+   *     distintas y hay que moverlas juntas. Una sección nueva que no se agregue arriba
+   *     no es destino del avance por gesto y el lead la pasa de largo sin que nada falle.
    *
    * Y el modo de alineación se LEE del CSS (`scroll-snap-align` + `scroll-margin-top`)
-   * en vez de replicarse acá: el cierre alinea centrado y el formulario alinea al
+   * en vez de replicarse acá: los hitos alinean centrado y el formulario alinea al
    * comienzo con un margen. Duplicar esos valores en JS los desincroniza en el primer
    * ajuste de estilos que alguien haga.
    *
@@ -261,12 +286,17 @@ export default function crear_avance_guiado(scroller) {
    *
    * 🔴 Esta es la segunda mitad de la trampa de scroll, y la encontró el checker del
    * prompt 02 después de que la primera (no interceptar cuando no hay sección vecina) ya
-   * estaba cerrada. El caso: una sección MÁS ALTA que la pantalla. `.demo-cierre` mide
-   * 1153px en un teléfono de 390x780 -- 373px por debajo del pliegue, que es casi todo el
-   * marco con la pieza multimedia --, su punto de enganche es su tope, y el destino
-   * siguiente es el puente, que está más abajo que su fondo. Con `preventDefault()` puesto
-   * no queda ninguna posición de reposo en el medio, así que la parte de abajo del cierre
-   * no se podía ver ni bajando ni subiendo. Y era una REGRESIÓN: con `scroll-snap-type: y
+   * estaba cerrada. El caso: una sección MÁS ALTA que la pantalla. La medición original
+   * fue sobre la sección de cierre de entonces (hoy `.demo-hitos`): 1153px en un teléfono
+   * de 390x780, o sea 373px por debajo del pliegue. Esos 373px eran la pieza multimedia
+   * que iba al lado del texto, y ESA PIEZA YA NO EXISTE (misión experiencia-nueva,
+   * 10/9/2026: la tarjeta quedó en una sola columna de texto). O sea que el número de
+   * arriba es historia, no una medición vigente -- pero el mecanismo sigue valiendo para
+   * cualquier sección que crezca más que la pantalla, y la versión campeón de los hitos
+   * en teléfono ya mide 1255px contra un viewport de 844px. Su punto de enganche es su
+   * tope, y el destino siguiente está más abajo que su fondo: con `preventDefault()`
+   * puesto no queda ninguna posición de reposo en el medio, así que la parte de abajo no
+   * se puede ver ni bajando ni subiendo. Y era una REGRESIÓN: con `scroll-snap-type: y
    * mandatory` a secas, una snap area más alta que el snapport deja válida cualquier
    * posición interna (lo pide la especificación), así que antes de este control el cierre
    * se recorría. Encima es justo el contenido que Lucas pidió poder leer entero en el
