@@ -389,10 +389,18 @@
 	scroll-snap-align: center;
 }
 
-// Las dos secciones con pin propio (clientes y cubo) alinean por ARRIBA y no al centro:
-// miden varias pantallas de alto, así que "centrarlas" dejaría al lead entrando por la
-// mitad de su recorrido, con la animación empezada. Es el mismo motivo por el que el
-// interludio usaba snap_progreso 0.
+// 🔴 Las dos secciones con pin propio (clientes y cubo) llevan `scroll-snap-align: start`
+// para poder RECORRERSE, no para engancharse. No es lo mismo y confundirlo cuesta caro:
+// el scroller lleva `scroll-snap-type: y mandatory`, y estas dos secciones miden varias
+// pantallas de alto. Una snap area MÁS ALTA que el snapport deja válida cualquier posición
+// interna (spec de CSS Scroll Snap), así que el lead puede recorrer la sección a su pulso
+// en vez de que el scroller lo empuje de un extremo al otro.
+//
+// El punto donde el gesto guiado DEPOSITA al lead es otro: el `.demo-fondo-seccion__snap`
+// que cada una lleva adentro, plantado donde su contenido ya entró. Medido el 10/9/2026 en
+// la página real: sin ese marcador, el gesto lo dejaba en el borde de la sección de
+// clientes, que es una pantalla en blanco durante los primeros 176px (su primer momento
+// entra entre progreso 0,0 y 0,07).
 .demo-scroll-guiado .demo-clientes,
 .demo-scroll-guiado .demo-cubo {
 	scroll-snap-align: start;

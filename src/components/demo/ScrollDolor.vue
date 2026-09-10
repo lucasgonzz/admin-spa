@@ -26,7 +26,16 @@
          🔴 Y solo ADELANTA: la animación corre sola a su ritmo (24,4 s) y el scroll la
          empuja hacia adelante, nunca hacia atrás. Es lo que pidió Lucas -- el que tiene
          paciencia la ve entera, el que no, llega al mensaje sin frustrarse. -->
+    <!-- 🔴 Bajo reduced-motion la sección NO se pinnea, y no es una sutileza: el
+         `min-height: 320vh` que FondoSeccionSticky escribe como estilo inline no lo
+         puede sacar ninguna regla CSS (un inline gana), así que el bloque de
+         reduced-motion de demo-experiencia.scss despinea el contenido pero deja 220vh
+         de fondo NEGRO VACÍO que el lead tiene que scrollear a mano. El cubo esquivó
+         este mismo problema no usando FondoSeccionSticky; acá se esquiva con el v-if.
+         Sin pista tampoco hay progreso de scroll que aplicar, que es justo lo que
+         reduced-motion pide: la animación muestra su cuadro final y punto. -->
     <fondo-seccion-sticky
+      v-if="!reduced_motion"
       variante="animacion"
       :recorrido_vh="320"
       :snap_progreso="0"
@@ -37,12 +46,30 @@
     >
       <animacion-procesador ref="animacion" />
     </fondo-seccion-sticky>
+    <div v-else class="demo-animacion-estatica">
+      <animacion-procesador />
+    </div>
 
 
     <fondo-seccion-sticky variante="apertura" :contenido_full_bleed="true" v-slot="{ progreso }">
+      <!-- 🔴 --espera retiene la entrada hasta que la apertura SE VE. Sin eso, los ~2,4s
+           de la animación (zoom del titular + bounce del subtítulo) corren al montar --
+           o sea, mientras el lead todavía está mirando la animación del procesador, que
+           ocupa 320vh antes que esto -- y para cuando scrollea hasta acá el titular ya
+           está en su estado final. Es exactamente el sintoma que Lucas reportó en el
+           grupo 369 ("no lo hace con ningún efecto, simplemente aparece"), revivido por
+           haber puesto una sección larga delante. Detectado el 10/9/2026 por el chequeo
+           independiente de la misión experiencia-nueva.
+
+           Sigue siendo el TIEMPO el que decide cuándo TERMINA (el animationend del
+           subtítulo); lo único que cambió es cuándo EMPIEZA. Una condición de scroll
+           sobre el final es la que revivía el bug viejo, y esa no está. -->
       <header
         class="demo-scroll-dolor__apertura"
-        :class="{ 'demo-scroll-dolor__apertura--carga': !apertura_entrada_terminada }"
+        :class="{
+          'demo-scroll-dolor__apertura--espera': !apertura_vista,
+          'demo-scroll-dolor__apertura--carga': apertura_vista && !apertura_entrada_terminada,
+        }"
       >
         <h1 class="demo-scroll-dolor__apertura-titulo" :style="estilo_apertura(progreso)">
           {{ contenido.apertura.titulo }}
@@ -391,8 +418,17 @@ export default {
        * Cualquier reintroducción de una condición de scroll acá revive ese bug.
        */
       apertura_entrada_terminada: false,
+      /**
+       * false hasta que la apertura entró al viewport por primera vez. Retiene el
+       * arranque de la entrada: ver el comentario del <header> en el template.
+       */
+      apertura_vista: false,
       /** true una vez emitido el evento de que el lead vio la animación entera. */
       animacion_trackeada: false,
+      /** El IntersectionObserver que reporta qué secciones vio el lead, o null. */
+      observador_secciones: null,
+      /** El IntersectionObserver que dispara la entrada de la apertura, o null. */
+      observador_apertura: null,
     }
   },
 
@@ -440,17 +476,125 @@ export default {
      * animación ya creada en el instante siguiente a que el elemento entra al
      * documento, sin ninguna lectura de layout de por medio -- la llamada obliga al
      * navegador a resolver los estilos pendientes.
+     *
+     * 🔴 Y desde el 10/9/2026 esta red NO corre en mounted, sino en cuanto la apertura
+     * se ve y la clase --carga entra (ver red_de_seguridad_apertura()). Corriéndola en
+     * mounted quedaba SIEMPRE en el caso "no hay animación" --porque sin --carga no hay
+     * ninguna que encontrar--, marcaba la entrada como terminada y entonces --carga no
+     * se aplicaba nunca: la entrada desaparecía del todo, en vez de llegar tarde.
      */
-    const self = this
-    this.$nextTick(function () {
-      const subtitulo = self.$refs.apertura_subtitulo
-      if (!subtitulo || !subtitulo.getAnimations || subtitulo.getAnimations().length === 0) {
-        self.apertura_entrada_terminada = true
-      }
-    })
+    this.observar_secciones()
+  },
+
+  beforeUnmount() {
+    if (this.observador_secciones) {
+      this.observador_secciones.disconnect()
+      this.observador_secciones = null
+    }
+    if (this.observador_apertura) {
+      this.observador_apertura.disconnect()
+      this.observador_apertura = null
+    }
   },
 
   methods: {
+    /**
+     * Arranca el reporte de qué secciones vio el lead.
+     *
+     * 🔴 Existe porque la instrumentación se rompía en silencio. Hasta el 10/9/2026 la
+     * página tenía seis puntos de medición -- uno por bloque de dolor, más el cierre --
+     * y todos se fueron con los bloques. Sin esto queda UN solo evento en toda la página
+     * (el de la animación), así que el brief del closer no puede decir dónde abandonó el
+     * lead: la señal desaparece sin que nada falle ni quede en ningún log.
+     *
+     * Un observador para todas las secciones, y no uno por componente: las cuatro
+     * secciones nuevas son componentes independientes que no reciben `emitir_evento`, y
+     * pasárselo a cada una sería cablear la instrumentación en cuatro APIs para siempre.
+     * Acá se observan sus nodos raíz desde afuera y los componentes no se enteran.
+     *
+     * Se emite UNA vez por sección (unobserve al disparar), con el mismo nombre de
+     * evento que usaban los bloques -- `scroll_bloque_visible` -- para que lo que ya lee
+     * esos eventos del otro lado no tenga que cambiar.
+     *
+     * @returns {void}
+     */
+    observar_secciones() {
+      if (typeof IntersectionObserver === 'undefined') {
+        return
+      }
+
+      const self = this
+      const secciones = [
+        ['.demo-clientes', 'clientes'],
+        ['.demo-cubo', 'cubo'],
+        ['.demo-hitos', 'hitos'],
+        ['.demo-nueva-era', 'nueva_era'],
+        ['.demo-resenas', 'resenas'],
+      ]
+
+      self.observador_secciones = new IntersectionObserver(function (entradas) {
+        entradas.forEach(function (entrada) {
+          if (!entrada.isIntersecting) {
+            return
+          }
+          const id = entrada.target.getAttribute('data-seccion-id')
+          self.observador_secciones.unobserve(entrada.target)
+          self.emitir_evento('scroll_bloque_visible', { bloque_id: id, perfil: self.perfil })
+        })
+      /* 0.5 y no 0: que el borde asome no es haberla visto. Es el mismo criterio que
+         usaba on_progreso_bloque(), que esperaba a que la entrada terminara. */
+      }, { threshold: 0.5 })
+
+      /* La apertura no emite evento: lo que se observa acá es CUÁNDO ARRANCA su
+         animación de entrada. Umbral bajo y no 0.5: la entrada tiene que estar corriendo
+         cuando el lead termina de llegar, no empezar recién con la sección centrada. */
+      const apertura = self.$el && self.$el.querySelector('.demo-scroll-dolor__apertura')
+      if (apertura) {
+        self.observador_apertura = new IntersectionObserver(function (entradas) {
+          if (!entradas[entradas.length - 1].isIntersecting) {
+            return
+          }
+          self.observador_apertura.disconnect()
+          self.observador_apertura = null
+          self.apertura_vista = true
+          self.red_de_seguridad_apertura()
+        }, { threshold: 0.15 })
+        self.observador_apertura.observe(apertura)
+      }
+
+      secciones.forEach(function (par) {
+        const nodo = self.$el && self.$el.querySelector(par[0])
+        if (!nodo) {
+          /* `.demo-resenas` hoy no renderiza ningún nodo (el array de reseñas está
+             vacío a propósito). No es un error: cuando tenga datos, entra sola. */
+          return
+        }
+        nodo.setAttribute('data-seccion-id', par[1])
+        self.observador_secciones.observe(nodo)
+      })
+    },
+
+    /**
+     * Si la entrada de la apertura no llegó a existir como animación, la da por
+     * terminada a mano. Sin esto la apertura se quedaría clavada en su estado de carga
+     * para siempre, sin la reversa por progreso al subir. El caso real y previsible es
+     * reduced-motion, donde el CSS deja las animaciones en `none`.
+     *
+     * Corre en el tick siguiente a que --carga entra, no en mounted: ver el comentario
+     * largo de mounted().
+     *
+     * @returns {void}
+     */
+    red_de_seguridad_apertura() {
+      const self = this
+      this.$nextTick(function () {
+        const subtitulo = self.$refs.apertura_subtitulo
+        if (!subtitulo || !subtitulo.getAnimations || subtitulo.getAnimations().length === 0) {
+          self.apertura_entrada_terminada = true
+        }
+      })
+    },
+
     /**
      * Progreso de la sección de la animación de apertura.
      *
@@ -875,5 +1019,31 @@ export default {
      texto centrado en una caja más chica. El costo de scroll que buscaba evitar lo
      resuelve ahora el avance guiado del prompt 07: un gesto lleva del puente al
      formulario, sin importar cuánto mida la sección. */
+}
+
+/* La apertura, retenida hasta que se ve (ver el comentario del <header>). Es el mismo
+   estado del que arranca la animación --opacidad 0-- para que al entrar --carga no haya
+   ningún salto: el primer cuadro del keyframe es exactamente esto.
+
+   🔴 El `!important` NO es prolijidad, y sacarlo devuelve el destello: los dos elementos
+   llevan `:style="estilo_apertura(...)"`, un estilo INLINE, y un inline le gana a
+   cualquier selector por especificidad. Medido el 10/9/2026 sin el !important: la
+   opacidad computada en --espera daba 1, así que el titular quedaba plenamente visible
+   hasta que el observador lo veía y recién ahí la animación arrancaba desde 0 -- un
+   parpadeo justo cuando el lead llega. Es el mismo motivo por el que el bloque de
+   reduced-motion de demo-experiencia.scss usa !important, y ahí está documentado igual. */
+.demo-scroll-dolor__apertura--espera .demo-scroll-dolor__apertura-titulo,
+.demo-scroll-dolor__apertura--espera .demo-scroll-dolor__apertura-subtitulo {
+  opacity: 0 !important;
+}
+
+/* Bajo reduced-motion la animación del procesador va en flujo normal y ocupa UNA
+   pantalla, no las 320vh de la pista que no se renderiza. Ver el v-else del template. */
+.demo-animacion-estatica {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  height: 100svh;
+  background: #04060b;
 }
 </style>

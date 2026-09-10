@@ -4,6 +4,26 @@
     class="demo-clientes"
     :style="movimiento_reducido ? null : { minHeight: recorrido_vh + 'vh' }"
   >
+    <!-- 🔴 Punto de enganche del avance guiado, y NO es decorativo: sin esto el gesto
+         deposita al lead en el BORDE de la sección, y ahí no hay nada que ver. Medido en
+         la página real el 10/9/2026: el primer momento entra entre progreso 0,0 y 0,07
+         (ver MOMENTOS), así que el borde de la sección es una pantalla en blanco durante
+         los primeros 176px de recorrido.
+
+         Es el mismo mecanismo que FondoSeccionSticky.vue usa con su prop `snap_progreso`
+         (default 0,42): un div vacío plantado a `(100% - 100vh) * fracción` del tope, que
+         es lo que el navegador alinea. La cuenta sale sola para cualquier `recorrido_vh`.
+
+         La clase `demo-fondo-seccion__snap` es el CONTRATO de destinos de esta página:
+         avance-guiado.js la busca por SELECTOR_DESTINOS. El estilo lo pone ESTE archivo
+         (ver el <style>) porque el de FondoSeccionSticky es scoped y su atributo data-v-*
+         no llega hasta acá -- el cubo hace exactamente lo mismo, por el mismo motivo. -->
+    <div
+      v-if="!movimiento_reducido"
+      class="demo-fondo-seccion__snap demo-clientes__ancla"
+      aria-hidden="true"
+    ></div>
+
     <div class="demo-clientes__pin">
       <div class="demo-clientes__lavado" aria-hidden="true"></div>
 
@@ -874,5 +894,20 @@ export default {
     opacity: 1;
     transform: none;
   }
+}
+
+/* El marcador de enganche (ver el comentario del template). Alto cero y sin pintar nada:
+   lo único que hace es existir en la posición correcta para que el navegador lo alinee.
+   0,08 y no 0,07 exacto: el momento del número termina de entrar en 0,07, y un pelo de
+   margen evita que el redondeo a píxeles de dispositivo lo deje justo en el borde de la
+   entrada. */
+.demo-clientes__ancla {
+  position: absolute;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  top: calc((100% - 100vh) * 0.08);
+  scroll-snap-align: start;
+  pointer-events: none;
 }
 </style>
