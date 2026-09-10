@@ -74,8 +74,7 @@
 // @keyframes declarado dentro de un scoped style NO queda acotado a ese componente
 // (Vue solo le agrega el atributo data-v-* a los selectores, nunca al nombre de un
 // @keyframes), así que definirlo en dos archivos scoped distintos los dejaría
-// pisándose entre sí según qué bundle cargue último -- el mismo motivo por el que el
-// override del título del cierre del interludio vive acá y no en ScrollDolor.vue.
+// pisándose entre sí según qué bundle cargue último.
 @keyframes demo-apertura-entrada {
 	from {
 		opacity: 0;
@@ -175,11 +174,11 @@
 	}
 }
 
-.demo-experiencia-page {
-	// ⛔ RETIRADO (10/9/2026, misión experiencia-nueva): el will-change de
-	// .demo-scroll-dolor__bloque-texto / __bloque-pieza. Los cinco bloques de dolor
-	// que animaba ya no existen.
-}
+// ⛔ RETIRADO (10/9/2026, misión experiencia-nueva): el will-change de
+// .demo-scroll-dolor__bloque-texto / __bloque-pieza, que vivía en un segundo bloque
+// .demo-experiencia-page acá. Los cinco bloques de dolor que animaba ya no existen, y con
+// la última declaración se va también la regla: un selector con solo un comentario adentro
+// es una regla vacía de verdad, no una nota.
 
 // ---------------------------------------------------------------------------
 // Fondos generados por sección (grupo 322, prompt 01): 2 radial-gradient
@@ -310,9 +309,15 @@
 	min-height: 100dvh;
 }
 
+// 🔴 Acá NO va `max-width`. Había uno de 1100px y estaba MUERTO: ScrollDolor.vue declara
+// `.demo-hitos__tarjeta { max-width: 720px }` en su `<style scoped>`, o sea
+// `.demo-hitos__tarjeta[data-v-x]` -- una clase más un atributo (0,2,0) contra la clase
+// sola de acá (0,1,0) --, así que la scoped gana siempre y el 1100 no se aplicaba nunca.
+// Retirado el 10/9/2026 (misión experiencia-nueva). El ancho de la tarjeta se decide allá,
+// junto al `display: flex` y al `gap` que le dan su forma; lo que queda acá es la piel
+// (fondo, sombra, radio, padding), que la scoped no toca.
 .demo-hitos__tarjeta {
 	width: 100%;
-	max-width: 1100px;
 	// El fondo semitransparente venía de cuando la tarjeta se leía SOBRE la escena
 	// del portal: era lo que le daba contraste al texto. Sin escena atrás pierde esa
 	// función, así que se decide en vez de arrastrarse -- queda blanco sólido con una
@@ -335,13 +340,20 @@
 // fondo semitransparente que le daba contraste sobre la escena. Ninguno tiene sentido
 // fuera del overlay, así que no se arrastran.
 
-// El override del título del cierre dentro del interludio (color sólido en
-// vez de degradé recortado) vive en el <style scoped> de ScrollDolor.vue, NO
-// acá: los dos archivos se cargan como bundles separados y en orden no
-// garantizado, así que una regla con la misma especificidad partida entre
-// los dos dependería de una carrera de carga. Con más especificidad y en el
-// mismo archivo que la regla base, el orden dentro del propio scoped style
-// alcanza para ganar siempre, sin depender de qué bundle cargó primero.
+// ⛔ RETIRADA LA NOTA (10/9/2026, misión experiencia-nueva): acá había una explicación
+// sobre dónde vivía el override del título del cierre dentro del interludio (color sólido
+// en vez de degradé recortado). Se retira por dos motivos y no por uno: esa regla ya no
+// existe en NINGÚN archivo -- el interludio se retiró y su título con él --, y encima la
+// nota se contradecía con la del @keyframes demo-apertura-entrada de más arriba, que decía
+// que el override vivía acá. Las dos no podían ser ciertas a la vez.
+//
+// Lo que SÍ sigue valiendo, y por eso queda escrito: cuando una regla base vive en este
+// archivo y su override en un `<style scoped>`, el override tiene que ganar por
+// ESPECIFICIDAD y no por orden -- los dos se cargan como bundles separados y en orden no
+// garantizado, así que empatar en especificidad deja el resultado atado a una carrera de
+// carga. El atributo `data-v-*` que Vue le agrega al selector scoped ya aporta ese punto
+// de más; es exactamente lo que hace que el `max-width` de `.demo-hitos__tarjeta` de
+// ScrollDolor.vue le gane al de acá (ver la nota junto a esa regla).
 
 // ---------------------------------------------------------------------------
 // Scroll guiado sección por sección (grupo 355, prompt 07). Pedido de Lucas del
@@ -586,54 +598,25 @@
 	background: #10131c;
 }
 
-// Composición computadora + teléfono (única combinación, pieza scroll.2): los
-// dos dispositivos conviven superpuestos, nunca apilados uno arriba del otro.
-// Es el bloque más alto de los seis (criterio de éxito 2, verificado a propósito):
-// el teléfono es proporcionalmente más chico que la compu (34% de su ancho, tope
-// 170px) y solo sobresale bottom:-16% por fuera de la caja de la compu -- sigue
-// heredando el mismo max-height: 62vh / 45vh de .demo-marco__pantalla-telefono
-// como red de seguridad, así que el combo nunca supera lo que ya deja margen el
-// overflow: hidden de FondoSeccionSticky.
-.demo-marco--computadora-telefono {
-	// Cuánto sobresale el teléfono por fuera de la caja de la computadora, en una
-	// sola variable: la usan el `right` del teléfono y el padding que le reserva ese
-	// espacio (grupo 355, prompt 03). Antes era un número suelto y el colchón no
-	// existía.
-	--demo-marco-combo-sobresalto: 6%;
-
-	// El teléfono es el único elemento de los seis marcos que se sale de su propia
-	// caja. Mientras la pieza estuvo siempre a la derecha del texto eso no molestaba
-	// -- sobresalía hacia el borde de pantalla. Pero en el bloque 2 la composición va
-	// dada vuelta (direction: rtl) y la pieza queda a la IZQUIERDA: ahí el sobresalto
-	// apunta al texto, se come el gap de 40px de la grilla y el teléfono termina
-	// pegado al párrafo (captura de Lucas del 5/8/2026).
-	//
-	// El arreglo reserva ese espacio dentro del propio marco, así que no depende de
-	// en qué lado esté la pieza: el marco cede un 6% de su ancho y el teléfono
-	// sobresale hacia adentro de ese colchón. La cuenta cierra porque el `right` se
-	// calcula sobre el wrap ya angostado: 6% de 94% = 5,64% < 6%.
-	//
-	// Medido en el navegador a 1280x720, contra el elemento realmente pintado más
-	// cerca del texto: 43px en el bloque 2 (el teléfono termina en x=690 y el texto
-	// arranca en 733) contra 40px en el bloque 1. Diferencia de 3px, dentro de la
-	// tolerancia de ±8px que pedía el prompt.
-	padding-right: var(--demo-marco-combo-sobresalto);
-
-	.demo-marco__compu-wrap {
-		position: relative;
-		width: 100%;
-	}
-
-	.demo-marco__pantalla-telefono {
-		position: absolute;
-		right: calc(-1 * var(--demo-marco-combo-sobresalto));
-		bottom: -16%;
-		width: 34%;
-		max-width: 170px;
-		z-index: 2;
-		margin: 0;
-	}
-}
+// ⛔ RETIRADO (10/9/2026, misión experiencia-nueva): todo el bloque
+// .demo-marco--computadora-telefono -- la variable --demo-marco-combo-sobresalto, el
+// padding-right que le reservaba el colchón, y las reglas anidadas de
+// .demo-marco__compu-wrap y del teléfono superpuesto (position: absolute, right negativo,
+// bottom: -16%, width 34% con tope 170px).
+//
+// POR QUÉ SE VA: esa composición tenía UN solo consumidor, el bloque 2 del scroll de
+// dolores (la pieza scroll.2), y ese bloque ya no existe. Hoy el único
+// <marco-dispositivo> que se monta en toda la página es el del video de introducción
+// (ExperienciaDemo.vue), con tipo="computadora". Verificado con grep sobre src/ antes de
+// borrar: no queda ni un `tipo="computadora+telefono"` ni un `tipo="telefono"`.
+//
+// ⚠️ MarcoDispositivo.vue SÍ conserva la rama `computadora+telefono` y su slot #telefono
+// -- se dejó a propósito, es la API del componente y sigue siendo una combinación válida
+// de pedir. Lo que ya no existe es su vestido: si alguien vuelve a montarla, los dos
+// dispositivos van a quedar apilados en vez de superpuestos y hay que reponer este bloque
+// (está en el historial de git, misión experiencia-nueva). Las reglas base
+// .demo-marco__pantalla-telefono / -inner de acá arriba sí siguen, así que el marco de
+// teléfono solo, ese sí, funciona tal cual.
 
 // Variante "protagonista" (grupo 348, prompt 07): el marco no acompaña un texto,
 // ES la sección -- hoy solo el video de introducción, que ocupa su propia
@@ -739,22 +722,11 @@
 	}
 }
 
-// Móvil: el marco se achica pero nunca se recorta (criterio de éxito 6). La
-// composición combo reduce el solape del teléfono para que no tape de más.
-@media (max-width: 575.98px) {
-	// La grilla acá ya es de una sola columna, así que el sobresalto no invade ningún
-	// texto -- pero el colchón sigue derivándose de la misma variable, que baja junto
-	// con el solape. Sin esto el marco cedería un 6% de ancho para reservar un
-	// espacio de 3%.
-	.demo-marco--computadora-telefono {
-		--demo-marco-combo-sobresalto: 3%;
-	}
-
-	.demo-marco--computadora-telefono .demo-marco__pantalla-telefono {
-		bottom: -10%;
-		width: 28%;
-	}
-}
+// ⛔ RETIRADO (10/9/2026, misión experiencia-nueva): el @media (max-width: 575.98px)
+// entero. Sus dos únicas reglas eran los ajustes móviles de la composición combo -- el
+// sobresalto bajado a 3% y el teléfono a bottom -10% / width 28% --, así que sin el
+// bloque .demo-marco--computadora-telefono de más arriba quedaba un media query vacío.
+// Se va con él y por el mismo motivo (ver ahí la explicación completa).
 
 // ---------------------------------------------------------------------------
 // Pieza multimedia: contenido real y placeholder de marca.

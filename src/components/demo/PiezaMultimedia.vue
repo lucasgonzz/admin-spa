@@ -33,6 +33,20 @@
  * Pieza multimedia de un bloque del scroll de dolor: video corto, imagen, o
  * placeholder de marca cuando todavía no hay URL cargada para ese slot.
  *
+ * 🔴 HOY ESTE COMPONENTE NO TIENE NINGÚN CONSUMIDOR. Desde el 10/9/2026 (misión
+ * experiencia-nueva) ningún archivo lo importa -- verificado con grep sobre todo src/: lo
+ * único que queda son menciones en comentarios. Sus consumidores eran los ~15 clips en
+ * loop de los bloques del scroll de dolor, y esos bloques se retiraron enteros en esa
+ * misión. El video de introducción, que es la otra pieza que podría parecerse, nunca lo
+ * usó: tiene su propio componente (VideoIntro.vue), porque además del reproductor lleva el
+ * tracking y el gate del ingreso.
+ *
+ * 🔴 NO SE BORRA, y es una decisión, no un olvido: los slots de media siguen declarados en
+ * el admin (el mapa `media` del payload de GET /demo-experiencia/{uuid} sigue viajando
+ * keyeado por slot_id), así que el día que vuelva a haber piezas en el recorrido esto es
+ * lo que las dibuja. Si alguien decide que no vuelven, lo que se borra es el par completo
+ * -- este componente y los slots del admin --, no solo este archivo.
+ *
  * Las URLs de cada pieza se configuran desde admin-spa (fuera del scope de
  * este prompt) y viajan en el mapa `media` del payload de
  * GET /demo-experiencia/{uuid}, keyeadas por slot_id (ej. "scroll.3"). Este

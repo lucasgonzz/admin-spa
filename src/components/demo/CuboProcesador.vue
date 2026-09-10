@@ -104,9 +104,12 @@
            acá sería un punto de enganche duro en el arranque de la pista, compitiendo
            con eso. -->
       <div class="demo-cubo__pin">
-        <!-- Deriva vertical: el cubo baja ~6vh a lo largo de todo el recorrido. Es lo
-             único que se mueve además de la rotación, y va en un envoltorio propio
-             para no mezclar `translateY` con el `rotate*` acumulado del cubo. -->
+        <!-- Deriva vertical: el cubo SUBE 6vh a lo largo de todo el recorrido, de +3vh a
+             -3vh (ver `translateY(3 - 6 · p/(PARADAS-1))` en el <script>). Hasta el
+             10/9/2026 acá decía "baja ~6vh", que es el sentido contrario: el recorrido
+             son 6vh, pero hacia arriba, y arranca por debajo del centro para terminar por
+             encima. Es lo único que se mueve además de la rotación, y va en un envoltorio
+             propio para no mezclar `translateY` con el `rotate*` acumulado del cubo. -->
         <div ref="deriva" class="demo-cubo__deriva">
           <div class="demo-cubo__sombra" aria-hidden="true"></div>
 
@@ -750,7 +753,12 @@ export default {
    --------------------------------------------------------------------------- */
 .demo-cubo__portada {
   position: relative;
+  /* svh después de vh, mismo orden que el resto de la página (.demo-hitos, el video de
+     intro, la animación): un navegador sin soporte ignora la segunda declaración entera y
+     se queda con la primera. Sin esto, en teléfono con la barra del navegador a la vista
+     el pin mide más que lo que se ve y el contenido centrado se corre hacia abajo. */
   min-height: 100vh;
+  min-height: 100svh;
   box-sizing: border-box;
   padding: 14vh 7vw 12vh;
   display: flex;
@@ -826,6 +834,7 @@ export default {
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100svh;
   width: 100vw;
   margin-left: calc(50% - 50vw);
   overflow: hidden;

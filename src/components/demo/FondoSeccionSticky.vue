@@ -106,7 +106,21 @@ export default {
 	name: 'FondoSeccionSticky',
 
 	props: {
-		/** apertura | bloque-1 .. bloque-5 | cierre | interludio -- selecciona el fondo generado. */
+		/**
+		 * Selecciona el fondo generado, vía la clase `demo-fondo-seccion--<variante>`.
+		 *
+		 * 🔴 Las variantes que EXISTEN hoy son tres, y son las tres que
+		 * demo-experiencia.scss define: `animacion`, `apertura` y `puente`. Esta lista
+		 * es el contrato que alguien lee para agregar una sección, así que se mantiene
+		 * al día a mano: hasta el 10/9/2026 decía `apertura | bloque-1 .. bloque-5 |
+		 * cierre | interludio`, que era el reparto viejo y ya no existía ninguno de esos
+		 * cinco bloques.
+		 *
+		 * Y pasar una variante que no está en la hoja de estilos NO rompe nada: el
+		 * componente arma igual la clase, ningún selector matchea y la sección queda sin
+		 * fondo -- sin error, sin warning y sin nada en la consola. Por eso el validador
+		 * no puede ser el CSS y la lista tiene que estar acá.
+		 */
 		variante: {
 			type: String,
 			required: true,
@@ -121,10 +135,12 @@ export default {
 		/**
 		 * Dónde cae el punto del avance guiado, en fracción del alto PINNEABLE de la
 		 * sección (grupo 355, prompt 07). El default es ENTRADA_FIN de ScrollDolor.vue:
-		 * el progreso en el que el contenido ya terminó de entrar. El interludio pasa 0
-		 * -- ahí el lead tiene que aterrizar con la coreografía en su punto inicial,
-		 * para recorrerla entera con su propio scroll ("debería dejar la animación en
-		 * el punto inicial y ahí sí darle control total al usuario", Lucas, 5/8/2026).
+		 * el progreso en el que el contenido ya terminó de entrar. La sección de la
+		 * ANIMACIÓN pasa 0 -- ahí el lead tiene que aterrizar con la coreografía en su
+		 * punto inicial, para recorrerla entera con su propio scroll ("debería dejar la
+		 * animación en el punto inicial y ahí sí darle control total al usuario", Lucas,
+		 * 5/8/2026). Ese pedido lo heredó de la sección del interludio, que fue quien lo
+		 * motivó y ya no existe (misión experiencia-nueva, 10/9/2026).
 		 *
 		 * 🔴 Este default y ENTRADA_FIN de ScrollDolor.vue son el mismo número escrito
 		 * en dos archivos, y tienen que moverse juntos: si la entrada se estira y el
@@ -144,7 +160,9 @@ export default {
 		/**
 		 * true en las secciones que suspenden el avance guiado MIENTRAS ocupan la
 		 * pantalla: se llega a ellas con el gesto guiado, y de ahí en adelante el
-		 * scroll es libre hasta que la sección se termina. Hoy solo el interludio.
+		 * scroll es libre hasta que la sección se termina. Hoy solo la sección de la
+		 * animación (`variante="animacion"` en ScrollDolor.vue), que heredó este papel
+		 * del interludio cuando ese se retiró (misión experiencia-nueva, 10/9/2026).
 		 * Es una prop y no una excepción por `variante` a propósito: la razón es de
 		 * comportamiento, no de qué fondo usa la sección.
 		 */
@@ -154,8 +172,9 @@ export default {
 		},
 		/**
 		 * false en las secciones que NO llevan el botón de avance (grupo 369, prompt
-		 * 03). Hoy solo el interludio: ahí el scroll es libre a propósito y un botón que
-		 * se saltea la escena entera contradice exactamente eso.
+		 * 03). Hoy solo la sección de la animación: ahí el scroll es libre a propósito y
+		 * un botón que se saltea la escena entera contradice exactamente eso. Antes del
+		 * 10/9/2026 la sección con este papel era el interludio.
 		 *
 		 * No hace falta apagarlo en la última sección del recorrido: eso lo resuelve
 		 * solo `hay_siguiente()` del avance guiado, que es el que sabe si queda algún
@@ -167,7 +186,7 @@ export default {
 		},
 		/**
 		 * true si el contenido de esta sección es full-bleed (grupo 370, correctivo 8,
-		 * prompt 03): hoy la apertura y el interludio. Le saca al contenedor el padding
+		 * prompt 03): hoy la apertura y la sección de la animación. Le saca al contenedor el padding
 		 * vertical y al hijo el max-width de 1080px, y le da el alto completo del pin --
 		 * pero NO le fuerza ningún padding al hijo: ese lo declara el propio contenido
 		 * (ver el comentario largo junto a `--full-bleed` en el <style>, ahí está LA
@@ -212,7 +231,7 @@ export default {
 			 *  encontrar_ancestro_scroll(). Se guarda para poder desuscribirse en beforeUnmount. */
 			scroll_target: null,
 			/** true en las secciones que suspenden el avance guiado mientras están a la
-			 *  vista (punto_snap:false, hoy solo el interludio). */
+			 *  vista (punto_snap:false, hoy solo la sección de la animación). */
 			vigila_snap: false,
 			/**
 			 * true mientras ESTA sección ocupa la pantalla (grupo 369, prompt 03). De
@@ -252,7 +271,16 @@ export default {
 
 		if (this.reduced_motion) {
 			/* Sin bucle de rAF y sin progreso: el progreso queda en 0 y cada hijo animado
-			 * aplica su propio estado estático final (aplicar_estilos_estatico).
+			 * resuelve su propio estado estático.
+			 *
+			 * Cómo lo hace, verificado archivo por archivo: NO hay ningún método común
+			 * que este componente llame. Cada hijo detecta la preferencia por su cuenta
+			 * (`reduced_motion` en ScrollDolor.vue y AnimacionProcesador.vue,
+			 * `movimiento_reducido` en CuboProcesador.vue, SeccionClientes.vue,
+			 * SeccionNuevaEra.vue y SeccionResenas.vue) y renderiza una rama estática
+			 * con un `v-if`, sin mirar el progreso que emite este componente. Hasta el
+			 * 10/9/2026 esta línea nombraba un `aplicar_estilos_estatico` que no existe
+			 * en ningún archivo del proyecto -- ya mentía en `origin/master`.
 			 *
 			 * 🔴 Pero SÍ se escucha el scroll, sólo para el encuadre del botón de avance.
 			 * La primera versión de esto daba la sección por encuadrada y listo, y estaba
@@ -328,8 +356,9 @@ export default {
 	methods: {
 		/**
 		 * Apaga el avance guiado mientras ESTA sección está en pantalla, y solo para
-		 * las que declaran `punto_snap: false` -- hoy el interludio (grupo 355,
-		 * prompt 07).
+		 * las que declaran `punto_snap: false` -- hoy la sección de la animación (grupo
+		 * 355, prompt 07; la medición de acá abajo se hizo sobre el interludio, que era
+		 * la sección con este papel hasta el 10/9/2026).
 		 *
 		 * Por qué hace falta, medido en el navegador y no deducido: con
 		 * `scroll-snap-type: y mandatory`, un tramo largo SIN puntos de snap no es un
@@ -360,8 +389,8 @@ export default {
 		 * propósito: el observer entrega sus entradas dentro del ciclo de render del
 		 * navegador, que en una pestaña en segundo plano no corre -- y entonces el
 		 * lead que vuelve a la pestaña se encuentra el snap en el estado equivocado.
-		 * El evento de scroll llega siempre. Es un rect por evento y solo en la
-		 * sección del interludio.
+		 * El evento de scroll llega siempre. Es un rect por evento y solo en la sección
+		 * que pide scroll libre, que hoy es una sola: la de la animación.
 		 *
 		 * @returns {void}
 		 */
@@ -383,10 +412,12 @@ export default {
 			 * (medido por el checker): las secciones miden 1,6 pantallas, así que ese
 			 * margen se tragaba los puntos de snap de la sección anterior y del cierre
 			 * -- subiendo, el bloque 5 se salteaba entero. El margen existía para poder
-			 * ENTRAR al interludio con el snap activo; eso ahora lo resuelve el propio
-			 * interludio teniendo su punto en snap_progreso = 0: el gesto guiado
-			 * aterriza justo en su comienzo, que es donde el lead tiene que tomar el
-			 * control. Desde ahí, esta condición ya es verdadera.
+			 * ENTRAR con el snap activo a la sección de scroll libre; eso ahora lo
+			 * resuelve la propia sección teniendo su punto en snap_progreso = 0: el
+			 * gesto guiado aterriza justo en su comienzo, que es donde el lead tiene que
+			 * tomar el control. Desde ahí, esta condición ya es verdadera. (Se midió
+			 * sobre el interludio; desde el 10/9/2026 la sección que hace esto es la de
+			 * la animación, con el mismo snap_progreso = 0.)
 			 *
 			 * 🔴 La tolerancia no es cosmética. Chrome redondea el offset de scroll a
 			 * PÍXELES DE DISPOSITIVO: con la pantalla al 125% (el default de Windows) el
@@ -414,7 +445,7 @@ export default {
 		 * Actualiza si esta sección ocupa la pantalla, que es lo que decide si se ve su
 		 * botón de avance (grupo 369, prompt 03). Mismo criterio y misma tolerancia que
 		 * revisar_snap_libre -- es la misma pregunta -- pero se resuelve para TODA
-		 * sección, no solo para la del interludio.
+		 * sección, no solo para la que pide scroll libre.
 		 *
 		 * Un rect por evento de scroll y por sección. Se prefiere eso a un
 		 * IntersectionObserver por el mismo motivo que allá abajo: el observer no entrega

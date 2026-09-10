@@ -36,7 +36,9 @@ import { Easing, animate, clamp, lerp } from './motor-tiempo'
    desde afuera con un `transform: scale()`, no cambiando esta constante. */
 const RADIO = 95
 
-/* Los tres helpers de movimiento de la escena original, tal cual. */
+/* El helper de movimiento que le toca al chip: `pop`, tal cual la escena original. Es
+   UNO, no tres -- los otros dos de la escena (`enter` y `glide`) viven en el MOTION de
+   AnimacionProcesador.vue, que es lo que dice el comentario de allá. */
 const MOTION = {
   pop: (s, d) => animate({ from: 0, to: 1, start: s, end: s + (d || 0.7), ease: Easing.easeOutBack }),
 }
@@ -68,11 +70,17 @@ export default {
      * Centro del procesador en el eje X, en unidades del escenario.
      *
      * El componente se posiciona SIEMPRE en absoluto (mide 190×190 y se coloca en
-     * `x - 95` / `y - 95`), así que para reusarlo fuera de la animación —el cubo 3D—
-     * alcanza con envolverlo en un contenedor `position: relative` y pasarle `x` e `y`
-     * iguales a la mitad de ese contenedor. Si hace falta más chico o más grande, se lo
-     * escala desde afuera con un `transform: scale()`: el radio de 95 es fijo porque toda
-     * la geometría interna está calibrada contra él.
+     * `x - 95` / `y - 95`), así que para reusarlo fuera de la animación alcanza con
+     * envolverlo en un contenedor `position: relative` y pasarle `x` e `y` iguales a la
+     * mitad de ese contenedor. Si hace falta más chico o más grande, se lo escala desde
+     * afuera con un `transform: scale()`: el radio de 95 es fijo porque toda la geometría
+     * interna está calibrada contra él.
+     *
+     * ⚠️ Ese reuso es una posibilidad, no un caso existente: hasta el 10/9/2026 acá
+     * decía "el cubo 3D" y era falso. CuboProcesador.vue NO monta este componente --
+     * dibuja el chip de cada cara con su propio markup y lo dice explícitamente en el
+     * comentario de `.demo-cubo__chip` ("no se reemplaza por ChipProcesador.vue, que es
+     * otra cosa"). El único que lo monta es AnimacionProcesador.vue.
      */
     x: {
       type: Number,
@@ -85,8 +93,17 @@ export default {
     },
     /**
      * true para mostrarlo quieto: ya nacido, a escala 1, sin pulso, sin barrido y sin
-     * anillo. Es el modo que usan el cubo 3D y el estado de `prefers-reduced-motion`,
-     * donde el procesador es un objeto de la escena y no algo que esté procesando.
+     * anillo -- el procesador como objeto de la escena, no como algo que esté procesando.
+     *
+     * Hoy lo prende UN solo consumidor: AnimacionProcesador.vue bajo
+     * `prefers-reduced-motion` (`:quieto="reduced_motion"`). Hasta el 10/9/2026 acá decía
+     * que también lo usaba "el cubo 3D" y era falso: CuboProcesador.vue no monta este
+     * componente en ningún momento, resuelve el chip de sus caras con su propio dibujo.
+     *
+     * Se conserva igual, y a propósito: es parte de la API del componente y es la única
+     * forma de mostrarlo sin línea de tiempo (con `claves` vacío nunca se enciende, pero
+     * tampoco nace). Que hoy tenga un solo consumidor no lo vuelve código muerto -- que
+     * mañana tenga cero, sí.
      */
     quieto: {
       type: Boolean,
@@ -95,10 +112,13 @@ export default {
   },
 
   computed: {
-    /** Radio expuesto al template y a quien lo consulte. */
-    radio() {
-      return RADIO
-    },
+    /* ⛔ RETIRADO (10/9/2026, misión experiencia-nueva): el computed `radio()`, que
+       devolvía la constante RADIO con el doc "Radio expuesto al template y a quien lo
+       consulte". No lo consultaba nadie -- verificado con grep sobre todo src/: el
+       template de este archivo no lo nombra, y ningún componente tiene un `ref` a este
+       chip (AnimacionProcesador.vue lo monta sin ref). La constante RADIO sigue arriba y
+       la usa el propio componente; lo que se va es el envoltorio que prometía una API
+       pública que nadie pidió. */
 
     /** El "nacimiento": el rebote con el que entra al principio de la animación. */
     nacido() {

@@ -50,11 +50,13 @@ const VELOCIDAD_FALLBACK = 1.5
 /**
  * Reproductor del video de introducción de la página inmersiva (misión 46, pieza 4).
  *
- * 🔴 POR QUÉ ES UN COMPONENTE APARTE Y NO UN MODO MÁS DE PiezaMultimedia: esa pieza la
- * comparten los ~15 clips en loop del scroll de dolor. Meterle acá el tracking, el
- * clamp del adelantado y el reporte al backend la ensuciaría para todos, y el día que
- * alguien toque el loop de los clips tendría que entender también el gate del ingreso.
- * Este video no es un clip: es la puerta.
+ * 🔴 POR QUÉ ES UN COMPONENTE APARTE Y NO UN MODO MÁS DE PiezaMultimedia: cuando esto se
+ * escribió, esa pieza la compartían los ~15 clips en loop del scroll de dolor, y meterle
+ * acá el tracking, el clamp del adelantado y el reporte al backend la ensuciaba para
+ * todos -- el día que alguien tocara el loop de los clips iba a tener que entender también
+ * el gate del ingreso. Los clips se retiraron el 10/9/2026 (misión experiencia-nueva) y
+ * hoy PiezaMultimedia no tiene ningún consumidor, pero la separación se sostiene por lo
+ * mismo de siempre: este video no es un clip, es la puerta.
  *
  * Lo que hace, y por qué cada cosa:
  *

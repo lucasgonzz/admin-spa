@@ -2,7 +2,14 @@
   <!-- Marco visual de dispositivo: da la sensación premium y evita que la pieza
        se lea como una captura suelta (contexto/demo_experiencia.md §3.18) -->
   <div class="demo-marco" :class="'demo-marco--' + tipo_normalizado">
-    <!-- Computadora + teléfono en composición conjunta (única combinación posible: scroll.2) -->
+    <!-- Computadora + teléfono en composición conjunta. 🔴 HOY NO LA USA NADIE: su único
+         consumidor era el bloque 2 del scroll de dolores (pieza scroll.2), que se retiró
+         el 10/9/2026 (misión experiencia-nueva). El único <marco-dispositivo> que se monta
+         en la página es el del video de introducción, con tipo="computadora".
+         Y el CSS que la vestía (.demo-marco--computadora-telefono en
+         demo-experiencia.scss) se retiró en la misma misión: si volvés a pedir esta
+         combinación, los dos dispositivos van a quedar apilados en vez de superpuestos
+         hasta que lo repongas. -->
     <div v-if="tipo === 'computadora+telefono'" class="demo-marco__compu-wrap">
       <div class="demo-marco__pantalla-compu">
         <div class="demo-marco__pantalla-compu-inner">

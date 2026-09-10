@@ -574,7 +574,12 @@ export default {
 .demo-clientes__pin {
   position: sticky;
   top: 0;
+  /* svh después de vh, mismo orden que el resto de la página (.demo-hitos, el video de
+     intro, la animación): un navegador sin soporte ignora la segunda declaración entera y
+     se queda con la primera. Sin esto, en teléfono con la barra del navegador a la vista
+     el pin mide más que lo que se ve y el contenido centrado se corre hacia abajo. */
   height: 100vh;
+  height: 100svh;
   overflow: hidden;
   display: flex;
   align-items: center;

@@ -65,9 +65,11 @@
            desmonta solo). Antes estaban siempre renderizados, justo debajo
            del formulario, y el lead los veía apenas terminaba el scroll de
            dolor, sin haber confirmado nada. v-if (no v-show): con v-show el
-           elemento seguiría en el documento ocupando lugar y, sobre todo,
-           PiezaMultimedia seguiría montada y podría precargar el video antes
-           de tiempo. -->
+           elemento seguiría en el documento ocupando lugar y, sobre todo, el
+           <video> del intro seguiría montado y podría precargarse antes de
+           tiempo. (Hasta el 10/9/2026 acá decía "PiezaMultimedia seguiría
+           montada": ese componente ya no lo monta nadie, el reproductor del
+           intro es VideoIntro.vue. El motivo del v-if no cambia.) -->
       <template v-if="intro_desbloqueada">
         <!-- El mensaje queda arriba para siempre. Y desde el grupo 355 (prompt 10)
              el shimmer del título tampoco se apaga: ya no hay un prop que lo prenda
@@ -86,11 +88,11 @@
              Antes el botón de acceso venía después en flujo, así que el scroll
              automático llevaba al video y el turno quedaba fuera de cuadro.
 
-             Video: pieza "intro" del catálogo. A diferencia de los clips del
-             scroll, va con controles y sonido, sin autoplay (son 5 minutos y
-             el lead lo mira, no lo ojea). Sin URL cargada todavía (se graba
-             post-merge), PiezaMultimedia muestra el placeholder de marca con
-             las proporciones reales dentro del mismo marco. ref video_intro:
+             Video: pieza "intro" del catálogo. Va con controles y sonido, sin
+             autoplay (son 5 minutos y el lead lo mira, no lo ojea) -- antes eso
+             se decía "a diferencia de los clips del scroll", que ya no existen.
+             Sin URL cargada, VideoIntro muestra el placeholder de marca con las
+             proporciones reales dentro del mismo marco. ref video_intro:
              destino del scroll automático al cerrarse la confirmación de
              arriba -- sigue apuntando acá, que ahora es la pantalla entera. -->
         <section ref="video_intro" class="demo-experiencia-page__video-intro">
@@ -107,8 +109,15 @@
             <!-- Reproductor propio del intro (misión 46, pieza 4): a la velocidad
                  configurada en Cuenta → Configuración de demos, sin poder
                  adelantar, y reportando el progreso al backend, que es quien
-                 decide si el botón se habilita. No es PiezaMultimedia:
-                 esa la comparten los clips en loop del scroll de dolor. -->
+                 decide si el botón se habilita.
+
+                 Es un componente aparte de PiezaMultimedia porque este video no
+                 es un clip: es la puerta, y el tracking, el clamp del adelantado
+                 y el reporte al backend no tienen por qué vivir en la pieza
+                 genérica (ver la cabecera de VideoIntro.vue). Hasta el 10/9/2026
+                 acá decía que PiezaMultimedia "la comparten los clips en loop del
+                 scroll de dolor": esos clips se retiraron en esa misma misión y
+                 hoy PiezaMultimedia no la usa nadie. -->
             <video-intro
               :url="url_intro"
               titulo="Video de introducción (Lucas a cámara, 5:15)"
