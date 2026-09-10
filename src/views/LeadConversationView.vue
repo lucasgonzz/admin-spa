@@ -1269,7 +1269,7 @@ export default {
     },
 
     /**
-     * Mensajes programados del lead que todavía no salieron (estados 'pendiente' y 'error',
+     * Mensajes programados del lead que todavía no salieron ('pendiente', 'enviando' y 'error',
      * que es lo único que devuelve la relación del backend), ordenados por hora de envío.
      *
      * @returns {Array<Object>}
