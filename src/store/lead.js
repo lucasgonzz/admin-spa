@@ -87,6 +87,29 @@ function merge_conversation_messages(previous, incoming) {
 }
 
 /**
+ * Cuerpo del POST/PUT de un mensaje programado. Es el mismo en el alta y en la edición,
+ * así que vive acá y no duplicado en los dos actions.
+ *
+ * `template_*` viaja siempre (null cuando el modo es texto libre) para que editar un
+ * programado de plantilla y pasarlo a texto libre limpie los campos viejos en backend,
+ * en vez de dejarlos colgados por ausencia de la clave.
+ *
+ * @param {Object} payload payload del action (ver schedule_message)
+ * @returns {Object} cuerpo listo para el endpoint
+ */
+function build_scheduled_message_body(payload) {
+  return {
+    scheduled_send_at:      payload.scheduled_send_at,
+    mode:                   payload.mode,
+    content:                payload.content,
+    template_name:          payload.template_name != null ? payload.template_name : null,
+    template_language:      payload.template_language != null ? payload.template_language : null,
+    template_variables:     payload.template_variables != null ? payload.template_variables : null,
+    cancel_if_lead_replies: Boolean(payload.cancel_if_lead_replies),
+  }
+}
+
+/**
  * Si el admin está viendo la conversación WhatsApp de ese lead, fuerza contadores de no leídos a 0
  * en el payload local hasta que el POST mark-whatsapp-messages-read confirme en backend.
  *
@@ -923,6 +946,64 @@ export default __base_store({
         })
         .then((res) => {
           /* Actualizar el lead en conversación con el modelo devuelto por el backend. */
+          const model = res.data.model
+          commit('update_lead_en_conversacion', model)
+          return model
+        })
+    },
+    /**
+     * Programa el envío de un mensaje de WhatsApp al lead para una fecha futura.
+     * El backend responde con el lead completo, así que se commitea igual que
+     * `send_template` / `send_direct_message` y la conversación se refresca sola.
+     *
+     * @param {Object} context
+     * @param {{ lead_id: number, scheduled_send_at: string, mode: string, content: string, template_name?: string, template_language?: string, template_variables?: string[], cancel_if_lead_replies: boolean }} payload
+     * @returns {Promise<Object>} modelo lead actualizado
+     */
+    schedule_message(context, payload) {
+      const commit = context.commit
+      return api
+        .post('/lead/' + payload.lead_id + '/scheduled-messages', build_scheduled_message_body(payload))
+        .then((res) => {
+          const model = res.data.model
+          commit('update_lead_en_conversacion', model)
+          return model
+        })
+    },
+    /**
+     * Edita un mensaje programado que todavía no salió (texto, plantilla, fecha o el check
+     * de cancelación). Mismo cuerpo que `schedule_message`.
+     *
+     * @param {Object} context
+     * @param {{ lead_id: number, scheduled_id: number, scheduled_send_at: string, mode: string, content: string, template_name?: string, template_language?: string, template_variables?: string[], cancel_if_lead_replies: boolean }} payload
+     * @returns {Promise<Object>} modelo lead actualizado
+     */
+    update_scheduled_message(context, payload) {
+      const commit = context.commit
+      return api
+        .put(
+          '/lead/' + payload.lead_id + '/scheduled-messages/' + payload.scheduled_id,
+          build_scheduled_message_body(payload)
+        )
+        .then((res) => {
+          const model = res.data.model
+          commit('update_lead_en_conversacion', model)
+          return model
+        })
+    },
+    /**
+     * Cancela un mensaje programado antes de que salga. El lead que vuelve ya no lo trae
+     * en `scheduled_messages`, así que la burbuja desaparece sola de la conversación.
+     *
+     * @param {Object} context
+     * @param {{ lead_id: number, scheduled_id: number }} payload
+     * @returns {Promise<Object>} modelo lead actualizado
+     */
+    cancel_scheduled_message(context, payload) {
+      const commit = context.commit
+      return api
+        .delete('/lead/' + payload.lead_id + '/scheduled-messages/' + payload.scheduled_id)
+        .then((res) => {
           const model = res.data.model
           commit('update_lead_en_conversacion', model)
           return model
