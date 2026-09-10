@@ -223,8 +223,15 @@ const CONTENIDO_POR_PERFIL = {
       subtitulo: 'Lo difícil es demostrarlo.',
     },
     hitos: {
+      /* 🔴 MISMO texto que el perfil dueño, y es una decisión de Lucas del 10/9/2026:
+         "poné la animación del cubo que hice en ambos casos". Hasta ese día el campeón
+         abría con "No hace falta que lo expliques vos." -- una diferencia por perfil que
+         venía de §3.17 y que la portada del cubo, tal como Lucas la diseñó en Claude
+         Design, no contempla. Si alguien quiere volver a diferenciarlos, que sea con él:
+         esto no es un descuido de copiar y pegar. */
       titulo_portada: [
-        'No hace falta que lo expliques vos.',
+        'Nada de esto es sobre el sistema.',
+        'Es sobre dejar de ser el único que sabe.',
       ],
       lista: [
         { momento: 'El primer día', texto: 'deja de cargarse lo mismo dos veces.' },

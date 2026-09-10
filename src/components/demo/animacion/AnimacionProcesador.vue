@@ -41,7 +41,6 @@
         <span class="animacion-procesador__titular" data-clave="vende">{{ TEXTOS.vende }}</span>
         <span class="animacion-procesador__rasgo" data-clave="f1">{{ TEXTOS.f1 }}</span>
         <span class="animacion-procesador__rasgo" data-clave="f2">{{ TEXTOS.f2 }}</span>
-        <span class="animacion-procesador__rasgo" data-clave="f3">{{ TEXTOS.f3 }}</span>
         <span class="animacion-procesador__ia" data-clave="ia">{{ TEXTOS.ia }}</span>
       </div>
 
@@ -158,9 +157,6 @@
         </div>
         <div v-if="emitidos.f2" class="animacion-procesador__emitido" :style="emitidos.f2">
           <div class="animacion-procesador__rasgo" :style="ajuste('f2')">{{ TEXTOS.f2 }}</div>
-        </div>
-        <div v-if="emitidos.f3" class="animacion-procesador__emitido" :style="emitidos.f3">
-          <div class="animacion-procesador__rasgo" :style="ajuste('f3')">{{ TEXTOS.f3 }}</div>
         </div>
 
         <div v-if="emitidos.logo_ia" class="animacion-procesador__emitido" :style="emitidos.logo_ia">
@@ -337,9 +333,11 @@ const V_ZOOM = [1.06, 1.04, 1, 1, 1, 1]
 /* Las alturas de descanso de cada cosa que el procesador emite. */
 const Y_LOGO = 152
 const Y_SLOT = 282
-const Y_T1 = 300
-const Y_T2 = 392
-const Y_T3 = 484
+/* Dos líneas, no tres (ver TEXTOS). Centradas en el MISMO eje que ocupaban las tres del
+   export --el medio era 392-- así el bloque emitido queda donde la coreografía lo dejaba:
+   346 y 438 son 392 ∓ 46, la mitad de los 92 que separaban a las tres. */
+const Y_T1 = 346
+const Y_T2 = 438
 const Y_IA = 430
 
 /* Ritmo de entrada de las seis tarjetas: la primera a los 0,34 s, una cada 0,72 s, y la
@@ -387,9 +385,20 @@ const ESCENAS = [
 const TEXTOS = {
   carga: 'Cargá una vez',
   vende: 'Vendé en todos lados',
-  f1: 'Tienda Online',
-  f2: 'Atender a tus clientes por WhatsApp',
-  f3: 'Sistema de gestión completo y amigable',
+  /* 🔴 Estas dos líneas son las que Lucas escribió en el pedido, NO las que traía el
+     export de Claude Design. El export venía con "Tienda Online" / "Atender a tus
+     clientes por WhatsApp" / "Sistema de gestión completo y amigable" -- los valores que
+     quedaron cargados en el editor mientras diseñaba-- y el port se los quedó sin que
+     nadie lo notara. Lo levantó el chequeo independiente el 10/9/2026 y Lucas eligió su
+     propio texto: se perdían IMÁGENES y CARGA DE FACTURAS, que son dos de las cosas que
+     más lo diferencian, y entraba una línea genérica que él nunca escribió.
+
+     Y son DOS, no tres: su frase agrupa cuatro conceptos de a dos ("Imágenes y tienda
+     online, WhatsApp y carga de facturas"), y la tercera ranura del export decía
+     justamente la línea que se descartó. El remate sigue siendo `ia`, que ya era el
+     suyo. */
+  f1: 'Imágenes y tienda online',
+  f2: 'WhatsApp y carga de facturas',
   ia: 'Todo asistido por IA, nunca fue tan fácil',
 }
 
@@ -579,15 +588,16 @@ export default {
       }
     },
 
-    /** true cuando entró la composición vertical. Lo usa el template y lo mira el chequeo. */
-    vertical() {
-      return this.geo.vertical
-    },
-
-    /** Factor con el que se escala el espacio de coordenadas para entrar en la pantalla. */
-    escala() {
-      return this.geo.escala
-    },
+    /* ⛔ RETIRADOS (10/9/2026, misión experiencia-nueva): los computed `vertical()` y
+       `escala()`, que devolvían `this.geo.vertical` y `this.geo.escala`. Ninguno tenía
+       consumidor -- verificado con grep sobre todo src/, incluido el template de este
+       mismo archivo: `vertical` solo aparece en comentarios y dentro de `geo`, y quien
+       necesita la escala usa `g.escala` directo (ver `estilo_escenario`). El doc de
+       `vertical()` decía "Lo usa el template y lo mira el chequeo" y las dos mitades eran
+       falsas: el template no lo nombra y no hay ningún chequeo que lo lea (el único ref
+       externo a este componente es el de ScrollDolor.vue, que solo llama
+       `adelantar_desde_scroll()`). Si algún día hace falta exponerlos, es de una línea;
+       lo que no vale es dejarlos con un doc que asegura un consumidor inexistente. */
 
     /** Ancho que le queda a un titular con `nowrap` antes de tener que encogerlo. */
     ancho_util() {
@@ -713,10 +723,35 @@ export default {
       return MOTION.enter(0, 0.9)(this.tiempo)
     },
 
-    /** Deriva lenta de las líneas de circuito. */
+    /**
+     * Deriva lenta de las líneas de circuito.
+     *
+     * 🔴 EL MÓDULO ES 40 EN LOS DOS EJES, Y NO ES UN NÚMERO ELEGIDO A OJO: 40 es el margen
+     * con el que están dibujados los TRAZOS. Todos los que arrancan fuera del cuadro lo
+     * hacen exactamente 40 unidades afuera -- `-40` de un lado, `1120` del otro sobre un
+     * viewBox de 1080. O sea que 40 es TODO el colchón que hay, y la deriva no puede
+     * gastar más que eso sin meter la punta de un trazo dentro del cuadro.
+     *
+     * En x había `% 60` y se pasaba por 20. Con `-d % 60` la deriva vive en (-60, 0], así
+     * que cuando bajaba de -40 los tres trazos que arrancan en `x = 1120`
+     * (`M1120 150`, `M1120 560`, `M1120 880`) terminaban DENTRO del cuadro -- hasta 20
+     * unidades antes del borde derecho, o sea un hilo cortado en el aire. Medido sobre la
+     * línea de tiempo real (22,1 s autorales): pasaba el 27,6% de la animación, en dos
+     * tramos (T de 8 a 12 y de 20 a 22,1). Solo se ve en composición HORIZONTAL: el SVG va
+     * con `preserveAspectRatio="xMidYMid slice"`, así que en apaisado la escala la fija el
+     * ancho y el rango x [0, 1080] queda entero a la vista; en vertical la fija el alto y
+     * esa zona ya está recortada.
+     *
+     * Con `% 40` la deriva vive en (-40, 0] y el trazo termina en (1080, 1120]: nunca
+     * entra. El eje y ya usaba 40 y por eso nunca falló -- esto lo único que hace es
+     * dejar los dos ejes en el mismo número, que es el que la geometría pedía.
+     * (Medido y corregido el 10/9/2026, misión experiencia-nueva.)
+     *
+     * @returns {string}
+     */
     transform_circuito() {
       const d = this.tiempo * 5
-      return 'translate(' + (-d % 60) + ',' + (d % 40) + ')'
+      return 'translate(' + (-d % 40) + ',' + (d % 40) + ')'
     },
 
     /** 0..1: cuánto se calienta el resplandor mientras el procesador trabaja. */
@@ -898,8 +933,10 @@ export default {
         carga: this.emitir(K.carga, K.carga + 0.7, y(Y_SLOT), [K.vende, K.vende + 0.55]),
         vende: this.emitir(K.vende + 0.3, K.vende + 1.05, y(Y_SLOT), [K.bajada, K.bajada + 0.55]),
         f1: this.emitir(K.bajada + 0.35, K.bajada + 0.35 + EM, y(Y_T1), [K.abs + 0.3, K.abs + 0.92]),
-        f2: this.emitir(K.wa + 0.05, K.wa + 0.05 + EM, y(Y_T2), [K.abs + 0.15, K.abs + 0.77]),
-        f3: this.emitir(K.wa + 0.62, K.wa + 0.62 + EM, y(Y_T3), [K.abs, K.abs + 0.62]),
+        /* K.wa + 0.35 y no + 0.05: la escena "Whatsapp" dura 4,1s porque en el export
+           salían DOS textos ahí adentro. Con uno solo, entrando al principio, quedaba
+           un hueco largo al final. Corrido al medio, la escena vuelve a tener su ritmo. */
+        f2: this.emitir(K.wa + 0.35, K.wa + 0.35 + EM, y(Y_T2), [K.abs + 0.15, K.abs + 0.77]),
         logo_ia: this.emitir(K.ia + 0.45, K.onda - 0.1, y(Y_LOGO), null),
         ia: this.emitir(K.ia + 0.7, K.onda + 0.15, y(Y_IA), null),
       }
