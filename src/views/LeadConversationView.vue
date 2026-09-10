@@ -8,12 +8,14 @@
   >
 
     <!-- ====================================================
-         HEADER FIJO: atrás | nombre del lead | 7 botones icono
+         HEADER FIJO: atrás | nombre del lead | 8 botones icono
          ==================================================== -->
     <div class="conversation-header d-flex align-items-center justify-content-between px-3 py-2 border-bottom bg-white">
 
       <!-- Izquierda: botón atrás + nombre del lead -->
-      <div class="d-flex align-items-center gap-2 overflow-hidden flex-shrink-0 conversation-header-left">
+      <!-- Sin flex-shrink-0 a propósito (ver .conversation-header-left en el CSS): con 8 botones
+           el nombre tiene que poder truncarse antes que la fila de acciones se salga. -->
+      <div class="d-flex align-items-center gap-2 overflow-hidden conversation-header-left">
         <button
           v-if="!is_sidebar_mode"
           type="button"
@@ -46,7 +48,7 @@
         </span>
       </div>
 
-      <!-- Derecha: 7 botones de acción (solo ícono) -->
+      <!-- Derecha: 8 botones de acción (solo ícono) -->
       <div class="d-flex align-items-center gap-1 flex-shrink-0 conversation-header-actions">
 
         <!-- Resumen del lead -->
@@ -143,6 +145,19 @@
           <i v-else class="bi bi-calendar-heart" aria-hidden="true" />
         </button>
 
+        <!-- Programar envío: deja un mensaje listo para salir a una fecha y hora futuras -->
+        <button
+          type="button"
+          class="icon-btn"
+          :class="can_schedule_message ? 'text-primary' : 'text-muted'"
+          :title="schedule_message_button_title"
+          aria-label="Programar el envío de un mensaje a este lead"
+          :disabled="!can_schedule_message"
+          @click="on_open_schedule_modal"
+        >
+          <i class="bi bi-clock" aria-hidden="true" />
+        </button>
+
         <!-- Toggle respuesta automática de Claude por lead -->
         <button
           type="button"
@@ -227,9 +242,9 @@
         <span class="visually-hidden">Cargando conversación…</span>
       </div>
 
-      <!-- Sin mensajes en el hilo (y sin ningún mensaje pendiente de envío tapado por el cartel) -->
+      <!-- Sin mensajes en el hilo (y sin ningún mensaje pendiente ni programado tapado por el cartel) -->
       <div
-        v-else-if="!sorted_messages.length && !outgoing_pending_messages.length"
+        v-else-if="!sorted_messages.length && !outgoing_pending_messages.length && !sorted_scheduled_messages.length"
         class="conversation-placeholder conversation-placeholder--empty"
       >
         <div class="conversation-placeholder__card">
@@ -277,6 +292,23 @@
           :status="pending_msg.status"
           @retry="retry_pending_outgoing_message(pending_msg.client_id)"
           @discard="discard_pending_outgoing_message(pending_msg.client_id)"
+        />
+        <!-- Mensajes programados que todavía no salieron.
+             🔴 Van acá, en un bloque propio, y NO adentro de sorted_messages: esa lista ordena
+             por id, así que un programado creado hoy quedaría ANTES de cualquier mensaje que se
+             mande después. Lucas los quiere siempre al final, porque todavía no se enviaron.
+             Mismo patrón que outgoing_pending_messages, justo arriba. Cuando el programado sale,
+             el backend lo saca de scheduled_messages y aparece como LeadMessage normal, mezclado
+             por id donde le toca: eso pasa solo, sin código de por medio. -->
+        <scheduled-message-bubble
+          v-for="scheduled in sorted_scheduled_messages"
+          :key="'scheduled-' + scheduled.id"
+          :scheduled="scheduled"
+          :last_lead_message_id="last_lead_inbound_message_id"
+          :busy="canceling_scheduled_message_id === scheduled.id"
+          :now_ms="whatsapp_window_now_tick"
+          @editar="on_edit_scheduled_message(scheduled)"
+          @cancelar="on_cancel_scheduled_message(scheduled)"
         />
         <!-- Ancla al final del hilo para scrollIntoView tras renderizar mensajes -->
         <div ref="conversation_scroll_end_anchor" class="conversation-scroll-end-anchor" aria-hidden="true" />
@@ -549,6 +581,15 @@
     :lead="effective_record"
   />
 
+  <!-- Modal para programar el envío de un mensaje a una fecha y hora futuras -->
+  <ScheduleMessageModal
+    v-if="effective_record"
+    ref="schedule_message_modal"
+    :lead="effective_record"
+    :window_expires_at_ms="whatsapp_window_expires_at_ms"
+    @saved="on_scheduled_message_saved"
+  />
+
   <!-- Editor de anotaciones sobre imagen (pegada o adjunta) antes de enviarla al lead -->
   <image-annotation-editor
     :show="image_editor_visible"
@@ -563,8 +604,10 @@
 <script>
 import MessageBubble from '@/components/lead/conversation/MessageBubble.vue'
 import PendingOutgoingBubble from '@/components/lead/conversation/PendingOutgoingBubble.vue'
+import ScheduledMessageBubble from '@/components/lead/conversation/ScheduledMessageBubble.vue'
 import LeadResumenTab from '@/components/lead/resumen/Index.vue'
 import TemplatePickerModal from '@/components/lead/conversation/TemplatePickerModal.vue'
+import ScheduleMessageModal from '@/components/lead/conversation/ScheduleMessageModal.vue'
 import ImageAnnotationEditor from '@/components/common/ImageAnnotationEditor.vue'
 import api from '@/utils/axios'
 import { copy_lead_conversation_to_clipboard } from '@/utils/lead_conversation_clipboard'
@@ -608,8 +651,10 @@ export default {
   components: {
     MessageBubble,
     PendingOutgoingBubble,
+    ScheduledMessageBubble,
     LeadResumenTab,
     TemplatePickerModal,
+    ScheduleMessageModal,
     ImageAnnotationEditor,
   },
   mixins: [lead_conversation_date_dividers, conversation_scroll_behavior, audio_recorder_button],
@@ -648,6 +693,12 @@ export default {
        * sorted_messages una vez que el POST confirma.
        */
       outgoing_pending_messages: [],
+
+      /**
+       * Id del mensaje programado que se está cancelando ahora mismo. Bloquea los botones de
+       * esa burbuja y solo de esa (puede haber varios programados por lead).
+       */
+      canceling_scheduled_message_id: null,
 
       /** Texto del mensaje simulado del lead (testing, no pasa por WhatsApp). */
       mensaje_simulado: '',
@@ -1179,6 +1230,27 @@ export default {
     },
 
     /**
+     * Momento en que vence la ventana de mensajería libre de WhatsApp: último inbound del
+     * lead con status 'enviado' + 24hs. 0 si el lead nunca escribió (ventana cerrada).
+     *
+     * Es la ÚNICA definición de la ventana en esta vista: la consumen whatsapp_window_open
+     * (para el footer) y ScheduleMessageModal (para decidir texto libre vs plantilla). El
+     * backend la revalida con WhatsappSessionWindowService, que además mira soporte e
+     * implementación — o sea que esta cuenta es la más restrictiva de las dos y nunca va a
+     * ofrecer texto libre donde el backend lo rechace.
+     *
+     * @returns {number} milisegundos, o 0
+     */
+    whatsapp_window_expires_at_ms() {
+      if (!this.last_lead_inbound_at_ms) {
+        return 0
+      }
+      /* 24 horas en milisegundos: ventana de conversación libre de Meta. */
+      const window_ms = 24 * 60 * 60 * 1000
+      return this.last_lead_inbound_at_ms + window_ms
+    },
+
+    /**
      * true si la ventana de mensajería libre de WhatsApp (24hs desde el último inbound
      * del lead con status 'enviado') sigue abierta. Sin inbound previo o con 24hs o más
      * desde ese mensaje, Meta exige plantilla y este computed es false.
@@ -1190,12 +1262,79 @@ export default {
     whatsapp_window_open() {
       /* Referencia al tick para forzar reactividad cada ~60s. */
       const now_ms = this.whatsapp_window_now_tick
-      if (!this.last_lead_inbound_at_ms) {
+      if (!this.whatsapp_window_expires_at_ms) {
         return false
       }
-      /* 24 horas en milisegundos: ventana de conversación libre de Meta. */
-      const window_ms = 24 * 60 * 60 * 1000
-      return now_ms - this.last_lead_inbound_at_ms < window_ms
+      return now_ms < this.whatsapp_window_expires_at_ms
+    },
+
+    /**
+     * Mensajes programados del lead que todavía no salieron (estados 'pendiente' y 'error',
+     * que es lo único que devuelve la relación del backend), ordenados por hora de envío.
+     *
+     * @returns {Array<Object>}
+     */
+    sorted_scheduled_messages() {
+      const rec = this.effective_record
+      const list = rec && rec.scheduled_messages ? rec.scheduled_messages : []
+      if (!list.length) {
+        return []
+      }
+      const copy = list.slice()
+      copy.sort(function (a, b) {
+        const a_ms = a.scheduled_send_at ? new Date(a.scheduled_send_at).getTime() : 0
+        const b_ms = b.scheduled_send_at ? new Date(b.scheduled_send_at).getTime() : 0
+        if (a_ms === b_ms) {
+          return (a.id || 0) - (b.id || 0)
+        }
+        return a_ms - b_ms
+      })
+      return copy
+    },
+
+    /**
+     * true si se puede programar el envío de un mensaje a este lead. Mismo criterio de "a
+     * este lead no se le escribe" que usa el botón "Ofrecer/agendar demo", más los dos frenos
+     * que el backend evalúa igual antes de escribir la fila: lead ya promovido a cliente y
+     * lead marcado como que no recibe mensajes.
+     *
+     * @returns {boolean}
+     */
+    can_schedule_message() {
+      const rec = this.effective_record
+      if (!rec || !rec.id) {
+        return false
+      }
+      if (rec.status === 'cerrado_ganado' || rec.status === 'cerrado_perdido') {
+        return false
+      }
+      if (rec.promoted_client_id) {
+        return false
+      }
+      if (rec.no_recibe_mensajes_at) {
+        return false
+      }
+      return true
+    },
+
+    /**
+     * Tooltip del botón "Programar envío" según el estado actual.
+     *
+     * @returns {string}
+     */
+    schedule_message_button_title() {
+      const rec = this.effective_record
+      const status = rec ? rec.status : ''
+      if (status === 'cerrado_ganado' || status === 'cerrado_perdido') {
+        return 'No se le programan mensajes a un lead cerrado.'
+      }
+      if (rec && rec.promoted_client_id) {
+        return 'Este lead ya es cliente: no se le programan mensajes.'
+      }
+      if (rec && rec.no_recibe_mensajes_at) {
+        return 'Este lead está marcado como que no recibe mensajes.'
+      }
+      return 'Programar el envío de un mensaje para más adelante.'
     },
 
     /**
@@ -1674,6 +1813,97 @@ export default {
           modal_ref.open()
         }
       })
+    },
+
+    /**
+     * Abre el modal de programación de envío para un alta nueva.
+     * Usa $nextTick por lo mismo que on_open_template_picker: el ref recién montado.
+     *
+     * @returns {void}
+     */
+    on_open_schedule_modal() {
+      const self = this
+      if (!this.can_schedule_message) {
+        return
+      }
+      this.$nextTick(function () {
+        const modal_ref = self.$refs.schedule_message_modal
+        if (modal_ref && typeof modal_ref.open === 'function') {
+          modal_ref.open()
+        }
+      })
+    },
+
+    /**
+     * Abre el mismo modal en modo edición, con el programado ya cargado.
+     *
+     * @param {Object} scheduled fila de scheduled_messages a editar
+     * @returns {void}
+     */
+    on_edit_scheduled_message(scheduled) {
+      const self = this
+      if (!scheduled || !scheduled.id) {
+        return
+      }
+      this.$nextTick(function () {
+        const modal_ref = self.$refs.schedule_message_modal
+        if (modal_ref && typeof modal_ref.open === 'function') {
+          modal_ref.open(scheduled)
+        }
+      })
+    },
+
+    /**
+     * Cancela un envío programado, con confirmación previa. El lead que vuelve ya no lo trae
+     * en scheduled_messages, así que la burbuja desaparece sola.
+     *
+     * @param {Object} scheduled fila de scheduled_messages a cancelar
+     * @returns {void}
+     */
+    on_cancel_scheduled_message(scheduled) {
+      const rec = this.effective_record
+      if (!scheduled || !scheduled.id || !rec || !rec.id) {
+        return
+      }
+      if (this.canceling_scheduled_message_id) {
+        return
+      }
+      const pregunta = scheduled.status === 'error'
+        ? '¿Descartar este mensaje programado que no se pudo enviar?'
+        : '¿Cancelar el envío programado? El mensaje no va a salir.'
+      if (!window.confirm(pregunta)) {
+        return
+      }
+      const self = this
+      this.canceling_scheduled_message_id = scheduled.id
+      this.$store
+        .dispatch('lead/cancel_scheduled_message', {
+          lead_id: rec.id,
+          scheduled_id: scheduled.id,
+        })
+        .then(function (model) {
+          self.canceling_scheduled_message_id = null
+          self.on_record_updated(model)
+        })
+        .catch(function (err) {
+          self.canceling_scheduled_message_id = null
+          const msg = err && err.response && err.response.data && err.response.data.message
+            ? err.response.data.message
+            : 'No se pudo cancelar el envío programado.'
+          alert(msg)
+        })
+    },
+
+    /**
+     * El modal confirmó un alta o una edición: refresca el lead y baja el scroll para que la
+     * burbuja programada, que va al final del hilo, quede a la vista.
+     *
+     * @param {Object} model lead actualizado devuelto por el backend
+     * @returns {void}
+     */
+    on_scheduled_message_saved(model) {
+      this.on_record_updated(model)
+      this.schedule_scroll_to_bottom()
     },
 
     /**
@@ -2851,28 +3081,50 @@ export default {
    badge de demo en el centro y a los botones de acción de la derecha, que no ceden (flex-shrink-0
    con ancho fijo en px). 30% y no 40%: con 7 botones (se sumó "Ofrecer/agendar demo", 8/9/2026) el
    40% original dejaba el séptimo fuera del sidebar en su ancho por defecto (440px) -- medido con
-   un nombre de longitud media, se cortaba por ~20px. */
+   un nombre de longitud media, se cortaba por ~20px.
+
+   Con el 8° botón ("Programar envío", 10/9/2026) ese 30% fijo ya no alcanza: en el sidebar de
+   440px los siete de 2.2rem ocupaban ~270px y el octavo se salía. Dos cambios, y ninguno toca
+   escritorio, donde sobra lugar:
+     1. min-width: 0 y sin flex-shrink-0 en el markup, así el nombre cede ancho (se trunca con
+        elipsis, que para eso está el text-truncate) ANTES de que la fila de botones se corte.
+        Esto vale para cualquier ancho de contenedor, incluido el sidebar redimensionable, que
+        una media query no puede ver porque mide el viewport y no la columna.
+     2. Los botones del HEADER pasan a 2rem; los del footer siguen en 2.2rem, donde entran bien. */
 .conversation-header-left {
   max-width: 30%;
+  min-width: 0;
+}
+.conversation-header-actions .icon-btn {
+  width: 2rem;
+  height: 2rem;
+  font-size: 1rem;
 }
 
 /* En teléfono (modo standalone, con el botón "volver" sumado a la izquierda) el 30% de arriba no
    alcanza: los 7 botones de 2.2rem no entran junto a flecha+nombre en ~375px de ancho total.
    Medido con Playwright el 8/9/2026 -- el séptimo (verificación) quedaba cortado. Se achican los
-   botones y su separación solo acá, no en escritorio/tablet donde ya entran holgados. */
+   botones y su separación solo acá, no en escritorio/tablet donde ya entran holgados.
+   Con el 8° (10/9/2026) los del header bajan un escalón más: 8 x 1.8rem + separación entra en
+   360px dejando lugar para el nombre. Los del footer se quedan en 1.9rem, que ahí son solo cuatro. */
 @media (max-width: 480px) {
   .icon-btn {
     width: 1.9rem;
     height: 1.9rem;
     font-size: 0.95rem;
   }
+  .conversation-header-actions .icon-btn {
+    width: 1.8rem;
+    height: 1.8rem;
+    font-size: 0.9rem;
+  }
   .conversation-header-actions {
-    gap: 0.15rem !important;
+    gap: 0.1rem !important;
   }
   .conversation-header-left {
     max-width: 90px;
   }
-  /* El badge de fecha/hora de demo (centro) ya no tiene dónde comprimirse con los 7 botones más
+  /* El badge de fecha/hora de demo (centro) ya no tiene dónde comprimirse con los 8 botones más
      el nombre en ~375px -- quedaba superpuesto al nombre truncado, ilegible. La fecha de la demo
      sigue disponible dentro de la conversación; acá se prioriza que el nombre y los botones de
      acción se vean bien. */
