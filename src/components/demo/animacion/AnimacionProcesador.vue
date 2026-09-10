@@ -54,8 +54,8 @@
           <svg
             v-if="conexiones"
             class="animacion-procesador__conexiones"
-            width="1080"
-            height="1080"
+            :width="geo.w"
+            :height="geo.h"
             aria-hidden="true"
             focusable="false"
           >
@@ -182,10 +182,16 @@
 
         <!-- ── Las dos líneas que el cuadro estático suma a la composición final ─────── -->
         <template v-if="reduced_motion">
-          <div class="animacion-procesador__emitido animacion-procesador__emitido--quieto" :style="{ top: '282px' }">
+          <div
+            class="animacion-procesador__emitido animacion-procesador__emitido--quieto"
+            :style="{ top: alto_reposo(282) + 'px' }"
+          >
             <div class="animacion-procesador__titular" :style="ajuste('carga')">{{ TEXTOS.carga }}</div>
           </div>
-          <div class="animacion-procesador__emitido animacion-procesador__emitido--quieto" :style="{ top: '356px' }">
+          <div
+            class="animacion-procesador__emitido animacion-procesador__emitido--quieto"
+            :style="{ top: alto_reposo(356) + 'px' }"
+          >
             <div
               class="animacion-procesador__titular animacion-procesador__recorte animacion-procesador__titular--degrade"
               :style="ajuste('vende')"
@@ -196,7 +202,7 @@
         <chip-procesador
           :tiempo="tiempo"
           :claves="claves_escena"
-          :x="CX"
+          :x="geo.cx"
           :y="chip_y"
           :quieto="reduced_motion"
         />
@@ -223,7 +229,8 @@ import {
 
 /* ═══ La escena, tal como salió del export ═══════════════════════════════════════════
    Estos números NO se deducen de nuevo: están medidos contra la escena original y
-   cambiarlos desarma la coreografía. */
+   cambiarlos desarma la coreografía. Son los de la composición HORIZONTAL, que es la que
+   Lucas aprobó en Claude Design y no se toca. */
 
 const W = 1080
 const H = 1080
@@ -235,6 +242,97 @@ const CARD_H = 78
 
 /* Cuánto baja el procesador cuando termina de descender. */
 const CHIP_DOWN = 700
+
+/* ═══ La composición VERTICAL ═════════════════════════════════════════════════════════
+   En una pantalla parada el cuadrado de 1080 es un mal encuadre y está MEDIDO: a 390×844
+   la escala cae a 0,361, el cuadrado ocupa 390 px de los 844 de alto —menos de la mitad
+   de la pantalla— y el rótulo de las tarjetas, que son 22 unidades, aterriza en 7,9 px
+   reales. Ilegible.
+
+   La salida no es agrandar la tipografía tarjeta por tarjeta: es ACHICAR EL ESPACIO DE
+   COORDENADAS. El tamaño real de cualquier cosa de la escena es
+   `unidades × (ancho del contenedor / ancho del espacio)`, así que pasar el espacio de
+   1080 a 600 unidades de ancho multiplica TODO por 1,8 de una sola vez —la tipografía, el
+   procesador, los iconos, los cables— sin tocar un solo tamaño. A 390 px de ancho la
+   escala pasa a 0,65 y ese mismo rótulo de 22 unidades da 14,3 px reales.
+
+   Lo que sí hay que recomponer es la geometría: en un espacio de 600×(alto real) el
+   círculo de tarjetas no entra, así que se estira a ELIPSE —angosta y alta— y el
+   procesador queda en el centro exacto. Decisión de Lucas, 10/9/2026.
+
+   🔴 La coreografía no cambia: son las mismas 12 escenas, los mismos tiempos y los mismos
+   beats. Cambia DÓNDE está cada cosa, nunca CUÁNDO pasa. */
+
+/**
+ * A partir de qué proporción `alto / ancho` entra la composición vertical.
+ *
+ * 1,55 no es un número redondo elegido de arriba: cae en el hueco que hay entre las dos
+ * familias de pantallas paradas que existen de verdad.
+ *
+ *   · La tablet más estirada en vertical —iPad Air 11", 820×1180— da 1,44, y ahí el
+ *     cuadrado todavía funciona: el rótulo mide 16,7 px reales.
+ *   · El teléfono más achaparrado que sigue vivo —360×640 y 375×667— da 1,78, y ahí ya
+ *     no: 7,3 px.
+ *
+ * Cualquier corte entre 1,45 y 1,77 parte la misma frontera; 1,55 la parte al medio y deja
+ * margen para los dos lados. Se mide contra la caja del componente y no contra el
+ * user-agent, así que rotar el teléfono devuelve la composición horizontal sin nada
+ * especial: 844×390 da 0,46 y entra por el mismo camino que el escritorio.
+ */
+const UMBRAL_VERTICAL = 1.55
+
+/**
+ * El ancho del espacio de coordenadas vertical.
+ *
+ * Sale de despejar el requisito de legibilidad: el rótulo son 22 unidades y tiene que dar
+ * 13 px reales o más a 390 px de ancho, o sea `22 × 390 / V_W ≥ 13` → `V_W ≤ 660`. Se toma
+ * 600 en vez de 660 para que la cuenta también cierre en el teléfono chico de 360 px, donde
+ * el mismo rótulo da 13,2 px.
+ */
+const V_W = 600
+
+/**
+ * El semieje horizontal de la elipse de tarjetas.
+ *
+ * Lo limita el ancho de la tarjeta y no el gusto: las tarjetas laterales caen a
+ * `±sen(60°) · V_RX` del centro y miden 258 de ancho, así que
+ * `0,866 · V_RX + 129 ≤ V_W / 2` obliga a `V_RX ≤ 197` para que apenas rocen el borde.
+ * Con 170 quedan 24 unidades de aire de cada lado (unos 15 px reales a 390).
+ */
+const V_RX = 170
+
+/** Aire entre el canto de la tarjeta de arriba (y la de abajo) y el borde de la pantalla. */
+const V_MARGEN = 34
+
+/**
+ * Techo del semieje vertical, en múltiplos de `V_RX`.
+ *
+ * Sin techo, una pantalla absurdamente larga estiraría la elipse hasta que las tarjetas
+ * quedaran desparramadas sin relación entre sí. 3,9 corresponde a una proporción de 2,45,
+ * o sea más que cualquier teléfono real —el más largo de uso corriente, 412×915, da 2,22—,
+ * así que en la práctica no llega a actuar nunca: es una red, no una regla de diseño.
+ */
+const V_RY_MAXIMO = V_RX * 3.9
+
+/**
+ * El zoom de la cámara en vertical, cuadro por cuadro (los tiempos son los mismos).
+ *
+ * 🔴 En vertical **el primer plano ya no lo hace el zoom, lo hace el espacio**, y esto no
+ * es una renuncia: en el cuadrado el 1,7 existe porque una tarjeta de 258 sobre 1080 es
+ * apenas el 24 % del ancho y sin acercarse no se lee; en un espacio de 600 esa misma
+ * tarjeta ya ocupa el 43 %, o sea *más* de lo que ocupaba allá acercándose. El acercamiento
+ * está hecho antes de que la cámara toque nada.
+ *
+ * Lo que sí queda es el barrido: el foco arranca arriba del anillo y baja hasta el centro
+ * cuando el anillo cierra, que en una elipse tan alta son 405 unidades —un tercio de la
+ * pantalla— y se ve perfectamente. El beat es el mismo y cae en el mismo instante.
+ *
+ * El 1,06 es un techo MEDIDO, no una preferencia: con la cámara en `z`, el borde izquierdo
+ * visible es `300 − 300/z`, y la tarjeta más a la izquierda del anillo empieza en la unidad
+ * 23,8 (`300 − sen(60°)·V_RX − 129`). Pasando de 1,086 la pantalla le come el canto a esa
+ * tarjeta; con 1,7 —el número del cuadrado— la guillotina. Se probó y se ve.
+ */
+const V_ZOOM = [1.06, 1.04, 1, 1, 1, 1]
 
 /* Las alturas de descanso de cada cosa que el procesador emite. */
 const Y_LOGO = 152
@@ -255,9 +353,10 @@ const EM = 0.75
 
 const ACENTO = '#2f7bff'
 
-/* Ancho útil del cuadro para un titular con `nowrap`, en unidades del escenario. Se deja
-   un margen de 30 por lado sobre los 1080. Ver medir_textos(). */
-const ANCHO_UTIL = 1020
+/* Margen por lado que se le deja a un titular con `nowrap` antes de encogerlo, en unidades
+   del escenario. El ancho útil sale de restárselo dos veces al ancho del espacio: 1020
+   sobre los 1080 del cuadrado, 540 sobre los 600 de la vertical. Ver medir_textos(). */
+const MARGEN_TEXTO = 30
 
 /**
  * La tabla de escenas del export (`window.OM_SCENES`). `dur` es lo que cada escena dura en
@@ -333,10 +432,23 @@ const MOTION = {
 /** Segundo autoral en el que llega la tarjeta `i`. */
 const llegada = (i) => T0 + i * STEP + (i >= 1 ? HOLD1 : 0)
 
-/** Un punto sobre el círculo de tarjetas: 0° es arriba y el ángulo crece en sentido horario. */
-function pol(cx, cy, r, grados) {
+/**
+ * Un punto sobre la ELIPSE de tarjetas: 0° es arriba y el ángulo crece en sentido horario.
+ *
+ * Con `rx === ry` es literalmente la fórmula polar de siempre —la composición horizontal
+ * pasa por acá y sale con los mismos números hasta el último bit—; con `rx < ry` es la
+ * elipse angosta y alta de la composición vertical.
+ *
+ * @param {number} cx
+ * @param {number} cy
+ * @param {number} rx semieje horizontal
+ * @param {number} ry semieje vertical
+ * @param {number} grados
+ * @returns {number[]} el par [x, y]
+ */
+function pol(cx, cy, rx, ry, grados) {
   const a = (grados * Math.PI) / 180
-  return [cx + r * Math.sin(a), cy - r * Math.cos(a)]
+  return [cx + rx * Math.sin(a), cy - ry * Math.cos(a)]
 }
 
 /** El techo de dt de un cuadro: una pestaña que vuelve no tiene que saltar la animación. */
@@ -366,8 +478,13 @@ export default {
     return {
       /** Segundo de RELOJ, de 0 a 24,4. El tiempo autoral sale de acá vía el warp. */
       tiempo_reloj: 0,
-      /** Factor con el que se escala el cuadrado de 1080 para entrar en la pantalla. */
-      escala: 1,
+      /**
+       * La caja del componente, medida. De estos dos números sale TODO el encuadre: qué
+       * composición entra, con qué escala y qué forma tiene la elipse de tarjetas. En 0
+       * hasta la primera medición, y ahí `geo` devuelve el cuadrado a escala 1.
+       */
+      ancho_caja: 0,
+      alto_caja: 0,
       /** true si el sistema pide reduced-motion: cuadro estático, sin reloj y sin rAF. */
       reduced_motion: false,
       /**
@@ -387,10 +504,11 @@ export default {
       /** El ResizeObserver que recalcula la escala, o null. */
       redimensionador: null,
       /**
-       * Factor de encogido por titular, para que ningún texto con `nowrap` desborde el
-       * cuadro si la tipografía de marca no llega a cargar. Ver medir_textos().
+       * Ancho natural de cada titular, en unidades del escenario. Se mide una sola vez y
+       * sirve para las dos composiciones: la unidad no cambia, lo que cambia es contra qué
+       * ancho útil se la compara. Ver medir_textos() y ajuste().
        */
-      ajustes_texto: {},
+      anchos_texto: {},
     }
   },
 
@@ -399,8 +517,82 @@ export default {
     TEXTOS: () => TEXTOS,
     TRAZOS: () => TRAZOS,
     ACENTO: () => ACENTO,
-    CX: () => CX,
     ETIQUETA_ACCESIBLE: () => ETIQUETA_ACCESIBLE,
+
+    /**
+     * El encuadre entero, resuelto de una sola vez: qué composición entra, con qué escala,
+     * qué tamaño tiene el espacio de coordenadas y dónde y cómo es la elipse de tarjetas.
+     *
+     * Es el ÚNICO lugar del componente donde se decide algo por el tamaño de la pantalla.
+     * Todo lo demás —la coreografía, los tiempos, las opacidades— lee de acá y no vuelve a
+     * preguntar por la caja.
+     *
+     * @returns {{vertical: boolean, escala: number, w: number, h: number, cx: number,
+     *            cy: number, rx: number, ry: number}}
+     *   `cy` es el centro de la elipse Y la altura de reposo del procesador: en la escena
+     *   original los dos son el mismo punto y acá se sostiene.
+     */
+    geo() {
+      const ancho = this.ancho_caja
+      const alto = this.alto_caja
+
+      /* Antes de la primera medición, el cuadrado a escala 1: exactamente el estado que
+         tenía el componente en su primer cuadro antes de que existiera la vertical. */
+      const cuadrado = {
+        vertical: false,
+        escala: 1,
+        w: W,
+        h: H,
+        cx: CX,
+        cy: CY,
+        rx: R,
+        ry: R,
+      }
+      if (!(ancho > 0) || !(alto > 0)) return cuadrado
+
+      /* ── Composición HORIZONTAL: el cuadrado de 1080, escalado por el lado más corto.
+         🔴 Ni un número de acá cambió respecto del port original. */
+      if (alto / ancho <= UMBRAL_VERTICAL) {
+        return Object.assign({}, cuadrado, { escala: Math.min(ancho, alto) / W })
+      }
+
+      /* ── Composición VERTICAL: el espacio se angosta a V_W y se estira hasta el alto
+         real de la pantalla, así que el escenario TAPA el viewport en vez de dejar dos
+         bandas muertas. El procesador queda en el centro exacto y la elipse crece hasta
+         donde le dé el alto. */
+      const escala = ancho / V_W
+      const h = alto / escala
+      const ry = Math.max(
+        CARD_H,
+        Math.min(h / 2 - CARD_H / 2 - V_MARGEN, V_RY_MAXIMO)
+      )
+
+      return {
+        vertical: true,
+        escala: escala,
+        w: V_W,
+        h: h,
+        cx: V_W / 2,
+        cy: h / 2,
+        rx: V_RX,
+        ry: ry,
+      }
+    },
+
+    /** true cuando entró la composición vertical. Lo usa el template y lo mira el chequeo. */
+    vertical() {
+      return this.geo.vertical
+    },
+
+    /** Factor con el que se escala el espacio de coordenadas para entrar en la pantalla. */
+    escala() {
+      return this.geo.escala
+    },
+
+    /** Ancho que le queda a un titular con `nowrap` antes de tener que encogerlo. */
+    ancho_util() {
+      return this.geo.w - 2 * MARGEN_TEXTO
+    },
 
     /** La tabla de escenas ya derivada: secciones, claves, duración de reloj y autoral. */
     derivado() {
@@ -458,30 +650,56 @@ export default {
 
     /** Y del procesador en unidades del escenario. */
     chip_y() {
-      return lerp(CY, CHIP_DOWN, this.descenso)
+      return lerp(this.geo.cy, this.alto_reposo(CHIP_DOWN), this.descenso)
     },
 
     estilo_escenario() {
-      return { transform: 'scale(' + this.escala.toFixed(5) + ')' }
+      const g = this.geo
+      /* El tamaño del escenario se escribe acá y no en el CSS porque en vertical deja de
+         ser un cuadrado fijo: es V_W de ancho por el alto real de la pantalla. En
+         horizontal estos cuatro valores dan 1080/1080/-540/-540, que es exactamente lo que
+         decía la hoja de estilos. */
+      return {
+        width: g.w + 'px',
+        height: g.h.toFixed(2) + 'px',
+        marginLeft: -g.w / 2 + 'px',
+        marginTop: (-g.h / 2).toFixed(2) + 'px',
+        transform: 'scale(' + g.escala.toFixed(5) + ')',
+      }
     },
 
     /**
      * La cámara: prioridad a la tarjeta que llega, y el zoom out recién cuando el círculo
      * se cierra. Va sobre un grupo con `transform-origin: 0 0`, como el original.
+     *
+     * Los CUADROS son los mismos en las dos composiciones —la cámara abre en el mismo
+     * instante— y lo único que cambia es cuánto se acerca y a qué altura mira:
+     *
+     *   · en horizontal, los cinco números del export, intactos;
+     *   · en vertical, un acercamiento más corto (ver V_ZOOM) y un foco derivado de la
+     *     elipse. Los 200 y 232 del original son el 0,704 y el 0,618 del radio por encima
+     *     del centro del anillo, así que acá se escriben como esa misma fracción de `ry`:
+     *     encuadran la tarjeta que llega igual que allá, sea cual sea el alto de la
+     *     pantalla. Después del cierre el foco es el centro del espacio, que en vertical
+     *     coincide con el centro del anillo -- por eso no queda deriva: en el cuadrado esa
+     *     deriva de 462 a 540 existía sólo porque los dos centros no coincidían.
      */
     camara() {
       const K = this.claves_escena
       const T = this.tiempo
+      const g = this.geo
       const cuadros = [0, this.apertura, K.Conexion - 0.05, K.Logo, K.carga, K.fin + 6]
-      const zoom = [1.7, 1.58, 1.0, 1.0, 1.0, 1.0]
-      const foco = [200, 232, 462, 478, 540, 540]
+      const zoom = g.vertical ? V_ZOOM : [1.7, 1.58, 1.0, 1.0, 1.0, 1.0]
+      const foco = g.vertical
+        ? [g.cy - 0.704 * g.ry, g.cy - 0.618 * g.ry, g.cy, g.cy, g.cy, g.cy]
+        : [200, 232, 462, 478, 540, 540]
       const z = interpolate(cuadros, zoom, Easing.easeInOutCubic)(T)
       const fy = interpolate(cuadros, foco, Easing.easeInOutCubic)(T)
       return (
         'translate(' +
-        (W / 2 - CX * z).toFixed(2) +
+        (g.w / 2 - g.cx * z).toFixed(2) +
         'px,' +
-        (H / 2 - fy * z).toFixed(2) +
+        (g.h / 2 - fy * z).toFixed(2) +
         'px) scale(' +
         z.toFixed(4) +
         ')'
@@ -513,6 +731,8 @@ export default {
 
     estilo_resplandor() {
       return {
+        /* Centrado en el procesador: mide 860 y el centro cae en left + 430. */
+        left: this.geo.cx - 430 + 'px',
         top: this.chip_y - 430 + 'px',
         background:
           'radial-gradient(circle, rgba(47,123,255,' +
@@ -536,6 +756,7 @@ export default {
     tarjetas() {
       const K = this.claves_escena
       const T = this.tiempo
+      const g = this.geo
       const lista = []
 
       for (let i = 0; i < N; i++) {
@@ -547,7 +768,11 @@ export default {
         for (let j = i + 1; j < N; j++) giro += MOTION.glide(llegada(j) - 0.26, llegada(j) + 0.02)(T)
         const grados = -ARC * giro
 
-        let [x, y] = pol(CX, CY, R + 52 * (1 - aparece), grados)
+        /* Entra desde 52 unidades más afuera del anillo. En la elipse se agranda a los dos
+           semiejes por igual: no es exactamente la normal, pero son 52 unidades de entrada
+           y a cambio la composición horizontal sale con los mismos números de siempre. */
+        const fuera = 52 * (1 - aparece)
+        let [x, y] = pol(g.cx, g.cy, g.rx + fuera, g.ry + fuera, grados)
 
         /* Mientras la cámara está cerca, las que se alejan del tope se atenúan. */
         const atenua = lerp(1 - 0.78 * clamp((giro - 0.5) / 1.1, 0, 1), 1, this.ancho_camara)
@@ -560,8 +785,8 @@ export default {
           end: K.Procesado + 0.56 + i * 0.04,
           ease: Easing.easeInQuart,
         })(T)
-        x = lerp(x, CX, absorbe)
-        y = lerp(y, CY, absorbe)
+        x = lerp(x, g.cx, absorbe)
+        y = lerp(y, g.cy, absorbe)
 
         const escala = lerp(0.88 + 0.12 * aparece, 0.06, absorbe)
         const opacidad = aparece * (1 - absorbe * absorbe)
@@ -597,6 +822,7 @@ export default {
     conexiones() {
       const K = this.claves_escena
       const T = this.tiempo
+      const g = this.geo
       const brillo = MOTION.glide(K.Conexion, K.Conexion + 0.7)(T)
       const ido = MOTION.glide(K.Procesado + 0.55, K.Logo - 0.05)(T)
       if (ido >= 0.999) return null
@@ -610,8 +836,21 @@ export default {
         for (let j = i + 1; j < N; j++) giro += MOTION.glide(llegada(j) - 0.26, llegada(j) + 0.02)(T)
         const grados = -ARC * giro
 
-        const [x1, y1] = pol(CX, CY, R - 50, grados)
-        const [x2, y2] = pol(CX, CY, 108, grados)
+        /* El cable va DERECHO de la tarjeta al procesador, y por eso acá sí hace falta la
+           dirección real y no el ángulo: en la elipse el punto de 60° y su dirección desde
+           el centro dejan de coincidir, y tomando el ángulo el cable saldría apuntando a
+           cualquier lado menos a su tarjeta. En el círculo esta cuenta devuelve el mismo
+           `(sen, -cos)` de siempre, así que arranca a 50 unidades de la tarjeta y termina a
+           108 del centro del chip, igual que en el original. */
+        const [tx, ty] = pol(g.cx, g.cy, g.rx, g.ry, grados)
+        const distancia = Math.hypot(tx - g.cx, ty - g.cy) || 1
+        const ux = (tx - g.cx) / distancia
+        const uy = (ty - g.cy) / distancia
+
+        const x1 = tx - 50 * ux
+        const y1 = ty - 50 * uy
+        const x2 = g.cx + 108 * ux
+        const y2 = g.cy + 108 * uy
         const dibujo = MOTION.glide(llegada(i) + 0.18, llegada(i) + 0.62)(T)
         const largo = Math.hypot(x2 - x1, y2 - y1)
 
@@ -653,15 +892,16 @@ export default {
      */
     emitidos() {
       const K = this.claves_escena
+      const y = this.alto_reposo
       return {
-        logo: this.emitir(K.Logo, K.Logo + 0.85, Y_LOGO, [K.bajada, K.bajada + 0.55]),
-        carga: this.emitir(K.carga, K.carga + 0.7, Y_SLOT, [K.vende, K.vende + 0.55]),
-        vende: this.emitir(K.vende + 0.3, K.vende + 1.05, Y_SLOT, [K.bajada, K.bajada + 0.55]),
-        f1: this.emitir(K.bajada + 0.35, K.bajada + 0.35 + EM, Y_T1, [K.abs + 0.3, K.abs + 0.92]),
-        f2: this.emitir(K.wa + 0.05, K.wa + 0.05 + EM, Y_T2, [K.abs + 0.15, K.abs + 0.77]),
-        f3: this.emitir(K.wa + 0.62, K.wa + 0.62 + EM, Y_T3, [K.abs, K.abs + 0.62]),
-        logo_ia: this.emitir(K.ia + 0.45, K.onda - 0.1, Y_LOGO, null),
-        ia: this.emitir(K.ia + 0.7, K.onda + 0.15, Y_IA, null),
+        logo: this.emitir(K.Logo, K.Logo + 0.85, y(Y_LOGO), [K.bajada, K.bajada + 0.55]),
+        carga: this.emitir(K.carga, K.carga + 0.7, y(Y_SLOT), [K.vende, K.vende + 0.55]),
+        vende: this.emitir(K.vende + 0.3, K.vende + 1.05, y(Y_SLOT), [K.bajada, K.bajada + 0.55]),
+        f1: this.emitir(K.bajada + 0.35, K.bajada + 0.35 + EM, y(Y_T1), [K.abs + 0.3, K.abs + 0.92]),
+        f2: this.emitir(K.wa + 0.05, K.wa + 0.05 + EM, y(Y_T2), [K.abs + 0.15, K.abs + 0.77]),
+        f3: this.emitir(K.wa + 0.62, K.wa + 0.62 + EM, y(Y_T3), [K.abs, K.abs + 0.62]),
+        logo_ia: this.emitir(K.ia + 0.45, K.onda - 0.1, y(Y_LOGO), null),
+        ia: this.emitir(K.ia + 0.7, K.onda + 0.15, y(Y_IA), null),
       }
     },
 
@@ -715,7 +955,7 @@ export default {
       window.matchMedia('(prefers-reduced-motion: reduce)').matches
     )
 
-    this.medir_escala()
+    this.medir_caja()
     this.vigilar_tamano()
 
     /* La tipografía de marca (Geist) llega por Google Fonts y puede aparecer después del
@@ -746,7 +986,7 @@ export default {
        pestaña. Es el error que ya se cometió con la escena anterior. */
     this.frenar()
     document.removeEventListener('visibilitychange', this.revisar_reloj)
-    window.removeEventListener('resize', this.medir_escala)
+    window.removeEventListener('resize', this.medir_caja)
     if (this.observador) {
       this.observador.disconnect()
       this.observador = null
@@ -860,9 +1100,9 @@ export default {
     },
 
     /**
-     * La escala del escenario depende del lado más corto de la caja, así que hay que
-     * recalcularla cuando cambia -- rotar el teléfono, abrir la barra del navegador,
-     * redimensionar la ventana.
+     * El encuadre entero depende del tamaño de la caja, así que hay que volver a medirla
+     * cuando cambia -- rotar el teléfono, abrir la barra del navegador, redimensionar la
+     * ventana. Rotar es el caso que importa: cruza el umbral y cambia de composición.
      *
      * @returns {void}
      */
@@ -870,31 +1110,56 @@ export default {
       if (typeof ResizeObserver === 'function' && this.$refs.raiz) {
         let self = this
         this.redimensionador = new ResizeObserver(function () {
-          self.medir_escala()
+          self.medir_caja()
         })
         this.redimensionador.observe(this.$refs.raiz)
         return
       }
-      window.addEventListener('resize', this.medir_escala, { passive: true })
-    },
-
-    /** @returns {void} */
-    medir_escala() {
-      const raiz = this.$refs.raiz
-      if (!raiz) return
-      const lado = Math.min(raiz.clientWidth, raiz.clientHeight)
-      if (lado > 0) this.escala = lado / W
+      window.addEventListener('resize', this.medir_caja, { passive: true })
     },
 
     /**
-     * Mide los titulares y calcula, para cada uno, cuánto hay que encogerlo para que
-     * entre en el cuadro.
+     * Mide la caja del componente. No decide nada: de estos dos números sale todo el
+     * encuadre, y eso lo resuelve `geo`.
+     *
+     * @returns {void}
+     */
+    medir_caja() {
+      const raiz = this.$refs.raiz
+      if (!raiz) return
+      const ancho = raiz.clientWidth
+      const alto = raiz.clientHeight
+      if (ancho > 0 && alto > 0) {
+        this.ancho_caja = ancho
+        this.alto_caja = alto
+      }
+    },
+
+    /**
+     * Traduce una altura de reposo del espacio original al espacio de coordenadas que esté
+     * en uso. Las alturas del export están escritas contra un cuadrado de 1080, así que lo
+     * que se conserva es la distancia al CENTRO: en horizontal devuelve el número tal cual,
+     * y en vertical lo reubica respecto del centro de una pantalla más larga.
+     *
+     * @param {number} base altura en el espacio original de 1080
+     * @returns {number}
+     */
+    alto_reposo(base) {
+      return this.geo.h / 2 + (base - H / 2)
+    },
+
+    /**
+     * Mide el ancho natural de cada titular, en unidades del escenario.
      *
      * Todos van con `white-space: nowrap` y sus tamaños están calibrados contra Geist, la
-     * tipografía de marca -- que la página ya carga, así que en el caso normal ninguno se
+     * tipografía de marca -- que la página ya carga, así que en el cuadrado ninguno se
      * ajusta. Pero si Google Fonts no llega, el stack de sistema tiene otras métricas y
      * "Todo asistido por IA, nunca fue tan fácil" queda a un pelo de los 1080: sin esto se
      * cortaría contra el borde del escenario.
+     *
+     * Lo medido son ANCHOS y no factores, a propósito: la unidad no cambia entre las dos
+     * composiciones, lo que cambia es el ancho útil contra el que se los compara. Así una
+     * sola medición sirve para las dos, incluso si el teléfono rota.
      *
      * @returns {void}
      */
@@ -902,12 +1167,11 @@ export default {
       const regla = this.$refs.regla
       if (!regla) return
       const nodos = regla.querySelectorAll('[data-clave]')
-      const ajustes = {}
+      const anchos = {}
       for (let i = 0; i < nodos.length; i++) {
-        const ancho = nodos[i].offsetWidth
-        if (ancho > ANCHO_UTIL) ajustes[nodos[i].getAttribute('data-clave')] = ANCHO_UTIL / ancho
+        anchos[nodos[i].getAttribute('data-clave')] = nodos[i].offsetWidth
       }
-      this.ajustes_texto = ajustes
+      this.anchos_texto = anchos
     },
 
     /**
@@ -917,9 +1181,10 @@ export default {
      * @returns {Object}
      */
     ajuste(clave) {
-      const factor = this.ajustes_texto[clave]
-      if (!factor) return {}
-      return { transform: 'scale(' + factor.toFixed(4) + ')' }
+      const ancho = this.anchos_texto[clave]
+      const util = this.ancho_util
+      if (!ancho || ancho <= util) return {}
+      return { transform: 'scale(' + (util / ancho).toFixed(4) + ')' }
     },
 
     /**
@@ -956,10 +1221,17 @@ export default {
 </script>
 
 <style scoped>
-/* La animación se dibuja en un espacio de coordenadas FIJO de 1080×1080 y ese cuadrado se
-   escala una sola vez, desde JS, contra el lado más corto de la caja. Por eso los px de
-   acá abajo no son px de pantalla y no hay ni un solo `@media` de tamaño: cambiar de
-   teléfono a escritorio es cambiar un número de `scale()`.
+/* La animación se dibuja en un espacio de coordenadas propio y ese espacio se escala una
+   sola vez, desde JS. Por eso los px de acá abajo no son px de pantalla y no hay ni un solo
+   `@media` de tamaño: el encuadre entero se decide en el computed `geo`, contra la caja
+   medida, y no en la hoja de estilos.
+
+   Son DOS composiciones y la única diferencia entre ellas es ese espacio:
+     · horizontal -- el cuadrado de 1080×1080 del export, escalado por el lado más corto;
+     · vertical   -- 600 de ancho por el alto real de la pantalla, con la elipse de
+       tarjetas estirada. Entra cuando el alto le saca bastante al ancho (ver
+       UMBRAL_VERTICAL) y existe porque en un teléfono el cuadrado dejaba el rótulo de las
+       tarjetas en 7,9 px reales.
 
    Las excepciones son las tres capas del fondo (degradé, circuito y viñeta), que van a
    sangre completa por fuera del escenario -- decisión de encuadre de Lucas, 10/9. */
@@ -1009,14 +1281,14 @@ export default {
 
 /* ── El escenario ───────────────────────────────────────────────────────────────────── */
 
+/* El tamaño, los márgenes y la escala los escribe `estilo_escenario` desde JS, porque en
+   la composición vertical el escenario deja de ser un cuadrado fijo: es V_W de ancho por
+   el alto real de la pantalla. En horizontal esos valores son los de siempre
+   (1080 × 1080, margen -540). */
 .animacion-procesador__escenario {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 1080px;
-  height: 1080px;
-  margin-left: -540px;
-  margin-top: -540px;
   transform-origin: 50% 50%;
   /* 🔴 SIN `overflow: hidden`, y esto no es un olvido. El original lo tenía porque el
      cuadrado ERA la pantalla: recortar contra el canto no se notaba. Acá el fondo va a
@@ -1027,9 +1299,9 @@ export default {
      pide el encuadre a sangre. */
 }
 
+/* `left` lo pone `estilo_resplandor`: sigue al procesador, que en vertical no está en 540. */
 .animacion-procesador__resplandor {
   position: absolute;
-  left: 110px;
   width: 860px;
   height: 860px;
   border-radius: 50%;
