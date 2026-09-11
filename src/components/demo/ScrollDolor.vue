@@ -12,20 +12,25 @@
          Reemplaza a <escena-hero>, que contaba lo mismo -- problemas sueltos, procesador,
          solución -- y se borró con sus 2,8 MB de WebP animado (decisión de Lucas, 10/9).
 
-         Las cuatro props del FondoSeccionSticky son las que tenía el interludio, por los
-         mismos motivos: snap_progreso 0 para que el lead aterrice con la animación SIN
-         empezar; snap_libre_mientras_ocupa para que el avance por gesto no la intercepte;
-         boton_avance false porque un botón que se la saltea contradice lo anterior; y
-         contenido_full_bleed true porque sin eso el max-width: 1080px que el padre le pone
-         a cualquier hijo "de columna" le come el fondo a sangre.
+         🔴 OCUPA UNA PANTALLA, EN FLUJO, y un gesto de scroll la deja atrás (Lucas,
+         11/9/2026, corrección a la misión experiencia-landing). Hasta ese día era un
+         FondoSeccionSticky de 320vh con scroll libre (snap_libre_mientras_ocupa): el gesto
+         guiado aterrizaba en ella y de ahí el scroll del lead recorría 220vh de pista
+         empujando el reloj de la escena. En la práctica el lead scrolleaba y "no avanzaba":
+         seguía viendo la animación pinneada durante todo ese recorrido, sin saber cuánto
+         faltaba. Lucas pidió lo contrario: *"si el usuario scrollea debe scrollear a la
+         siguiente sección"*. Así que la sección mide 100svh, lleva su propio marcador de
+         enganche (.demo-fondo-seccion__snap, igual que la portada del cubo) para ser un
+         destino más del avance guiado, y la escena corre SOLA con su reloj (la arranca
+         AnimacionProcesador al montarse y la pausa cuando no está a la vista): el que tiene
+         paciencia la ve entera sin tocar nada; el que scrollea, un gesto y está en la
+         apertura. El scroll ya no empuja el reloj (adelantar_desde_scroll queda sin uso
+         desde acá; la API sigue en el hijo por si otra pantalla la necesita).
 
-         🔴 El progreso NO va por el slot escopeado: va por el evento y de ahí a un método
-         del hijo, vía ref. Atarlo al template ata cada frame de scroll a un render de Vue,
-         y acá lo único que cambia son estilos que el reloj escribe a mano.
-
-         🔴 Y solo ADELANTA: la animación corre sola a su ritmo (22,4 s desde el 11/9/2026) y el scroll la
-         empuja hacia adelante, nunca hacia atrás. Es lo que pidió Lucas -- el que tiene
-         paciencia la ve entera, el que no, llega al mensaje sin frustrarse. -->
+         Sin FondoSeccionSticky tampoco hay v-if por reduced-motion: el propio
+         AnimacionProcesador resuelve ese caso plantando el reloj en el cuadro final, y una
+         sección de una pantalla en flujo es exactamente lo que ese modo pedía (el problema
+         de los 220vh de fondo vacío era de la pista, y la pista ya no está). -->
     <!-- <animacion-procesador> SÍ PARTICIPA del tema claro/oscuro desde el 11/9/2026 (misión
          experiencia-landing): recibe `tema` y elige su paleta con él. Hasta ese día acá
          decía lo contrario -- "siempre oscura, pase lo que pase", decisión de Lucas del
@@ -41,37 +46,23 @@
 
          El tema se pasa a las DOS instancias (la pinneada y la estática de reduced-motion):
          son la misma escena y tienen que verse iguales. -->
-    <!-- 🔴 Bajo reduced-motion la sección NO se pinnea, y no es una sutileza: el
-         `min-height: 320vh` que FondoSeccionSticky escribe como estilo inline no lo
-         puede sacar ninguna regla CSS (un inline gana), así que el bloque de
-         reduced-motion de demo-experiencia.scss despinea el contenido pero deja 220vh
-         de fondo NEGRO VACÍO que el lead tiene que scrollear a mano. El cubo esquivó
-         este mismo problema no usando FondoSeccionSticky; acá se esquiva con el v-if.
-         Sin pista tampoco hay progreso de scroll que aplicar, que es justo lo que
-         reduced-motion pide: la animación muestra su cuadro final y punto. -->
-    <fondo-seccion-sticky
-      v-if="!reduced_motion"
-      variante="animacion"
-      :recorrido_vh="320"
-      :snap_progreso="0"
-      :snap_libre_mientras_ocupa="true"
-      :boton_avance="false"
-      :contenido_full_bleed="true"
-      @progreso="on_progreso_animacion"
-    >
+    <section ref="animacion_seccion" class="demo-animacion-seccion" data-seccion-id="animacion.procesador">
+      <!-- Punto de enganche del avance guiado, el mismo contrato que la portada del cubo
+           (ver el comentario de .demo-cubo__ancla en CuboProcesador.vue): avance-guiado.js
+           resuelve los destinos con SELECTOR_DESTINOS y esta clase es la entrada genérica.
+           El estilo (scroll-snap-align incluido) lo pone ESTE archivo, porque el de
+           FondoSeccionSticky.vue es scoped. -->
+      <div class="demo-fondo-seccion__snap demo-animacion-seccion__ancla" aria-hidden="true"></div>
       <animacion-procesador ref="animacion" :tema="tema" />
-    </fondo-seccion-sticky>
-    <div v-else class="demo-animacion-estatica">
-      <animacion-procesador :tema="tema" />
-    </div>
+    </section>
 
 
     <fondo-seccion-sticky variante="apertura" :contenido_full_bleed="true" v-slot="{ progreso }">
       <!-- 🔴 --espera retiene la entrada hasta que la apertura SE VE. Sin eso, los ~2,4s
            de la animación (zoom del titular + bounce del subtítulo) corren al montar --
            o sea, mientras el lead todavía está mirando la animación del procesador, que
-           ocupa 320vh antes que esto -- y para cuando scrollea hasta acá el titular ya
-           está en su estado final. Es exactamente el sintoma que Lucas reportó en el
+           ocupa la pantalla anterior (una sola desde el 11/9/2026; antes 320vh) -- y para
+           cuando scrollea hasta acá el titular ya está en su estado final. Es exactamente el sintoma que Lucas reportó en el
            grupo 369 ("no lo hace con ningún efecto, simplemente aparece"), revivido por
            haber puesto una sección larga delante. Detectado el 10/9/2026 por el chequeo
            independiente de la misión experiencia-nueva.
@@ -125,7 +116,7 @@
          veces seguidas.
 
          🔴 Igual que la sección de clientes: trae su propio pin, no lo envuelvas. -->
-    <cubo-procesador :titulos="contenido.hitos.titulo_portada" />
+    <cubo-procesador :titulos="contenido.hitos.titulo_portada" :tema="tema" />
 
     <!-- LOS HITOS. Vivían dentro del cierre, debajo del titular que ahora abre el cubo.
          Lucas pidió sacar los DOLORES, no estos: son copy validado (marca/cliente_ideal.md)
@@ -514,8 +505,6 @@ export default {
        * arranque de la entrada: ver el comentario del <header> en el template.
        */
       apertura_vista: false,
-      /** true una vez emitido el evento de que el lead vio la animación entera. */
-      animacion_trackeada: false,
       /** El IntersectionObserver que reporta qué secciones vio el lead, o null. */
       observador_secciones: null,
       /** El IntersectionObserver que dispara la entrada de la apertura, o null. */
@@ -616,6 +605,10 @@ export default {
 
       const self = this
       const secciones = [
+        /* La animación del procesador: desde el 11/9/2026 es una sección de una pantalla en
+           flujo, así que se observa como cualquier otra (antes el evento salía del progreso
+           de su pista, al 94%, y esa pista ya no existe). */
+        ['.demo-animacion-seccion', 'animacion.procesador'],
         ['.demo-clientes', 'clientes'],
         ['.demo-cubo', 'cubo'],
         ['.demo-hitos', 'hitos'],
@@ -691,36 +684,6 @@ export default {
           self.apertura_entrada_terminada = true
         }
       })
-    },
-
-    /**
-     * Progreso de la sección de la animación de apertura.
-     *
-     * 🔴 Solo ADELANTA. La animación corre sola a su ritmo (22,4 s desde el 11/9/2026) y esto la empuja
-     * hacia adelante; nunca la rebobina. Es la decisión de Lucas del 10/9/2026: el lead
-     * con paciencia la ve entera, y el que no la tiene llega al mensaje sin frustrarse.
-     * `adelantar_desde_scroll()` ya ignora un progreso menor al del reloj, así que acá
-     * no hace falta compararlo.
-     *
-     * Va por `ref` y no por el slot escopeado a propósito, igual que hacía el interludio:
-     * consumir el progreso desde el template ata cada frame de scroll a un render de Vue,
-     * y lo único que cambia acá son estilos que el reloj del hijo escribe a mano.
-     *
-     * @param {number} p Progreso [0,1] de la sección, ya amortiguado por el componente.
-     * @returns {void}
-     */
-    on_progreso_animacion(p) {
-      const animacion = this.$refs.animacion
-      if (animacion) {
-        animacion.adelantar_desde_scroll(p)
-      }
-      if (p >= 0.94 && !this.animacion_trackeada) {
-        this.animacion_trackeada = true
-        this.emitir_evento('scroll_bloque_visible', {
-          bloque_id: 'animacion.procesador',
-          perfil: this.perfil,
-        })
-      }
     },
 
     /**
@@ -1135,15 +1098,27 @@ export default {
   opacity: 0 !important;
 }
 
-/* Bajo reduced-motion la animación del procesador va en flujo normal y ocupa UNA
-   pantalla, no las 320vh de la pista que no se renderiza. Ver el v-else del template. */
-.demo-animacion-estatica {
+/* La animación del procesador: UNA pantalla en flujo normal, con o sin reduced-motion
+   (11/9/2026; antes era una pista pinneada de 320vh, ver el comentario del template). */
+.demo-animacion-seccion {
   position: relative;
   width: 100%;
   height: 100vh;
   height: 100svh;
-  /* El tema manda también acá (11/9/2026): la escena pinta su propio fondo a sangre, pero
-     este contenedor no puede quedar negro debajo de una página en tema claro. */
+  /* El tema manda también acá: la escena pinta su propio fondo a sangre, pero este
+     contenedor no puede quedar negro debajo de una página en tema claro. */
   background: var(--demo-color-fondo, #04060b);
+}
+
+/* El marcador de enganche, mismo estilo que .demo-cubo__ancla (y por el mismo motivo: el
+   de FondoSeccionSticky.vue es scoped y no alcanza acá). */
+.demo-animacion-seccion__ancla {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+  scroll-snap-align: start;
 }
 </style>

@@ -385,16 +385,10 @@
 // La sección de la animación del procesador (misión experiencia-nueva, 10/9/2026).
 // Reemplaza a las cinco variantes --bloque-1..5 de los dolores y a --interludio.
 //
-// Va del color de fondo DEL TEMA, liso, sin los radial-gradient de la apertura. La animación
-// pinta su propio fondo a sangre completa por encima de éste (desde el 11/9/2026 con la paleta
-// del tema: casi negro en oscuro, #f6f8fc en claro), así que en régimen no se ve; esto existe
-// para que no haya un destello de otro color entre que la sección monta y el componente pinta,
-// que en un scroll rápido se lee como un parpadeo. Por eso va la variable y no un valor fijo:
-// hasta hoy era #04060b a mano, y en tema claro ese destello habría sido negro.
-.demo-fondo-seccion--animacion .demo-fondo-seccion__fondo {
-	background-color: var(--demo-color-fondo, #04060b);
-	background-image: none;
-}
+// RETIRADA (11/9/2026): acá vivía `.demo-fondo-seccion--animacion .demo-fondo-seccion__fondo`,
+// el fondo liso de la pista pinneada de 320vh de la animación del procesador. Esa pista ya no
+// existe: la animación es una sección de una pantalla en flujo (`.demo-animacion-seccion`,
+// estilada en ScrollDolor.vue) y un gesto de scroll la deja atrás, por pedido de Lucas.
 
 // Puente al formulario (grupo 355, prompt 08): era la única sección del recorrido sin
 // fondo propio -- "tiene el fondo muy blanco", Lucas, 5/8/2026. Opacidades del rango

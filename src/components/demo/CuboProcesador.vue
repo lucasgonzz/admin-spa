@@ -20,17 +20,17 @@
            FondoSeccionSticky.vue es scoped y su atributo data-v-* no alcanza acá. -->
       <div class="demo-fondo-seccion__snap demo-cubo__ancla" aria-hidden="true"></div>
 
-      <!-- 🔴 Logotipo con texto, no el isotipo solo -cambiado en la misión
-           paleta-oscura-experiencia, 10/9/2026. Hasta esa misión iba el isotipo
-           porque logotipo-comerciocity.png tiene la palabra "ComercioCity" en BLANCO
-           puro (medido: promedio RGB 255,255,255 en la zona del texto) -pensado para
-           el fondo oscuro de AnimacionProcesador.vue, invisible sobre el fondo claro
-           que tenía esta página. Con el tema oscuro completo esa restricción se
-           invierte: es el MISMO asset que ya usa la animación, 35,5 KB, ya en el
-           repo -no hace falta un logotipo oscuro aparte. -->
+      <!-- 🔴 Logotipo con texto, no el isotipo solo (misión paleta-oscura-experiencia,
+           10/9/2026), y EL DEL TEMA (11/9/2026): logotipo-comerciocity.png tiene la
+           palabra "ComercioCity" en BLANCO puro (medido: promedio RGB 255,255,255 en la
+           zona del texto), pensado para fondo casi negro. Cuando el tema pasó a ser
+           configurable, esta portada siguió con ese asset fijo y en tema claro el nombre
+           desaparecía: solo se veía el isotipo (Lucas, 11/9/2026: "el nombre del logo
+           comerciocity aparece en blanco y no se ve"). Con tema claro va el logotipo con
+           el wordmark oscuro, el mismo que ya usa AnimacionProcesador.vue. -->
       <img
         class="demo-cubo__marca"
-        src="../../assets/logotipo-comerciocity.png"
+        :src="src_marca"
         alt="ComercioCity"
       />
 
@@ -185,6 +185,12 @@
 </template>
 
 <script>
+/* Los dos logotipos, uno por tema (misma pareja que usa AnimacionProcesador.vue). Importados
+   y no escritos en el `src` del template: con un `:src` dinámico Vite no resuelve la ruta
+   relativa, así que hay que darle el módulo ya resuelto. */
+import LOGOTIPO_WORDMARK_CLARO from '../../assets/logotipo-comerciocity.png'
+import LOGOTIPO_WORDMARK_OSCURO from '../../assets/logotipo-comerciocity-oscuro.png'
+
 /**
  * El cubo del procesador, movido por scroll (grupo de la misión `experiencia-nueva`,
  * 10/9/2026).
@@ -397,6 +403,16 @@ export default {
 
   props: {
     /**
+     * Tema visual de la página ('oscuro' | 'claro'), el mismo que recibe ScrollDolor. Acá
+     * solo decide qué logotipo va en la portada: el resto del cubo ya lee las variables
+     * --demo-color-* y responde solo al tema.
+     */
+    tema: {
+      type: String,
+      default: 'oscuro',
+      validator: (valor) => ['oscuro', 'claro'].includes(valor),
+    },
+    /**
      * Alto total de la pista en vh: 100vh de pin + el resto de recorrido. 470 es el
      * número del export (370vh de recorrido para cuatro giros, ~92vh por cara). Es
      * prop y no constante para poder calibrarlo desde ScrollDolor.vue sin tocar este
@@ -449,6 +465,16 @@ export default {
   },
 
   computed: {
+    /**
+     * El logotipo de la portada según el tema: wordmark blanco sobre el fondo oscuro,
+     * wordmark oscuro sobre el claro.
+     *
+     * @returns {string}
+     */
+    src_marca() {
+      return this.tema === 'claro' ? LOGOTIPO_WORDMARK_OSCURO : LOGOTIPO_WORDMARK_CLARO
+    },
+
     /* Los dos van por `computed` y no por `data` a propósito: lo que entra a data() lo
        convierte Vue en un proxy reactivo, y esto es una constante de módulo que no
        cambia nunca. Mismo criterio que SeccionClientes.vue con sus listas de logos. */

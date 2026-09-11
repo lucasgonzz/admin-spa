@@ -160,10 +160,12 @@ export default {
 		/**
 		 * true en las secciones que suspenden el avance guiado MIENTRAS ocupan la
 		 * pantalla: se llega a ellas con el gesto guiado, y de ahí en adelante el
-		 * scroll es libre hasta que la sección se termina. Hoy solo la sección de la
-		 * animación (`variante="animacion"` en ScrollDolor.vue), que heredó este papel
-		 * del interludio cuando ese se retiró (misión experiencia-nueva, 10/9/2026).
-		 * Es una prop y no una excepción por `variante` a propósito: la razón es de
+		 * scroll es libre hasta que la sección se termina. Lo usó el interludio hasta
+		 * el 10/9/2026 y la sección de la animación del procesador hasta el 11/9/2026,
+		 * cuando Lucas pidió que un gesto de scroll la deje atrás en vez de recorrerla:
+		 * hoy NINGUNA sección lo pide, pero la prop queda porque el comportamiento
+		 * sigue siendo válido para una sección larga que quiera scroll libre. Es una
+		 * prop y no una excepción por `variante` a propósito: la razón es de
 		 * comportamiento, no de qué fondo usa la sección.
 		 */
 		snap_libre_mientras_ocupa: {
@@ -172,9 +174,10 @@ export default {
 		},
 		/**
 		 * false en las secciones que NO llevan el botón de avance (grupo 369, prompt
-		 * 03). Hoy solo la sección de la animación: ahí el scroll es libre a propósito y
-		 * un botón que se saltea la escena entera contradice exactamente eso. Antes del
-		 * 10/9/2026 la sección con este papel era el interludio.
+		 * 03). Lo usaron el interludio (hasta el 10/9/2026) y la sección de la animación
+		 * (hasta el 11/9/2026, cuando dejó de ser un sticky), y desde la misión
+		 * experiencia-landing lo usa el cierre del recorrido sin turno: el chevron
+		 * aparecía debajo del botón de WhatsApp sin tener a dónde ir.
 		 *
 		 * No hace falta apagarlo en la última sección del recorrido: eso lo resuelve
 		 * solo `hay_siguiente()` del avance guiado, que es el que sabe si queda algún
