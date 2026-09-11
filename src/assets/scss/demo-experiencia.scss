@@ -125,6 +125,61 @@
 }
 
 // ---------------------------------------------------------------------------
+// LUZ AMBIENTE sobre el fondo oscuro por defecto (misión experiencia-ajustes,
+// 11/9/2026, punto 5). Pedido de Lucas, sin más precisión que "un poco de luces": la
+// portada del cubo (el titular "Nada de esto es sobre el sistema...") y la pista donde
+// gira el cubo (las dos viven en CuboProcesador.vue) se veían con el fondo demasiado
+// negro.
+//
+// Motivo, mirando el código y no a ojo: ninguna de las dos pasa por
+// FondoSeccionSticky.vue -traen su propio pin, ver la cabecera del <script> de
+// CuboProcesador.vue-, así que no hay ningún .demo-fondo-seccion__fondo pintándoles una
+// capa encima, a diferencia de la apertura y el puente acá abajo. Lo único que se veía
+// ahí era el `background: var(--demo-color-fondo)` liso de arriba, sin nada más.
+//
+// Y por qué esto NO copia el tratamiento de AnimacionProcesador.vue (que sí tiene su
+// propio degradé + líneas de circuito + resplandor): esa escena se diseñó a mano,
+// pensada para verse siempre oscura pase lo que pase (ver el comentario grande en
+// ScrollDolor.vue, arriba de <animacion-procesador>) con colores fijos que no son de
+// este sistema de variables. Copiar ESE tratamiento acá sería repetir ese mismo trabajo
+// a mano. En cambio, acá se usa el lenguaje más simple que ya tiene el resto de la
+// página oscura: radial-gradient en los dos colores de marca, apagándose a transparent
+// -- la misma receta que .demo-fondo-seccion--apertura y --puente, un poco más abajo en
+// este archivo, no una paleta inventada para esta ocasión.
+//
+// 🔴 :not(.demo-scroll-dolor--claro), no ".demo-scroll-dolor <algo>" a secas. Los dos
+// temas conviven en el MISMO elemento raíz -ScrollDolor.vue agrega --claro como clase
+// ADICIONAL sobre demo-scroll-dolor, nunca la reemplaza (ver la clase condicional en su
+// <template>)-, así que un descendiente de ".demo-scroll-dolor" sin más matchea en los
+// dos temas por igual. Sin el :not(), esta luz se colaría al modo claro -que tiene que
+// seguir viéndose exactamente como antes- y ésta es la forma de lograrlo sin tocar una
+// sola línea del bloque --claro, que esta misión tiene prohibido editar.
+.demo-scroll-dolor:not(.demo-scroll-dolor--claro) {
+	// La portada: pantalla completa con el isotipo, el titular y "Seguí bajando". Dos
+	// manchas de esquina -mismo par de colores y misma curva que la apertura de la
+	// página, más abajo- pero bastante más tenues (0,22/0,18 contra 0,35/0,3 de esa): la
+	// apertura es la PRIMERA pantalla de la página y busca impacto; esta ya es la
+	// tercera pantalla oscura seguida (después de la animación y la propia apertura), y
+	// con la misma intensidad la página se leería sobrecargada de manchas de color.
+	.demo-cubo__portada {
+		background-image:
+			radial-gradient(90% 70% at 18% 12%, rgba(11, 132, 248, 0.22), transparent 60%),
+			radial-gradient(80% 65% at 85% 88%, rgba(58, 49, 252, 0.18), transparent 55%);
+	}
+
+	// La pista: un único resplandor centrado, no dos manchas de esquina como la
+	// portada -acá el punto de interés YA es el cubo, que flota en el medio del pin con
+	// su propia chapa y su propio brillo (.demo-cubo__brillo en CuboProcesador.vue), así
+	// que esta luz acompaña ese centro en vez de tirar la mirada a las esquinas. Va en
+	// .demo-cubo__pin -el elemento full-bleed, con su propio width:100vw- y no en
+	// .demo-cubo__deriva, que sólo mide lo que ocupa el cubo: así el degradé cubre la
+	// pantalla entera del pin, riel de progreso incluido.
+	.demo-cubo__pin {
+		background-image: radial-gradient(60% 60% at 50% 45%, rgba(11, 132, 248, 0.17), transparent 70%);
+	}
+}
+
+// ---------------------------------------------------------------------------
 // TEMA CLARO, la excepción configurable (misión tema-experiencia-configurable,
 // 10/9/2026). El oscuro de arriba deja de ser una decisión fija en código: Lucas pidió
 // que sea elegible desde Cuenta → Configuración de demos
@@ -604,6 +659,15 @@
 		&::after {
 			display: none;
 		}
+	}
+
+	// Mismo criterio para la luz ambiente del punto 5 (misión experiencia-ajustes,
+	// 11/9/2026): bajo esta preferencia, fondo liso y nada de degradé encima. Ninguna de
+	// las dos tiene un ::after que apagar (a diferencia de la regla de arriba), por eso
+	// es una regla aparte y no una más en el selector de la de arriba.
+	.demo-scroll-dolor:not(.demo-scroll-dolor--claro) .demo-cubo__portada,
+	.demo-scroll-dolor:not(.demo-scroll-dolor--claro) .demo-cubo__pin {
+		background-image: none !important;
 	}
 }
 
