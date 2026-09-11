@@ -1,5 +1,5 @@
 <template>
-  <section class="demo-scroll-dolor">
+  <section class="demo-scroll-dolor" :class="{ 'demo-scroll-dolor--claro': tema === 'claro' }">
     <!-- Apertura: revertida a solo titular + subtítulo (grupo 336, correctivo 3;
          decisión de Lucas tras ver la escena cinematográfica implementada -- ver nota
          de reversión en demo_experiencia.md §3.18-bis). Ya no arma su propia
@@ -26,6 +26,22 @@
          🔴 Y solo ADELANTA: la animación corre sola a su ritmo (24,4 s) y el scroll la
          empuja hacia adelante, nunca hacia atrás. Es lo que pidió Lucas -- el que tiene
          paciencia la ve entera, el que no, llega al mensaje sin frustrarse. -->
+    <!-- 🔴 <animacion-procesador> NO PARTICIPA del tema claro/oscuro (misión
+         tema-experiencia-configurable, 10/9/2026), y esto es una decisión de Lucas, no
+         un bug ni un olvido: "siempre oscura, pase lo que pase". Sus colores -el
+         resplandor, las líneas de circuito, el degradé de fondo- están escritos a mano
+         en AnimacionProcesador.vue pensados específicamente para verse sobre casi negro;
+         no leen ninguna variable --demo-color-*. Diseñar una versión clara sería repetir
+         buena parte del trabajo de portar la animación, no un ajuste de tema, y Lucas
+         eligió no encargarla.
+
+         Consecuencia que hay que saber si se vuelve a tocar esto: con tema="claro", el
+         lead ve la animación oscura (320vh) seguida del resto de la página clara -- el
+         mismo tipo de corte que la misión paleta-oscura-experiencia vino a evitar,
+         reaparecido acá por la decisión de arriba, no por descuido. Si el día de mañana
+         alguien "arregla" esto agregando la clase --claro adentro de
+         <animacion-procesador>, va a chocar con colores que no tienen equivalente claro
+         definido en ningún lado: hay que preguntarle a Lucas antes, no inferirlo. -->
     <!-- 🔴 Bajo reduced-motion la sección NO se pinnea, y no es una sutileza: el
          `min-height: 320vh` que FondoSeccionSticky escribe como estilo inline no lo
          puede sacar ninguna regla CSS (un inline gana), así que el bloque de
@@ -391,6 +407,16 @@ export default {
     emitir_evento: {
       type: Function,
       default: function () {},
+    },
+    /**
+     * Tema visual ('oscuro' | 'claro') del recorrido, configurable desde el admin (misión
+     * tema-experiencia-configurable). Default 'oscuro': es lo que ya está en producción
+     * desde la migración de esta misma tarde, así que un lead cuyo payload todavía no
+     * traiga la clave (o un consumidor que no la pase) ve exactamente lo mismo que hoy.
+     */
+    tema: {
+      type: String,
+      default: 'oscuro',
     },
   },
 
