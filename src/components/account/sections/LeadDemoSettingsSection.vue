@@ -52,6 +52,67 @@
         </div>
       </div>
 
+      <!-- La página como landing (misión experiencia-landing, 11/9/2026): para el lead que
+           todavía no tiene demo, la página termina en un botón que lo manda a WhatsApp a
+           pedirla. Estos tres campos son ese botón (a qué número escribe y con qué texto) y el
+           seguimiento de Martín si abrió la página y no lo tocó. Van pegados a los dos de arriba
+           porque los tres deciden qué ve el lead en esa misma página. Si la API todavía no
+           devuelve estas claves, quedan vacíos y el guardado no las manda (ver on_save). -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-5">
+          <label class="form-label small" for="demo_whatsapp_numero_leads">Número de WhatsApp del canal de leads</label>
+          <!-- Texto y no number: un número de teléfono no es una cantidad (nada de flechitas ni
+               de notación científica), y `inputmode` abre el teclado numérico en el teléfono. -->
+          <input
+            id="demo_whatsapp_numero_leads"
+            v-model.trim="local.whatsapp_numero_leads"
+            type="text"
+            inputmode="numeric"
+            class="form-control form-control-sm"
+            maxlength="40"
+            placeholder="543444544199"
+            :disabled="saving"
+          />
+          <p class="text-muted small mb-0 mt-1">
+            Solo dígitos con código de país, sin +. Es el número al que escribe el lead cuando toca
+            el botón de su página.
+          </p>
+        </div>
+        <div class="col-sm-7">
+          <label class="form-label small" for="demo_cta_whatsapp_texto">Mensaje prearmado del botón</label>
+          <input
+            id="demo_cta_whatsapp_texto"
+            v-model="local.cta_whatsapp_texto"
+            type="text"
+            class="form-control form-control-sm"
+            maxlength="200"
+            :disabled="saving"
+          />
+          <p class="text-muted small mb-0 mt-1">
+            El mensaje que llega prearmado a WhatsApp cuando el lead toca el botón.
+          </p>
+        </div>
+      </div>
+
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-5">
+          <label class="form-label small" for="demo_pagina_seguimiento_minutos">Minutos después de abrir la página sin pedir la demo para que Martín le escriba</label>
+          <input
+            id="demo_pagina_seguimiento_minutos"
+            v-model.number="local.pagina_seguimiento_minutos"
+            type="number"
+            class="form-control form-control-sm"
+            min="0"
+            max="240"
+            :disabled="saving"
+          />
+          <p class="text-muted small mb-0 mt-1">
+            Cuánto esperar después de que el lead abrió su página sin pedir la demo para que Martín
+            le escriba (dentro de la ventana de 24 hs).
+          </p>
+        </div>
+      </div>
+
       <!-- Campo: duración de la demo -->
       <div class="row g-2 align-items-end mb-3">
         <div class="col-sm-5">
@@ -695,6 +756,11 @@ import api from '@/utils/axios'
  * Incluye también, primero de toda la pantalla, el selector de qué dinámica de demo
  * (`experiencia_default`) reciben los leads que se creen de acá en adelante (grupo 293,
  * prompt 04) — no afecta a los leads ya existentes.
+ *
+ * Desde el 11/9/2026 (misión experiencia-landing) lleva además el CTA de la página de
+ * experiencia para el lead sin demo: el número de WhatsApp al que escribe, el texto prearmado y
+ * los minutos de seguimiento si abrió la página y no pidió la demo. Los dos textos se mandan
+ * solo cuando tienen valor (ver on_save).
  */
 export default {
   name: 'LeadDemoSettingsSection',
@@ -707,6 +773,17 @@ export default {
         /** Tema visual ('oscuro' | 'claro') de la página inmersiva de experiencia. Solo tiene
             efecto en la dinámica 'nueva'. */
         experiencia_tema: 'oscuro',
+        /** Número (solo dígitos, con código de país) al que escribe el lead desde el botón de su
+            página (misión experiencia-landing, 11/9/2026). Vacío hasta que la API lo mande:
+            el default real vive en el backend, y un valor inventado acá se guardaría si alguien
+            apretara Guardar antes de la respuesta. */
+        whatsapp_numero_leads: '',
+        /** Texto prearmado que abre WhatsApp desde ese botón. Mismo criterio: vacío hasta que
+            la API lo mande. */
+        cta_whatsapp_texto: '',
+        /** Minutos desde que el lead abrió su página sin pedir la demo hasta el seguimiento de
+            Martín. 120 es el default del backend. */
+        pagina_seguimiento_minutos: 120,
         duracion_minutos: 60,
         /** Minutos reales de bloqueo desde el inicio (11/9/2026); separado de duracion_minutos a propósito. */
         bloqueo_real_minutos: 180,
@@ -779,6 +856,10 @@ export default {
         experiencia_default: 'actual',
         /** Espejo del servidor: tema visual de la página de experiencia. */
         experiencia_tema: 'oscuro',
+        /** Espejo del servidor: número, texto y seguimiento del CTA de la página (11/9/2026). */
+        whatsapp_numero_leads: '',
+        cta_whatsapp_texto: '',
+        pagina_seguimiento_minutos: 120,
         duracion_minutos: 60,
         /** Espejo del servidor: bloqueo real de la instancia (11/9/2026). */
         bloqueo_real_minutos: 180,
@@ -980,7 +1061,10 @@ export default {
           var data = res.data || {}
           var fields = Object.keys(self.local)
           /* Campos que se tratan como string (no entero). */
-          var string_fields = ['recordatorio_manana_hora', 'experiencia_default', 'experiencia_tema']
+          /* Los dos del CTA son texto aunque uno sea "un número": parseInt sobre un teléfono
+             es un entero de doce cifras que se vuelve a mostrar sin el cero inicial que pudiera
+             tener y que ya no es lo que el operador tipeó. */
+          var string_fields = ['recordatorio_manana_hora', 'experiencia_default', 'experiencia_tema', 'whatsapp_numero_leads', 'cta_whatsapp_texto']
           /* Campos que se tratan como booleano. */
           var bool_fields = ['llamada_debe_terminar_en_horario']
           /* Campos float: NO pasan por parseInt, que truncaría 1.5 a 1 y le pisaría al admin el
@@ -1041,48 +1125,78 @@ export default {
       if (!self.can_save) {
         return
       }
-      self.saving = true
       self.saved_message = ''
       self.error_message = ''
+
+      /* El número del CTA se chequea ACÁ antes de mandar, y no se delega en el 422 del backend
+         como con el resto de los campos: el mensaje de un 422 de Laravel 8 es "The given data was
+         invalid.", que no le dice al operador qué campo ni por qué. Mismo criterio que el backend
+         (dígitos que quedan después de sacar +, espacios y guiones, entre 8 y 15). */
+      var digitos_whatsapp = String(self.local.whatsapp_numero_leads || '').replace(/\D+/g, '')
+      if (self.local.whatsapp_numero_leads !== '' && (digitos_whatsapp.length < 8 || digitos_whatsapp.length > 15)) {
+        self.error_message = 'El número de WhatsApp tiene que tener entre 8 y 15 dígitos, con código de país y sin +.'
+        return
+      }
+
+      self.saving = true
+
+      var payload = {
+        experiencia_default:                 self.local.experiencia_default,
+        experiencia_tema:                    self.local.experiencia_tema,
+        pagina_seguimiento_minutos:          self.local.pagina_seguimiento_minutos,
+        duracion_minutos:                    self.local.duracion_minutos,
+        bloqueo_real_minutos:                self.local.bloqueo_real_minutos,
+        setup_minutos_antes:                 self.local.setup_minutos_antes,
+        gracia_minutos_post:                 self.local.gracia_minutos_post,
+        recordatorio_minutos_antes:          self.local.recordatorio_minutos_antes,
+        recordatorio_silencio_minutos:       self.local.recordatorio_silencio_minutos,
+        demo_directa_no_show_minutos:        self.local.demo_directa_no_show_minutos,
+        recordatorio_manana_hora:            self.local.recordatorio_manana_hora,
+        check_ingreso_minutos_post:          self.local.check_ingreso_minutos_post,
+        check_ingreso_silencio_minutos:      self.local.check_ingreso_silencio_minutos,
+        resumen_minutos_antes_fin:           self.local.resumen_minutos_antes_fin,
+        duracion_llamada_closer_minutos:     self.local.duracion_llamada_closer_minutos,
+        demo_minimo_minutos_desde_ahora:     self.local.demo_minimo_minutos_desde_ahora,
+        demo_intro_umbral_pct:               self.local.demo_intro_umbral_pct,
+        demo_intro_velocidad:                self.local.demo_intro_velocidad,
+        demo_horario_lunes_viernes:          self.build_horario_range(self.local.demo_lv_inicio, self.local.demo_lv_fin),
+        demo_horario_sabado:                 self.build_horario_range(self.local.demo_sabado_inicio, self.local.demo_sabado_fin),
+        demo_horario_domingo:                self.build_horario_range(self.local.demo_domingo_inicio, self.local.demo_domingo_fin),
+        closer_horario_lunes_viernes:        self.build_horario_range(self.local.closer_lv_inicio, self.local.closer_lv_fin),
+        closer_horario_sabado:               self.build_horario_range(self.local.closer_sabado_inicio, self.local.closer_sabado_fin),
+        closer_horario_domingo:              self.build_horario_range(self.local.closer_domingo_inicio, self.local.closer_domingo_fin),
+        frecuencia_slots_minutos:            self.local.frecuencia_slots_minutos,
+        llamada_debe_terminar_en_horario:    self.local.llamada_debe_terminar_en_horario,
+        ingreso_timeout_minutos:             self.local.ingreso_timeout_minutos,
+        fin_seguimiento_minutos:             self.local.fin_seguimiento_minutos,
+        fin_timeout_minutos:                 self.local.fin_timeout_minutos,
+        pendiente_ingreso_horas_timeout:     self.local.pendiente_ingreso_horas_timeout,
+        pendiente_terminar_timeout_minutos:  self.local.pendiente_terminar_timeout_minutos,
+      }
+
+      /* Los dos textos del CTA viajan SOLO si tienen valor. Vacíos, el backend los rechaza con
+         422 (`sometimes|string`: la clave presente pero vacía no es "ausente") -- y vacíos están
+         justamente contra una API vieja que no los devolvió en el GET, que es el caso en que el
+         guardado de todo lo demás tiene que seguir andando. Tampoco hay nada que "borrar": el
+         backend nunca se queda sin número ni sin texto, cae a su default. */
+      if (self.local.whatsapp_numero_leads !== '') {
+        payload.whatsapp_numero_leads = self.local.whatsapp_numero_leads
+      }
+      if (String(self.local.cta_whatsapp_texto || '').trim() !== '') {
+        payload.cta_whatsapp_texto = self.local.cta_whatsapp_texto
+      }
+
       api
-        .put('/settings/lead-demo', {
-          experiencia_default:                 self.local.experiencia_default,
-          experiencia_tema:                    self.local.experiencia_tema,
-          duracion_minutos:                    self.local.duracion_minutos,
-          bloqueo_real_minutos:                self.local.bloqueo_real_minutos,
-          setup_minutos_antes:                 self.local.setup_minutos_antes,
-          gracia_minutos_post:                 self.local.gracia_minutos_post,
-          recordatorio_minutos_antes:          self.local.recordatorio_minutos_antes,
-          recordatorio_silencio_minutos:       self.local.recordatorio_silencio_minutos,
-          demo_directa_no_show_minutos:        self.local.demo_directa_no_show_minutos,
-          recordatorio_manana_hora:            self.local.recordatorio_manana_hora,
-          check_ingreso_minutos_post:          self.local.check_ingreso_minutos_post,
-          check_ingreso_silencio_minutos:      self.local.check_ingreso_silencio_minutos,
-          resumen_minutos_antes_fin:           self.local.resumen_minutos_antes_fin,
-          duracion_llamada_closer_minutos:     self.local.duracion_llamada_closer_minutos,
-          demo_minimo_minutos_desde_ahora:     self.local.demo_minimo_minutos_desde_ahora,
-          demo_intro_umbral_pct:               self.local.demo_intro_umbral_pct,
-          demo_intro_velocidad:                self.local.demo_intro_velocidad,
-          demo_horario_lunes_viernes:          self.build_horario_range(self.local.demo_lv_inicio, self.local.demo_lv_fin),
-          demo_horario_sabado:                 self.build_horario_range(self.local.demo_sabado_inicio, self.local.demo_sabado_fin),
-          demo_horario_domingo:                self.build_horario_range(self.local.demo_domingo_inicio, self.local.demo_domingo_fin),
-          closer_horario_lunes_viernes:        self.build_horario_range(self.local.closer_lv_inicio, self.local.closer_lv_fin),
-          closer_horario_sabado:               self.build_horario_range(self.local.closer_sabado_inicio, self.local.closer_sabado_fin),
-          closer_horario_domingo:              self.build_horario_range(self.local.closer_domingo_inicio, self.local.closer_domingo_fin),
-          frecuencia_slots_minutos:            self.local.frecuencia_slots_minutos,
-          llamada_debe_terminar_en_horario:    self.local.llamada_debe_terminar_en_horario,
-          ingreso_timeout_minutos:             self.local.ingreso_timeout_minutos,
-          fin_seguimiento_minutos:             self.local.fin_seguimiento_minutos,
-          fin_timeout_minutos:                 self.local.fin_timeout_minutos,
-          pendiente_ingreso_horas_timeout:     self.local.pendiente_ingreso_horas_timeout,
-          pendiente_terminar_timeout_minutos:  self.local.pendiente_terminar_timeout_minutos,
-        })
+        .put('/settings/lead-demo', payload)
         .then(function (res) {
           /* Actualizar los valores de referencia para que can_save vuelva a false. */
           var data = res.data || {}
           var fields = Object.keys(self.local)
           /* Campos que se tratan como string (no entero). */
-          var string_fields = ['recordatorio_manana_hora', 'experiencia_default', 'experiencia_tema']
+          /* Los dos del CTA son texto aunque uno sea "un número": parseInt sobre un teléfono
+             es un entero de doce cifras que se vuelve a mostrar sin el cero inicial que pudiera
+             tener y que ya no es lo que el operador tipeó. */
+          var string_fields = ['recordatorio_manana_hora', 'experiencia_default', 'experiencia_tema', 'whatsapp_numero_leads', 'cta_whatsapp_texto']
           /* Campos que se tratan como booleano. */
           var bool_fields = ['llamada_debe_terminar_en_horario']
           /* Campos float: NO pasan por parseInt, que truncaría 1.5 a 1 y le pisaría al admin el
