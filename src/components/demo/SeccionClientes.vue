@@ -77,9 +77,12 @@
         <p class="demo-clientes__subtitulo">
           {{ tiendas.length }} de ellos también venden por internet.
         </p>
+        <!-- Verdadero para las DOS plataformas (11/9/2026): desde ese día la lista trae
+             también las tiendas de Tienda Nube conectadas al sistema, y cada tarjeta dice
+             cuál es cuál con su etiqueta. Hasta entonces decía "su propia tienda, con su
+             dominio y el mismo catálogo del sistema", que sólo valía para las nuestras. -->
         <p class="demo-clientes__pie">
-          Su propia tienda, con su dominio y el mismo catálogo del sistema. Están abiertas
-          ahora mismo.
+          Con su propia tienda, o con Tienda Nube conectada al sistema. Abiertas ahora mismo.
         </p>
         <ul ref="tiendas" class="demo-clientes__tiendas" :style="estilo_tiendas">
           <li v-for="tienda in tiendas" :key="tienda.id" class="demo-clientes__tienda">
@@ -99,6 +102,10 @@
               <span class="demo-clientes__tienda-datos">
                 <span class="demo-clientes__tienda-nombre">{{ tienda.nombre }}</span>
                 <span class="demo-clientes__tienda-rubro">{{ tienda.rubro }}</span>
+                <!-- La etiqueta por plataforma: es lo que hace verdadera la lista con las
+                     tiendas de Tienda Nube adentro (ver clientes.js). Chica y apagada a
+                     propósito: informa, no compite con el logo ni con el nombre. -->
+                <span class="demo-clientes__tienda-plataforma">{{ etiqueta_plataforma(tienda) }}</span>
               </span>
               <i class="bi bi-arrow-up-right demo-clientes__tienda-flecha" aria-hidden="true"></i>
             </a>
@@ -110,7 +117,17 @@
 </template>
 
 <script>
-import { logos_clientes, tiendas_comerciocity } from './clientes'
+import { logos_clientes, tiendas_de_clientes } from './clientes'
+
+/**
+ * Cómo se llama cada plataforma en la etiqueta de la tarjeta. La clave es el campo
+ * `plataforma` de clientes.js; un valor que no esté acá no muestra etiqueta (mejor nada
+ * que un nombre inventado).
+ */
+const ETIQUETAS_PLATAFORMA = {
+  comerciocity: 'Tienda ComercioCity',
+  tiendanube: 'Tienda Nube',
+}
 
 /**
  * 🔴 Cuánta gente usa esto, y por qué NO dice "50".
@@ -264,9 +281,9 @@ export default {
       return logos_clientes
     },
 
-    /** @returns {Array} */
+    /** @returns {Array} Las tiendas activas, de las dos plataformas (ver clientes.js). */
     tiendas() {
-      return tiendas_comerciocity
+      return tiendas_de_clientes
     },
 
     /**
@@ -343,6 +360,17 @@ export default {
   },
 
   methods: {
+    /**
+     * El texto de la etiqueta de plataforma de una tienda, o '' si la plataforma no está
+     * en ETIQUETAS_PLATAFORMA.
+     *
+     * @param {{plataforma: string}} tienda
+     * @returns {string}
+     */
+    etiqueta_plataforma(tienda) {
+      return ETIQUETAS_PLATAFORMA[tienda.plataforma] || ''
+    },
+
     /**
      * Opacidad y desplazamiento de un momento, como variables CSS.
      *
@@ -731,7 +759,7 @@ export default {
   object-fit: contain;
 }
 
-/* Las tiendas: flex y no grid, para que la última fila quede centrada. Con 7 tarjetas y
+/* Las tiendas: flex y no grid, para que la última fila quede centrada. Con 13 tarjetas y
    4 columnas, una grilla las deja pegadas a la izquierda y se lee como si faltara algo. */
 .demo-clientes__tiendas {
   --p: 0;
@@ -746,20 +774,36 @@ export default {
   gap: clamp(8px, 1.2vw, 14px);
 }
 
-/* En teléfono va una tarjeta por fila. Con dos por fila el nombre entra en ~80px y
-   "HB Distribuciones" se corta con puntos suspensivos: un nombre propio recortado se lee
-   como un error, no como una decisión. Siete filas de 58px entran de sobra en el pin. */
+/* 🔴 En teléfono van DOS por fila (desde el 11/9/2026; hasta entonces era una por fila).
+   No es gusto: son 13 tiendas y no 7, y trece filas de 45px son 670px de lista dentro de
+   un pin de 100svh que en el teléfono más chico que hay que bancar (360×640) mide 640 --
+   con los encabezados arriba, la mitad de la lista quedaba cortada por el `overflow:
+   hidden` del pin. Con dos por fila son siete filas.
+
+   El motivo por el que antes era una por fila ("HB Distribuciones" se cortaba con puntos
+   suspensivos en ~80px) se resuelve de otra forma: en teléfono el nombre ENVUELVE hasta
+   dos líneas en vez de recortarse, y el rubro no se muestra (es lo menos esencial de la
+   tarjeta y son los ~13px que hacen que siete filas entren). Ver las reglas de teléfono
+   al final del archivo. Medido a 360×640 el 11/9/2026: ~560px de contenido (rótulo a
+   última tarjeta), ~600 con el padding del momento, contra los 640 del pin. */
 .demo-clientes__tienda {
   --d: 0;
   --avance: clamp(0, calc((var(--p, 0) - var(--d, 0)) / 0.45), 1);
-  flex: 1 1 100%;
+  flex: 0 0 calc(50% - 3.5px);
+  min-width: 0;
   opacity: var(--avance);
   transform: translateY(calc((1 - var(--avance)) * 14px));
 }
 
+/* 270px de tope y no 220 (11/9/2026): con 220 el texto tiene 128px y "Innovate
+   Materiales", "Distribuidora de bebidas" y "Materiales de construcción" se cortaban con
+   puntos suspensivos -- visto en la página real a 768. Con 270 el texto tiene 178px y las
+   trece entran enteras, nombre y rubro. El precio es una columna menos: tres por fila en
+   escritorio (5 filas: 376px de lista, entra en 1366×768 con aire) y dos en tablet
+   vertical (7 filas: 502px, entra de sobra en 1024 de alto). */
 @media (min-width: 480px) {
   .demo-clientes__tienda {
-    flex: 0 1 clamp(190px, 30vw, 220px);
+    flex: 0 1 clamp(190px, 34vw, 270px);
   }
 }
 
@@ -821,6 +865,21 @@ export default {
   white-space: nowrap;
 }
 
+/* La etiqueta de plataforma ("Tienda ComercioCity" / "Tienda Nube"), 11/9/2026. Más chica
+   y más apagada que el rubro: es un dato de verdad, no un adorno, y no tiene que competir
+   con el logo. Fijo, mismo motivo que el rubro: vive sobre el chip claro. */
+.demo-clientes__tienda-plataforma {
+  margin-top: 2px;
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #7b859c;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Fijo, mismo motivo que __tienda-nombre/-rubro arriba: vive sobre el chip claro, no
    sobre el fondo de la página. */
 .demo-clientes__tienda-flecha {
@@ -829,10 +888,16 @@ export default {
   color: #566078;
 }
 
-/* Teléfono chico (360×640, que es el piso que hay que bancar): siete tarjetas apiladas más
-   el titular NO entran con la tarjeta del tamaño normal -- medido, sobraban 9px, o sea que
-   con la barra de direcciones del navegador arriba se recortaba la última. Acá la tarjeta
-   baja de 58 a ~45px de alto y quedan ~75px de aire.
+/* Teléfono chico (360×640, que es el piso que hay que bancar): trece tarjetas más el
+   titular entran sólo de a dos por fila y con la tarjeta más compacta (ver el comentario
+   de `.demo-clientes__tienda`). La columna mide ~153px y, con 6px de padding, logo de 24
+   y 6 de hueco, al texto le quedan ~111px: la etiqueta "Tienda ComercioCity" en
+   minúsculas, sin tracking y a 0,66rem mide ~105 y entra entera (medido: con 9px de
+   padding y logo de 26 quedaban 102 y se cortaba); el nombre envuelve hasta dos líneas
+   en vez de recortarse (un nombre propio recortado se lee como un error); el rubro no se
+   muestra y la flecha se va: son píxeles que el nombre necesita más. El pie del momento
+   baja a 0,88rem para quedar en dos líneas y no tres. Medido a 360×640 el 11/9/2026:
+   ~560px de contenido, ~600 con el padding, contra los 640 del pin.
    🔴 Va acá abajo y no al lado de `.demo-clientes__tienda`: las reglas base de la tarjeta
    están más abajo en el archivo y, con la misma especificidad, ganan las últimas. Puesto
    arriba el bloque entero no hace nada y no avisa. */
@@ -841,22 +906,42 @@ export default {
     gap: 7px;
   }
 
-  .demo-clientes__tienda-link {
-    gap: 8px;
-    padding: 7px 10px;
-  }
-
-  .demo-clientes__tienda-logo {
-    width: 28px;
-    height: 28px;
-  }
-
-  .demo-clientes__tienda-nombre {
+  .demo-clientes__momento--tiendas .demo-clientes__pie {
     font-size: 0.88rem;
   }
 
+  .demo-clientes__tienda-link {
+    gap: 6px;
+    padding: 7px 6px;
+  }
+
+  .demo-clientes__tienda-logo {
+    width: 24px;
+    height: 24px;
+  }
+
+  .demo-clientes__tienda-nombre {
+    font-size: 0.82rem;
+    line-height: 1.2;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+
   .demo-clientes__tienda-rubro {
-    font-size: 0.74rem;
+    display: none;
+  }
+
+  .demo-clientes__tienda-plataforma {
+    font-size: 0.66rem;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  .demo-clientes__tienda-flecha {
+    display: none;
   }
 }
 

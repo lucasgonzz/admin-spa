@@ -1,11 +1,15 @@
 <template>
-  <!-- v-if en la RAÍZ: mientras `RESENAS` esté vacío, este componente no pinta un solo
+  <!-- v-if en la RAÍZ: si `RESENAS` quedara vacío, este componente no pinta un solo
        píxel. No hay estado vacío, no hay "próximamente", no hay esqueleto gris: la página
-       pasa de la sección anterior a la siguiente como si esta sección no existiera. -->
+       pasa de la sección anterior a la siguiente como si esta sección no existiera. Fue
+       el estado real de la sección hasta el 11/9/2026 (ver el bloque de RESENAS). -->
   <section v-if="hay_resenas" ref="seccion" class="demo-resenas">
     <div ref="grupo" class="demo-resenas__grupo" :style="estilo_grupo">
       <p class="demo-resenas__rotulo demo-resenas__paso">Lo que dicen en Google</p>
 
+      <!-- El promedio y la cantidad son los de la FICHA de Google (PROMEDIO_GOOGLE /
+           CANTIDAD_GOOGLE), no los del array de abajo: hay una reseña de 5 estrellas sin
+           texto que cuenta para Google y acá no tiene tarjeta que mostrar. -->
       <div class="demo-resenas__promedio demo-resenas__paso">
         <span class="demo-resenas__promedio-numero">{{ promedio_texto }}</span>
         <span
@@ -20,7 +24,7 @@
           </span>
           <span
             class="demo-resenas__capa demo-resenas__capa--llena"
-            :style="{ width: ancho_estrellas(promedio) }"
+            :style="{ width: ancho_estrellas(PROMEDIO_GOOGLE) }"
             aria-hidden="true"
           >
             <svg v-for="n in 5" :key="'l' + n" class="demo-resenas__estrella" viewBox="0 0 24 24">
@@ -29,7 +33,7 @@
           </span>
         </span>
         <span class="demo-resenas__promedio-cantidad">
-          {{ resenas.length }} {{ resenas.length === 1 ? 'reseña' : 'reseñas' }}
+          {{ CANTIDAD_GOOGLE }} {{ CANTIDAD_GOOGLE === 1 ? 'reseña' : 'reseñas' }}
         </span>
       </div>
 
@@ -62,9 +66,15 @@
 
           <p class="demo-resenas__texto">{{ resena.texto }}</p>
 
+          <!-- El negocio va sólo cuando agrega algo: si el autor de la reseña ES el
+               negocio (Innovate Materiales firma como Innovate Materiales), repetirlo
+               abajo es leer dos veces lo mismo. -->
           <p class="demo-resenas__autor">
             <span class="demo-resenas__autor-nombre">{{ resena.autor }}</span>
-            <span v-if="resena.negocio" class="demo-resenas__autor-negocio">{{ resena.negocio }}</span>
+            <span
+              v-if="resena.negocio && resena.negocio !== resena.autor"
+              class="demo-resenas__autor-negocio"
+            >{{ resena.negocio }}</span>
           </p>
         </li>
       </ul>
@@ -80,52 +90,157 @@
           <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
         </a>
       </p>
+
+      <!-- ── Los testimonios en video (11/9/2026, misión experiencia-landing) ─────────
+           Tres cortes verticales de Mariel, en la MISMA sección que las reseñas: son la
+           misma cosa (gente real contando cómo le fue), dicha de otra forma. Van después
+           del enlace a Google y no antes, para que el bloque de Google cierre con su link
+           y el de video abra con su propio subtítulo.
+
+           Cada <video> baja SOLO los metadatos (`preload="metadata"`: los tres MP4 tienen
+           el `moov` al principio, medido, así que son ~35 KB por video y no los 8-11 MB
+           del archivo); no hay autoplay ni `muted`: se escuchan cuando el lead les da
+           play, y `playsinline` es para que en iPhone no se abran a pantalla completa.
+           El `#t=0.001` del `src` es para que Safari pinte el primer cuadro: sin él, iOS
+           muestra un rectángulo negro con el botón de play, que sobre el tema claro es
+           una mancha. -->
+      <div class="demo-resenas__testimonios">
+        <p class="demo-resenas__testimonios-titulo demo-resenas__paso">
+          Mariel, de Innovate Materiales, cuenta cómo era antes.
+        </p>
+        <ul class="demo-resenas__videos">
+          <li
+            v-for="testimonio in testimonios"
+            :key="testimonio.url"
+            class="demo-resenas__video demo-resenas__paso"
+          >
+            <p class="demo-resenas__video-frase">{{ testimonio.frase }}</p>
+            <video
+              class="demo-resenas__video-reproductor"
+              :src="testimonio.url + '#t=0.001'"
+              :aria-label="'Testimonio de Mariel, de Innovate Materiales: ' + testimonio.frase"
+              preload="metadata"
+              controls
+              playsinline
+            ></video>
+            <p class="demo-resenas__video-autor">Mariel · Innovate Materiales</p>
+          </li>
+        </ul>
+      </div>
     </div>
   </section>
 </template>
 
 <script>
 /**
- * 🔴 ESTA SECCIÓN NO TIENE DATOS, Y NO SE INVENTAN.
+ * 🔴 LOS DATOS SON LOS DE LA FICHA REAL DE GOOGLE, Y NO SE INVENTAN.
  * ═══════════════════════════════════════════════════════════════════════════════════════
  *
- * Al 10/9/2026 **no existe ninguna fuente de reseñas de Google en ningún repo**: se buscó
- * en `comerciocity-web`, en `admin-spa`, en `admin-api` y en el repo de conocimiento. Se le
- * pidió a Lucas el link de su perfil de Google Business y todavía no llegó.
+ * Hasta el 11/9/2026 esta sección estaba VACÍA a propósito: no existía ninguna fuente de
+ * reseñas en ningún repo, se le pidió el perfil a Lucas y hasta que llegó el array quedó
+ * en `[]` y la sección no renderizaba nada (el `v-if` de la raíz sigue ahí por si alguna
+ * vez vuelve a quedar vacío). Ese día Lucas pasó el link de la ficha de Google Business
+ * de ComercioCity (misión experiencia-landing) y de ahí se copió todo lo de abajo.
  *
- * Lo que hay construido acá es **el hueco**: el maquetado entero, listo, alimentado por un
- * array que arranca vacío. Con el array vacío la sección no renderiza nada (el `v-if` está
- * en la raíz), así que se puede mergear y desplegar sin que se vea un bloque a medias.
+ * ── DE DÓNDE SALE CADA COSA ───────────────────────────────────────────────────────────
  *
- * ── QUÉ HAY QUE COMPLETAR ──────────────────────────────────────────────────────────────
+ * - `PERFIL_GOOGLE`: la URL pública de la ficha. Es a donde va "Ver todas en Google".
  *
- * 1. `PERFIL_GOOGLE`: la URL pública del perfil de ComercioCity en Google Business. Sale
- *    del propio Lucas (es el dueño de la ficha). Mientras sea `null`, el enlace "Ver todas
- *    en Google" no se muestra.
+ * - `RESENAS`: una entrada por reseña CON TEXTO, copiada TAL CUAL de la ficha, con su
+ *   ortografía, sus signos repetidos y sus emojis. Son cuatro.
  *
- * 2. `RESENAS`: una entrada por reseña, copiada TAL CUAL de la ficha de Google. Forma:
- *
- *        {
- *          autor: 'Nombre y apellido, como figura en Google',
- *          negocio: 'Nombre del comercio',   // opcional, si se sabe cuál es
- *          estrellas: 5,                     // número entero de 1 a 5, el de Google
- *          texto: 'El texto de la reseña, textual.',
- *        }
+ * - `PROMEDIO_GOOGLE` y `CANTIDAD_GOOGLE`: el promedio y la cantidad que muestra la ficha
+ *   (5,0 · 5 reseñas). 🔴 Van como constantes explícitas y NO derivadas del array, y esto
+ *   es al revés de lo que decía este comentario hasta el 11/9: la ficha tiene CINCO
+ *   reseñas y acá hay CUATRO tarjetas, porque la quinta (Rafael Fossaceca, 5 estrellas)
+ *   no tiene texto -- cuenta para el promedio y la cantidad de Google, pero no hay nada
+ *   que mostrar en una tarjeta. Derivar "4 reseñas" del array sería contradecir lo que el
+ *   lead ve al tocar el link. Si se suma o se saca una reseña, hay que refrescar los DOS
+ *   números a mano mirando la ficha.
  *
  * 🔴 Cada campo se copia de la ficha real. No se redacta, no se "mejora la redacción", no
- * se completa el `negocio` a ojo y no se inventa una reseña para llenar la grilla: son
- * testimonios de personas reales y fabricar uno solo es fabricar el testimonio de alguien.
- * El promedio y la cantidad NO se escriben a mano: salen de este array, así que no pueden
- * quedar desfasados de lo que se muestra.
+ * se completa el `negocio` a ojo (va sólo cuando el propio autor lo dice o es el nombre del
+ * comercio) y no se inventa una reseña para llenar la grilla: son testimonios de personas
+ * reales y fabricar uno solo es fabricar el testimonio de alguien.
  *
  * Si algún día Google publica la ficha por API, esto se reemplaza por una carga desde el
  * backend; hasta entonces es una copia a mano y hay que refrescarla a mano.
  * ═══════════════════════════════════════════════════════════════════════════════════════
  */
-const PERFIL_GOOGLE = null
+const PERFIL_GOOGLE = 'https://maps.app.goo.gl/xQqz5B2BurGHxXyU7'
 
-/** @type {Array<{autor: string, negocio?: string, estrellas: number, texto: string}>} */
-const RESENAS = []
+/** Promedio de la ficha de Google, tal como lo muestra Google. Ver el bloque de arriba. */
+const PROMEDIO_GOOGLE = 5
+
+/** Cantidad de reseñas de la ficha (incluye la que no tiene texto). Ver el bloque de arriba. */
+const CANTIDAD_GOOGLE = 5
+
+/**
+ * Las cuatro reseñas con texto, textuales. `negocio` es `null` cuando el autor no lo dice:
+ * no se adivina.
+ *
+ * @type {Array<{autor: string, negocio: string|null, estrellas: number, texto: string}>}
+ */
+const RESENAS = [
+  {
+    autor: 'Innovate Materiales',
+    negocio: 'Innovate Materiales',
+    estrellas: 5,
+    texto:
+      'Excelente el programa, súper completo y la atención de Lucas un 10! Enseñan súper ' +
+      'claro a usarlo, paciencia extra a los emprendedores que tenemos todo desordenado🤭, ' +
+      'incluso fueron adaptando muchas cosas que pedíamos específicas para nuestro rubro! ' +
+      'Todo personalizado, ya vamos 1 año y sigue igual la atención y el soporte cuando no ' +
+      'entendes algo! Realmente el negocio no habría progresado sin el orden que no dio ' +
+      'esto! Fue una decisión acertada😃',
+  },
+  {
+    autor: 'Elkri ticon',
+    negocio: null,
+    estrellas: 5,
+    texto:
+      'Lo estoy usando en mi local hace varios años, me ayudo mucho a ordenar un montón de ' +
+      'datos sueltos, llevo al día el stock, devoluciones, facturación, compras.\n' +
+      'Aparte, Lucas(genio), siempre estuvo ayudándonos desde el principio hasta que le ' +
+      'agarramos la mano. Siempre sumando también nuevas herramientas que le hemos ' +
+      'solicitado, y respondiendo siempre en las complicaciones y dudas que han aparecido. ' +
+      'Aparte de varias herramientas más.',
+  },
+  {
+    autor: 'Sergio Srebernich',
+    negocio: null,
+    estrellas: 5,
+    texto:
+      'Excelente Sistema!! Me cambio la vida para mejor!! Ya que en esta bendita económica ' +
+      'variable que tenemos, @ComercioCity me lo soluciono! Muy recomendable.',
+  },
+  {
+    autor: 'Secure Point - Del Viso -',
+    negocio: 'Secure Point',
+    estrellas: 5,
+    texto:
+      'Muy buen sistema de gestión financiera, muy sencillo de entender y usar ! Lo ' +
+      'recomendamos!!',
+  },
+]
+
+/**
+ * Los testimonios en video: tres cortes verticales (9:16) de Mariel, de Innovate
+ * Materiales, filmados para la demo y subidos al bucket público de R2 (misión
+ * experiencia-landing, 11/9/2026). Son externos a propósito: pesan entre 8 y 11 MB cada
+ * uno y no van dentro del repo. La `frase` es el rótulo corto que va arriba de cada uno,
+ * una cita de lo que Mariel dice en ese corte.
+ *
+ * @type {Array<{frase: string, url: string}>}
+ */
+const TESTIMONIOS = [
+  { frase: 'Un lío total.', url: 'https://videos.comerciocity.store/test-mariel-01-lio-total.mp4' },
+  {
+    frase: 'Hubo una persona detrás.',
+    url: 'https://videos.comerciocity.store/test-mariel-06-bots-vs-persona.mp4',
+  },
+  { frase: 'Aliviada.', url: 'https://videos.comerciocity.store/test-mariel-09-aliviada.mp4' },
+]
 
 /** Path de una estrella de 5 puntas en una caja de 24×24. */
 const ESTRELLA =
@@ -147,10 +262,11 @@ function acotar(valor) {
 }
 
 /**
- * Las reseñas de Google de ComercioCity.
+ * Las reseñas de Google de ComercioCity, y los testimonios en video de Mariel.
  *
- * Ver el bloque de arriba: hoy la sección está vacía a propósito y no renderiza nada.
- * Todo lo que sigue es el maquetado que se enciende solo cuando `RESENAS` tenga entradas.
+ * Ver el bloque de arriba: los datos son los de la ficha real. Si `RESENAS` quedara vacío
+ * la sección entera no renderiza nada (v-if en la raíz), y todo lo que sigue es el
+ * maquetado que se enciende solo cuando tiene entradas.
  *
  * La entrada de cada renglón es función pura del progreso del bloque (no un
  * IntersectionObserver de una sola vía, que no tiene marcha atrás al subir y ya costó tres
@@ -176,13 +292,23 @@ export default {
         window.matchMedia('(prefers-reduced-motion: reduce)').matches,
       ESTRELLA: ESTRELLA,
       PERFIL_GOOGLE: PERFIL_GOOGLE,
+      PROMEDIO_GOOGLE: PROMEDIO_GOOGLE,
+      CANTIDAD_GOOGLE: CANTIDAD_GOOGLE,
     }
   },
 
   computed: {
+    /* Los dos arrays van por `computed` y no por `data`, como en SeccionClientes.vue: lo
+       que entra a data() lo vuelve Vue un proxy reactivo, y son constantes de módulo. */
+
     /** @returns {Array} */
     resenas() {
       return RESENAS
+    },
+
+    /** @returns {Array} */
+    testimonios() {
+      return TESTIMONIOS
     },
 
     /** @returns {boolean} */
@@ -191,24 +317,11 @@ export default {
     },
 
     /**
-     * Promedio real de las reseñas cargadas. No se escribe a mano en ningún lado: si el
-     * array cambia, el número que se muestra cambia con él.
-     *
-     * @returns {number}
+     * @returns {string} El promedio de la ficha con una decimal y coma, como se escribe en
+     *   castellano ("5,0"). Sale de PROMEDIO_GOOGLE, no del array: ver el bloque de arriba.
      */
-    promedio() {
-      if (!RESENAS.length) {
-        return 0
-      }
-
-      const suma = RESENAS.reduce((total, resena) => total + Number(resena.estrellas || 0), 0)
-
-      return suma / RESENAS.length
-    },
-
-    /** @returns {string} Promedio con una decimal y coma, como se escribe en castellano. */
     promedio_texto() {
-      return this.promedio.toFixed(1).replace('.', ',')
+      return PROMEDIO_GOOGLE.toFixed(1).replace('.', ',')
     },
 
     /** @returns {Object|null} */
@@ -525,10 +638,10 @@ export default {
   text-align: left;
 }
 
-/* Superficie oscura (misión paleta-oscura-experiencia, 10/9/2026), mismo criterio que
+/* Superficie del tema (misión paleta-oscura-experiencia, 10/9/2026), mismo criterio que
    .demo-nueva-era__pilar: es contenido real (la reseña), no un chip de cliente, así que
-   usa --demo-color-superficie en vez de blanco. La sección sigue vacía (RESENAS = []) --
-   esto deja el terreno listo para cuando lleguen los datos, no algo que se vea hoy. */
+   usa --demo-color-superficie en vez de blanco. Se ve desde el 11/9/2026, cuando entraron
+   las reseñas reales. */
 .demo-resenas__tarjeta {
   display: flex;
   flex-direction: column;
@@ -544,6 +657,9 @@ export default {
   font-size: clamp(0.98rem, 1.35vw, 1.08rem);
   line-height: 1.55;
   color: var(--demo-color-texto-suave);
+  /* Una de las reseñas trae un salto de línea escrito por su autor: se respeta, como el
+     resto del texto. `pre-line` muestra ese salto y sigue envolviendo lo demás. */
+  white-space: pre-line;
 }
 
 .demo-resenas__autor {
@@ -580,10 +696,100 @@ export default {
   text-decoration: underline;
 }
 
-/* Tablet y para arriba: las tarjetas en tres columnas. En teléfono van apiladas. */
+/* ── Los testimonios en video ──────────────────────────────────────────────────────────
+   Tres cortes verticales 9:16. Todo el color sale de las variables --demo-color-*, así
+   que el bloque se ve bien en los dos temas sin una regla por tema.
+
+   🔴 En teléfono van APILADOS, uno por fila, y no en un carrusel horizontal -- y no es
+   por gusto: el avance guiado de la página (avance-guiado.js) corta el `touchmove`
+   nativo con preventDefault cuando hay una sección vecina a la que ir, y sólo deja pasar
+   el gesto dentro de un scroller VERTICAL propio (`dentro_de_scroll_propio()` mira
+   `overflowY`). Un scroller horizontal quedaría trabado según dónde esté parado el lead.
+   Apilados, cada video mide como mucho 270px de ancho (480 de alto) y entran de a uno
+   con su rótulo en cualquier teléfono de 640px de alto para arriba. */
+.demo-resenas__testimonios {
+  margin: clamp(56px, 8vw, 96px) 0 0;
+}
+
+/* Sin `max-width`: es una sola oración y en escritorio entra en una línea; donde no
+   entra (teléfono), `balance` reparte las dos líneas en vez de dejar una palabra sola. */
+.demo-resenas__testimonios-titulo {
+  margin: 0 auto clamp(20px, 3vw, 32px);
+  font-size: clamp(1.15rem, 2.2vw, 1.5rem);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  color: var(--demo-color-texto);
+  text-wrap: balance;
+}
+
+.demo-resenas__videos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: clamp(28px, 4vw, 40px);
+}
+
+/* Ancho tope de 270px: un vertical más ancho que eso, en escritorio, se vuelve una
+   columna de 500px de alto que domina la pantalla y le saca el aire a la sección. */
+.demo-resenas__video {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 270px;
+}
+
+/* La frase de Mariel, como rótulo: es lo que se lee antes de decidir darle play. */
+.demo-resenas__video-frase {
+  margin: 0;
+  font-size: clamp(1rem, 1.4vw, 1.12rem);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--demo-color-texto);
+}
+
+/* `aspect-ratio` reserva el alto antes de que lleguen los metadatos: sin eso la grilla
+   salta cuando cada video descubre su tamaño. El fondo es el de superficie del tema, así
+   que mientras no hay cuadro que mostrar el rectángulo se lee como una tarjeta más, no
+   como un agujero negro. */
+.demo-resenas__video-reproductor {
+  display: block;
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  border-radius: 16px;
+  border: 1px solid var(--demo-color-borde-superficie);
+  background: var(--demo-color-superficie);
+  object-fit: cover;
+}
+
+.demo-resenas__video-autor {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--demo-color-texto-suave);
+}
+
+/* Tablet y para arriba: las tarjetas en DOS columnas y los tres videos en fila (a 768px
+   cada columna de video da ~225px, que es un vertical cómodo). En teléfono va todo
+   apilado.
+
+   Dos columnas y no tres para las reseñas, y es por el dato: son CUATRO (ver RESENAS).
+   Con tres columnas la cuarta queda sola en una segunda fila, pegada a la izquierda, y
+   se lee como si faltara algo -- visto en la página real el 11/9/2026. En 2×2 el orden
+   del array deja las dos largas arriba y las dos cortas abajo, así que las filas quedan
+   parejas. Si algún día son seis, tres columnas vuelven a cerrar. */
 @media (min-width: 768px) {
   .demo-resenas__lista {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .demo-resenas__videos {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(16px, 2.4vw, 28px);
   }
 }
 

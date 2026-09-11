@@ -210,15 +210,27 @@ export const logos_clientes = clientes
   }))
 
 /**
- * Clientes con tienda online real, portados del mismo índice.
+ * Clientes con tienda online real: los primeros ocho portados del índice de
+ * `comerciocity-web`, los demás sumados el 11/9/2026 (misión experiencia-landing).
  *
- * 🔴 `plataforma` no está en el original y se agregó acá a propósito: Racing Parts vende
- * por **Tienda Nube**, no por nuestra tienda -- está integrado al sistema (por eso figura
- * en el índice de ecommerce de la web), pero la tienda no la hicimos nosotros. Mostrarlo
- * bajo "tiendas hechas con esta plataforma" sería una afirmación falsa, así que la sección
- * filtra por `plataforma === 'comerciocity'` y el número que se muestra sale de ese filtro,
- * nunca escrito a mano. Si mañana Racing Parts pasa a nuestra tienda, se cambia el campo
- * acá y el texto de la página se corrige solo.
+ * 🔴 `plataforma` no está en el original y se agregó acá a propósito: no todas las tiendas
+ * las hicimos nosotros. Las de `'comerciocity'` son nuestra tienda (`tienda-spa`, sobre la
+ * misma base que el sistema); las de `'tiendanube'` son tiendas de **Tienda Nube**
+ * conectadas al sistema por la integración (el catálogo y el stock salen de acá, la
+ * vidriera es de ellos).
+ *
+ * Hasta el 11/9/2026 la sección mostraba SOLO las de `'comerciocity'`, para no decir
+ * "tiendas hechas con esta plataforma" de una que no hicimos. Ese día Lucas cambió la
+ * decisión: las de Tienda Nube también se muestran, porque están integradas al sistema y
+ * eso es exactamente lo que se le vende al lead ("vendé en todos lados"). Lo que evita la
+ * afirmación falsa ya no es esconderlas: es la etiqueta por plataforma que cada tarjeta
+ * lleva en SeccionClientes.vue ("Tienda ComercioCity" / "Tienda Nube"). Por eso el campo
+ * tiene que ser VERDADERO tienda por tienda -- se mira el HTML de la tienda, no el nombre
+ * del cliente (ver la nota de `trama`).
+ *
+ * `activa: false` saca una tienda de la página sin borrar su entrada: es para las que hoy
+ * no se pueden abrir. El número que se muestra sale de `tiendas_de_clientes`, nunca
+ * escrito a mano.
  */
 export const clientes_ecommerce = [
   {
@@ -240,7 +252,12 @@ export const clientes_ecommerce = [
     nombre: 'Trama',
     rubro: 'Ferretería',
     url: 'https://tramaferreteria.com.ar/',
-    plataforma: 'comerciocity',
+    // Venía como 'comerciocity' del índice de la web, y NO lo es: medido el 11/9/2026, el
+    // HTML de tramaferreteria.com.ar es una vidriera de Tienda Nube
+    // (`LS.store.url = "tramaferreteria.mitiendanube.com"`, `custom_url` el dominio propio),
+    // sin rastro de tienda-spa. Con la etiqueta por plataforma en la tarjeta, dejarlo como
+    // estaba le pondría "Tienda ComercioCity" a una tienda que no hicimos.
+    plataforma: 'tiendanube',
   },
   {
     id: 'truvari',
@@ -276,13 +293,85 @@ export const clientes_ecommerce = [
     rubro: 'Importadora',
     url: 'https://dosrracingparts.mitiendanube.com/',
     plataforma: 'tiendanube',
+    // Tienda suspendida al 11/9/2026: la URL responde "La tienda fue momentáneamente
+    // suspendida" (título de la página, medido ese día). Se vuelve a prender cuando Lucas
+    // pase otra URL, o la misma si la reactivan -- la entrada queda para no perder el dato.
+    activa: false,
+  },
+
+  /* ── Sumadas el 11/9/2026 (misión experiencia-landing). URLs verificadas ese día
+     (HTTP 200) y plataforma confirmada mirando el HTML de cada una: las tres de
+     `'comerciocity'` sirven la shell de tienda-spa; las tres de `'tiendanube'` traen la
+     vidriera de Tienda Nube. El rubro sale de lo que la propia tienda dice de sí misma
+     cuando el plan no lo traía (Golden Breeze: "arenas para gato, alimentos húmedos";
+     3DTisk: "venta de impresoras 3D, insumos, repuestos"). ── */
+  {
+    id: 'tiju',
+    nombre: 'Tiju Distribuidora',
+    rubro: 'Distribuidora',
+    url: 'https://tijudistribuidora.com.ar/',
+    plataforma: 'comerciocity',
+  },
+  {
+    id: 'grupolimp',
+    nombre: 'Grupo Limp',
+    rubro: 'Limpieza',
+    url: 'https://grupolimp.com.ar/',
+    plataforma: 'comerciocity',
+  },
+  {
+    id: 'quino2',
+    nombre: 'Quino2',
+    rubro: 'Distribuidora',
+    url: 'https://quino2.com.ar/',
+    plataforma: 'comerciocity',
+  },
+  {
+    id: 'unicas',
+    nombre: 'Unicas',
+    rubro: 'Productos capilares',
+    url: 'https://unicas.com.ar/',
+    plataforma: 'comerciocity',
+    // 🔴 Apagada a propósito, y es distinto de lo que decía el plan del 11/9/2026 (que la
+    // traía como tienda activa). Medido ese mismo día: unicas.com.ar responde 200 pero es
+    // un sitio institucional estático (Bootstrap, hecho por xentsoft.com) que sólo enlaza
+    // a WhatsApp, Facebook e Instagram -- no hay carrito ni catálogo, no es una tienda. En
+    // el admin de producción tampoco hay un `client_ecommerce` de Unicas (sí lo hay para
+    // tiju, grupolimp y quino2), y ni tienda.unicas.com.ar ni api.unicas.com.ar resuelven.
+    // Mostrarla bajo "también venden por internet" sería falso. Si Lucas pasa la URL de
+    // una tienda real, se cambia `url` y se saca esta línea.
+    activa: false,
+  },
+  {
+    id: 'golden-breeze',
+    nombre: 'Golden Breeze',
+    rubro: 'Mascotas',
+    url: 'https://goldenbreeze.mitiendanube.com/',
+    plataforma: 'tiendanube',
+  },
+  {
+    id: 'innovate',
+    nombre: 'Innovate Materiales',
+    rubro: 'Materiales de construcción',
+    url: 'https://www.innovatemateriales.com.ar/',
+    plataforma: 'tiendanube',
+  },
+  {
+    id: '3dtisk',
+    nombre: '3DTisk',
+    rubro: 'Impresión 3D',
+    url: 'https://3dtisk.com.ar/',
+    plataforma: 'tiendanube',
   },
 ].map((cliente) => ({
   ...cliente,
   logo: logo_cliente(cliente.id),
 }))
 
-/** Las tiendas hechas con esta plataforma, que son las que la página puede mostrar como propias. */
-export const tiendas_comerciocity = clientes_ecommerce.filter(
-  (cliente) => cliente.plataforma === 'comerciocity',
-)
+/**
+ * Las tiendas que la página muestra: las activas, de las DOS plataformas (decisión de
+ * Lucas del 11/9/2026, ver el comentario de `clientes_ecommerce`). Reemplaza a
+ * `tiendas_comerciocity`, que filtraba por `plataforma === 'comerciocity'` y ya no la
+ * importa nadie.
+ */
+export const tiendas_de_clientes = clientes_ecommerce.filter((cliente) => cliente.activa !== false)
