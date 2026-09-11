@@ -166,6 +166,14 @@
 	color: var(--demo-color-texto);
 }
 
+// 🔴 Esta clase NO llega a `.animacion-procesador` (la escena del procesador, primera
+// sección de la página) -y es a propósito, decisión de Lucas: "siempre oscura, pase lo
+// que pase". Esa escena tiene sus colores escritos a mano en AnimacionProcesador.vue,
+// pensados para fondo casi negro, y no lee ninguna variable --demo-color-*. Con
+// tema=claro el lead ve esa sección oscura seguida del resto de la página clara -es
+// consecuencia sabida de la decisión, no un bug. Ver el comentario largo en
+// ScrollDolor.vue, arriba de <animacion-procesador>.
+
 // RETIRADO (grupo 348, prompt 03): acá vivía @keyframes demo-bloque-entrada, la
 // entrada de los bloques 1-5 y el cierre. La disparaba un IntersectionObserver de
 // una sola vía (clase --visible + forwards + unobserve), que no tenía marcha atrás

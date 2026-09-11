@@ -26,6 +26,22 @@
          🔴 Y solo ADELANTA: la animación corre sola a su ritmo (24,4 s) y el scroll la
          empuja hacia adelante, nunca hacia atrás. Es lo que pidió Lucas -- el que tiene
          paciencia la ve entera, el que no, llega al mensaje sin frustrarse. -->
+    <!-- 🔴 <animacion-procesador> NO PARTICIPA del tema claro/oscuro (misión
+         tema-experiencia-configurable, 10/9/2026), y esto es una decisión de Lucas, no
+         un bug ni un olvido: "siempre oscura, pase lo que pase". Sus colores -el
+         resplandor, las líneas de circuito, el degradé de fondo- están escritos a mano
+         en AnimacionProcesador.vue pensados específicamente para verse sobre casi negro;
+         no leen ninguna variable --demo-color-*. Diseñar una versión clara sería repetir
+         buena parte del trabajo de portar la animación, no un ajuste de tema, y Lucas
+         eligió no encargarla.
+
+         Consecuencia que hay que saber si se vuelve a tocar esto: con tema="claro", el
+         lead ve la animación oscura (320vh) seguida del resto de la página clara -- el
+         mismo tipo de corte que la misión paleta-oscura-experiencia vino a evitar,
+         reaparecido acá por la decisión de arriba, no por descuido. Si el día de mañana
+         alguien "arregla" esto agregando la clase --claro adentro de
+         <animacion-procesador>, va a chocar con colores que no tienen equivalente claro
+         definido en ningún lado: hay que preguntarle a Lucas antes, no inferirlo. -->
     <!-- 🔴 Bajo reduced-motion la sección NO se pinnea, y no es una sutileza: el
          `min-height: 320vh` que FondoSeccionSticky escribe como estilo inline no lo
          puede sacar ninguna regla CSS (un inline gana), así que el bloque de
