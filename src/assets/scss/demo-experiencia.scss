@@ -100,6 +100,26 @@
 	--demo-color-superficie: linear-gradient(160deg, #1c2b4b 0%, #0c1424 100%);
 	--demo-color-borde-superficie: rgba(126, 172, 255, 0.2);
 
+	// 🔴 El botón de avance de FondoSeccionSticky.vue -encontrado en la verificación
+	// independiente, no en la construcción original: ese archivo no está en la lista de
+	// componentes de esta misión, así que nadie lo miró hasta que el chequeo navegó la
+	// app real y lo encontró roto. Sus valores fijos (rgba(255,255,255,.42) de fondo,
+	// rgba(86,96,120,.28) de borde) están pensados para blanco-sobre-claro: sobre el
+	// fondo oscuro nuevo, ese mismo blanco al 42% compone un GRIS MEDIO
+	// (#696b71, medido) contra el que --demo-color-texto-suave (ahora claro) da 2,11:1
+	// -por debajo del mínimo de 3:1 que exige WCAG 1.4.11 para un control de interfaz.
+	// Con estos tres tokens el botón usa <fondo-seccion-sticky> SOLO dentro de esta
+	// sección (las tres instancias de la página viven todas adentro de
+	// .demo-scroll-dolor), así que se resuelven acá; fuera de este scope, el propio
+	// componente cae en su fallback original (ver el var(...,) en FondoSeccionSticky.vue),
+	// sin romper si algún día se usa en un contexto claro.
+	// alpha 0,14 y no 0,42: medido, da un contraste de 5,83:1 -sobra margen sobre el
+	// mínimo- y de paso el círculo queda MÁS sutil, que es literalmente lo que ese botón
+	// pide ("si se nota más que el contenido de la sección, está mal").
+	--demo-color-avance-fondo: rgba(244, 247, 253, 0.14);
+	--demo-color-avance-borde: rgba(153, 163, 186, 0.28);
+	--demo-color-avance-borde-hover: rgba(153, 163, 186, 0.5);
+
 	background: var(--demo-color-fondo);
 	color: var(--demo-color-texto);
 }
