@@ -427,14 +427,19 @@ export default {
   gap: clamp(12px, 1.6vw, 18px);
 }
 
+/* Superficie oscura (misión paleta-oscura-experiencia, 10/9/2026): antes era una
+   tarjeta blanca -tenía sentido con la página clara de entonces. Ahora usa el mismo
+   fondo que las tarjetas de problema de la animación (--demo-color-superficie,
+   definida en demo-experiencia.scss junto al resto del tema oscuro), para que un
+   pilar de "nueva era" y una tarjeta de la animación lean como el mismo sistema. */
 .demo-nueva-era__pilar {
   display: flex;
   align-items: flex-start;
   gap: 12px;
   padding: clamp(14px, 1.8vw, 20px);
-  border: 1px solid rgba(28, 35, 51, 0.07);
+  border: 1px solid var(--demo-color-borde-superficie);
   border-radius: 14px;
-  background: #fff;
+  background: var(--demo-color-superficie);
 }
 
 .demo-nueva-era__pilar-disco {
@@ -445,7 +450,10 @@ export default {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: rgba(11, 132, 248, 0.1);
+  /* Mismo tono que usa la animación para sus cajas de ícono
+     (.animacion-procesador__caja-icono) -no un azul nuevo inventado para acá. */
+  background: rgba(47, 123, 255, 0.14);
+  border: 1px solid var(--demo-color-borde-superficie);
   color: var(--demo-color-azul);
   font-size: 1rem;
 }

@@ -797,10 +797,16 @@ export default {
   flex: 1 1 auto;
 }
 
+/* 🔴 Colores FIJOS, no var(--demo-color-texto/-suave) -- encontrado en la
+   verificación de la misión paleta-oscura-experiencia (10/9/2026). Esta tarjeta
+   (.demo-clientes__tienda-link) es un chip CLARO a propósito, igual que los logos de
+   la pared: no se invierte con el tema oscuro de la página. Con la variable, el texto
+   quedaba blanco sobre una tarjeta blanca -invisible. Mismo motivo por el que
+   .demo-cubo__cara-titulo tampoco usa la variable. */
 .demo-clientes__tienda-nombre {
   font-size: 0.92rem;
   font-weight: 600;
-  color: var(--demo-color-texto);
+  color: #1c2333;
   /* Un nombre largo tiene que recortarse, nunca ensanchar la tarjeta. */
   overflow: hidden;
   text-overflow: ellipsis;
@@ -809,16 +815,18 @@ export default {
 
 .demo-clientes__tienda-rubro {
   font-size: 0.78rem;
-  color: var(--demo-color-texto-suave);
+  color: #566078;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* Fijo, mismo motivo que __tienda-nombre/-rubro arriba: vive sobre el chip claro, no
+   sobre el fondo de la página. */
 .demo-clientes__tienda-flecha {
   flex: 0 0 auto;
   font-size: 0.85rem;
-  color: var(--demo-color-texto-suave);
+  color: #566078;
 }
 
 /* Teléfono chico (360×640, que es el piso que hay que bancar): siete tarjetas apiladas más
