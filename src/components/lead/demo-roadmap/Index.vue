@@ -28,115 +28,149 @@
         No se pudo leer el recorrido. Si el problema sigue, recargá la página.
       </p>
 
-      <!-- Sin plan: una línea y nada más. Es el estado normal de casi todos los leads, así que no
-           lleva spinner, ni tabla vacía, ni botón que invite a arreglar algo que no está roto. -->
-      <p v-else-if="!tiene_plan" class="small text-muted mb-0">
-        El recorrido se arma cuando el lead completa el formulario de la página.
-      </p>
-
       <template v-else>
-        <!-- Errores del catálogo. Es un typo del repo que se sincronizó a producción sin deploy:
-             tiene que verlo Lucas, no morir en un log. -->
-        <div v-if="condiciones_invalidas.length" class="alert alert-warning py-2 small mb-2">
-          <i class="bi bi-exclamation-triangle me-1"></i>
-          <span class="fw-semibold">El catálogo tiene condiciones que no se pudieron leer.</span>
-          <div v-for="(mala, i) in condiciones_invalidas" :key="i" class="mt-1">
-            {{ mala.tipo === 'seccion' ? 'Sección' : 'Clip' }} <code>{{ mala.id }}</code>:
-            <code>{{ mala.condicion }}</code>
+        <!-- La página de experiencia como landing (misión experiencia-landing, 11/9/2026): qué
+             hizo el lead con el link ANTES de tener demo -- la abrió, llegó hasta el botón, pidió
+             la demo. Va ARRIBA de los hitos porque pasa antes que todos ellos, y va también cuando
+             no hay plan, que es justamente el caso del lead que todavía está mirando la landing:
+             sin esto, la tarjeta le diría a Martín "el recorrido se arma cuando complete el
+             formulario" de un lead que ya tocó el botón.
+
+             `pagina` viene en `null` cuando el lead nunca abrió la página, y no viene (undefined)
+             contra un admin-api viejo: en los dos casos no se dibuja nada, igual que los chips de
+             los hitos -- no se afirma "no la abrió" cuando lo que pasa es que la API no lo sabe. -->
+        <div v-if="pagina" class="demo-roadmap-pagina pb-2 mb-1">
+          <div class="text-uppercase text-muted fw-semibold demo-roadmap-seccion mt-1 mb-1">
+            Página de experiencia
+          </div>
+          <div
+            v-for="estado in estados_pagina"
+            :key="estado.clave"
+            class="d-flex align-items-start gap-2 py-1"
+          >
+            <!-- Mismos íconos que los hitos: hecho en verde, pendiente en gris. No hay "parcial"
+                 acá porque cada uno de los tres es un hecho que pasó o no pasó. -->
+            <div class="flex-shrink-0">
+              <i v-if="estado.fecha" class="bi bi-check-circle-fill text-success"></i>
+              <i v-else class="bi bi-circle text-muted"></i>
+            </div>
+            <div
+              class="small min-width-0 demo-roadmap-titulo"
+              :class="estado.fecha ? 'fw-semibold text-success' : 'text-muted'"
+            >{{ estado.texto }}</div>
           </div>
         </div>
 
-        <!-- Los hitos, en orden, agrupados por sección. -->
-        <!-- La clave es el id de sección más su posición, no el índice solo: si el número de
-             grupos cambia entre ticks, Vue reusaría nodos por posición. -->
-        <div v-for="(grupo, gi) in grupos" :key="(grupo.id || 'ingreso') + '-' + gi">
+        <!-- Sin plan: una línea y nada más. Es el estado normal de casi todos los leads, así que no
+             lleva spinner, ni tabla vacía, ni botón que invite a arreglar algo que no está roto. -->
+        <p v-if="!tiene_plan" class="small text-muted mb-0">
+          El recorrido se arma cuando el lead completa el formulario de la página.
+        </p>
 
-          <!-- Separador de sección. El hito de ingreso va suelto arriba, sin encabezado. -->
-          <div
-            v-if="grupo.seccion"
-            class="text-uppercase text-muted fw-semibold demo-roadmap-seccion mt-2 mb-1"
-          >{{ grupo.seccion }}</div>
+        <template v-else>
+          <!-- Errores del catálogo. Es un typo del repo que se sincronizó a producción sin deploy:
+               tiene que verlo Lucas, no morir en un log. -->
+          <div v-if="condiciones_invalidas.length" class="alert alert-warning py-2 small mb-2">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            <span class="fw-semibold">El catálogo tiene condiciones que no se pudieron leer.</span>
+            <div v-for="(mala, i) in condiciones_invalidas" :key="i" class="mt-1">
+              {{ mala.tipo === 'seccion' ? 'Sección' : 'Clip' }} <code>{{ mala.id }}</code>:
+              <code>{{ mala.condicion }}</code>
+            </div>
+          </div>
 
-          <div
-            v-for="hito in grupo.hitos"
-            :key="hito.orden"
-            class="demo-roadmap-hito py-2"
-          >
-            <div class="d-flex align-items-start gap-2">
-              <!-- Ícono de estado. `parcial` NO usa semántica de error: no es una falla, es el
-                   dato más útil de la pantalla (dice dónde se trabó el lead). -->
-              <div class="flex-shrink-0 mt-1">
-                <i v-if="hito.estado === 'completo'" class="bi bi-check-circle-fill text-success"></i>
-                <i v-else-if="hito.estado === 'parcial'" class="bi bi-slash-circle demo-roadmap-parcial"></i>
-                <i v-else class="bi bi-circle text-muted"></i>
-              </div>
+          <!-- Los hitos, en orden, agrupados por sección. -->
+          <!-- La clave es el id de sección más su posición, no el índice solo: si el número de
+               grupos cambia entre ticks, Vue reusaría nodos por posición. -->
+          <div v-for="(grupo, gi) in grupos" :key="(grupo.id || 'ingreso') + '-' + gi">
 
-              <div class="flex-grow-1 min-width-0">
-                <!-- El parcial usa `demo-roadmap-parcial` y no `text-warning` a secas: el
-                     amarillo de Bootstrap sobre fondo blanco no llega a contraste AA, y
-                     justamente éste es el estado que más se lee. Mismo criterio que
-                     DemoExperienciaControl, que ya usa la variable de énfasis. -->
-                <div
-                  class="small fw-semibold demo-roadmap-titulo"
-                  :class="{
-                    'text-success':        hito.estado === 'completo',
-                    'demo-roadmap-parcial': hito.estado === 'parcial',
-                    'text-muted':          hito.estado === 'pendiente',
-                  }"
-                >{{ hito.titulo }}</div>
+            <!-- Separador de sección. El hito de ingreso va suelto arriba, sin encabezado. -->
+            <div
+              v-if="grupo.seccion"
+              class="text-uppercase text-muted fw-semibold demo-roadmap-seccion mt-2 mb-1"
+            >{{ grupo.seccion }}</div>
 
-                <!-- 🔴 Detalle del recorrido: cuánto vio del video y cuánto hizo del tour.
-                     Es lo que Lucas pidió el 1/9/2026 ("*quiero que cuando ya vio el video (...)
-                     me aparezca la información de que lo vio y la información de si lo probó*").
-
-                     Los chips los resuelve `chips_de()` y llegan acá ya armados desde la computed
-                     `grupos`. La lista viene VACÍA cuando no hay nada que decir — incluido el caso
-                     de un `admin-api` VIEJO, donde los cinco campos vienen `undefined` y acá no se
-                     dibuja ni un chip vacío ni un "0%".
-                     `flex-wrap` porque en el teléfono los dos chips no entran en una línea. -->
-                <div v-if="hito.chips.length" class="d-flex flex-wrap gap-1 mt-1">
-                  <span
-                    v-for="chip in hito.chips"
-                    :key="chip.clave"
-                    class="badge fw-normal"
-                    :class="chip.clase"
-                  >
-                    <i class="bi me-1" :class="chip.icono"></i>{{ chip.texto }}
-                  </span>
+            <div
+              v-for="hito in grupo.hitos"
+              :key="hito.orden"
+              class="demo-roadmap-hito py-2"
+            >
+              <div class="d-flex align-items-start gap-2">
+                <!-- Ícono de estado. `parcial` NO usa semántica de error: no es una falla, es el
+                     dato más útil de la pantalla (dice dónde se trabó el lead). -->
+                <div class="flex-shrink-0 mt-1">
+                  <i v-if="hito.estado === 'completo'" class="bi bi-check-circle-fill text-success"></i>
+                  <i v-else-if="hito.estado === 'parcial'" class="bi bi-slash-circle demo-roadmap-parcial"></i>
+                  <i v-else class="bi bi-circle text-muted"></i>
                 </div>
 
-                <!-- Texto de apoyo: la hora en el completo, y en el parcial el porqué —que ahora
-                     se deriva de los datos en vez de ser un texto fijo, ver `texto_del_parcial()`. -->
-                <div v-if="hito.estado === 'completo' && hito.accion_hecha_at" class="small text-muted mt-1">
-                  {{ hito.accion_hecha_at }}
-                </div>
-                <div v-else-if="hito.estado === 'parcial'" class="small text-muted mt-1">
-                  {{ texto_del_parcial(hito) }}
+                <div class="flex-grow-1 min-width-0">
+                  <!-- El parcial usa `demo-roadmap-parcial` y no `text-warning` a secas: el
+                       amarillo de Bootstrap sobre fondo blanco no llega a contraste AA, y
+                       justamente éste es el estado que más se lee. Mismo criterio que
+                       DemoExperienciaControl, que ya usa la variable de énfasis. -->
+                  <div
+                    class="small fw-semibold demo-roadmap-titulo"
+                    :class="{
+                      'text-success':        hito.estado === 'completo',
+                      'demo-roadmap-parcial': hito.estado === 'parcial',
+                      'text-muted':          hito.estado === 'pendiente',
+                    }"
+                  >{{ hito.titulo }}</div>
+
+                  <!-- 🔴 Detalle del recorrido: cuánto vio del video y cuánto hizo del tour.
+                       Es lo que Lucas pidió el 1/9/2026 ("*quiero que cuando ya vio el video (...)
+                       me aparezca la información de que lo vio y la información de si lo probó*").
+
+                       Los chips los resuelve `chips_de()` y llegan acá ya armados desde la computed
+                       `grupos`. La lista viene VACÍA cuando no hay nada que decir — incluido el caso
+                       de un `admin-api` VIEJO, donde los cinco campos vienen `undefined` y acá no se
+                       dibuja ni un chip vacío ni un "0%".
+                       `flex-wrap` porque en el teléfono los dos chips no entran en una línea. -->
+                  <div v-if="hito.chips.length" class="d-flex flex-wrap gap-1 mt-1">
+                    <span
+                      v-for="chip in hito.chips"
+                      :key="chip.clave"
+                      class="badge fw-normal"
+                      :class="chip.clase"
+                    >
+                      <i class="bi me-1" :class="chip.icono"></i>{{ chip.texto }}
+                    </span>
+                  </div>
+
+                  <!-- Texto de apoyo: la hora en el completo, y en el parcial el porqué —que ahora
+                       se deriva de los datos en vez de ser un texto fijo, ver `texto_del_parcial()`. -->
+                  <div v-if="hito.estado === 'completo' && hito.accion_hecha_at" class="small text-muted mt-1">
+                    {{ hito.accion_hecha_at }}
+                  </div>
+                  <div v-else-if="hito.estado === 'parcial'" class="small text-muted mt-1">
+                    {{ texto_del_parcial(hito) }}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Los datos siguen en pantalla pero son los del último tick bueno: se dice, en vez de
-             mostrarlos como si fueran de ahora. -->
-        <p v-if="hubo_error" class="small text-muted mb-0 mt-2">
-          <i class="bi bi-arrow-clockwise me-1"></i>
-          No se pudo actualizar; esto es lo último que se leyó.
-        </p>
+          <!-- Los datos siguen en pantalla pero son los del último tick bueno: se dice, en vez de
+               mostrarlos como si fueran de ahora. -->
+          <p v-if="hubo_error" class="small text-muted mb-0 mt-2">
+            <i class="bi bi-arrow-clockwise me-1"></i>
+            No se pudo actualizar; esto es lo último que se leyó.
+          </p>
 
-        <!-- Cuando el poleo llegó a su tope, se para y se ofrece el refresco a mano. -->
-        <div v-if="poleo_agotado" class="mt-2">
-          <button
-            type="button"
-            class="btn btn-outline-secondary btn-sm"
-            :disabled="cargando"
-            @click="reanudar_poleo"
-          >
-            <span v-if="cargando" class="spinner-border spinner-border-sm me-1"></span>
-            Actualizar
-          </button>
-        </div>
+          <!-- Cuando el poleo llegó a su tope, se para y se ofrece el refresco a mano. -->
+          <div v-if="poleo_agotado" class="mt-2">
+            <button
+              type="button"
+              class="btn btn-outline-secondary btn-sm"
+              :disabled="cargando"
+              @click="reanudar_poleo"
+            >
+              <span v-if="cargando" class="spinner-border spinner-border-sm me-1"></span>
+              Actualizar
+            </button>
+          </div>
+        </template>
       </template>
     </div>
   </div>
@@ -161,6 +195,10 @@ import api from '@/utils/axios'
  * hizo del tour— que salen de cinco campos nuevos del endpoint. **Los tres estados no cambiaron**:
  * los badges van al costado del estado, no lo reemplazan. Ver `chips_de()`, que además explica por
  * qué no se dibuja nada cuando esos campos no vienen.
+ *
+ * Desde el 11/9/2026 (misión experiencia-landing) arriba de los hitos va una fila con lo que el
+ * lead hizo en su página de experiencia ANTES de tener demo (la abrió, llegó al final, pidió la
+ * demo), leída de la clave opcional `pagina` del mismo endpoint. Ver `estados_pagina`.
  *
  * Props:
  *   lead {Object} - Lead del que se muestra el recorrido. Requerido.
@@ -187,6 +225,10 @@ export default {
       completos: 0,
       total: 0,
       hitos: [],
+      /* `{ abierta_at, final_at, cta_at, aperturas }` de la página de experiencia como landing
+       * (misión experiencia-landing, 11/9/2026), o null: tanto si el lead nunca la abrió como si
+       * la API todavía no manda la clave. Ver la computed `estados_pagina`. */
+      pagina: null,
 
       // Estado de la vista.
       cargando: false,
@@ -253,6 +295,47 @@ export default {
       })
 
       return grupos
+    },
+
+    /**
+     * Los tres hechos de la página de experiencia, listos para dibujar: abrió, llegó al final,
+     * pidió la demo. Siempre los tres, en ese orden, con o sin fecha -- lo que no pasó se dibuja
+     * atenuado, como un hito pendiente, porque el hueco también informa ("la abrió pero no llegó
+     * al botón" es lo que Martín necesita saber antes de escribirle).
+     *
+     * El texto lleva la fecha adentro ("Abierta el 11/09 14:32") en vez de una línea de apoyo
+     * como los hitos: son tres renglones de una fila secundaria, no el recorrido.
+     *
+     * @returns {Array} Lista de { clave, texto, fecha }. Vacía si no hay `pagina`.
+     */
+    estados_pagina() {
+      const pagina = this.pagina
+
+      if (!pagina || typeof pagina !== 'object') {
+        return []
+      }
+
+      /* "(N veces)" solo a partir de la segunda apertura: "(1 vez)" no dice nada que la fecha no
+       * diga ya. Y solo si el número es un entero razonable -- contra un valor raro se calla. */
+      const aperturas = parseInt(pagina.aperturas, 10)
+      const veces = isFinite(aperturas) && aperturas > 1 ? ' (' + aperturas + ' veces)' : ''
+
+      const self = this
+      const estado = function (clave, titulo, fecha, sufijo) {
+        const corta = self.fecha_corta(fecha)
+
+        return {
+          clave: clave,
+          fecha: corta,
+          texto: corta ? titulo + ' el ' + corta + (sufijo || '') : titulo,
+        }
+      }
+
+      return [
+        estado('abierta', 'Abierta', pagina.abierta_at, veces),
+        estado('final', 'Llegó al final', pagina.final_at),
+        estado('cta', 'Pidió la demo', pagina.cta_at),
+      ]
     },
   },
 
@@ -447,6 +530,32 @@ export default {
     },
 
     /**
+     * Una fecha `Y-m-d H:i:s` del backend como `dd/mm HH:mm`, que es lo que entra en un renglón
+     * de la tarjeta. Sin año: es una fila de "qué hizo esta semana", no un registro.
+     *
+     * Se recorta con una expresión regular y NO con `new Date()`: el backend manda la hora ya en
+     * la zona de Argentina y sin sufijo, y `Date` la leería como hora local del navegador (o UTC,
+     * según el formato), corriéndola tres horas para un operador con la máquina en otra zona.
+     * Lo que no matchea se devuelve tal cual, para no perderlo.
+     *
+     * @param {*} valor
+     * @returns {string} Vacía si no hay fecha.
+     */
+    fecha_corta(valor) {
+      if (typeof valor !== 'string' || valor.trim() === '') {
+        return ''
+      }
+
+      const partes = valor.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/)
+
+      if (!partes) {
+        return valor
+      }
+
+      return partes[3] + '/' + partes[2] + ' ' + partes[4] + ':' + partes[5]
+    },
+
+    /**
      * El texto de apoyo del estado `parcial`.
      *
      * 🔴 Hasta el 1/9/2026 acá había un texto fijo —*"Vio el tutorial, no llegó a hacerlo"*— que
@@ -633,6 +742,9 @@ export default {
           self.hitos = data.hitos || []
           self.completos = data.progreso ? data.progreso.completos : 0
           self.total = data.progreso ? data.progreso.total : 0
+          /* Objeto o nada: un `null` (nunca la abrió), un `undefined` (API vieja) o cualquier
+           * cosa que no sea un objeto dejan la fila sin dibujar. */
+          self.pagina = data.pagina && typeof data.pagina === 'object' ? data.pagina : null
           self.hubo_error = false
           self.cargo_alguna_vez = true
         })
@@ -739,6 +851,11 @@ export default {
 .demo-roadmap-seccion
 	font-size: .7rem
 	letter-spacing: .04em
+
+// La fila de la página de experiencia se separa de los hitos con la misma línea fina que los
+// separa entre sí: es un bloque distinto (pasa antes de la demo), pero de la misma familia.
+.demo-roadmap-pagina
+	border-bottom: 1px solid rgba(0, 0, 0, .05)
 
 // Ámbar oscuro en vez del `text-warning` de Bootstrap (#ffc107), que sobre el fondo blanco de la
 // tarjeta da ~1.6:1 y no llega a AA. `parcial` es el estado que más se lee de los tres: es el que
