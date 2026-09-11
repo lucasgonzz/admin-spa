@@ -629,6 +629,14 @@ export default {
       }
       /* Campos faltantes para habilitar el envío del mail de demo. */
       var missing = []
+      /* Dinámica nueva (misión demo-agendado-directo): el mail es la carta de acceso, con los
+         dos links; el backend sólo pide email e instancia asignada. Sin esta rama el botón
+         pedía documento y horarios que en esa dinámica no existen y nunca se habilitaba. */
+      if (this.record.demo_experiencia === 'nueva') {
+        if (!(this.record.email || '').trim()) { missing.push('email') }
+        if (!this.record.demo_id)              { missing.push('demo asignada') }
+        return missing.length === 0 ? null : 'Faltan: ' + missing.join(', ') + '.'
+      }
       if (!(this.record.contact_name || '').trim())    { missing.push('nombre') }
       if (!(this.record.email || '').trim())            { missing.push('email') }
       if (!(this.record.doc_number || '').trim())       { missing.push('documento') }

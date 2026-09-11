@@ -115,6 +115,21 @@
             :disabled="saving"
           />
         </div>
+        <div class="col-sm-5">
+          <label class="form-label small" for="demo_directa_no_show_minutos">Minutos desde el inicio de una demo directa sin que el lead entre para liberar la instancia</label>
+          <!-- Demo directa (misión demo-agendado-directo): pasado este tiempo sin ingreso, el turno se
+               da por perdido, la instancia queda libre para otro lead y cuando este vuelva se le
+               asigna una fresca. No se le manda ningún mensaje. -->
+          <input
+            id="demo_directa_no_show_minutos"
+            v-model.number="local.demo_directa_no_show_minutos"
+            type="number"
+            class="form-control form-control-sm"
+            min="0"
+            max="240"
+            :disabled="saving"
+          />
+        </div>
       </div>
 
       <!-- Campo: recordatorio de mañana de la demo -->
@@ -643,6 +658,8 @@ export default {
         recordatorio_minutos_antes: 15,
         /** Minutos sin mensajes (en ninguna dirección) antes de mandar el recordatorio de demo. */
         recordatorio_silencio_minutos: 30,
+        /** Minutos desde el inicio de una demo directa sin ingreso para liberar la instancia. */
+        demo_directa_no_show_minutos: 60,
         recordatorio_manana_hora: '09:00',
         /** Minutos desde que el lead termina el video de introducción hasta preguntarle si pudo ingresar. */
         check_ingreso_minutos_post: 10,
@@ -709,6 +726,8 @@ export default {
         recordatorio_minutos_antes: 15,
         /** Espejo del servidor: silencio previo al recordatorio de demo. */
         recordatorio_silencio_minutos: 30,
+        /** Espejo del servidor: no-show de la demo directa. */
+        demo_directa_no_show_minutos: 60,
         recordatorio_manana_hora: '09:00',
         check_ingreso_minutos_post: 10,
         /** Espejo del servidor: silencio previo al check de ingreso. */
@@ -972,6 +991,7 @@ export default {
           gracia_minutos_post:                 self.local.gracia_minutos_post,
           recordatorio_minutos_antes:          self.local.recordatorio_minutos_antes,
           recordatorio_silencio_minutos:       self.local.recordatorio_silencio_minutos,
+          demo_directa_no_show_minutos:        self.local.demo_directa_no_show_minutos,
           recordatorio_manana_hora:            self.local.recordatorio_manana_hora,
           check_ingreso_minutos_post:          self.local.check_ingreso_minutos_post,
           check_ingreso_silencio_minutos:      self.local.check_ingreso_silencio_minutos,
