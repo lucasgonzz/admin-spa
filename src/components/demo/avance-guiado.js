@@ -61,6 +61,34 @@ const SELECTOR_DESTINOS = [
   '.demo-formulario',
 ].join(', ')
 
+/* 🔴 Selector APARTE para "¿todavía hay contenido sin ver?" (11/9/2026), y no el mismo
+   SELECTOR_DESTINOS de arriba -- hasta acá eran la misma lista, y esa fusión era
+   justamente el bug: "Clientes actuales" nunca llegaba a verse con el avance guiado.
+
+   La cadena de causa, medida en el navegador (no deducida): el arreglo del 10/9/2026 de
+   arriba sacó `.demo-clientes` (la sección real, de ~380vh) de SELECTOR_DESTINOS para que
+   el ATERRIZAJE no cayera en su borde (pantalla en blanco), y puso en su lugar el marcador
+   de 1px `.demo-clientes__ancla` (ver SeccionClientes.vue). Eso resolvió el aterrizaje,
+   pero como `hay_contenido_sin_ver()` (más abajo) también lee de SELECTOR_DESTINOS, el
+   único nodo de esta sección que le queda visible ahora es ese marcador de 1px -- y un
+   marcador de 1px nunca mide más que el viewport, así que la condición "esta sección
+   todavía tiene contenido sin ver" dejó de activarse para TODO `.demo-clientes`. Resultado
+   real: el lead aterrizaba bien, viendo el número ("casi 50 negocios"), pero el próximo
+   gesto (el siguiente scroll natural, no hacía falta ni esperar) saltaba directo a la
+   sección siguiente, de largo sobre los ~380vh de la pared de logos y las tiendas -- esos
+   dos momentos no llegaban a verse nunca con el guiado, aunque sí aparecían scrolleando a
+   mano dentro de la sección (que es lo que hizo que este bug pasara desapercibido: probar
+   arrastrando la rueda sin pasar por el aterrizaje real no lo reproduce).
+
+   La misma fusión de listas beneficia a `.demo-hitos`, `.demo-nueva-era`, `.demo-resenas` y
+   `.demo-formulario` sin generar este problema: esas CUATRO están en SELECTOR_DESTINOS con
+   su nodo REAL (no un marcador chico), así que `hay_contenido_sin_ver()` ya las protege
+   sola. `.demo-clientes` es la única que necesita aparecer con dos identidades distintas:
+   el marcador chico para el aterrizaje, la sección real para "cuánto falta por ver" -- de
+   ahí que haga falta una segunda lista en vez de arreglar esto adentro de SELECTOR_DESTINOS
+   mismo. */
+const SELECTOR_CONTENIDO_ALTO = [SELECTOR_DESTINOS, '.demo-clientes'].join(', ')
+
 /* Cerrojo por TIEMPO desde que arranca un avance. Cubre lo que dura el
    desplazamiento suave más un margen: mientras corre, todo gesto nuevo se ignora. */
 const CERROJO_MS = 700
@@ -307,6 +335,11 @@ export default function crear_avance_guiado(scroller) {
    * secciones pinneadas no entran nunca por acá porque miden 1px: lo que se pinnea siempre
    * ocupa exactamente una pantalla.
    *
+   * 🔴 Lee SELECTOR_CONTENIDO_ALTO y no SELECTOR_DESTINOS (11/9/2026, ver el comentario
+   * largo junto a esa constante): `.demo-clientes` necesita entrar acá con su nodo REAL
+   * (~380vh), no con el marcador de 1px que usa `destinos()` para el aterrizaje -- son dos
+   * preguntas distintas sobre la misma sección y una lista sola no puede responder las dos.
+   *
    * @param {number} direccion
    * @returns {boolean}
    */
@@ -315,7 +348,7 @@ export default function crear_avance_guiado(scroller) {
     const base = scroller.getBoundingClientRect().top
     let sin_ver = false
 
-    scroller.querySelectorAll(SELECTOR_DESTINOS).forEach(function (nodo) {
+    scroller.querySelectorAll(SELECTOR_CONTENIDO_ALTO).forEach(function (nodo) {
       if (sin_ver) {
         return
       }
