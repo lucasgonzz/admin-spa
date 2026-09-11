@@ -5,16 +5,19 @@
       <p class="demo-nueva-era__parrafo demo-nueva-era__paso">
         Esto no es un sistema de gestión, es
         <strong class="demo-nueva-era__remate-inline">la mejor plataforma de Argentina</strong>
-        para automatizar tus operaciones diarias, ventas por internet, atención personal a
-        clientes por WhatsApp asistida por IA, imágenes automáticas y gestión de cuentas con
-        clientes y proveedores.
+        para automatizar tus operaciones diarias.
       </p>
     </div>
 
     <div ref="grupo_implementacion" class="demo-nueva-era__grupo" :style="estilo_implementacion">
       <p class="demo-nueva-era__parrafo demo-nueva-era__paso">
-        Pasar de un sistema a otro no es fácil, y lo sabemos: todos nuestros clientes venían
-        de un sistema que ya no les permitía crecer.
+        Pasar de un sistema a otro
+        <strong class="demo-nueva-era__enfasis">no es fácil</strong>,
+        <em
+          class="demo-nueva-era__tipeo"
+          :class="{ 'demo-nueva-era__tipeo--cursor': tipeo_cursor_visible }"
+        >{{ tipeo_texto }}</em>:
+        todos nuestros clientes venían de un sistema que ya no les permitía crecer.
       </p>
       <p class="demo-nueva-era__resaltado demo-nueva-era__paso">
         Por eso un pilar de nuestro servicio es la implementación personalizada.
@@ -67,6 +70,20 @@ const RECORRIDO = 0.45
 const ABANICO = 0.5
 
 /**
+ * Texto que se revela con efecto de máquina de escribir dentro del segundo párrafo
+ * (pedido de Lucas, 11/9/2026). Separado como constante -y no escrito directo en el
+ * template- porque el mismo string se usa para calcular cada substring tipeada Y como
+ * valor final bajo `prefers-reduced-motion`.
+ */
+const TEXTO_TIPEADO = 'y lo sabemos'
+/** Espera desde que la sección entra en el viewport hasta que arranca el tipeo, en ms.
+ *  Pedido explícito: 4 segundos, nunca al cargar la página. */
+const TIPEO_ESPERA_MS = 4000
+/** Cuánto tarda en aparecer cada letra, en ms. Ritmo de máquina de escribir real, ni
+ *  instantáneo ni tan lento que se sienta forzado. */
+const TIPEO_VELOCIDAD_MS = 55
+
+/**
  * @param {number} valor
  * @returns {number} `valor` recortado a [0,1].
  */
@@ -87,6 +104,14 @@ function acotar(valor) {
  * pasada se siente rota. Acá la entrada es función pura del progreso del grupo, así que la
  * reversa sale gratis. El IntersectionObserver que sí hay tiene otro trabajo: apagar el
  * rAF cuando la sección no se ve.
+ *
+ * El tipeo de "y lo sabemos" (Punto 3, 11/9/2026) es la EXCEPCIÓN deliberada a ese mismo
+ * párrafo: ahí sí hace falta un IntersectionObserver de una sola vía + `disconnect()`,
+ * porque no es una animación continua atada al progreso del scroll -es un evento que pasa
+ * UNA vez, como el armado de una máquina de escribir-, y reiniciarlo cada vez que el lead
+ * sube y vuelve a bajar se leería roto, no como un efecto. Mismo patrón que ya usa
+ * ConfirmacionArmandoDemo.vue para su animación de entrada + la invitación al video: un
+ * observer que dispara, arranca un timer, y se desconecta solo.
  *
  * La jerarquía tipográfica es deliberadamente tenue (demo_experiencia.md §3.18-ter):
  * cuerpo en `--demo-color-texto-suave`, remate en `--demo-color-texto`. No aplanarla.
@@ -116,6 +141,18 @@ export default {
         typeof window !== 'undefined' &&
         typeof window.matchMedia === 'function' &&
         window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+      /**
+       * Substring de TEXTO_TIPEADO ya revelada (Punto 3). Vacía hasta que arranca el
+       * efecto -es el estado "todavía no tipeé nada", no un error de render.
+       */
+      tipeo_texto: '',
+      /** Observer de una sola vía que dispara el tipeo al entrar la sección en viewport. */
+      tipeo_observador: null,
+      /** Handle del setTimeout de la espera de TIPEO_ESPERA_MS, para poder cancelarlo si
+       *  el componente se desmonta en el medio. */
+      tipeo_espera_timeout: null,
+      /** Handle del setInterval que va revelando una letra por vez. */
+      tipeo_intervalo: null,
     }
   },
 
@@ -134,11 +171,26 @@ export default {
     estilo_implementacion() {
       return this.movimiento_reducido ? null : { '--p': this.p_implementacion.toFixed(4) }
     },
+
+    /**
+     * true mientras conviene mostrar el cursor parpadeante junto al tipeo: antes de que
+     * arranque (los primeros TIPEO_ESPERA_MS) y mientras está en curso. Sin esto, esos
+     * tramos dejan un hueco vacío entre la coma y los dos puntos ("no es fácil, : todos
+     * nuestros...") que se lee como texto roto, no como una animación en marcha. Se apaga
+     * solo apenas el texto queda completo -un cursor parpadeando para siempre no era parte
+     * del pedido.
+     *
+     * @returns {boolean}
+     */
+    tipeo_cursor_visible() {
+      return this.tipeo_texto !== TEXTO_TIPEADO
+    },
   },
 
   mounted() {
     this.escalonar(this.$refs.grupo_era)
     this.escalonar(this.$refs.grupo_implementacion)
+    this.iniciar_tipeo()
 
     if (this.movimiento_reducido) {
       return
@@ -178,6 +230,22 @@ export default {
 
     window.removeEventListener('resize', this.on_scroll)
     document.removeEventListener('visibilitychange', this.on_visibilidad)
+
+    /* Mismo criterio que el resto de esta página con sus timers (ConfirmacionArmandoDemo,
+       ExperienciaDemo): si el lead navega afuera a mitad de la espera o del tipeo, no puede
+       quedar un timer corriendo contra un componente ya desmontado. */
+    if (this.tipeo_observador) {
+      this.tipeo_observador.disconnect()
+      this.tipeo_observador = null
+    }
+    if (this.tipeo_espera_timeout !== null) {
+      window.clearTimeout(this.tipeo_espera_timeout)
+      this.tipeo_espera_timeout = null
+    }
+    if (this.tipeo_intervalo !== null) {
+      window.clearInterval(this.tipeo_intervalo)
+      this.tipeo_intervalo = null
+    }
   },
 
   methods: {
@@ -200,6 +268,70 @@ export default {
         const demora = pasos.length > 1 ? (i / (pasos.length - 1)) * ABANICO : 0
         pasos[i].style.setProperty('--d', demora.toFixed(4))
       }
+    },
+
+    /**
+     * Arranca el efecto de tipeo de "y lo sabemos" (Punto 3): a los TIPEO_ESPERA_MS de que
+     * la sección entra en el viewport -nunca al cargar la página, que es lo que un
+     * `mounted()` sin este observer haría (la sección nace montada junto con el resto del
+     * recorrido, mucho antes de que el lead scrollee hasta acá).
+     *
+     * Mismo patrón que ConfirmacionArmandoDemo.vue: IntersectionObserver de una sola vía
+     * que dispara y se desconecta. A diferencia del `observador` de arriba (que prende y
+     * apaga el bucle de rAF cada vez que la sección entra y sale de la vista), este es
+     * intencionalmente de un solo uso -una máquina de escribir que se reinicia cada vez
+     * que el lead sube y vuelve a bajar se leería rota, no como un efecto.
+     *
+     * @returns {void}
+     */
+    iniciar_tipeo() {
+      if (this.movimiento_reducido || typeof IntersectionObserver !== 'function') {
+        /* Sin animación que disparar: bajo reduced-motion el texto queda puesto de una
+           (mismo criterio que el resto del componente), y sin IntersectionObserver
+           (navegador viejo) no hay forma de saber cuándo entra en viewport -mejor
+           mostrarlo directo que dejarlo vacío para siempre. */
+        this.tipeo_texto = TEXTO_TIPEADO
+        return
+      }
+
+      const self = this
+
+      this.tipeo_observador = new IntersectionObserver(function (entradas) {
+        if (!entradas[entradas.length - 1].isIntersecting) {
+          return
+        }
+
+        self.tipeo_espera_timeout = window.setTimeout(function () {
+          self.tipeo_espera_timeout = null
+          self.tipear()
+        }, TIPEO_ESPERA_MS)
+
+        /* Una sola vez: sin esto, cada vez que el lead vuelve a pasar por acá (sube y
+           baja de nuevo) se reprogramaría la espera y el tipeo se repetiría. */
+        self.tipeo_observador.disconnect()
+      })
+
+      this.tipeo_observador.observe(this.$refs.seccion)
+    },
+
+    /**
+     * Revela TEXTO_TIPEADO de a una letra, a TIPEO_VELOCIDAD_MS por letra.
+     *
+     * @returns {void}
+     */
+    tipear() {
+      const self = this
+      let i = 0
+
+      this.tipeo_intervalo = window.setInterval(function () {
+        i++
+        self.tipeo_texto = TEXTO_TIPEADO.slice(0, i)
+
+        if (i >= TEXTO_TIPEADO.length) {
+          window.clearInterval(self.tipeo_intervalo)
+          self.tipeo_intervalo = null
+        }
+      }, TIPEO_VELOCIDAD_MS)
     },
 
     /**
@@ -410,6 +542,44 @@ export default {
   color: var(--demo-color-texto);
 }
 
+/* Negrita simple (Punto 3, 11/9/2026): a diferencia de __remate-inline, NO sube al color
+   fuerte -Lucas pidió negrita, no un segundo remate destacado dentro del mismo párrafo, y
+   la jerarquía tenue de esta página ya tiene su remate (§3.18-ter, ver arriba). */
+.demo-nueva-era__enfasis {
+  font-weight: 700;
+}
+
+/* Cursiva + tipeo (Punto 3). El texto en sí no lleva color propio -hereda el suave del
+   párrafo-, la cursiva es lo único que lo distingue mientras no está tipeando. */
+.demo-nueva-era__tipeo {
+  font-style: italic;
+}
+
+/* Cursor parpadeante: cubre los TIPEO_ESPERA_MS de espera antes de que arranque el tipeo
+   y el tipeo en sí. Sin esto, ese tramo se ve como un hueco vacío entre la coma y los dos
+   puntos ("no es fácil, : todos nuestros...") -se lee como texto roto, no como una
+   animación en marcha. Se apaga solo apenas termina (ver tipeo_cursor_visible). */
+.demo-nueva-era__tipeo--cursor::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: currentColor;
+  animation: demo-nueva-era-cursor 0.9s step-end infinite;
+}
+
+@keyframes demo-nueva-era-cursor {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
 .demo-nueva-era__resaltado {
   margin: clamp(14px, 2vw, 20px) 0 0;
   font-size: clamp(1.2rem, 1.9vw, 1.5rem);
@@ -486,6 +656,14 @@ export default {
   .demo-nueva-era__paso {
     opacity: 1;
     transform: none;
+  }
+
+  /* Red de seguridad, no la vía principal: bajo esta preferencia iniciar_tipeo() ya pone
+     TEXTO_TIPEADO completo de una y nunca agrega la clase --cursor. Esto cubre el caso
+     borde de un navegador que entiende la media query pero no IntersectionObserver. */
+  .demo-nueva-era__tipeo--cursor::after {
+    animation: none;
+    opacity: 0;
   }
 }
 </style>
