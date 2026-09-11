@@ -20,7 +20,7 @@
     <template v-if="!loading">
     <!-- Estado: uuid inválido o vencido -- nunca el error crudo ni redirección al login -->
     <div v-if="invalido" class="demo-experiencia-page__invalido">
-      <img src="@/assets/logo.jpg" alt="ComercioCity" class="demo-experiencia-page__logo" />
+      <img src="@/assets/isotipo-comerciocity.svg" alt="ComercioCity" class="demo-experiencia-page__logo" />
       <h1>Este link no es válido</h1>
       <p>Puede que haya vencido o esté mal escrito. Escribinos y te pasamos uno nuevo.</p>
     </div>

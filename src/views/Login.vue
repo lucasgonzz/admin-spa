@@ -3,7 +3,7 @@
   <div class="login-page">
     <div class="login-page__inner">
       <header class="login-page__brand">
-        <img src="@/assets/logo.jpg" alt="ComercioCity" />
+        <img src="@/assets/isotipo-comerciocity.svg" alt="ComercioCity" />
         <p class="login-page__subtitle">
           {{ login_subtitle }}
         </p>
