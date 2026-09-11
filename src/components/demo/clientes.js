@@ -157,7 +157,7 @@ export const clientes = [
     id: 'unicas',
     nombre: 'Unicas Distribuidora Capilar',
     // image_url del dueño. PNG con canal alfa (fondo transparente) -- se aplanó sobre blanco
-    // antes de recomprimir, para quedar igual que el resto (ninguno de los otros 47 es
+    // antes de recomprimir, para quedar igual que el resto (ninguno de los otros 46 es
     // transparente).
     // https://api-unicas.comerciocity.com/public/storage/178515615168755.png
   },

@@ -1321,8 +1321,9 @@ export default {
      * Todos van con `white-space: nowrap` y sus tamaños están calibrados contra Geist, la
      * tipografía de marca -- que la página ya carga, así que en el cuadrado ninguno se
      * ajusta. Pero si Google Fonts no llega, el stack de sistema tiene otras métricas y
-     * "Todo asistido por IA, nunca fue tan fácil" queda a un pelo de los 1080: sin esto se
-     * cortaría contra el borde del escenario.
+     * el remate ("Todo asistido por IA," + "nunca fue tan fácil", medidos por separado desde
+     * el 11/9/2026 -- ver TEXTOS.ia / TEXTOS.ia_em y estilo_fila_ia()) queda a un pelo de los
+     * 1080: sin esto se cortaría contra el borde del escenario.
      *
      * Lo medido son ANCHOS y no factores, a propósito: la unidad no cambia entre las dos
      * composiciones, lo que cambia es el ancho útil contra el que se los compara. Así una
