@@ -42,6 +42,7 @@
         <span class="animacion-procesador__rasgo" data-clave="f1">{{ TEXTOS.f1 }}</span>
         <span class="animacion-procesador__rasgo" data-clave="f2">{{ TEXTOS.f2 }}</span>
         <span class="animacion-procesador__ia" data-clave="ia">{{ TEXTOS.ia }}</span>
+        <span class="animacion-procesador__ia animacion-procesador__ia--enfasis" data-clave="ia_em">{{ TEXTOS.ia_em }}</span>
       </div>
 
       <div class="animacion-procesador__camara" :style="{ transform: camara }">
@@ -141,15 +142,28 @@
           />
         </div>
 
-        <div v-if="emitidos.carga" class="animacion-procesador__emitido" :style="emitidos.carga">
-          <div class="animacion-procesador__titular" :style="ajuste('carga')">{{ TEXTOS.carga }}</div>
-        </div>
-
-        <div v-if="emitidos.vende" class="animacion-procesador__emitido" :style="emitidos.vende">
-          <div
-            class="animacion-procesador__titular animacion-procesador__recorte animacion-procesador__titular--degrade"
-            :style="ajuste('vende')"
-          >{{ TEXTOS.vende }}</div>
+        <!-- "Cargá una vez" y "Vendé en todos lados" comparten esta única ranura desde
+             el 11/9/2026 (ver ranura_carga_vende()): van superpuestas, centradas, y una
+             onda las tapa/destapa con una máscara en vez de que cada una entre y salga
+             por su cuenta. -->
+        <div
+          v-if="ranura_carga_vende"
+          class="animacion-procesador__emitido"
+          :style="ranura_carga_vende.contenedor"
+        >
+          <div class="animacion-procesador__ranura">
+            <div class="animacion-procesador__titular" :style="ranura_carga_vende.mascara_carga">{{ TEXTOS.carga }}</div>
+            <div
+              class="animacion-procesador__titular animacion-procesador__recorte animacion-procesador__titular--degrade"
+              :style="ranura_carga_vende.mascara_vende"
+            >{{ TEXTOS.vende }}</div>
+            <div
+              v-if="ranura_carga_vende.barrido"
+              class="animacion-procesador__barrido-texto"
+              :style="ranura_carga_vende.barrido"
+              aria-hidden="true"
+            ></div>
+          </div>
         </div>
 
         <div v-if="emitidos.f1" class="animacion-procesador__emitido" :style="emitidos.f1">
@@ -168,12 +182,22 @@
             height="77"
           />
         </div>
+        <!-- El remate: "Todo asistido por IA," en un color y "nunca fue tan fácil" en
+             cursiva y otro color, partido en dos <span> desde el 11/9/2026 (ver
+             TEXTOS.ia / TEXTOS.ia_em y el método onda()). Es la MISMA oración de
+             siempre, ver el comentario de TEXTOS. -->
         <div v-if="emitidos.ia" class="animacion-procesador__emitido" :style="emitidos.ia">
-          <div
-            class="animacion-procesador__ia"
-            :class="{ 'animacion-procesador__recorte': ondeando }"
-            :style="estilo_ia"
-          >{{ TEXTOS.ia }}</div>
+          <div class="animacion-procesador__ia" :style="estilo_fila_ia">
+            <span
+              :class="{ 'animacion-procesador__recorte': ondeando }"
+              :style="onda('rgba(236,244,255,0.95)', '#9ad4ff')"
+            >{{ TEXTOS.ia }}</span>
+            <span
+              class="animacion-procesador__ia--enfasis"
+              :class="{ 'animacion-procesador__recorte': ondeando }"
+              :style="onda('#b49bff', '#e8dcff')"
+            >{{ TEXTOS.ia_em }}</span>
+          </div>
         </div>
 
         <!-- ── Las dos líneas que el cuadro estático suma a la composición final ─────── -->
@@ -359,17 +383,29 @@ const MARGEN_TEXTO = 30
 /**
  * La tabla de escenas del export (`window.OM_SCENES`). `dur` es lo que cada escena dura en
  * pantalla y `nat` la duración en la que fue coreografiada; el motor warpea una en la otra.
- * Los `dur` suman 24,4 s, que es la duración total de la animación.
+ * Los `dur` suman 23,5 s, que es la duración total de la animación.
+ *
+ * 🔴 Retocada el 11/9/2026 (misión experiencia-ajustes) contra el export nuevo de ese día:
+ * Logo, Carga una vez, Vende en todos lados, Bajada y Whatsapp se acortaron en `dur` SIN
+ * tocar su `nat` -- es decir, la misma coreografía autoral corre más rápido en pantalla,
+ * que es exactamente para lo que existe el warp (por eso no hizo falta tocar ninguna
+ * fórmula de `MOTION.glide`/`emitir`, todas viven en tiempo autoral). Y se sumó una escena
+ * nueva, "Transicion" (1,1 s, sin `nat` propio): es el tramo de la onda que borra "Cargá
+ * una vez" y deja "Vendé en todos lados" en su lugar -- ver `ranura_carga_vende()`. Antes
+ * esas dos frases eran dos `Emitted` independientes que ni se cruzaban; ahora comparten un
+ * solo lugar. Duración vieja: 24,4 s (ver el README de `marca/animacion-procesador/` en el
+ * repo de conocimiento para la tabla completa, antes/después).
  */
 const ESCENAS = [
   { name: 'Problemas', dur: 6.5, nat: 5.9 },
   { name: 'Conexion', dur: 1, nat: 1.2 },
   { name: 'Procesado', dur: 1, nat: 1.4 },
-  { name: 'Logo', dur: 1.1 },
-  { name: 'Carga una vez', dur: 1.4, nat: 1.2 },
-  { name: 'Vende en todos lados', dur: 1.6, nat: 1.3 },
-  { name: 'Bajada', dur: 1.4 },
-  { name: 'Whatsapp', dur: 4.1, nat: 1.6 },
+  { name: 'Logo', dur: 0.8, nat: 1.1 },
+  { name: 'Carga una vez', dur: 1.1, nat: 1.2 },
+  { name: 'Transicion', dur: 1.1 },
+  { name: 'Vende en todos lados', dur: 1.1, nat: 1.3 },
+  { name: 'Bajada', dur: 1.1, nat: 1.4 },
+  { name: 'Whatsapp', dur: 3.5, nat: 1.6 },
   { name: 'Absorcion', dur: 0.7, nat: 1.2 },
   { name: 'Procesado IA', dur: 1, nat: 1.2 },
   { name: 'Onda IA', dur: 3 },
@@ -399,7 +435,15 @@ const TEXTOS = {
      suyo. */
   f1: 'Imágenes y tienda online',
   f2: 'WhatsApp y carga de facturas',
-  ia: 'Todo asistido por IA, nunca fue tan fácil',
+  /* Hasta el 10/9/2026 esto era una sola cadena. El export del 11/9/2026 partió el
+     remate en dos <span> con estilo propio (ver ranura_carga_vende() y el método
+     `onda()`): el cuerpo en azul y "nunca fue tan fácil" en cursiva y violeta. Es la
+     MISMA frase, partida en la misma coma -- confirmado contra `textIa`/`textIaEm` del
+     `data-props` del export ("Todo asistido por IA," / "nunca fue tan facil"), no un
+     cambio de copy. ETIQUETA_ACCESIBLE no se toca: concatenando ia + ' ' + ia_em da la
+     misma oración de siempre. */
+  ia: 'Todo asistido por IA,',
+  ia_em: 'nunca fue tan fácil',
 }
 
 /* 🔴 Este texto es lo que un lector de pantalla lee EN LUGAR de toda la animación, así que
@@ -637,6 +681,9 @@ export default {
         Procesado: c.Procesado,
         Logo: c.Logo,
         carga: c['Carga una vez'],
+        /* Nueva escena "Transicion" (11/9/2026): el segundo autoral en el que arranca
+           la onda que borra "Cargá una vez". Ver ranura_carga_vende(). */
+        trans: c.Transicion,
         vende: c['Vende en todos lados'],
         bajada: c.Bajada,
         wa: c.Whatsapp,
@@ -926,16 +973,17 @@ export default {
     /* ── Lo que el procesador emite ────────────────────────────────────────────────── */
 
     /**
-     * Los ocho elementos que salen del procesador. Cada uno es `null` (todavía no salió) o
-     * el objeto de estilo con el que se dibuja. Los tiempos son los del original.
+     * Los elementos que salen del procesador con posición propia (entra/se sostiene/
+     * vuelve). Cada uno es `null` (todavía no salió) o el objeto de estilo con el que se
+     * dibuja. `carga`/`vende` ya NO están acá: desde el 11/9/2026 comparten una sola
+     * ranura con una onda que borra una y deja la otra -- ver ranura_carga_vende(), que
+     * hace su propio manejo de entrada/salida porque no es un `emitir()` simple.
      */
     emitidos() {
       const K = this.claves_escena
       const y = this.alto_reposo
       return {
         logo: this.emitir(K.Logo, K.Logo + 0.85, y(Y_LOGO), [K.bajada, K.bajada + 0.55]),
-        carga: this.emitir(K.carga, K.carga + 0.7, y(Y_SLOT), [K.vende, K.vende + 0.55]),
-        vende: this.emitir(K.vende + 0.3, K.vende + 1.05, y(Y_SLOT), [K.bajada, K.bajada + 0.55]),
         f1: this.emitir(K.bajada + 0.35, K.bajada + 0.35 + EM, y(Y_T1), [K.abs + 0.3, K.abs + 0.92]),
         /* K.wa + 0.35 y no + 0.05: la escena "Whatsapp" dura 4,1s porque en el export
            salían DOS textos ahí adentro. Con uno solo, entrando al principio, quedaba
@@ -952,29 +1000,107 @@ export default {
       return this.tiempo >= K.onda - 0.02 && this.tiempo <= K.fin + 0.02
     },
 
-    estilo_ia() {
-      const base = 'rgba(236,244,255,0.95)'
-      if (!this.ondeando) return Object.assign({ color: base }, this.ajuste('ia'))
+    /**
+     * El encogido de la FILA del remate ("ia" + "ia_em"), si juntos no entran en el
+     * ancho útil. Reemplaza al `ajuste('ia')` que había hasta el 10/9/2026: el remate
+     * se partió en dos `<span>` el 11/9/2026 (ver TEXTOS.ia / TEXTOS.ia_em) y ahora hay
+     * que medir dos textos MÁS el separador entre ellos, no uno solo. Se encoge la fila
+     * entera -- nunca cada mitad por separado, que las dejaría con tamaños de letra
+     * distintos y rompería el efecto de una sola oración.
+     */
+    estilo_fila_ia() {
+      const ia = this.anchos_texto.ia || 0
+      const em = this.anchos_texto.ia_em || 0
+      if (!ia && !em) return {}
+      /* El separador es gap: 0.3em sobre una fila a 52px (ver .animacion-procesador__ia
+         en el <style>) -- 0.3 × 52 son los px reales que ocupa ese hueco. */
+      const combinado = ia + em + 0.3 * 52
+      const util = this.ancho_util
+      if (combinado <= util) return {}
+      return { transform: 'scale(' + (util / combinado).toFixed(4) + ')' }
+    },
 
+    /**
+     * El ancho máximo entre "Cargá una vez" y "Vendé en todos lados", medido. La
+     * ranura comparte una sola escala para las dos frases -- a diferencia del viejo
+     * `ajuste()`, que las trataba una por una cuando cada una tenía su propio
+     * `emitir()` independiente (hasta el 10/9/2026, ver ranura_carga_vende()).
+     */
+    escala_ranura() {
+      const ancho = Math.max(this.anchos_texto.carga || 0, this.anchos_texto.vende || 0)
+      const util = this.ancho_util
+      if (!ancho || ancho <= util) return 1
+      return util / ancho
+    },
+
+    /**
+     * La ranura compartida entre "Cargá una vez" y "Vendé en todos lados" (escena
+     * "Transicion", sumada el 11/9/2026). Hasta el 10/9/2026 eran dos `emitir()`
+     * independientes que jamás se cruzaban: una entraba, se sostenía, volvía al
+     * procesador, y recién ENTONCES entraba la otra por el mismo camino. El export
+     * nuevo las funde en un solo lugar: las dos ocupan el mismo espacio (superpuestas,
+     * centradas) y una onda vertical barre de izquierda a derecha, tapando la primera
+     * con una máscara y destapando la segunda con la máscara inversa. Devuelve `null`
+     * mientras "Cargá una vez" todavía no salió.
+     *
+     * 🔴 El barrido se mide contra K.trans → K.vende, en tiempo AUTORAL -- por eso no
+     * hace falta ningún ajuste si el warp cambia: ver el comentario de ESCENAS.
+     *
+     * @returns {Object|null}
+     */
+    ranura_carga_vende() {
       const K = this.claves_escena
-      const avance = clamp((this.tiempo - K.onda) / Math.max(0.2, K.fin - K.onda), 0, 1)
-      return Object.assign(
-        {
-          backgroundImage:
-            'linear-gradient(100deg,' +
-            base +
-            ' 0%,' +
-            base +
-            ' 30%, #ffffff 40%, #9ad4ff 50%, #ffffff 60%,' +
-            base +
-            ' 70%,' +
-            base +
-            ' 100%)',
-          backgroundSize: '190% 100%',
-          backgroundPosition: (145 - 190 * avance).toFixed(1) + '% 0',
+      const T = this.tiempo
+      const chip_y = this.chip_y
+
+      const app = MOTION.glide(K.carga, K.carga + 0.7)(T)
+      if (app <= 0.001) return null
+      const vuelve = MOTION.glide(K.bajada, K.bajada + 0.55)(T)
+
+      const y_app = lerp(chip_y, Y_SLOT, app)
+      const s_app = lerp(0.22, 1, app)
+      const y = lerp(y_app, chip_y + 8, vuelve)
+      const s = lerp(s_app, 0.22, vuelve)
+      const opacidad = Math.min(app * 1.3, 1) * Math.max(0, 1 - vuelve * 1.7)
+
+      /* 0 antes de que arranque la Transición, 1 cuando "Vendé en todos lados" ya
+         quedó entero a la vista. Igual que arriba: en tiempo autoral, contra K.trans y
+         K.vende -- no una duración fija en segundos de reloj. */
+      const avance = clamp((T - K.trans) / Math.max(0.2, K.vende - K.trans), 0, 1)
+      /* El centro de la onda, en % del ancho de la ranura (que es el ancho del texto
+         más largo de los dos -- ver escala_ranura()). Arranca 5 unidades antes del
+         borde izquierdo y termina 8 después del derecho, para que la onda entre y
+         salga de cuadro en vez de aparecer/desaparecer de golpe en el canto. */
+      const centro = -5 + avance * 113
+      const borde_a = (centro - 7).toFixed(2) + '%'
+      const borde_b = (centro + 3.5).toFixed(2) + '%'
+      /* `invertida=false` (carga): opaco ANTES de la onda, transparente después --se
+         va borrando de izquierda a derecha. `invertida=true` (vende): al revés. */
+      const mascara = (invertida) =>
+        'linear-gradient(90deg, rgba(0,0,0,' +
+        (invertida ? 1 : 0) +
+        ') ' +
+        borde_a +
+        ', rgba(0,0,0,' +
+        (invertida ? 0 : 1) +
+        ') ' +
+        borde_b +
+        ')'
+
+      const barriendo = avance > 0.002 && avance < 0.998
+
+      return {
+        contenedor: {
+          top: y.toFixed(2) + 'px',
+          transform: 'translateY(-50%) scale(' + (s * this.escala_ranura).toFixed(4) + ')',
+          opacity: opacidad,
         },
-        this.ajuste('ia')
-      )
+        mascara_carga: { webkitMaskImage: mascara(false), maskImage: mascara(false) },
+        mascara_vende: { webkitMaskImage: mascara(true), maskImage: mascara(true) },
+        /* La barra que viaja al frente de la onda. null fuera del tramo de barrido: al
+           llegar a cualquiera de las dos puntas no queda un hilo de luz clavado ahí. */
+        barrido: barriendo ? { left: centro.toFixed(2) + '%' } : null,
+      }
     },
   },
 
@@ -1218,6 +1344,14 @@ export default {
     /**
      * El estilo de encogido de un titular, o un objeto vacío si entra tal cual.
      *
+     * Desde el 11/9/2026 ya NO se llama para 'carga'/'vende'/'ia' en el camino animado
+     * normal -- esos tres tienen su propio encogido de a PAR (`escala_ranura()` para
+     * la ranura, `estilo_fila_ia()` para el remate), porque ahora comparten espacio con
+     * otro texto y hay que encogerlos juntos, no cada uno por separado. Sigue viva para
+     * 'f1'/'f2' (que siguen solos) y para 'carga'/'vende' en el cuadro ESTÁTICO de
+     * `prefers-reduced-motion` (ver el `<template v-if="reduced_motion">` del
+     * componente), donde cada titular vuelve a mostrarse solo, en su propia línea.
+     *
      * @param {string} clave
      * @returns {Object}
      */
@@ -1255,6 +1389,50 @@ export default {
         top: y_final.toFixed(2) + 'px',
         transform: 'translateY(-50%) scale(' + s_final.toFixed(4) + ')',
         opacity: Math.min(p * 1.3, 1) * Math.max(0, 1 - vuelta * 1.7),
+      }
+    },
+
+    /**
+     * El estilo de una de las dos mitades del remate ("ia" o "ia_em"): color plano
+     * fuera de la escena "Onda IA", con el barrido de brillo adentro. Reemplaza al
+     * viejo `estilo_ia` (era uno solo, ahora hacen falta dos con colores distintos —
+     * ver TEXTOS.ia/ia_em) y toma PASADAS=3: el export del 11/9/2026 hace que la onda
+     * recorra el texto TRES veces en el mismo tramo de 3 s de "Onda IA", no una sola
+     * vez como el de ayer. `avance` es el resto de recorrer `crudo` (0→1, una vez) tres
+     * veces seguidas -- el `% 1` es lo que multiplica las pasadas sin alargar la escena.
+     *
+     * @param {string} base color de reposo (y de las dos franjas fuera del núcleo)
+     * @param {string} core color del núcleo que cruza el texto
+     * @returns {Object}
+     */
+    onda(base, core) {
+      if (!this.ondeando) return { color: base }
+
+      const K = this.claves_escena
+      const PASADAS = 3
+      const crudo = clamp((this.tiempo - K.onda) / Math.max(0.2, K.fin - K.onda), 0, 0.9999)
+      const avance = (crudo * PASADAS) % 1
+
+      /* El recorte del degradé (`-webkit-background-clip`) NO va acá: es constante
+         mientras ondea, así que lo pone la clase .animacion-procesador__recorte por
+         :class en el template -- mismo motivo que ya explica el comentario de esa
+         clase en el <style>. Acá solo lo que cambia cuadro a cuadro. */
+      return {
+        color: 'transparent',
+        backgroundImage:
+          'linear-gradient(100deg,' +
+          base +
+          ' 0%,' +
+          base +
+          ' 26%, #ffffff 40%, ' +
+          core +
+          ' 50%, #ffffff 60%,' +
+          base +
+          ' 74%,' +
+          base +
+          ' 100%)',
+        backgroundSize: '150% 100%',
+        backgroundPosition: (125 - 150 * avance).toFixed(1) + '% 0',
       }
     },
   },
@@ -1455,11 +1633,25 @@ export default {
   color: rgba(230, 239, 254, 0.94);
 }
 
+/* Desde el 11/9/2026 es la FILA del remate, no un solo texto: "Todo asistido por IA,"
+   y "nunca fue tan fácil" son dos <span> hijos (ver TEXTOS.ia/ia_em) que se apoyan en
+   esta línea de base común. `font-size` va ACÁ (no solo heredado) porque el
+   `gap: 0.3em` se resuelve contra el tamaño de fuente de ESTE elemento -- si el 52px
+   quedara solo en los hijos, el hueco entre las dos frases saldría con el tamaño de
+   fuente que sea que herede este contenedor, no el que se ve en pantalla. */
 .animacion-procesador__ia {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3em;
   font-weight: 700;
   font-size: 52px;
   letter-spacing: -0.03em;
   white-space: nowrap;
+}
+
+.animacion-procesador__ia--enfasis {
+  font-style: italic;
+  font-weight: 600;
 }
 
 /* El recorte del degradé contra el texto. Va en una clase y no en el estilo inline porque
@@ -1468,6 +1660,36 @@ export default {
   color: transparent;
   -webkit-background-clip: text;
   background-clip: text;
+}
+
+/* ── La ranura compartida de "Cargá una vez" / "Vendé en todos lados" (11/9/2026) ──────
+   `display: grid` sin filas/columnas declaradas: los dos titulares llevan
+   `grid-area: 1 / 1` y caen en la MISMA celda, que crece hasta el ancho del más largo
+   de los dos -- así el barrido (en % del ancho de esta caja) queda bien calibrado sea
+   cual sea la frase más larga. Ver ranura_carga_vende(). */
+.animacion-procesador__ranura {
+  position: relative;
+  display: grid;
+  justify-items: center;
+}
+
+.animacion-procesador__ranura > .animacion-procesador__titular {
+  grid-area: 1 / 1;
+  text-align: center;
+}
+
+/* La barra de luz que viaja al frente de la onda mientras tapa una frase y destapa la
+   otra. Se extiende un poco por arriba/abajo del texto (-16px) para que no se vea
+   recortada contra el alto de la línea. */
+.animacion-procesador__barrido-texto {
+  position: absolute;
+  top: -16px;
+  bottom: -16px;
+  width: 5px;
+  margin-left: -2.5px;
+  background: linear-gradient(180deg, rgba(150, 205, 255, 0) 0%, #e4f1ff 48%, rgba(150, 205, 255, 0) 100%);
+  box-shadow: 0 0 30px 10px rgba(90, 169, 255, 0.5);
+  pointer-events: none;
 }
 
 /* La regla con la que se miden los titulares: ocupa lugar en el layout (por eso
