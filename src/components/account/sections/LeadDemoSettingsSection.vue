@@ -30,6 +30,28 @@
         </div>
       </div>
 
+      <!-- Campo: tema visual (oscuro/claro) de la página inmersiva de experiencia (misión
+           tema-experiencia-configurable). Va pegado al campo de arriba porque los dos deciden
+           qué ve el lead en esa página: uno la dinámica, el otro el aspecto. -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-7">
+          <label class="form-label small" for="demo_experiencia_tema">Tema de la página de experiencia</label>
+          <select
+            id="demo_experiencia_tema"
+            v-model="local.experiencia_tema"
+            class="form-select form-select-sm"
+            :disabled="saving"
+          >
+            <option value="oscuro">Oscuro (procesador, clientes y cubo)</option>
+            <option value="claro">Claro (como el formulario)</option>
+          </select>
+          <p class="text-muted small mb-0 mt-1">
+            Solo tiene efecto en la dinámica <strong>nueva</strong>: en la dinámica actual esta
+            página ni se renderiza, así que el tema no cambia nada para esos leads.
+          </p>
+        </div>
+      </div>
+
       <!-- Campo: duración de la demo -->
       <div class="row g-2 align-items-end mb-3">
         <div class="col-sm-5">
@@ -682,6 +704,9 @@ export default {
       local: {
         /** Dinámica con la que nacen los leads nuevos: 'actual' | 'nueva'. No afecta leads existentes. */
         experiencia_default: 'actual',
+        /** Tema visual ('oscuro' | 'claro') de la página inmersiva de experiencia. Solo tiene
+            efecto en la dinámica 'nueva'. */
+        experiencia_tema: 'oscuro',
         duracion_minutos: 60,
         /** Minutos reales de bloqueo desde el inicio (11/9/2026); separado de duracion_minutos a propósito. */
         bloqueo_real_minutos: 180,
@@ -752,6 +777,8 @@ export default {
       stored: {
         /** Espejo del servidor: dinámica por defecto para leads nuevos. */
         experiencia_default: 'actual',
+        /** Espejo del servidor: tema visual de la página de experiencia. */
+        experiencia_tema: 'oscuro',
         duracion_minutos: 60,
         /** Espejo del servidor: bloqueo real de la instancia (11/9/2026). */
         bloqueo_real_minutos: 180,
@@ -953,7 +980,7 @@ export default {
           var data = res.data || {}
           var fields = Object.keys(self.local)
           /* Campos que se tratan como string (no entero). */
-          var string_fields = ['recordatorio_manana_hora', 'experiencia_default']
+          var string_fields = ['recordatorio_manana_hora', 'experiencia_default', 'experiencia_tema']
           /* Campos que se tratan como booleano. */
           var bool_fields = ['llamada_debe_terminar_en_horario']
           /* Campos float: NO pasan por parseInt, que truncaría 1.5 a 1 y le pisaría al admin el
@@ -1020,6 +1047,7 @@ export default {
       api
         .put('/settings/lead-demo', {
           experiencia_default:                 self.local.experiencia_default,
+          experiencia_tema:                    self.local.experiencia_tema,
           duracion_minutos:                    self.local.duracion_minutos,
           bloqueo_real_minutos:                self.local.bloqueo_real_minutos,
           setup_minutos_antes:                 self.local.setup_minutos_antes,
@@ -1054,7 +1082,7 @@ export default {
           var data = res.data || {}
           var fields = Object.keys(self.local)
           /* Campos que se tratan como string (no entero). */
-          var string_fields = ['recordatorio_manana_hora', 'experiencia_default']
+          var string_fields = ['recordatorio_manana_hora', 'experiencia_default', 'experiencia_tema']
           /* Campos que se tratan como booleano. */
           var bool_fields = ['llamada_debe_terminar_en_horario']
           /* Campos float: NO pasan por parseInt, que truncaría 1.5 a 1 y le pisaría al admin el

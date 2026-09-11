@@ -46,6 +46,7 @@
       <template v-if="!intro_desbloqueada">
         <scroll-dolor
           :perfil="lead.perfil"
+          :tema="tema"
           :emitir_evento="emitir_evento"
         />
 
@@ -266,6 +267,16 @@ export default {
       setup: {},
       /** { visto_pct, umbral_pct, obligatorio, velocidad } del video de introducción (misión 46). */
       intro: {},
+      /**
+       * Tema visual ('oscuro' | 'claro') del recorrido de experiencia, configurable desde
+       * Cuenta → Configuración de demos (misión tema-experiencia-configurable). Se pasa tal
+       * cual como prop a <scroll-dolor>, que es quien realmente aplica la clase CSS.
+       *
+       * 🔴 Default 'oscuro' como red de seguridad: si el payload todavía no trae la clave
+       * `tema` (backend en medio de un deploy), la página se sigue viendo exactamente igual
+       * a como quedó la migración a oscuro de esta misma tarde -- nunca transparente ni rota.
+       */
+      tema: 'oscuro',
       /**
        * 🔴 Lo calcula el backend y esta página no lo deriva ni lo recalcula (misión 46,
        * pieza 3). Es la única puerta del botón de ingreso.
@@ -853,6 +864,10 @@ export default {
       this.media = payload.media || {}
       this.setup = payload.setup || {}
       this.intro = payload.intro || {}
+      /* Red de seguridad si el backend todavía no manda la clave (ventana entre deploys de
+         admin-api y admin-spa, o un payload viejo cacheado): cae a 'oscuro', que es lo que ya
+         está en producción hoy. */
+      this.tema = payload.tema ?? 'oscuro'
       this.modo_prueba = !!payload.modo_prueba
       this.puede_ingresar = !!payload.puede_ingresar
       /* Después de asignar `setup` y `puede_ingresar`: el método los lee a los dos. */
