@@ -183,7 +183,7 @@
             :title="demo_mail_validation_message || 'Enviar mail de acceso a la demo'"
             @click="send_demo_mail"
           >
-            {{ loading_action === 'demo_mail' ? 'Enviando...' : 'Enviar mail 1 - DEMO' }}
+            {{ loading_action === 'demo_mail' ? 'Enviando...' : 'Enviar mail de acceso a la demo' }}
           </button>
           <!-- Promover a cliente: crea el Client en admin-api y genera las tareas del equipo -->
           <button
@@ -215,7 +215,7 @@
 
         <!-- Advertencia de campos faltantes para el mail de demo -->
         <div v-if="demo_mail_validation_message" class="alert alert-warning py-2 mt-2 mb-0 small">
-          <strong>Mail 1 - DEMO:</strong> {{ demo_mail_validation_message }}
+          <strong>Mail de acceso a la demo:</strong> {{ demo_mail_validation_message }}
         </div>
       </div>
     </div>
@@ -1138,7 +1138,7 @@ export default {
         function () {
           return self.$store.dispatch('lead/send_demo_mail', self.record.id)
         },
-        'Mail 1 - DEMO enviado correctamente.'
+        'Mail de acceso a la demo enviado correctamente.'
       )
     },
     /**

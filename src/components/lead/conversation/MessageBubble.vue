@@ -1523,8 +1523,8 @@ export default {
       var READABLE_LABELS = {
         agendar_demo: 'agendamiento',
         cancelar_demo: 'cancelación de demo',
-        enviar_mail_demo: 'Mail 1',
-        reenviar_mail_demo: 'reenvío del Mail 1',
+        enviar_mail_demo: 'mail de acceso a la demo',
+        reenviar_mail_demo: 'reenvío del mail de acceso',
         guardar_nombre: 'guardar nombre',
         guardar_email: 'guardar email',
         forzar_slot: 'forzar horario',
