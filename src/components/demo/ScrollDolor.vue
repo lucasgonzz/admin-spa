@@ -208,6 +208,15 @@ import SeccionResenas from './SeccionResenas.vue'
  * Lo que queda por perfil son tres cosas: la `apertura`, los `hitos` -- que
  * incluyen el `titulo_portada` con el que abre el cubo, y que NO es el mismo texto
  * en los dos perfiles -- y el `puente` al formulario.
+ *
+ * 🔴 `hitos.lista` tenía tres entradas hasta el 11/9/2026 (misión experiencia-ajustes,
+ * punto 6): arrancaba con "El primer día / dejás de cargar lo mismo dos veces.". Se
+ * sacó por pedido de Lucas, sin más precisión que eso -- quedan las otras dos, "El
+ * primer mes" y "A los doce meses", en los DOS perfiles (la entrada se sacó de los dos
+ * arrays para no dejarlos desalineados). El layout no necesitó ningún ajuste: la lista
+ * se pinta en columna simple (.demo-scroll-dolor__hitos, flex-direction: column), así
+ * que dos líneas en vez de tres no dejan hueco ni descuadre, solo una tarjeta un poco
+ * más baja.
  */
 const CONTENIDO_POR_PERFIL = {
   dueno: {
@@ -221,7 +230,6 @@ const CONTENIDO_POR_PERFIL = {
         'Es sobre dejar de ser el único que sabe.',
       ],
       lista: [
-        { momento: 'El primer día', texto: 'dejás de cargar lo mismo dos veces.' },
         { momento: 'El primer mes', texto: 'dejás de suponer: el stock, los precios y las deudas son los de verdad.' },
         { momento: 'A los doce meses', texto: 'el sistema ya sabe qué vendiste en cada época — y te dice qué comprar antes de que te falte.' },
       ],
@@ -250,7 +258,6 @@ const CONTENIDO_POR_PERFIL = {
         'Es sobre dejar de ser el único que sabe.',
       ],
       lista: [
-        { momento: 'El primer día', texto: 'deja de cargarse lo mismo dos veces.' },
         { momento: 'El primer mes', texto: 'las decisiones se toman mirando, no suponiendo.' },
         { momento: 'A los doce meses', texto: 'el sistema sabe qué se vendió en cada época y avisa qué comprar.' },
       ],
