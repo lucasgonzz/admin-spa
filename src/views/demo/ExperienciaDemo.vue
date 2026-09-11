@@ -43,17 +43,34 @@
            dejaba de ser un punto sin retorno, porque el formulario seguía ahí
            arriba. Excluirlas resuelve las dos cosas sin repetirle el formulario
            a quien ya lo completó (criterio 5 del grupo 325). -->
-      <template v-if="!intro_desbloqueada">
+      <!-- SIN TURNO la página es una LANDING (misión experiencia-landing, 11/9/2026): el
+           recorrido entero y, al final, el CTA que manda al lead a WhatsApp a pedir la demo.
+           Nada de formulario, confirmación, video ni botón de acceso -- todo eso es parte
+           de la DEMO (contexto/demo_experiencia.md §3.16 A: el formulario arma la demo y el
+           video corre mientras se prepara), y para un lead que todavía no tiene demo
+           asignada mostrárselo es mentirle. Martín le manda este link ANTES de ofrecerle la
+           demo, para que vaya viendo.
+
+           🔴 Las tres condiciones llevan `sin_turno` escrito, y no dependen de que
+           `intro_desbloqueada` esté en false: un lead que completó el formulario en una
+           demo anterior y hoy no tiene demo llega con `formulario.completado` en true, y
+           sin esto vería la confirmación "armando tu demo" de una demo que no existe.
+           cargar_experiencia() además no prende `intro_desbloqueada` sin turno (para que
+           no arranque el poleo ni la secuencia), pero el template no confía en eso. -->
+      <template v-if="sin_turno || !intro_desbloqueada">
         <scroll-dolor
           :perfil="lead.perfil"
           :tema="tema"
           :emitir_evento="emitir_evento"
+          :sin_turno="sin_turno"
+          :cta="cta"
         />
 
         <!-- Formulario de configuración: preseleccionado con las respuestas del
              payload. El envío real (POST + refresco de todo el payload) lo hace
              este contenedor vía enviar_formulario, inyectado por prop. -->
         <formulario-configuracion
+          v-if="!sin_turno"
           :respuestas="formulario"
           :enviar_formulario="enviar_formulario"
         />
@@ -71,7 +88,7 @@
            tiempo. (Hasta el 10/9/2026 acá decía "PiezaMultimedia seguiría
            montada": ese componente ya no lo monta nadie, el reproductor del
            intro es VideoIntro.vue. El motivo del v-if no cambia.) -->
-      <template v-if="intro_desbloqueada">
+      <template v-if="!sin_turno && intro_desbloqueada">
         <!-- El mensaje queda arriba para siempre. Y desde el grupo 355 (prompt 10)
              el shimmer del título tampoco se apaga: ya no hay un prop que lo prenda
              y lo apague, es parte fija del título mientras la pantalla está a la
@@ -222,6 +239,84 @@ const POLEO_TOPE_MS = 20 * 60 * 1000
  */
 const CORRIDA_NUEVA_MARGEN_MS = 60000
 
+/**
+ * Los tres eventos de la página como landing (misión experiencia-landing, 11/9/2026). Son
+ * los ÚNICOS que viajan al backend (`POST /demo-experiencia/{clave}/evento`); todos los
+ * demás nombres que pasan por emitir_evento() siguen quedando solo en consola.
+ *
+ * 🔴 Son el contrato con admin-api: allá es una lista cerrada
+ * (`DemoExperienciaController::EVENTOS_PAGINA`) y cualquier otro nombre es 422. Si se
+ * agrega uno acá, se agrega allá primero.
+ */
+const EVENTO_PAGINA_ABIERTA = 'pagina_abierta_sin_turno'
+const EVENTO_PAGINA_FINAL = 'pagina_final_sin_turno'
+const EVENTO_CTA_TOCADO = 'cta_demo_tocado'
+const EVENTOS_QUE_VIAJAN = [EVENTO_PAGINA_ABIERTA, EVENTO_PAGINA_FINAL, EVENTO_CTA_TOCADO]
+
+/**
+ * Los que se mandan UNA sola vez por carga de página. Abrirla es un hecho por carga, y
+ * llegar al final también: el lead que sube y baja tres veces por el CTA no llegó tres
+ * veces. El toque del CTA no está acá a propósito: cada toque es un pedido, y si el lead
+ * tocó dos veces porque WhatsApp no le abrió, eso también es información.
+ */
+const EVENTOS_UNA_VEZ_POR_CARGA = [EVENTO_PAGINA_ABIERTA, EVENTO_PAGINA_FINAL]
+
+/**
+ * El `bloque_id` con el que ScrollDolor reporta el CTA en `scroll_bloque_visible` (lo lleva
+ * CtaDemo.vue como `data-bloque-id`). Es lo que se traduce a EVENTO_PAGINA_FINAL.
+ */
+const BLOQUE_CTA = 'cta'
+
+/**
+ * Id único de un evento, generado del lado del lead. El backend lo usa para no guardar dos
+ * veces el mismo (índice único `lead_id + uuid`): la página dispara y olvida, así que un
+ * reintento de red podría llegar dos veces y el id lo vuelve inofensivo.
+ *
+ * `crypto.randomUUID()` existe en todo navegador de los últimos años, pero solo en contexto
+ * seguro (https o localhost). La página vive en https, así que el repliegue es para el
+ * navegador viejo o la prueba en una IP pelada: fecha más azar alcanza para no repetirse
+ * dentro de la vida de una pestaña, que es lo único que hace falta.
+ *
+ * @returns {string}
+ */
+function generar_uuid_evento() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12)
+}
+
+/**
+ * El instante actual en ISO 8601 CON el desfase horario del navegador
+ * (`2026-09-11T12:00:28-03:00`), y no `toISOString()`, que lo da en UTC con `Z`.
+ *
+ * 🔴 Medido el 11/9/2026 contra la API del slot: el backend guarda `ocurrido_at` tal como
+ * llega (cast `datetime` sobre el string), o sea que con `Z` la fila quedaba con la hora
+ * UTC pelada -- un toque del CTA a las 12:00 figuraba a las 15:00, tres horas adelante de
+ * su propio `created_at`. Con el desfase adentro, Carbon conserva la hora de pared del
+ * lead, que es exactamente lo que ya manda la instancia de demo por su canal
+ * (`DemoEventosPushHelper` de empresa-api usa `toIso8601String()`, que lleva el `-03:00`).
+ * Mismo formato en los dos canales, misma hora en la misma tabla.
+ *
+ * @returns {string}
+ */
+function ahora_iso_con_desfase() {
+  const ahora = new Date()
+  const dos = function (n) {
+    return String(n).padStart(2, '0')
+  }
+  /* getTimezoneOffset() es "minutos que hay que SUMARLE a la hora local para llegar a UTC":
+     Argentina da 180, y el desfase ISO que corresponde es -03:00. */
+  const desfase_min = -ahora.getTimezoneOffset()
+  const signo = desfase_min >= 0 ? '+' : '-'
+  const abs = Math.abs(desfase_min)
+
+  return (
+    ahora.getFullYear() + '-' + dos(ahora.getMonth() + 1) + '-' + dos(ahora.getDate()) +
+    'T' + dos(ahora.getHours()) + ':' + dos(ahora.getMinutes()) + ':' + dos(ahora.getSeconds()) +
+    signo + dos(Math.floor(abs / 60)) + ':' + dos(abs % 60)
+  )
+}
 
 /**
  * Página inmersiva de demo (Grupo 300 · pagina-inmersiva-demo, prompts 04 y
@@ -235,6 +330,12 @@ const CORRIDA_NUEVA_MARGEN_MS = 60000
  * El prompt 04 construyó la ruta, el contenedor y el scroll. Este prompt (05)
  * agrega el formulario, el video de introducción y el botón de acceso, sin
  * tocar la ruta ni el fetch inicial del payload.
+ *
+ * Desde el 11/9/2026 (misión experiencia-landing) la misma ruta tiene una segunda
+ * cara: para el lead SIN demo asignada (`turno.estado === 'sin_turno'`) es una landing
+ * -- el recorrido y, al final, un CTA a WhatsApp para pedir la demo -- y reporta al
+ * backend tres eventos (abrió, llegó al final, tocó el CTA). Ver `sin_turno` y
+ * emitir_evento().
  */
 export default {
   name: 'ExperienciaDemo',
@@ -267,6 +368,19 @@ export default {
       setup: {},
       /** { visto_pct, umbral_pct, obligatorio, velocidad } del video de introducción (misión 46). */
       intro: {},
+      /**
+       * `{ whatsapp_url, texto_boton }` del CTA de la página como landing (misión
+       * experiencia-landing, 11/9/2026). Lo arma el backend con el número y el texto de
+       * Configuración de demos; acá se pasa tal cual a ScrollDolor → CtaDemo. Queda `{}`
+       * si el payload no lo trae (API vieja): el CTA se dibuja sin botón.
+       */
+      cta: {},
+      /**
+       * Nombres de los eventos de la landing que ya se mandaron en ESTA carga de página
+       * (ver EVENTOS_UNA_VEZ_POR_CARGA). Es por carga y no persistido a propósito: si el lead
+       * recarga, volvió a abrirla, y el backend cuenta las aperturas justamente con eso.
+       */
+      eventos_emitidos: new Set(),
       /**
        * Tema visual ('oscuro' | 'claro') del recorrido de experiencia, configurable desde
        * Cuenta → Configuración de demos (misión tema-experiencia-configurable). Se pasa tal
@@ -431,6 +545,21 @@ export default {
 
   computed: {
     /**
+     * true cuando el lead NO tiene demo asignada (`demo_date` null): el backend lo dice con
+     * `turno.estado === 'sin_turno'` y la página pasa a ser una landing (misión
+     * experiencia-landing, 11/9/2026). Ver el comentario largo del template.
+     *
+     * Se lee del payload y no se deriva de nada más: es el backend el que sabe si hay
+     * turno, igual que con `puede_ingresar`. Antes de que llegue el payload, `turno` es
+     * `{}` y esto da false -- pero nada se monta antes de que llegue, así que no importa.
+     *
+     * @returns {boolean}
+     */
+    sin_turno() {
+      return !!(this.turno && this.turno.estado === 'sin_turno')
+    },
+
+    /**
      * true cuando lo que está en pantalla es el RECORRIDO (scroll de dolor +
      * formulario), que es lo único que tiene secciones con punto de enganche.
      *
@@ -441,10 +570,15 @@ export default {
      * poder scrollear nada. Las dos vistas son excluyentes (ver el template), así que
      * la condición es exactamente esta.
      *
+     * SIN turno el recorrido está visible siempre: no hay vista posterior a la que
+     * pasar (misión experiencia-landing, 11/9/2026). Se escribe `sin_turno` acá igual que
+     * en el template, y no se confía en que `intro_desbloqueada` quede en false: son la
+     * misma condición en los dos lugares, a propósito.
+     *
      * @returns {boolean}
      */
     recorrido_visible() {
-      return !this.loading && !this.invalido && !this.intro_desbloqueada
+      return !this.loading && !this.invalido && (this.sin_turno || !this.intro_desbloqueada)
     },
 
     /**
@@ -501,10 +635,15 @@ export default {
      * No hay riesgo de poleo infinito: `arrancar_poleo()` ya tiene tope duro de 20 minutos
      * y saltea los ticks con la pestaña en segundo plano.
      *
+     * Y SIN turno no se polea nunca: no hay armado que esperar (misión experiencia-landing,
+     * 11/9/2026). `intro_desbloqueada` ya queda en false en ese caso, pero un GET cada diez
+     * segundos desde cada landing abierta es un modo de falla lo bastante caro como para
+     * escribir la condición dos veces.
+     *
      * @returns {boolean}
      */
     debe_polear() {
-      return this.intro_desbloqueada && !this.puede_ingresar
+      return !this.sin_turno && this.intro_desbloqueada && !this.puede_ingresar
     },
   },
 
@@ -657,8 +796,23 @@ export default {
           // revelar_pagina): mientras el loader está encima, la confirmación ni
           // siquiera está montada, y los 3s de la invitación y los 5s del scroll
           // correrían tapados y descoordinados entre sí.
-          self.intro_desbloqueada = !!self.formulario.completado
-          self.secuencia_pendiente = !!(self.formulario.completado && !self.carga_inicial_hecha)
+          //
+          // 🔴 SIN turno, nada de esto (misión experiencia-landing, 11/9/2026): un lead
+          // que completó el formulario en una demo anterior y hoy no tiene demo
+          // asignada vería la confirmación "armando tu demo" de una demo que no existe,
+          // y `intro_desbloqueada` en true además dispararía el poleo y la secuencia.
+          // El template tiene la misma guarda por su lado; acá se corta en la fuente.
+          const con_turno = !self.sin_turno
+          self.intro_desbloqueada = con_turno && !!self.formulario.completado
+          self.secuencia_pendiente = con_turno && !!(self.formulario.completado && !self.carga_inicial_hecha)
+
+          // La landing se abrió: es el primero de los tres eventos que viajan al backend,
+          // y se emite acá -- con el payload recién aplicado -- porque abrir la página es
+          // haber cargado su contenido, no haber terminado el piso de la pantalla de
+          // carga. emitir_evento() se ocupa de que salga una sola vez por carga.
+          if (self.sin_turno) {
+            self.emitir_evento(EVENTO_PAGINA_ABIERTA, { perfil: self.lead.perfil || '' })
+          }
         })
         .catch(function () {
           self.invalido = true
@@ -801,10 +955,23 @@ export default {
     },
 
     /**
-     * Tracking mínimo centralizado (contexto/demo_experiencia.md §6 del
-     * prompt): hoy solo deja rastro en consola; el día que exista el bus de
-     * eventos real, se enchufa acá sin tener que tocar ScrollDolor ni las
-     * piezas del scroll.
+     * Tracking centralizado de la página (contexto/demo_experiencia.md §6 del prompt
+     * original): todo lo que ScrollDolor y sus piezas reportan pasa por acá, y por eso
+     * ninguno de ellos tiene que saber nada del backend.
+     *
+     * Hasta el 11/9/2026 esto era solo un `console.debug`. Desde la misión
+     * experiencia-landing, TRES nombres viajan al backend (EVENTOS_QUE_VIAJAN): que la
+     * landing se abrió, que el lead llegó al CTA y que lo tocó. Son los tres hechos que
+     * Martín necesita para saber qué hizo el lead con el link antes de ofrecerle la demo, y
+     * el seguimiento automático de la página cuelga del primero. Todo lo demás
+     * (`scroll_bloque_visible` de cada sección, etc.) sigue quedando solo en consola: el
+     * canal de eventos de la INSTANCIA de demo es otro (`POST /demo-eventos`, con su
+     * clave) y no es el de esta página.
+     *
+     * "Llegó al final" no lo emite nadie con ese nombre: ScrollDolor reporta el CTA como
+     * una sección más (`scroll_bloque_visible` con `bloque_id` 'cta') y acá se traduce.
+     * Se traduce acá y no allá para que ScrollDolor siga sin saber de turnos ni de qué
+     * eventos existen del otro lado.
      *
      * @param {string} nombre Nombre del evento (ej. "scroll_bloque_visible").
      * @param {object} payload Datos asociados al evento.
@@ -812,6 +979,66 @@ export default {
      */
     emitir_evento(nombre, payload) {
       console.debug('[demo-experiencia]', nombre, payload)
+
+      if (
+        nombre === 'scroll_bloque_visible' &&
+        this.sin_turno &&
+        payload &&
+        payload.bloque_id === BLOQUE_CTA
+      ) {
+        this.emitir_evento(EVENTO_PAGINA_FINAL, { perfil: payload.perfil || '' })
+        return
+      }
+
+      if (EVENTOS_QUE_VIAJAN.indexOf(nombre) === -1) {
+        return
+      }
+
+      if (EVENTOS_UNA_VEZ_POR_CARGA.indexOf(nombre) !== -1) {
+        if (this.eventos_emitidos.has(nombre)) {
+          return
+        }
+        this.eventos_emitidos.add(nombre)
+      }
+
+      this.enviar_evento_pagina(nombre, payload)
+    },
+
+    /**
+     * Manda un evento de la landing al backend (POST /demo-experiencia/{clave}/evento,
+     * api_public). FIRE-AND-FORGET, y las dos mitades importan:
+     *
+     *  - No bloquea nada: el CTA sigue abriendo WhatsApp mientras esto viaja, y la
+     *    página no espera la respuesta para nada.
+     *  - No muestra ningún error al lead. Contra una API que todavía no tenga el
+     *    endpoint (ventana entre deploys) esto es un 404, y un 404 de instrumentación no
+     *    es un problema del lead: queda en consola y nada más. Sin el `.catch`, además,
+     *    sería una promesa rechazada sin manejar en cada carga.
+     *
+     * El cuerpo es el contrato con admin-api: `uuid` es el id del EVENTO (generado acá,
+     * para que el backend deduplique), no la clave del lead -- esa va en la URL.
+     *
+     * @param {string} nombre Uno de EVENTOS_QUE_VIAJAN.
+     * @param {object} datos Datos del evento; `{}` si no hay.
+     * @returns {void}
+     */
+    enviar_evento_pagina(nombre, datos) {
+      const clave = this.$route.params.uuid
+
+      api_public
+        .post('/demo-experiencia/' + clave + '/evento', {
+          uuid: generar_uuid_evento(),
+          nombre: nombre,
+          ocurrido_at: ahora_iso_con_desfase(),
+          datos: datos || {},
+        })
+        .catch(function (error) {
+          console.debug(
+            '[demo-experiencia] el evento no llegó al backend',
+            nombre,
+            error && error.message ? error.message : error
+          )
+        })
     },
 
     /**
@@ -864,6 +1091,9 @@ export default {
       this.media = payload.media || {}
       this.setup = payload.setup || {}
       this.intro = payload.intro || {}
+      /* `{}` contra una API que no lo mande (misma ventana entre deploys que `tema`): el CTA
+         se dibuja sin botón, que es lo que CtaDemo hace sin `whatsapp_url`. */
+      this.cta = payload.cta || {}
       /* Red de seguridad si el backend todavía no manda la clave (ventana entre deploys de
          admin-api y admin-spa, o un payload viejo cacheado): cae a 'oscuro', que es lo que ya
          está en producción hoy. */

@@ -23,25 +23,24 @@
          del hijo, vía ref. Atarlo al template ata cada frame de scroll a un render de Vue,
          y acá lo único que cambia son estilos que el reloj escribe a mano.
 
-         🔴 Y solo ADELANTA: la animación corre sola a su ritmo (24,4 s) y el scroll la
+         🔴 Y solo ADELANTA: la animación corre sola a su ritmo (22,4 s desde el 11/9/2026) y el scroll la
          empuja hacia adelante, nunca hacia atrás. Es lo que pidió Lucas -- el que tiene
          paciencia la ve entera, el que no, llega al mensaje sin frustrarse. -->
-    <!-- 🔴 <animacion-procesador> NO PARTICIPA del tema claro/oscuro (misión
-         tema-experiencia-configurable, 10/9/2026), y esto es una decisión de Lucas, no
-         un bug ni un olvido: "siempre oscura, pase lo que pase". Sus colores -el
-         resplandor, las líneas de circuito, el degradé de fondo- están escritos a mano
-         en AnimacionProcesador.vue pensados específicamente para verse sobre casi negro;
-         no leen ninguna variable --demo-color-*. Diseñar una versión clara sería repetir
-         buena parte del trabajo de portar la animación, no un ajuste de tema, y Lucas
-         eligió no encargarla.
+    <!-- <animacion-procesador> SÍ PARTICIPA del tema claro/oscuro desde el 11/9/2026 (misión
+         experiencia-landing): recibe `tema` y elige su paleta con él. Hasta ese día acá
+         decía lo contrario -- "siempre oscura, pase lo que pase", decisión de Lucas del
+         10/9/2026 (misión tema-experiencia-configurable), tomada porque sus colores estaban
+         escritos a mano para casi negro, no leían ninguna variable --demo-color-* y diseñar
+         la versión clara era repetir buena parte del port. Eso cambió cuando Lucas exportó
+         la escena en tema claro desde Claude Design y pidió que, con el tema claro, la
+         animación sea ESA: ya no hay que inventar colores, la paleta clara viene de su
+         propio export (la lleva AnimacionProcesador.vue, junto con el logotipo de texto
+         oscuro). Con eso desaparece también el corte que este comentario documentaba --la
+         animación oscura de 320vh seguida del resto de la página clara--, que existía por
+         la decisión anterior y no por descuido.
 
-         Consecuencia que hay que saber si se vuelve a tocar esto: con tema="claro", el
-         lead ve la animación oscura (320vh) seguida del resto de la página clara -- el
-         mismo tipo de corte que la misión paleta-oscura-experiencia vino a evitar,
-         reaparecido acá por la decisión de arriba, no por descuido. Si el día de mañana
-         alguien "arregla" esto agregando la clase --claro adentro de
-         <animacion-procesador>, va a chocar con colores que no tienen equivalente claro
-         definido en ningún lado: hay que preguntarle a Lucas antes, no inferirlo. -->
+         El tema se pasa a las DOS instancias (la pinneada y la estática de reduced-motion):
+         son la misma escena y tienen que verse iguales. -->
     <!-- 🔴 Bajo reduced-motion la sección NO se pinnea, y no es una sutileza: el
          `min-height: 320vh` que FondoSeccionSticky escribe como estilo inline no lo
          puede sacar ninguna regla CSS (un inline gana), así que el bloque de
@@ -60,10 +59,10 @@
       :contenido_full_bleed="true"
       @progreso="on_progreso_animacion"
     >
-      <animacion-procesador ref="animacion" />
+      <animacion-procesador ref="animacion" :tema="tema" />
     </fondo-seccion-sticky>
     <div v-else class="demo-animacion-estatica">
-      <animacion-procesador />
+      <animacion-procesador :tema="tema" />
     </div>
 
 
@@ -157,20 +156,49 @@
     <!-- "Bienvenido a la nueva era" + los tres pilares de la implementación. -->
     <seccion-nueva-era />
 
-    <!-- Las reseñas de Google. 🔴 HOY NO RENDERIZA NADA: el array está vacío a propósito
-         porque no hay ninguna fuente de reseñas todavía (se le pidió a Lucas el link de
-         su perfil el 10/9/2026 y no llegó). No se inventan reseñas ni promedio. -->
+    <!-- Las reseñas de Google y los testimonios en video. Hasta el 11/9/2026 (misión
+         experiencia-landing) el array de reseñas estaba vacío a propósito y la sección no
+         renderizaba nada: no había fuente y no se inventan reseñas ni promedio. Ese día
+         llegó el perfil de Google de Lucas y SeccionResenas.vue las carga. -->
     <seccion-resenas />
 
 
-    <!-- Puente al formulario (el formulario lo renderiza ExperienciaDemo.vue justo
-         después de esta sección). Desde el grupo 355 (prompt 08) vive adentro de un
-         FondoSeccionSticky como las otras seis: era la única sección del recorrido sin
-         fondo propio -- "tiene el fondo muy blanco", Lucas, 5/8/2026 -- y sin progreso
-         del cual colgar su entrada, así que quedaba como texto plano y estático en
-         medio de una página que se mueve toda. -->
-    <fondo-seccion-sticky variante="puente" v-slot="{ progreso }">
-      <footer class="demo-scroll-dolor__puente" data-bloque-id="puente">
+    <!-- El cierre del recorrido, y tiene DOS caras según si el lead tiene demo asignada
+         (misión experiencia-landing, 11/9/2026):
+
+         · CON turno, el puente al formulario (el formulario lo renderiza ExperienciaDemo.vue
+           justo después de esta sección). Desde el grupo 355 (prompt 08) vive adentro de un
+           FondoSeccionSticky como las otras: era la única sección del recorrido sin fondo
+           propio -- "tiene el fondo muy blanco", Lucas, 5/8/2026 -- y sin progreso del cual
+           colgar su entrada, así que quedaba como texto plano y estático en medio de una
+           página que se mueve toda.
+         · SIN turno, el CTA que manda al lead a WhatsApp a pedir la demo. Ocupa EL MISMO
+           fondo sticky, no uno propio: mismo fondo, mismo punto de enganche del avance guiado
+           (el .demo-fondo-seccion__snap que este componente planta, así que avance-guiado.js
+           no necesita saber que existe) y la misma coreografía de entrada por progreso. Y por
+           eso el `variante="puente"` se conserva aunque acá no haya puente: es el nombre del
+           FONDO en demo-experiencia.scss, no de lo que hay adentro.
+
+         El `data-bloque-id` de la cara que se renderiza ('puente' o 'cta', este último lo
+         lleva el propio CtaDemo) es lo que observar_secciones() reporta como
+         scroll_bloque_visible al llegar acá. -->
+    <!-- 🔴 `boton_avance` apagado sin turno, y no por prolijidad: medido el 11/9/2026 en el
+         navegador. Con turno, después de esta sección viene el formulario y el botón de
+         "siguiente" tiene a dónde ir. Sin turno esta es la ÚLTIMA sección, y aunque
+         FondoSeccionSticky dice que "hay_siguiente() resuelve solo la última", eso vale para
+         una última sección EN FLUJO (el formulario) y no para una pinneada: la sección se
+         da por encuadrada desde que su borde llega al tope, o sea 200px ANTES de su propio
+         punto de enganche, y en ese tramo hay_siguiente() todavía ve ese punto adelante,
+         responde true y la respuesta queda cacheada. Resultado: el chevron aparecía debajo
+         del botón de WhatsApp y al tocarlo no hacía nada. -->
+    <fondo-seccion-sticky variante="puente" :boton_avance="!sin_turno" v-slot="{ progreso }">
+      <cta-demo
+        v-if="sin_turno"
+        :cta="cta"
+        :progreso="progreso"
+        :emitir_evento="emitir_evento"
+      />
+      <footer v-else class="demo-scroll-dolor__puente" data-bloque-id="puente">
         <p
           v-for="(linea, indice) in contenido.puente"
           :key="indice"
@@ -192,6 +220,7 @@ import SeccionClientes from './SeccionClientes.vue'
 import CuboProcesador from './CuboProcesador.vue'
 import SeccionNuevaEra from './SeccionNuevaEra.vue'
 import SeccionResenas from './SeccionResenas.vue'
+import CtaDemo from './CtaDemo.vue'
 
 /**
  * Copy por perfil de la página, transcripto palabra por palabra desde
@@ -360,9 +389,10 @@ function ease_out(t) {
 /**
  * El recorrido de la página inmersiva de demo, rehecho el 10/9/2026 (misión
  * experiencia-nueva): la animación del procesador, la apertura, los clientes, el
- * cubo, los hitos, "Bienvenido a la nueva era", las reseñas y el puente al
- * formulario. Renderiza la versión dueño o campeón según `perfil`
- * (contexto/demo_experiencia.md §3.17).
+ * cubo, los hitos, "Bienvenido a la nueva era", las reseñas y el cierre -- el puente al
+ * formulario cuando el lead tiene demo asignada, o el CTA a WhatsApp cuando no la tiene
+ * (`sin_turno`, misión experiencia-landing, 11/9/2026). Renderiza la versión dueño o
+ * campeón según `perfil` (contexto/demo_experiencia.md §3.17).
  *
  * ⚠️ El nombre del componente quedó viejo: ya no hay ningún "scroll de dolor". Se
  * conserva porque renombrarlo toca la ruta, el SCSS compartido y una docena de
@@ -394,6 +424,7 @@ export default {
     CuboProcesador,
     SeccionNuevaEra,
     SeccionResenas,
+    CtaDemo,
   },
 
   props: {
@@ -424,6 +455,26 @@ export default {
     tema: {
       type: String,
       default: 'oscuro',
+    },
+    /**
+     * true cuando el lead NO tiene demo asignada (`turno.estado === 'sin_turno'`, lo decide
+     * ExperienciaDemo.vue) y la página es una landing (misión experiencia-landing,
+     * 11/9/2026): el recorrido es el mismo, pero cierra con el CTA a WhatsApp en vez del
+     * puente al formulario. Default false: quien no lo pase ve exactamente lo de siempre.
+     */
+    sin_turno: {
+      type: Boolean,
+      default: false,
+    },
+    /**
+     * `{ whatsapp_url, texto_boton }` del payload, para el CTA. Solo se lee con `sin_turno`;
+     * se pasa tal cual a CtaDemo, que es quien decide qué dibuja sin URL.
+     */
+    cta: {
+      type: Object,
+      default: function () {
+        return {}
+      },
     },
   },
 
@@ -570,6 +621,12 @@ export default {
         ['.demo-hitos', 'hitos'],
         ['.demo-nueva-era', 'nueva_era'],
         ['.demo-resenas', 'resenas'],
+        /* El cierre del recorrido, en cualquiera de sus dos caras (11/9/2026, misión
+           experiencia-landing). Solo una de las dos existe en el DOM. El 'cta' no es un
+           dato más para el brief: ExperienciaDemo lo traduce a `pagina_final_sin_turno`,
+           el evento que le dice al backend que el lead llegó hasta el botón. */
+        ['.demo-scroll-dolor__puente', 'puente'],
+        ['.demo-cta', 'cta'],
       ]
 
       self.observador_secciones = new IntersectionObserver(function (entradas) {
@@ -605,8 +662,9 @@ export default {
       secciones.forEach(function (par) {
         const nodo = self.$el && self.$el.querySelector(par[0])
         if (!nodo) {
-          /* `.demo-resenas` hoy no renderiza ningún nodo (el array de reseñas está
-             vacío a propósito). No es un error: cuando tenga datos, entra sola. */
+          /* No es un error: del puente y el CTA solo existe uno, y `.demo-resenas` no
+             renderiza nada si algún día vuelve a quedarse sin reseñas. Lo que no está en el
+             DOM, no se observa. */
           return
         }
         nodo.setAttribute('data-seccion-id', par[1])
@@ -638,7 +696,7 @@ export default {
     /**
      * Progreso de la sección de la animación de apertura.
      *
-     * 🔴 Solo ADELANTA. La animación corre sola a su ritmo (24,4 s) y esto la empuja
+     * 🔴 Solo ADELANTA. La animación corre sola a su ritmo (22,4 s desde el 11/9/2026) y esto la empuja
      * hacia adelante; nunca la rebobina. Es la decisión de Lucas del 10/9/2026: el lead
      * con paciencia la ve entera, y el que no la tiene llega al mensaje sin frustrarse.
      * `adelantar_desde_scroll()` ya ignora un progreso menor al del reloj, así que acá
@@ -1084,6 +1142,8 @@ export default {
   width: 100%;
   height: 100vh;
   height: 100svh;
-  background: #04060b;
+  /* El tema manda también acá (11/9/2026): la escena pinta su propio fondo a sangre, pero
+     este contenedor no puede quedar negro debajo de una página en tema claro. */
+  background: var(--demo-color-fondo, #04060b);
 }
 </style>
