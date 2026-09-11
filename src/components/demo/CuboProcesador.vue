@@ -110,28 +110,59 @@
         <div ref="deriva" class="demo-cubo__deriva">
           <div class="demo-cubo__sombra" aria-hidden="true"></div>
 
-          <div ref="cubo" class="demo-cubo__cuerpo">
-            <div
-              v-for="(cara, indice) in caras"
-              :key="indice"
-              class="demo-cubo__cara"
-              :class="{ 'demo-cubo__cara--ciega': !cara.titulo }"
-              :style="{ transform: cara.transform }"
-            >
-              <template v-if="cara.titulo">
-                <span class="demo-cubo__surco demo-cubo__surco--arriba" aria-hidden="true"></span>
-                <span class="demo-cubo__surco demo-cubo__surco--abajo" aria-hidden="true"></span>
-                <span class="demo-cubo__surco demo-cubo__surco--izquierda" aria-hidden="true"></span>
-                <span class="demo-cubo__surco demo-cubo__surco--derecha" aria-hidden="true"></span>
-                <span class="demo-cubo__brillo" aria-hidden="true"></span>
+          <!-- El flote (11/9/2026, export nuevo): un balanceo idle de 9s, siempre
+               encendido, INDEPENDIENTE del giro por scroll -- por eso es un envoltorio
+               propio y no algo que se le suma al transform que ya escribe aplicar()
+               sobre :ref="cubo". Los dos transforms se componen solos porque los dos
+               ancestros llevan transform-style: preserve-3d. No hace falta apagarlo a
+               mano bajo prefers-reduced-motion: toda esta rama es v-else, así que bajo
+               movimiento reducido ni se monta (ver movimiento_reducido más abajo); el
+               <style> igual lo frena por las dudas, mismo criterio que .demo-cubo__portada. -->
+          <div class="demo-cubo__flotador">
+            <div ref="cubo" class="demo-cubo__cuerpo">
+              <!-- Las seis paredes interiores: dan la sensación de espesor -- una caja
+                   hueca con paredes oscuras detrás de cada cara, no seis chapas sueltas
+                   flotando en el aire. Son decorativas y siempre las mismas seis (no
+                   dependen de tiempo/progreso), por eso van hardcodeadas acá en vez de
+                   salir de un v-for con estado en JS -- ver .demo-cubo__interior--* en
+                   el <style> para las seis posiciones. -->
+              <span class="demo-cubo__interior demo-cubo__interior--frente" aria-hidden="true"></span>
+              <span class="demo-cubo__interior demo-cubo__interior--atras" aria-hidden="true"></span>
+              <span class="demo-cubo__interior demo-cubo__interior--arriba" aria-hidden="true"></span>
+              <span class="demo-cubo__interior demo-cubo__interior--abajo" aria-hidden="true"></span>
+              <span class="demo-cubo__interior demo-cubo__interior--derecha" aria-hidden="true"></span>
+              <span class="demo-cubo__interior demo-cubo__interior--izquierda" aria-hidden="true"></span>
 
-                <div class="demo-cubo__cara-contenido">
-                  <span class="demo-cubo__chip" aria-hidden="true">
-                    <img src="../../assets/isotipo-comerciocity.svg" alt="" />
-                  </span>
-                  <p class="demo-cubo__cara-titulo">{{ cara.titulo }}</p>
-                </div>
-              </template>
+              <div
+                v-for="(cara, indice) in caras"
+                :key="indice"
+                class="demo-cubo__cara"
+                :class="{ 'demo-cubo__cara--ciega': !cara.titulo, 'demo-cubo__cara--lateral': cara.lateral }"
+                :style="{ transform: cara.transform }"
+              >
+                <template v-if="cara.titulo">
+                  <span class="demo-cubo__surco demo-cubo__surco--arriba" aria-hidden="true"></span>
+                  <span class="demo-cubo__surco demo-cubo__surco--abajo" aria-hidden="true"></span>
+                  <span class="demo-cubo__surco demo-cubo__surco--izquierda" aria-hidden="true"></span>
+                  <span class="demo-cubo__surco demo-cubo__surco--derecha" aria-hidden="true"></span>
+                  <span class="demo-cubo__brillo" aria-hidden="true"></span>
+
+                  <!-- Derecha/izquierda (cara.lateral) quedaron cuadradas y angostas
+                       con el cuerpo ancho nuevo -- ahí el ícono más el título no
+                       entran cómodos, y el export las simplificó a un título centrado,
+                       sin chip. Las otras tres (frente/atrás/arriba) conservan el
+                       layout de siempre. -->
+                  <div v-if="cara.lateral" class="demo-cubo__cara-centro">
+                    <p class="demo-cubo__cara-titulo">{{ cara.titulo }}</p>
+                  </div>
+                  <div v-else class="demo-cubo__cara-contenido">
+                    <span class="demo-cubo__chip" aria-hidden="true">
+                      <img src="../../assets/isotipo-comerciocity.svg" alt="" />
+                    </span>
+                    <p class="demo-cubo__cara-titulo">{{ cara.titulo }}</p>
+                  </div>
+                </template>
+              </div>
             </div>
           </div>
         </div>
@@ -192,6 +223,12 @@
  *    cambia el diseño; lo que quedó literal es la chapa del cubo (los degradés
  *    claros, los surcos y el encapsulado oscuro del chip), que no es texto de página
  *    sino el material del objeto.
+ * 5. Geometría del cuerpo (11/9/2026, misión `experiencia-ajustes`, export nuevo). El
+ *    cubo dejó de ser parejo: ver el comentario de CARAS acá abajo y
+ *    .demo-cubo__flotador en el <style>. Esta lista de 1 a 4 sigue valiendo tal cual
+ *    contra ese export nuevo -- lo único que cambió es el CUERPO del cubo, no el
+ *    motor de scroll, la amortiguación ni los colores de esta página. Detalle
+ *    completo en el README de `marca/animacion-cubo/` del repo de conocimiento.
  *
  * ── EL PIN ──────────────────────────────────────────────────────────────────────
  *
@@ -255,7 +292,15 @@ const DWELL = 0.4
  *
  * La sexta (abajo) es ciega a propósito: el recorrido tiene cinco paradas, así que
  * esa cara no llega nunca al frente. Lleva su propio degradé, sin contenido.
- */
+ *
+ * 🔴 `lateral: true` (11/9/2026): el export de ese día dejó de ser un cubo parejo. El
+ * cuerpo pasó a ser una caja ANCHA (`--cubo-ancho` = 1,55 × `--cubo-lado`, ver el
+ * <style>) -- frente/atrás/arriba/abajo son rectángulos anchos y solo derecha/
+ * izquierda quedan cuadradas, viendo el lado angosto de la caja. Por eso esas dos
+ * empujan a `--cubo-ancho / 2` (no `--cubo-lado / 2`, que siguen usando las otras
+ * cuatro) y por eso el export les sacó el chip: en la cara cuadrada, más angosta, el
+ * ícono más el título quedaban apretados, así que ahí va solo el título centrado (ver
+ * `.demo-cubo__cara-centro` en el <style> y el `v-if="!cara.lateral"` del template). */
 const CARAS = [
   {
     /* Frente */
@@ -265,8 +310,9 @@ const CARAS = [
       'El mismo producto que está cargado en el sistema se muestra en la tienda online, y lo tiene en cuenta tu agente de WhatsApp para responder y asesorar a tus clientes.',
   },
   {
-    /* Derecha */
-    transform: 'rotateY(90deg) translateZ(calc(var(--cubo-lado) / 2))',
+    /* Derecha: cuadrada y angosta (ver el comentario de arriba), sin chip. */
+    transform: 'rotateY(90deg) translateZ(calc(var(--cubo-ancho) / 2))',
+    lateral: true,
     titulo: 'Foto a la factura del proveedor',
     texto:
       'Sacá foto a la factura de tu proveedor, y el sistema identifica ese mismo artículo para actualizar su precio y stock.',
@@ -285,10 +331,12 @@ const CARAS = [
       'Perfilado de tus clientes en base a su actividad en la tienda online, para ofrecer descuentos oportunos súper personalizados a tus mejores clientes.',
   },
   {
-    /* Izquierda. El export la titulaba "Reportes y tesorería", que es un rubro y no
-       una escena como los otros cuatro títulos. Este está en el mismo registro: par
-       nominal separado por coma, igual que "Cada cliente, su descuento". */
-    transform: 'rotateY(-90deg) rotateZ(90deg) translateZ(calc(var(--cubo-lado) / 2))',
+    /* Izquierda: cuadrada y angosta, sin chip -- mismo motivo que Derecha. El export la
+       titulaba "Reportes y tesorería", que es un rubro y no una escena como los otros
+       cuatro títulos. Este está en el mismo registro: par nominal separado por coma,
+       igual que "Cada cliente, su descuento". */
+    transform: 'rotateY(-90deg) rotateZ(90deg) translateZ(calc(var(--cubo-ancho) / 2))',
+    lateral: true,
     titulo: 'Los números, antes de decidir',
     texto: 'Reportes y tesorería, para tomar decisiones informado.',
   },
@@ -714,14 +762,25 @@ export default {
 
 <style scoped>
 /* ---------------------------------------------------------------------------
-   Envoltorio. `--cubo-lado` es la única medida de la que cuelga toda la geometría
-   del cubo (el export la llamaba `--cube`): el translateZ de las seis caras y el
+   Envoltorio. `--cubo-lado` es la medida base de la que cuelga toda la geometría del
+   cubo (el export la llamaba `--cs`): el translateZ de frente/atrás/arriba/abajo y el
    cuerpo de letra del título salen de acá. clamp con vmin y no con vw: en teléfono
    apaisado el que manda es el alto, y un cubo dimensionado por ancho se sale de
    pantalla.
+
+   🔴 Dos variables nuevas (11/9/2026, export nuevo): el cuerpo dejó de ser un cubo
+   parejo -- `--cubo-ancho` ("--cw" en el export) es 1,55× `--cubo-lado`, y frente/
+   atrás/arriba/abajo pasaron a ser rectángulos ANCHOS (--cubo-ancho × --cubo-lado);
+   solo derecha/izquierda siguen cuadradas (--cubo-lado × --cubo-lado), viendo el lado
+   angosto. `--cubo-inset` ("--in") es el margen de las paredes interiores nuevas (ver
+   `.demo-cubo__interior`), que le dan sensación de espesor a la caja. Las dos se
+   derivan de `--cubo-lado` con `calc()`, así que los dos `@media` de acá abajo (que
+   solo pisan `--cubo-lado`) las recalculan solos -- no hay que tocarlos aparte.
    --------------------------------------------------------------------------- */
 .demo-cubo {
-  --cubo-lado: clamp(200px, 31vmin, 250px);
+  --cubo-lado: clamp(192px, 29vmin, 240px);
+  --cubo-ancho: calc(var(--cubo-lado) * 1.55);
+  --cubo-inset: calc(var(--cubo-lado) * 0.03);
   /* Acento del riel. El export usa #2f7bff; acá es el azul ancla de la marca, que es
      la variable que ya usa el resto de la página. */
   --cubo-acento: var(--demo-color-azul, #0b84f8);
@@ -870,13 +929,96 @@ export default {
   filter: blur(10px);
 }
 
+/* El flote idle (11/9/2026, export nuevo): un balanceo suave de 9s en loop, siempre
+   encendido mientras el cubo está montado -- INDEPENDIENTE del giro por scroll, que
+   sigue viviendo en :ref="cubo" adentro. `transform-style: preserve-3d` es necesario
+   acá (no solo en .demo-cubo__cuerpo) para que el balanceo participe del mismo
+   espacio 3D que el cubo y no lo aplaste. */
+.demo-cubo__flotador {
+  position: relative;
+  transform-style: preserve-3d;
+  animation: demo-cubo-flote 9s ease-in-out infinite;
+}
+
+@keyframes demo-cubo-flote {
+  0% {
+    transform: translate3d(0, 0, 0) rotateX(0deg) rotateY(0deg);
+  }
+  25% {
+    transform: translate3d(7px, -10px, 0) rotateX(2.6deg) rotateY(-3deg);
+  }
+  50% {
+    transform: translate3d(0, -15px, 0) rotateX(0deg) rotateY(0.8deg);
+  }
+  75% {
+    transform: translate3d(-7px, -9px, 0) rotateX(-2.4deg) rotateY(2.8deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotateX(0deg) rotateY(0deg);
+  }
+}
+
+/* 🔴 El cuerpo dejó de ser un cubo parejo (11/9/2026, export nuevo): ahora es una caja
+   ANCHA, --cubo-ancho (1,55× --cubo-lado) de ancho por --cubo-lado de alto Y de
+   profundidad. Frente/atrás/arriba/abajo quedan rectángulos anchos; derecha/izquierda
+   quedan cuadradas, viendo el lado angosto -- ver el comentario de CARAS en el
+   <script> para el detalle de qué cara usa qué medida. */
 .demo-cubo__cuerpo {
   position: relative;
-  width: var(--cubo-lado);
+  width: var(--cubo-ancho);
   height: var(--cubo-lado);
   transform-style: preserve-3d;
   /* Valor inicial; a partir del primer frame lo escribe aplicar(). */
   transform: rotateY(0deg);
+}
+
+/* Las seis paredes interiores (11/9/2026, export nuevo): le dan a la caja sensación de
+   espesor real -- un hueco oscuro detrás de cada cara, no seis chapas sueltas sin
+   nada atrás. Van un poco adentro de cada cara (--cubo-inset) y no llevan texto ni
+   brillo: son directamente el material oscuro del interior. */
+.demo-cubo__interior {
+  position: absolute;
+  inset: var(--cubo-inset);
+  border-radius: calc(var(--cubo-lado) * 0.04);
+  background: linear-gradient(150deg, #27354d 0%, #101a2b 100%);
+}
+
+.demo-cubo__interior--frente {
+  transform: translateZ(calc(var(--cubo-lado) / 2 - var(--cubo-inset)));
+}
+
+.demo-cubo__interior--atras {
+  transform: rotateY(180deg) translateZ(calc(var(--cubo-lado) / 2 - var(--cubo-inset)));
+}
+
+.demo-cubo__interior--arriba {
+  transform: rotateX(90deg) translateZ(calc(var(--cubo-lado) / 2 - var(--cubo-inset)));
+}
+
+.demo-cubo__interior--abajo {
+  transform: rotateX(-90deg) translateZ(calc(var(--cubo-lado) / 2 - var(--cubo-inset)));
+}
+
+/* Derecha/izquierda son las caras angostas de la caja: la pared interior mide
+   --cubo-lado de ancho (no --cubo-ancho) y se centra en el eje X del cuerpo -- mismo
+   truco de `left: 50%` + `margin-left` negativo que usa .demo-cubo__cara--lateral acá
+   abajo, para las caras visibles. */
+.demo-cubo__interior--derecha,
+.demo-cubo__interior--izquierda {
+  inset: auto;
+  top: var(--cubo-inset);
+  bottom: var(--cubo-inset);
+  left: 50%;
+  width: calc(var(--cubo-lado) - 2 * var(--cubo-inset));
+  margin-left: calc((var(--cubo-lado) - 2 * var(--cubo-inset)) / -2);
+}
+
+.demo-cubo__interior--derecha {
+  transform: rotateY(90deg) translateZ(calc(var(--cubo-ancho) / 2 - var(--cubo-inset)));
+}
+
+.demo-cubo__interior--izquierda {
+  transform: rotateY(-90deg) translateZ(calc(var(--cubo-ancho) / 2 - var(--cubo-inset)));
 }
 
 /* La chapa: el mismo degradé claro para las cinco caras con contenido. Se deja
@@ -885,7 +1027,7 @@ export default {
 .demo-cubo__cara {
   position: absolute;
   inset: 0;
-  border-radius: 9%;
+  border-radius: calc(var(--cubo-lado) * 0.05);
   overflow: hidden;
   background: linear-gradient(
     146deg,
@@ -902,13 +1044,32 @@ export default {
   backface-visibility: hidden;
 }
 
+/* Derecha/izquierda (11/9/2026): la cara ya no hereda el ancho completo del cuerpo
+   (--cubo-ancho) vía `inset: 0` -- mide --cubo-lado y se centra, igual que su pared
+   interior de arriba. Es lo que las deja cuadradas en vez de anchas. */
+.demo-cubo__cara--lateral {
+  inset: auto;
+  top: 0;
+  right: auto;
+  bottom: 0;
+  left: 50%;
+  width: var(--cubo-lado);
+  margin-left: calc(var(--cubo-lado) / -2);
+}
+
 /* La sexta cara (abajo). No llega nunca al frente: solo tapa el hueco. */
 .demo-cubo__cara--ciega {
   background: linear-gradient(146deg, rgba(226, 234, 246, 0.97) 0%, rgba(196, 209, 228, 0.97) 100%);
 }
 
 /* Los cuatro surcos punteados del borde: el detalle que hace leer la cara como el
-   encapsulado de un integrado y no como una tarjeta. */
+   encapsulado de un integrado y no como una tarjeta.
+
+   🔴 Grosor fijo en px, no en % (11/9/2026): con el cuerpo parejo de ayer daba lo
+   mismo, pero con la caja ancha nueva un grosor en % de una cara de --cubo-ancho salía
+   más grueso que el de una cara de --cubo-lado -- un mismo integrado con bordes de dos
+   espesores distintos según qué cara se estuviera mirando. En px el grosor es el
+   mismo en las seis. */
 .demo-cubo__surco {
   position: absolute;
   border-radius: 2px;
@@ -916,9 +1077,9 @@ export default {
 
 .demo-cubo__surco--arriba,
 .demo-cubo__surco--abajo {
-  left: 11%;
-  right: 11%;
-  height: 2.4%;
+  left: 9%;
+  right: 9%;
+  height: 3px;
   background: repeating-linear-gradient(
     90deg,
     rgba(74, 102, 148, 0.5) 0 3px,
@@ -927,18 +1088,18 @@ export default {
 }
 
 .demo-cubo__surco--arriba {
-  top: 4%;
+  top: 5%;
 }
 
 .demo-cubo__surco--abajo {
-  bottom: 4%;
+  bottom: 5%;
 }
 
 .demo-cubo__surco--izquierda,
 .demo-cubo__surco--derecha {
-  top: 11%;
-  bottom: 11%;
-  width: 2.4%;
+  top: 9%;
+  bottom: 9%;
+  width: 3px;
   background: repeating-linear-gradient(
     0deg,
     rgba(74, 102, 148, 0.5) 0 3px,
@@ -947,11 +1108,11 @@ export default {
 }
 
 .demo-cubo__surco--izquierda {
-  left: 4%;
+  left: 5%;
 }
 
 .demo-cubo__surco--derecha {
-  right: 4%;
+  right: 5%;
 }
 
 /* El reflejo diagonal sobre la chapa. */
@@ -969,19 +1130,37 @@ export default {
 
 .demo-cubo__cara-contenido {
   position: absolute;
-  inset: 12%;
+  inset: 11% 9%;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 4%;
+  gap: 5%;
+}
+
+/* El layout de derecha/izquierda (11/9/2026): sin chip, un solo título centrado. En la
+   cara cuadrada y angosta nueva el ícono más el título no entraban cómodos, y el
+   export las simplificó a esto -- ver `cara.lateral` en CARAS y el `v-if` del
+   template. */
+.demo-cubo__cara-centro {
+  position: absolute;
+  inset: 13%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 /* El procesador de la cara: el cuadrado oscuro con el isotipo adentro. Es el dibujo
    que trae el export y es el que Lucas aprobó, así que no se reemplaza por
    ChipProcesador.vue (que es otra cosa: 190px de encapsulado con 36 pines, halo y
-   barrido, movido por un reloj en segundos, no por scroll). */
+   barrido, movido por un reloj en segundos, no por scroll).
+
+   🔴 Ancho en unidades de --cubo-lado, no en % de la cara (11/9/2026): un 25% de una
+   cara ANCHA (--cubo-ancho) daba un ícono más grande que el de una cara angosta. Ya no
+   se nota en las caras cuadradas (perdieron el chip, ver .demo-cubo__cara-centro),
+   pero frente/atrás/arriba lo siguen usando y quedan con el mismo tamaño entre sí. */
 .demo-cubo__chip {
-  width: 25%;
+  width: calc(var(--cubo-lado) * 0.19);
   aspect-ratio: 1;
   border-radius: 20%;
   flex: 0 0 auto;
@@ -1013,9 +1192,9 @@ export default {
    (.demo-cubo__chip) -ninguno de los dos participa del tema de la página tampoco. */
 .demo-cubo__cara-titulo {
   margin: 0;
-  font-size: calc(var(--cubo-lado) * 0.082);
+  font-size: calc(var(--cubo-lado) * 0.088);
   font-weight: 600;
-  line-height: 1.13;
+  line-height: 1.14;
   letter-spacing: -0.028em;
   text-wrap: pretty;
   color: #1c2333;
@@ -1189,13 +1368,15 @@ export default {
 }
 
 /* ---------------------------------------------------------------------------
-   Movimiento reducido: acá no queda nada que apagar (la pista ni se renderiza),
-   pero la portada se deja explícitamente quieta por si algún día alguien le agrega
-   una entrada.
+   Movimiento reducido: acá no queda nada que apagar (la pista ni se renderiza, y con
+   ella .demo-cubo__flotador tampoco existe en el DOM), pero se deja todo
+   explícitamente quieto por las dudas -- mismo criterio que ya valía para la portada,
+   ahora extendido al flote idle nuevo del 11/9/2026.
    --------------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .demo-cubo__portada,
-  .demo-cubo__ficha {
+  .demo-cubo__ficha,
+  .demo-cubo__flotador {
     animation: none !important;
     transform: none !important;
   }
