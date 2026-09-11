@@ -287,38 +287,6 @@ function generar_uuid_evento() {
 }
 
 /**
- * El instante actual en ISO 8601 CON el desfase horario del navegador
- * (`2026-09-11T12:00:28-03:00`), y no `toISOString()`, que lo da en UTC con `Z`.
- *
- * 🔴 Medido el 11/9/2026 contra la API del slot: el backend guarda `ocurrido_at` tal como
- * llega (cast `datetime` sobre el string), o sea que con `Z` la fila quedaba con la hora
- * UTC pelada -- un toque del CTA a las 12:00 figuraba a las 15:00, tres horas adelante de
- * su propio `created_at`. Con el desfase adentro, Carbon conserva la hora de pared del
- * lead, que es exactamente lo que ya manda la instancia de demo por su canal
- * (`DemoEventosPushHelper` de empresa-api usa `toIso8601String()`, que lleva el `-03:00`).
- * Mismo formato en los dos canales, misma hora en la misma tabla.
- *
- * @returns {string}
- */
-function ahora_iso_con_desfase() {
-  const ahora = new Date()
-  const dos = function (n) {
-    return String(n).padStart(2, '0')
-  }
-  /* getTimezoneOffset() es "minutos que hay que SUMARLE a la hora local para llegar a UTC":
-     Argentina da 180, y el desfase ISO que corresponde es -03:00. */
-  const desfase_min = -ahora.getTimezoneOffset()
-  const signo = desfase_min >= 0 ? '+' : '-'
-  const abs = Math.abs(desfase_min)
-
-  return (
-    ahora.getFullYear() + '-' + dos(ahora.getMonth() + 1) + '-' + dos(ahora.getDate()) +
-    'T' + dos(ahora.getHours()) + ':' + dos(ahora.getMinutes()) + ':' + dos(ahora.getSeconds()) +
-    signo + dos(Math.floor(abs / 60)) + ':' + dos(abs % 60)
-  )
-}
-
-/**
  * Página inmersiva de demo (Grupo 300 · pagina-inmersiva-demo, prompts 04 y
  * 05). Contenedor de la ruta pública /experiencia/:uuid: carga el payload del
  * endpoint público (prompt 03 de este mismo grupo) y arma el armazón completo
@@ -1026,10 +994,16 @@ export default {
       const clave = this.$route.params.uuid
 
       api_public
+        /* 🔴 Sin `ocurrido_at`: lo estampa el servidor. La primera versión de esta misión lo
+           mandaba desde acá y el backend lo guardaba tal como llegaba; un ISO con `Z` dejaba la
+           fila tres horas adelantada, y "arreglarlo" mandando el desfase local sólo cubría al
+           navegador que estuviera en Argentina. Como la página dispara el POST en el acto, el
+           momento que importa es cuándo llega -- y ese reloj lo tiene el servidor, no el teléfono
+           del lead. Si alguna vez hace falta el instante del cliente, va adentro de `datos`, no
+           como `ocurrido_at`. */
         .post('/demo-experiencia/' + clave + '/evento', {
           uuid: generar_uuid_evento(),
           nombre: nombre,
-          ocurrido_at: ahora_iso_con_desfase(),
           datos: datos || {},
         })
         .catch(function (error) {

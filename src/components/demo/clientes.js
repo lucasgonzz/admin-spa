@@ -331,15 +331,17 @@ export const clientes_ecommerce = [
     nombre: 'Unicas',
     rubro: 'Productos capilares',
     url: 'https://unicas.com.ar/',
-    plataforma: 'comerciocity',
+    plataforma: 'otra',
     // 🔴 Apagada a propósito, y es distinto de lo que decía el plan del 11/9/2026 (que la
-    // traía como tienda activa). Medido ese mismo día: unicas.com.ar responde 200 pero es
-    // un sitio institucional estático (Bootstrap, hecho por xentsoft.com) que sólo enlaza
-    // a WhatsApp, Facebook e Instagram -- no hay carrito ni catálogo, no es una tienda. En
-    // el admin de producción tampoco hay un `client_ecommerce` de Unicas (sí lo hay para
-    // tiju, grupolimp y quino2), y ni tienda.unicas.com.ar ni api.unicas.com.ar resuelven.
-    // Mostrarla bajo "también venden por internet" sería falso. Si Lucas pasa la URL de
-    // una tienda real, se cambia `url` y se saca esta línea.
+    // traía como tienda propia activa). Medido ese mismo día, dos veces: unicas.com.ar SÍ es
+    // una tienda (carrito, fichas de producto con precio y botón "Comprar", login), pero la
+    // hizo un tercero (xentsoft.com): no es tienda-spa ni Tienda Nube, y en el admin de
+    // producción no hay ningún `client_ecommerce` de Unicas (sí lo hay para tiju, grupolimp y
+    // quino2), así que tampoco sabemos si está conectada al sistema. Ninguna de las dos
+    // etiquetas de la sección ("Tienda ComercioCity" / "Tienda Nube") sería verdadera. Lucas
+    // la pidió por nombre: queda apagada hasta que él diga si la muestra igual y con qué
+    // etiqueta -- el informe de la misión se lo pregunta. `plataforma: 'otra'` deja el dato
+    // asentado por si la respuesta es "sí": alcanza con `activa: true` y una etiqueta más.
     activa: false,
   },
   {
