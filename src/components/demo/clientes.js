@@ -32,7 +32,9 @@ export function logo_cliente(id) {
 }
 
 /**
- * Los 38 logos que hay en disco, en el mismo orden que el índice de `comerciocity-web`.
+ * Los primeros 38 logos (índices 0 a 37), en el mismo orden que el índice de
+ * `comerciocity-web`. De ahí en más (11/9/2026) sigue una segunda tanda con una fuente
+ * distinta -- ver el bloque de comentario propio más abajo, antes de `servian`.
  *
  * **Los nombres NO son los del índice original.** Allá varios entran con el nombre de pila
  * del dueño ("Christian", "Ernesto", "Fernando", "Roberto") porque así llegó el archivo por
@@ -96,10 +98,104 @@ export const clientes = [
   { id: 'truvari', nombre: 'Truvari' },
   { id: 'kiosco-verde', nombre: 'Kiosco Verde' },
   { id: 'servian', nombre: 'Servian Repuestos' },
+
+  /**
+   * TANDA DEL 11/9/2026 -- fuente distinta de la de arriba, ver punto 8 del plan
+   * `experiencia-ajustes`. Estos 9 son clientes activos (medido contra `clients` +
+   * `client_apis` del admin de producción, vía `GET claude/query`) que a esa fecha NO
+   * tenían logo ni en este archivo ni en `comerciocity-web`: 13 candidatos en total, de los
+   * que quedaron afuera 4 (no se fuerza un logo malo, mismo criterio que ya dejó `fernando`/
+   * `trama-luis`/`sr-imperio` arriba):
+   *   - `Distribuidora Pets` (client id 51): activo en el admin pero SIN una sola
+   *     `client_api` -- no hay servidor al que conectarse, quedó promovido y nunca instalado
+   *     (mismo caso que `mayorista-de-pesca`, que por eso tampoco entra a este archivo).
+   *   - `Leudinox`, `Electro-Lacarra` y `DobleP Herrajes` SÍ tienen base propia, pero las
+   *     tres apuntan al MISMO `image_url` roto (`api-demo.comerciocity.com/.../174292591094040.png`,
+   *     HTTP 404): es el avatar por defecto que les quedó cuando nunca subieron uno propio,
+   *     ya ni siquiera existe en el servidor. Ninguna tiene `online_configurations.logo_url`
+   *     (corren una versión de `empresa-api` anterior a esa columna). Nada que mostrar.
+   *
+   * De dónde sale cada logo: NO es `comerciocity-web` (ahí no están). Se resolvió leyendo,
+   * en la base física de CADA cliente (por SSH -- shared hosting o VPS según
+   * `client_apis.hosting_type`, mismo patrón de conexión que `liberar-sesion.php` /
+   * `auditar-extension.php` en el repo de conocimiento), dos campos que carga el propio
+   * dueño desde su panel: `online_configurations.logo_url` ("Logo de la tienda", visible en
+   * `empresa-spa` en Configuración > Tienda online) cuando estaba cargado, y si no
+   * `users.image_url` (la imagen de perfil del dueño, `owner_id IS NULL`) como respaldo.
+   * Ni `Client` (esa tabla en `empresa-api` es la CARTERA DE CLIENTES del propio comercio --
+   * sus compradores -- no un dato del comercio en sí) ni ningún campo `web`/`sitio_web`
+   * sirvieron: no existen en el schema real de `empresa-api` (se buscó en las migraciones).
+   * Mismo procesamiento que el resto del archivo: lado largo 320px, WebP calidad ~82, sin
+   * agrandar el que ya venía más chico (`pack-descartables` quedó en 295px nativos).
+   */
+  {
+    id: 'securepoint',
+    nombre: 'Secure Point',
+    // image_url del dueño (no tenía logo_url: version vieja de empresa-api sin esa columna).
+    // https://api-sistema.comerciocity.com/public/storage/174904540312127.png
+  },
+  {
+    id: 'la-cava-de-don-juan',
+    nombre: 'La Cava de Don Juan',
+    // online_configurations.logo_url:
+    // https://api-lacava.comerciocity.com/public/storage/178112516421146.webp
+  },
+  {
+    id: 'punto-diet',
+    nombre: 'Punto Diet',
+    // image_url del dueño. Cliente de la base compartida vieja (u767360347_empresa, 51
+    // dueños adentro): se identificó por company_name entre esos 51, no por owner_id solo.
+    // https://api-empresa.comerciocity.com/public/storage/169342241618138.png
+  },
+  {
+    id: 'grupolimp',
+    nombre: 'Grupo Limp',
+    // online_configurations.logo_url. Único de la tanda en VPS (los otros ocho, shared hosting).
+    // https://api-grupolimp.comerciocity.com/public/storage/178682276210664.webp
+  },
+  {
+    id: 'unicas',
+    nombre: 'Unicas Distribuidora Capilar',
+    // image_url del dueño. PNG con canal alfa (fondo transparente) -- se aplanó sobre blanco
+    // antes de recomprimir, para quedar igual que el resto (ninguno de los otros 47 es
+    // transparente).
+    // https://api-unicas.comerciocity.com/public/storage/178515615168755.png
+  },
+  {
+    id: 'tiju',
+    nombre: 'Distribuidora Tiju',
+    // online_configurations.logo_url. El nombre sale del logo ("DISTRIBUIDORA TIJU"): el
+    // company_name del admin tiene una errata ("Tiju dustribuidora").
+    // https://api-bellabianca2.comerciocity.com/public/storage/178485466369771.webp
+  },
+  {
+    id: 'quino2',
+    nombre: 'Grupo Quino2',
+    // online_configurations.logo_url. El "2" es parte del logo mismo, no un artefacto de
+    // carpeta: se mantiene en el id y en el nombre tal como lo muestra la marca.
+    // https://api-quino2.comerciocity.com/public/storage/178817704974853.webp
+  },
+  {
+    id: 'pack-descartables',
+    nombre: 'Pack Descartables',
+    // image_url del dueño. Nativo 295px de lado largo -- ya venía por debajo de 320 y no se
+    // agrandó (la regla del pipeline es no perder calidad de más, no llegar siempre a 320).
+    // https://api-pack-descartables.comerciocity.com/public/storage/172610521219797.png
+  },
+  {
+    id: 'candyguay',
+    nombre: 'Candyguay',
+    // image_url del dueño. VPS, base propia (copia podada del 7/9/2026, ver CLAUDE.md raíz
+    // "varios clientes comparten la misma base") -- NO comparte base con otros clientes pese
+    // a que el admin todavía le marca shared_database_group_id=1 de su historia vieja.
+    // https://api.comerciocity.com/public/storage/169876004418610.png
+  },
 ]
 
 /**
- * Los que efectivamente van a la pared de logos: hoy **35**.
+ * Los que efectivamente van a la pared de logos: hoy **44** (35 de la tanda de
+ * `comerciocity-web` + 9 de la tanda del 11/9/2026, ninguno de estos nueve con
+ * `en_la_pared: false`).
  *
  * El número no está atado a la grilla y no hace falta que sea "redondo": la pared es un
  * flex con `justify-content: center`, así que la última fila queda centrada aunque esté
