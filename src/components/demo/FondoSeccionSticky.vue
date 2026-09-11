@@ -766,7 +766,18 @@ export default {
    44x44 REALES y no un círculo chico con área de toque aparte: es el mismo número que
    pide la guía de accesibilidad para el dedo, y la mayoría de los leads entra desde el
    teléfono. El z-index 2 lo pone por encima del contenido (que es 1) pero el botón vive
-   abajo al centro, donde ninguna de las siete secciones dibuja nada clickeable. */
+   abajo al centro, donde ninguna de las siete secciones dibuja nada clickeable.
+
+   🔴 Fondo y borde por variable, con el valor viejo como fallback -- encontrado en la
+   verificación independiente de la misión paleta-oscura-experiencia (10/9/2026): este
+   componente es genérico (no forma parte de esa misión) pero sus TRES instancias reales
+   viven hoy dentro de .demo-scroll-dolor, que pasó a tema oscuro. Los valores fijos de
+   antes (blanco 42%, borde gris-azul 28%) estaban pensados para blanco-sobre-claro: sobre
+   fondo oscuro, ese mismo blanco compone un gris medio contra el que
+   --demo-color-texto-suave (ahora claro) daba 2,11:1 de contraste -por debajo del mínimo
+   de 3:1 de WCAG 1.4.11 para un control de interfaz. Con var(..., valor-viejo), si este
+   componente se usa alguna vez fuera de ese scope (un contexto claro que no defina estas
+   variables), cae exactamente en el comportamiento de siempre. */
 .demo-fondo-seccion__avance {
 	position: absolute;
 	z-index: 2;
@@ -779,9 +790,9 @@ export default {
 	align-items: center;
 	justify-content: center;
 	padding: 0;
-	border: 1px solid rgba(86, 96, 120, 0.28);
+	border: 1px solid var(--demo-color-avance-borde, rgba(86, 96, 120, 0.28));
 	border-radius: 50%;
-	background: rgba(255, 255, 255, 0.42);
+	background: var(--demo-color-avance-fondo, rgba(255, 255, 255, 0.42));
 	color: var(--demo-color-texto-suave);
 	cursor: pointer;
 	animation: demo-latido-avance 2s ease-in-out infinite;
@@ -800,7 +811,7 @@ export default {
 .demo-fondo-seccion__avance:hover {
 	animation: none;
 	opacity: 1;
-	border-color: rgba(86, 96, 120, 0.55);
+	border-color: var(--demo-color-avance-borde-hover, rgba(86, 96, 120, 0.55));
 }
 
 /* Foco visible, y no el outline del navegador: el anillo de la marca, y con la misma

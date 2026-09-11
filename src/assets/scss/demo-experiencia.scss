@@ -59,6 +59,71 @@
 	}
 }
 
+// ---------------------------------------------------------------------------
+// TEMA OSCURO del recorrido de experiencia (misión paleta-oscura-experiencia,
+// 10/9/2026). Pedido de Lucas: el corte entre el fondo oscuro de la animación del
+// procesador y el resto de la página -antes clara- era muy brusco. Decisión: tema
+// oscuro COMPLETO (no un degradé de transición), con los colores de la propia
+// animación, hasta el puente al formulario inclusive.
+//
+// 🔴 El scope es `.demo-scroll-dolor`, y NO es arbitrario: es literalmente el límite
+// del pedido. Todo lo que se construyó en la misión experiencia-nueva -animación,
+// apertura, clientes, cubo, hitos, nueva era, reseñas, puente- vive DENTRO de
+// <section class="demo-scroll-dolor"> (la raíz de ScrollDolor.vue). El formulario de
+// configuración, la confirmación "armando tu demo" y el video de intro son HERMANOS
+// de esa sección en ExperienciaDemo.vue, no hijos -- Lucas pidió explícitamente que
+// esos tres NO se toquen.
+//
+// Una custom property redefinida acá adentro cae en cascada hacia los DESCENDIENTES
+// de .demo-scroll-dolor, nunca hacia sus hermanos: por eso alcanza con este único
+// bloque para que los seis componentes de la misión anterior -que ya leen
+// var(--demo-color-texto) y var(--demo-color-texto-suave) en vez de tener el color
+// escrito a mano- se oscurezcan solos, sin tocarlos uno por uno.
+.demo-scroll-dolor {
+	// Los tres, tal cual los define AnimacionProcesador.vue -no una paleta nueva.
+	--demo-color-fondo: #04060b;
+	--demo-color-texto: #f4f7fd;
+	// 🔴 NO es la inversión ingenua de #566078. Contraste MEDIDO (WCAG), no a ojo:
+	//   texto  #f4f7fd vs fondo #04060b -> 18,89:1
+	//   suave  #99a3ba vs fondo #04060b ->  8,01:1  (bien por encima del mínimo AA de
+	//                                                4,5:1 para texto normal)
+	// La proporción suave/texto da 0,42 -- calcada a la que ya tenía el modo claro
+	// (5,97/14,91 = 0,40): el cuerpo sigue leyendo perceptiblemente más tenue que el
+	// remate, que es la jerarquía que este archivo ya documentó como deliberada tres
+	// veces, pero ninguno de los dos cae por debajo de lo legible.
+	--demo-color-texto-suave: #99a3ba;
+	// Superficie de tarjeta para CONTENIDO real (los pilares de "nueva era", una
+	// reseña) -no para los chips de logos de clientes, que quedan claros a propósito
+	// (ver SeccionClientes.vue). Es el mismo fondo que ya usan las seis tarjetas de
+	// problema de la animación (.animacion-procesador__tarjeta): se reusa en vez de
+	// inventar un gris oscuro nuevo, para que todo lea como el mismo sistema.
+	--demo-color-superficie: linear-gradient(160deg, #1c2b4b 0%, #0c1424 100%);
+	--demo-color-borde-superficie: rgba(126, 172, 255, 0.2);
+
+	// 🔴 El botón de avance de FondoSeccionSticky.vue -encontrado en la verificación
+	// independiente, no en la construcción original: ese archivo no está en la lista de
+	// componentes de esta misión, así que nadie lo miró hasta que el chequeo navegó la
+	// app real y lo encontró roto. Sus valores fijos (rgba(255,255,255,.42) de fondo,
+	// rgba(86,96,120,.28) de borde) están pensados para blanco-sobre-claro: sobre el
+	// fondo oscuro nuevo, ese mismo blanco al 42% compone un GRIS MEDIO
+	// (#696b71, medido) contra el que --demo-color-texto-suave (ahora claro) da 2,11:1
+	// -por debajo del mínimo de 3:1 que exige WCAG 1.4.11 para un control de interfaz.
+	// Con estos tres tokens el botón usa <fondo-seccion-sticky> SOLO dentro de esta
+	// sección (las tres instancias de la página viven todas adentro de
+	// .demo-scroll-dolor), así que se resuelven acá; fuera de este scope, el propio
+	// componente cae en su fallback original (ver el var(...,) en FondoSeccionSticky.vue),
+	// sin romper si algún día se usa en un contexto claro.
+	// alpha 0,14 y no 0,42: medido, da un contraste de 5,83:1 -sobra margen sobre el
+	// mínimo- y de paso el círculo queda MÁS sutil, que es literalmente lo que ese botón
+	// pide ("si se nota más que el contenido de la sección, está mal").
+	--demo-color-avance-fondo: rgba(244, 247, 253, 0.14);
+	--demo-color-avance-borde: rgba(153, 163, 186, 0.28);
+	--demo-color-avance-borde-hover: rgba(153, 163, 186, 0.5);
+
+	background: var(--demo-color-fondo);
+	color: var(--demo-color-texto);
+}
+
 // RETIRADO (grupo 348, prompt 03): acá vivía @keyframes demo-bloque-entrada, la
 // entrada de los bloques 1-5 y el cierre. La disparaba un IntersectionObserver de
 // una sola vía (clase --visible + forwards + unobserve), que no tenía marcha atrás
@@ -318,13 +383,18 @@
 // (fondo, sombra, radio, padding), que la scoped no toca.
 .demo-hitos__tarjeta {
 	width: 100%;
-	// El fondo semitransparente venía de cuando la tarjeta se leía SOBRE la escena
-	// del portal: era lo que le daba contraste al texto. Sin escena atrás pierde esa
-	// función, así que se decide en vez de arrastrarse -- queda blanco sólido con una
-	// sombra suave, para que siga leyéndose como la tarjeta que Lucas nombra, apoyada
-	// sobre el fondo de la página en lugar de flotando sobre el anillo.
-	background: #ffffff;
-	box-shadow: 0 24px 60px -32px rgba(28, 35, 51, 0.28);
+	// 🔴 Oscura desde el 10/9/2026 (misión paleta-oscura-experiencia): antes era blanco
+	// sólido -tenía sentido con la página clara de entonces (ver la nota vieja más abajo
+	// en el historial de este archivo). Con el tema oscuro completo, un blanco sólido acá
+	// era EXACTAMENTE el bug que la misión vino a arreglar -corte brusco- adentro de la
+	// propia sección de hitos, y encima dejaba el texto (que ya usa
+	// var(--demo-color-texto-suave)/(--demo-color-texto), pensado para fondo oscuro)
+	// prácticamente invisible sobre blanco. Mismo tratamiento que .demo-nueva-era__pilar
+	// y .demo-resenas__tarjeta: la superficie que ya usan las tarjetas de problema de la
+	// animación, no un gris inventado para acá.
+	background: var(--demo-color-superficie);
+	border: 1px solid var(--demo-color-borde-superficie);
+	box-shadow: 0 24px 60px -32px rgba(0, 0, 0, 0.45);
 	border-radius: 20px;
 	padding: clamp(24px, 4vw, 48px);
 	box-sizing: border-box;

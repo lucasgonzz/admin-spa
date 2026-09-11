@@ -20,20 +20,17 @@
            FondoSeccionSticky.vue es scoped y su atributo data-v-* no alcanza acá. -->
       <div class="demo-fondo-seccion__snap demo-cubo__ancla" aria-hidden="true"></div>
 
-      <!-- 🔴 El isotipo y no el logotipo horizontal, y esto NO es una preferencia:
-           src/assets/logotipo-comerciocity.png tiene la palabra "ComercioCity" en
-           BLANCO puro (medido: promedio RGB 255,255,255 en la zona del texto) porque
-           lo usa AnimacionProcesador.vue sobre fondo oscuro. Sobre el fondo claro de
-           esta página (--demo-color-fondo, #f8f9fc) quedaría invisible: se leería el
-           isotipo suelto y un hueco al lado. El logotipo del export sí es oscuro
-           (18,28,42) pero pesa 121 KB y no está en el repo.
-           El isotipo vectorial pesa 1,2 KB, ya vive en el repo y es exactamente el
-           mismo tratamiento de marca que PantallaCargaMarca.vue le da a esta misma
-           página clara. Ver el informe: reponer el logotipo con texto oscuro es
-           agregar un asset y cambiar este <img>, nada más. -->
+      <!-- 🔴 Logotipo con texto, no el isotipo solo -cambiado en la misión
+           paleta-oscura-experiencia, 10/9/2026. Hasta esa misión iba el isotipo
+           porque logotipo-comerciocity.png tiene la palabra "ComercioCity" en BLANCO
+           puro (medido: promedio RGB 255,255,255 en la zona del texto) -pensado para
+           el fondo oscuro de AnimacionProcesador.vue, invisible sobre el fondo claro
+           que tenía esta página. Con el tema oscuro completo esa restricción se
+           invierte: es el MISMO asset que ya usa la animación, 35,5 KB, ya en el
+           repo -no hace falta un logotipo oscuro aparte. -->
       <img
         class="demo-cubo__marca"
-        src="../../assets/isotipo-comerciocity.svg"
+        src="../../assets/logotipo-comerciocity.png"
         alt="ComercioCity"
       />
 
@@ -771,7 +768,10 @@ export default {
 
 .demo-cubo__marca {
   display: block;
-  width: clamp(56px, 7vw, 84px);
+  /* Ancho pensado para un logotipo HORIZONTAL (aspecto 4,34:1), no para el isotipo
+     cuadrado que iba antes -ese clamp(56px,7vw,84px) daba un logotipo de ~19px de
+     alto, ilegible. height:auto respeta el aspecto real del PNG (668×154). */
+  width: clamp(160px, 20vw, 260px);
   height: auto;
 }
 
@@ -1002,7 +1002,15 @@ export default {
 
 /* El título de la cara: el REMATE, a contraste pleno. La jerarquía tenue de esta
    página es deliberada -- cuerpo tenue, remate en contraste pleno -- y acá el cuerpo
-   es el párrafo de abajo del cubo. */
+   es el párrafo de abajo del cubo.
+
+   🔴 NO usa var(--demo-color-texto). Encontrado en la verificación de la misión
+   paleta-oscura-experiencia (10/9/2026): este título se pinta ENCIMA del bezel claro
+   de la cara (el chip fotografiado, que no se invierte -- ver el comentario de la
+   plantilla), no directamente sobre el fondo de la página. Con la variable, el tema
+   oscuro nuevo lo pone en #f4f7fd -blanco- sobre un bezel claro: invisible. Es fijo a
+   propósito, igual que el gradiente del propio bezel (.demo-cubo__cara) y el chip
+   (.demo-cubo__chip) -ninguno de los dos participa del tema de la página tampoco. */
 .demo-cubo__cara-titulo {
   margin: 0;
   font-size: calc(var(--cubo-lado) * 0.082);
@@ -1010,7 +1018,7 @@ export default {
   line-height: 1.13;
   letter-spacing: -0.028em;
   text-wrap: pretty;
-  color: var(--demo-color-texto, #1c2333);
+  color: #1c2333;
 }
 
 /* ---------------------------------------------------------------------------

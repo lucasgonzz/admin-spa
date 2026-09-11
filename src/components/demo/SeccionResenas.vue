@@ -502,9 +502,13 @@ export default {
   fill: currentColor;
 }
 
-/* La capa vacía es la misma estrella, en gris: se ve el hueco de lo que falta. */
+/* La capa vacía es la misma estrella, apagada: se ve el hueco de lo que falta.
+   🔴 Antes era rgba(28, 35, 51, 0.16) -gris casi negro-, invisible sobre el fondo
+   oscuro nuevo (gris oscuro sobre fondo oscuro no se distingue). Ahora es el mismo
+   blanco de --demo-color-texto pero a una fracción de opacidad: se sigue leyendo como
+   "hueco" -mucho más tenue que la estrella llena- pero sin desaparecer. */
 .demo-resenas__capa:not(.demo-resenas__capa--llena) .demo-resenas__estrella {
-  fill: rgba(28, 35, 51, 0.16);
+  fill: rgba(244, 247, 253, 0.18);
 }
 
 .demo-resenas__estrellas--grandes .demo-resenas__estrella {
@@ -521,14 +525,18 @@ export default {
   text-align: left;
 }
 
+/* Superficie oscura (misión paleta-oscura-experiencia, 10/9/2026), mismo criterio que
+   .demo-nueva-era__pilar: es contenido real (la reseña), no un chip de cliente, así que
+   usa --demo-color-superficie en vez de blanco. La sección sigue vacía (RESENAS = []) --
+   esto deja el terreno listo para cuando lleguen los datos, no algo que se vea hoy. */
 .demo-resenas__tarjeta {
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: clamp(16px, 2vw, 22px);
-  border: 1px solid rgba(28, 35, 51, 0.07);
+  border: 1px solid var(--demo-color-borde-superficie);
   border-radius: 14px;
-  background: #fff;
+  background: var(--demo-color-superficie);
 }
 
 .demo-resenas__texto {
