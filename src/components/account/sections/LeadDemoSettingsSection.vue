@@ -98,6 +98,25 @@
         </div>
       </div>
 
+      <!-- Campo: silencio previo al recordatorio (misión demo-agendado-directo). Va pegado al
+           recordatorio porque lo condiciona: si el lead y el agente se están escribiendo, el
+           recordatorio no hace falta y molesta. -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-5">
+          <label class="form-label small" for="demo_recordatorio_silencio_minutos">Minutos sin mensajes que hacen falta para mandar el recordatorio de demo</label>
+          <!-- Minutos sin mensajes en la conversación (en ninguna dirección) antes de que salga el recordatorio -->
+          <input
+            id="demo_recordatorio_silencio_minutos"
+            v-model.number="local.recordatorio_silencio_minutos"
+            type="number"
+            class="form-control form-control-sm"
+            min="0"
+            max="240"
+            :disabled="saving"
+          />
+        </div>
+      </div>
+
       <!-- Campo: recordatorio de mañana de la demo -->
       <div class="row g-2 align-items-end mb-3">
         <div class="col-sm-5">
@@ -114,14 +133,33 @@
         </div>
       </div>
 
-      <!-- Campo: check de ingreso post-inicio -->
+      <!-- Campo: check de ingreso. Desde la misión demo-agendado-directo se cuenta desde que el
+           lead termina el video de introducción, no desde el inicio del slot. -->
       <div class="row g-2 align-items-end mb-3">
         <div class="col-sm-5">
-          <label class="form-label small" for="demo_check_ingreso_minutos_post">Minutos después del inicio para preguntar si pudo ingresar</label>
-          <!-- Cuántos minutos después del inicio se verifica si el lead logró acceder a la demo -->
+          <label class="form-label small" for="demo_check_ingreso_minutos_post">Minutos después de que el lead termina el video de introducción para preguntarle si pudo ingresar</label>
+          <!-- Cuántos minutos después de terminar el video de introducción se le pregunta al lead si logró acceder a la demo -->
           <input
             id="demo_check_ingreso_minutos_post"
             v-model.number="local.check_ingreso_minutos_post"
+            type="number"
+            class="form-control form-control-sm"
+            min="0"
+            max="240"
+            :disabled="saving"
+          />
+        </div>
+      </div>
+
+      <!-- Campo: silencio previo al check de ingreso (misión demo-agendado-directo). Va pegado
+           al check porque lo condiciona: si hay conversación en curso, la pregunta no sale. -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-5">
+          <label class="form-label small" for="demo_check_ingreso_silencio_minutos">Minutos sin mensajes (en ninguna dirección) que hacen falta para mandar ese check</label>
+          <!-- Minutos sin mensajes en la conversación, ni del lead ni del agente, antes de que salga la pregunta -->
+          <input
+            id="demo_check_ingreso_silencio_minutos"
+            v-model.number="local.check_ingreso_silencio_minutos"
             type="number"
             class="form-control form-control-sm"
             min="0"
@@ -603,8 +641,13 @@ export default {
         setup_minutos_antes: 15,
         gracia_minutos_post: 10,
         recordatorio_minutos_antes: 15,
+        /** Minutos sin mensajes (en ninguna dirección) antes de mandar el recordatorio de demo. */
+        recordatorio_silencio_minutos: 30,
         recordatorio_manana_hora: '09:00',
-        check_ingreso_minutos_post: 5,
+        /** Minutos desde que el lead termina el video de introducción hasta preguntarle si pudo ingresar. */
+        check_ingreso_minutos_post: 10,
+        /** Minutos sin mensajes (en ninguna dirección) antes de mandar ese check de ingreso. */
+        check_ingreso_silencio_minutos: 10,
         resumen_minutos_antes_fin: 10,
         /** Minutos que el closer necesita para atender al lead post-demo; bloquea la ventana en otras demos. */
         duracion_llamada_closer_minutos: 30,
@@ -664,8 +707,12 @@ export default {
         setup_minutos_antes: 15,
         gracia_minutos_post: 10,
         recordatorio_minutos_antes: 15,
+        /** Espejo del servidor: silencio previo al recordatorio de demo. */
+        recordatorio_silencio_minutos: 30,
         recordatorio_manana_hora: '09:00',
-        check_ingreso_minutos_post: 5,
+        check_ingreso_minutos_post: 10,
+        /** Espejo del servidor: silencio previo al check de ingreso. */
+        check_ingreso_silencio_minutos: 10,
         resumen_minutos_antes_fin: 10,
         /** Espejo del servidor para detectar si el campo fue modificado localmente. */
         duracion_llamada_closer_minutos: 30,
@@ -924,8 +971,10 @@ export default {
           setup_minutos_antes:                 self.local.setup_minutos_antes,
           gracia_minutos_post:                 self.local.gracia_minutos_post,
           recordatorio_minutos_antes:          self.local.recordatorio_minutos_antes,
+          recordatorio_silencio_minutos:       self.local.recordatorio_silencio_minutos,
           recordatorio_manana_hora:            self.local.recordatorio_manana_hora,
           check_ingreso_minutos_post:          self.local.check_ingreso_minutos_post,
+          check_ingreso_silencio_minutos:      self.local.check_ingreso_silencio_minutos,
           resumen_minutos_antes_fin:           self.local.resumen_minutos_antes_fin,
           duracion_llamada_closer_minutos:     self.local.duracion_llamada_closer_minutos,
           demo_minimo_minutos_desde_ahora:     self.local.demo_minimo_minutos_desde_ahora,
