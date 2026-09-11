@@ -487,6 +487,14 @@ export default {
 .demo-nueva-era {
   box-sizing: border-box;
   padding: clamp(64px, 11vh, 130px) clamp(16px, 4vw, 48px);
+  /* dvh encima de vh (mismo par que ya usa el resto de la página: .demo-hitos en
+     demo-experiencia.scss, .demo-scroll-dolor__puente, __video-intro): en un teléfono
+     real con barra de direcciones dinámica, vh se fija contra el viewport GRANDE (barra
+     escondida), y justo al aterrizar el guiado -con la barra típicamente visible- el
+     padding sale un poco más grande que el espacio que en verdad se ve. Un navegador sin
+     soporte de dvh ignora esta línea entera y se queda con la de arriba. */
+  padding-top: clamp(64px, 11dvh, 130px);
+  padding-bottom: clamp(64px, 11dvh, 130px);
 }
 
 .demo-nueva-era *,
@@ -504,6 +512,8 @@ export default {
 
 .demo-nueva-era__grupo + .demo-nueva-era__grupo {
   margin-top: clamp(64px, 11vh, 128px);
+  /* dvh, mismo motivo que el padding de arriba. */
+  margin-top: clamp(64px, 11dvh, 128px);
   max-width: 940px;
 }
 
@@ -635,6 +645,48 @@ export default {
   font-size: clamp(0.98rem, 1.35vw, 1.08rem);
   line-height: 1.5;
   color: var(--demo-color-texto-suave);
+}
+
+/* 🔴 Punto 1 (11/9/2026): "Bienvenido a la nueva era" no entraba en pantalla en celular.
+   No era un `overflow: hidden` cortando nada -- no hay ninguno en este componente ni en
+   sus ancestros -- sino que la sección, con sus dos grupos completos, mide MÁS que la
+   pantalla en un teléfono bajo (medido: 899px de contenido contra 640px de viewport a
+   360x640; 981px contra 568px a 360x568), y esta sección va SUELTA en el scroll (no
+   dentro de un <fondo-seccion-sticky>, ver ScrollDolor.vue), así que no tiene la flechita
+   de "seguir bajando" que sí tienen las otras seis secciones del recorrido -- nada le
+   avisa al lead que hay más para ver. El guiado aterriza bien (el título siempre se ve
+   completo apenas llega, verificado con scrollTo instantáneo y suave en cinco tamaños de
+   teléfono) y el scroll nativo después sí revela el resto sin trabarse -- pero mientras
+   tanto, el borde inferior de la pantalla corta la primera tarjeta de pilares A MITAD DE
+   PALABRA en los teléfonos más bajos (360x568: "...el sistema listo ~~para vender.~~"), y
+   eso se lee como contenido roto, no como una invitación a scrollear un poco más.
+
+   El arreglo de fondo (agregarle la flecha de avance a esta sección) vive en
+   FondoSeccionSticky.vue/ScrollDolor.vue, fuera del alcance de este punto. Achicar el
+   ritmo vertical achica la sección entera -- menos separación entre bloques, tarjetas más
+   compactas -- lo suficiente para que en los altos de teléfono más comunes (390x844,
+   375x812) el sobrante caiga en el padding, no en el texto; en los más bajos (360x568) lo
+   reduce bastante aunque no lo cierra del todo, que ya es una decisión de densidad de
+   layout para consultar con Lucas, no algo para resolver a fuerza de achicar números. */
+@media (max-width: 767.98px) {
+  .demo-nueva-era {
+    padding: clamp(40px, 7vh, 80px) clamp(16px, 4vw, 48px);
+    padding-top: clamp(40px, 7dvh, 80px);
+    padding-bottom: clamp(40px, 7dvh, 80px);
+  }
+
+  .demo-nueva-era__grupo + .demo-nueva-era__grupo {
+    margin-top: clamp(40px, 7vh, 80px);
+    margin-top: clamp(40px, 7dvh, 80px);
+  }
+
+  .demo-nueva-era__pilares {
+    margin-top: clamp(20px, 3vw, 32px);
+  }
+
+  .demo-nueva-era__pilar {
+    padding: clamp(12px, 1.8vw, 16px);
+  }
 }
 
 /* Tablet y para arriba: los tres pilares en fila. En teléfono quedan apilados -- tres
