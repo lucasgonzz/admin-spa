@@ -1,5 +1,5 @@
 <template>
-  <section class="demo-scroll-dolor">
+  <section class="demo-scroll-dolor" :class="{ 'demo-scroll-dolor--claro': tema === 'claro' }">
     <!-- Apertura: revertida a solo titular + subtítulo (grupo 336, correctivo 3;
          decisión de Lucas tras ver la escena cinematográfica implementada -- ver nota
          de reversión en demo_experiencia.md §3.18-bis). Ya no arma su propia
@@ -391,6 +391,16 @@ export default {
     emitir_evento: {
       type: Function,
       default: function () {},
+    },
+    /**
+     * Tema visual ('oscuro' | 'claro') del recorrido, configurable desde el admin (misión
+     * tema-experiencia-configurable). Default 'oscuro': es lo que ya está en producción
+     * desde la migración de esta misma tarde, así que un lead cuyo payload todavía no
+     * traiga la clave (o un consumidor que no la pase) ve exactamente lo mismo que hoy.
+     */
+    tema: {
+      type: String,
+      default: 'oscuro',
     },
   },
 

@@ -124,6 +124,48 @@
 	color: var(--demo-color-texto);
 }
 
+// ---------------------------------------------------------------------------
+// TEMA CLARO, la excepción configurable (misión tema-experiencia-configurable,
+// 10/9/2026). El oscuro de arriba deja de ser una decisión fija en código: Lucas pidió
+// que sea elegible desde Cuenta → Configuración de demos
+// (LeadDemoSettingsSection.vue, clave `experiencia_tema`). El backend expone el valor
+// elegido en el payload público de GET /demo-experiencia/{uuid} (clave `tema`),
+// ExperienciaDemo.vue lo lee y se lo pasa como prop a ScrollDolor.vue, que agrega esta
+// clase al elemento raíz cuando el valor es 'claro'.
+//
+// 🔴 Por qué esto es una SEGUNDA definición completa y no alcanza con un `:not()` que
+// simplemente anule el bloque de arriba. Si `tema=claro` no aplicara ninguna variable
+// propia, `.demo-scroll-dolor` heredaría los valores de `.demo-experiencia-page` de
+// todos modos (son las mismas variables, definidas más arriba en la cascada) -- así
+// que en teoría *casi* alcanzaría con un `:not()`. Pero `--demo-color-superficie` y
+// `--demo-color-avance-*` NO EXISTEN EN ABSOLUTO en `.demo-experiencia-page`: son
+// variables nuevas que solo se definieron dentro del bloque oscuro de acá arriba. Sin
+// una definición explícita para el modo claro, esos `var(--demo-color-superficie)` que
+// ya usan SeccionNuevaEra.vue y SeccionResenas.vue (y .demo-hitos__tarjeta, en este
+// mismo archivo) quedarían SIN NINGÚN VALOR -no hay fallback en esos usos-, y el
+// navegador trata eso como `background: initial` -transparente, no blanco. Por eso el
+// modo claro define ESAS variables también acá, con los valores que tenían antes de la
+// migración a oscuro de esta tarde (#ffffff para superficie, que es lo que usaban esas
+// tarjetas hasta esta misma misión).
+//
+// El botón de avance (FondoSeccionSticky.vue) no se toca: ya lee
+// var(--demo-color-avance-fondo, rgba(255,255,255,.42)) con fallback -y con la
+// definición explícita de esas tres variables acá abajo, cae exactamente en los
+// valores originales sin necesitar el fallback.
+.demo-scroll-dolor--claro {
+	--demo-color-fondo: #f8f9fc;
+	--demo-color-texto: #1c2333;
+	--demo-color-texto-suave: #566078;
+	--demo-color-superficie: #ffffff;
+	--demo-color-borde-superficie: rgba(28, 35, 51, 0.08);
+	--demo-color-avance-fondo: rgba(255, 255, 255, 0.42);
+	--demo-color-avance-borde: rgba(86, 96, 120, 0.28);
+	--demo-color-avance-borde-hover: rgba(86, 96, 120, 0.55);
+
+	background: var(--demo-color-fondo);
+	color: var(--demo-color-texto);
+}
+
 // RETIRADO (grupo 348, prompt 03): acá vivía @keyframes demo-bloque-entrada, la
 // entrada de los bloques 1-5 y el cierre. La disparaba un IntersectionObserver de
 // una sola vía (clase --visible + forwards + unobserve), que no tenía marcha atrás
