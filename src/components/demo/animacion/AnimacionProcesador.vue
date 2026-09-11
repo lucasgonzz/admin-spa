@@ -1,15 +1,19 @@
 <template>
+  <!-- Los colores del tema entran por acá, como variables CSS de la raíz (ver PALETA y
+       `variables_paleta`): la hoja de estilos de abajo lee `var(--animacion-*)` en vez de
+       tener cada color escrito a mano, y cambiar de tema es cambiar un solo objeto. -->
   <div
     ref="raiz"
     class="animacion-procesador"
     role="img"
     :aria-label="ETIQUETA_ACCESIBLE"
+    :style="variables_paleta"
   >
     <!-- ═══ EL FONDO, A SANGRE ═══════════════════════════════════════════════════════
-         Va POR FUERA del escenario a propósito: el degradé oscuro y las líneas de
-         circuito ocupan toda la pantalla, no el cuadrado de 1080. Es el punto donde el
-         port se separa del original, que asumía un lienzo cuadrado -- así, en escritorio
-         16:9, no quedan bandas negras a los costados. -->
+         Va POR FUERA del escenario a propósito: el degradé del fondo (oscuro o claro,
+         según el tema) y las líneas de circuito ocupan toda la pantalla, no el cuadrado
+         de 1080. Es el punto donde el port se separa del original, que asumía un lienzo
+         cuadrado -- así, en escritorio 16:9, no quedan bandas muertas a los costados. -->
     <div class="animacion-procesador__degrade" aria-hidden="true"></div>
 
     <svg
@@ -41,6 +45,7 @@
         <span class="animacion-procesador__titular" data-clave="vende">{{ TEXTOS.vende }}</span>
         <span class="animacion-procesador__rasgo" data-clave="f1">{{ TEXTOS.f1 }}</span>
         <span class="animacion-procesador__rasgo" data-clave="f2">{{ TEXTOS.f2 }}</span>
+        <span class="animacion-procesador__rasgo" data-clave="f3">{{ TEXTOS.f3 }}</span>
         <span class="animacion-procesador__ia" data-clave="ia">{{ TEXTOS.ia }}</span>
         <span class="animacion-procesador__ia animacion-procesador__ia--enfasis" data-clave="ia_em">{{ TEXTOS.ia_em }}</span>
       </div>
@@ -77,7 +82,7 @@
                 :cx="punto.cx"
                 :cy="punto.cy"
                 r="4.2"
-                fill="#bcd9ff"
+                :fill="paleta.particula"
                 :opacity="punto.opacidad"
               />
             </g>
@@ -132,10 +137,13 @@
         </div>
 
         <!-- ── Todo lo que el procesador emite: sale de su centro, chico, y sube ─────── -->
+        <!-- El logotipo es el único asset que cambia con el tema (ver PALETA.logo): el
+             wordmark blanco no se lee sobre el fondo claro. Mismas 334×77 unidades en
+             los dos: los dos PNG tienen la misma proporción (4,33:1). -->
         <div v-if="emitidos.logo" class="animacion-procesador__emitido" :style="emitidos.logo">
           <img
             class="animacion-procesador__logotipo"
-            src="../../../assets/logotipo-comerciocity.png"
+            :src="paleta.logo"
             alt=""
             width="334"
             height="77"
@@ -166,17 +174,22 @@
           </div>
         </div>
 
+        <!-- Las tres líneas que salen mientras el procesador baja (ver TEXTOS.f1/f2/f3).
+             Comparten UNA escala, no una por línea: ver el computed estilo_rasgo. -->
         <div v-if="emitidos.f1" class="animacion-procesador__emitido" :style="emitidos.f1">
-          <div class="animacion-procesador__rasgo" :style="ajuste('f1')">{{ TEXTOS.f1 }}</div>
+          <div class="animacion-procesador__rasgo" :style="estilo_rasgo">{{ TEXTOS.f1 }}</div>
         </div>
         <div v-if="emitidos.f2" class="animacion-procesador__emitido" :style="emitidos.f2">
-          <div class="animacion-procesador__rasgo" :style="ajuste('f2')">{{ TEXTOS.f2 }}</div>
+          <div class="animacion-procesador__rasgo" :style="estilo_rasgo">{{ TEXTOS.f2 }}</div>
+        </div>
+        <div v-if="emitidos.f3" class="animacion-procesador__emitido" :style="emitidos.f3">
+          <div class="animacion-procesador__rasgo" :style="estilo_rasgo">{{ TEXTOS.f3 }}</div>
         </div>
 
         <div v-if="emitidos.logo_ia" class="animacion-procesador__emitido" :style="emitidos.logo_ia">
           <img
             class="animacion-procesador__logotipo"
-            src="../../../assets/logotipo-comerciocity.png"
+            :src="paleta.logo"
             alt=""
             width="334"
             height="77"
@@ -190,12 +203,12 @@
           <div class="animacion-procesador__ia" :style="estilo_fila_ia">
             <span
               :class="{ 'animacion-procesador__recorte': ondeando }"
-              :style="onda('rgba(236,244,255,0.95)', '#9ad4ff')"
+              :style="onda(paleta.onda_ia)"
             >{{ TEXTOS.ia }}</span>
             <span
               class="animacion-procesador__ia--enfasis"
               :class="{ 'animacion-procesador__recorte': ondeando }"
-              :style="onda('#b49bff', '#e8dcff')"
+              :style="onda(paleta.onda_ia_enfasis)"
             >{{ TEXTOS.ia_em }}</span>
           </div>
         </div>
@@ -225,13 +238,21 @@
           :x="geo.cx"
           :y="chip_y"
           :quieto="reduced_motion"
+          :tema="tema"
         />
       </div>
     </div>
 
     <!-- La viñeta, también a sangre y por encima de todo: en el original enmarcaba el
-         cuadrado, acá enmarca la pantalla, que es lo que pide el encuadre a sangre. -->
-    <div class="animacion-procesador__vineta" aria-hidden="true"></div>
+         cuadrado, acá enmarca la pantalla, que es lo que pide el encuadre a sangre.
+         Solo existe en el tema oscuro: la escena clara no la trae (PALETA.claro.vineta
+         es null), así que ahí ni siquiera se monta el nodo. -->
+    <div
+      v-if="paleta.vineta"
+      class="animacion-procesador__vineta"
+      :style="{ background: paleta.vineta }"
+      aria-hidden="true"
+    ></div>
   </div>
 </template>
 
@@ -246,6 +267,11 @@ import {
   lerp,
   tiempo_autoral,
 } from './motor-tiempo'
+/* Los dos logotipos son el MISMO lockup con el wordmark en distinto color: blanco para el
+   tema oscuro (el de siempre) y tinta oscura para el claro (sumado el 11/9/2026). Van por
+   import y no por `src` fijo en el template porque el que se muestra lo elige PALETA. */
+import LOGOTIPO_WORDMARK_CLARO from '../../../assets/logotipo-comerciocity.png'
+import LOGOTIPO_WORDMARK_OSCURO from '../../../assets/logotipo-comerciocity-oscuro.png'
 
 /* ═══ La escena, tal como salió del export ═══════════════════════════════════════════
    Estos números NO se deducen de nuevo: están medidos contra la escena original y
@@ -280,7 +306,7 @@ const CHIP_DOWN = 700
    círculo de tarjetas no entra, así que se estira a ELIPSE —angosta y alta— y el
    procesador queda en el centro exacto. Decisión de Lucas, 10/9/2026.
 
-   🔴 La coreografía no cambia: son las mismas 12 escenas, los mismos tiempos y los mismos
+   🔴 La coreografía no cambia: son las mismas 13 escenas, los mismos tiempos y los mismos
    beats. Cambia DÓNDE está cada cosa, nunca CUÁNDO pasa. */
 
 /**
@@ -357,11 +383,13 @@ const V_ZOOM = [1.06, 1.04, 1, 1, 1, 1]
 /* Las alturas de descanso de cada cosa que el procesador emite. */
 const Y_LOGO = 152
 const Y_SLOT = 282
-/* Dos líneas, no tres (ver TEXTOS). Centradas en el MISMO eje que ocupaban las tres del
-   export --el medio era 392-- así el bloque emitido queda donde la coreografía lo dejaba:
-   346 y 438 son 392 ∓ 46, la mitad de los 92 que separaban a las tres. */
-const Y_T1 = 346
-const Y_T2 = 438
+/* Las tres líneas de rasgos (ver TEXTOS.f1/f2/f3), a 92 unidades una de otra y con la
+   del medio en 392: son los números del export. Entre el 10/9 y el 11/9/2026 fueron dos
+   líneas (346 y 438, o sea 392 ∓ 46, para que el bloque de dos quedara centrado en el
+   mismo eje que el de tres); al volver la tercera frase vuelven los valores originales. */
+const Y_T1 = 300
+const Y_T2 = 392
+const Y_T3 = 484
 const Y_IA = 430
 
 /* Ritmo de entrada de las seis tarjetas: la primera a los 0,34 s, una cada 0,72 s, y la
@@ -373,7 +401,102 @@ const HOLD1 = 1.0
 /* Toda aparición de texto dura lo mismo. */
 const EM = 0.75
 
+/* El azul de acento de la escena. Es el MISMO en los dos temas (en el export es `BLUE` en
+   las dos versiones): los cables, el halo de las tarjetas y el resplandor lo usan tal cual.
+   `ACENTO_RGB` es el mismo color para las formas `rgba(...)` que llevan alfa variable. */
 const ACENTO = '#2f7bff'
+const ACENTO_RGB = '47,123,255'
+
+/* ═══ LA PALETA, POR TEMA ═════════════════════════════════════════════════════════════
+   Hasta el 11/9/2026 la animación era "siempre oscura, pase lo que pase" (decisión de
+   Lucas del 10/9) y cada color estaba escrito a mano donde se usaba. Ese día Lucas pidió
+   la versión clara (misión experiencia-landing) y Claude Design entregó una segunda escena
+   con la MISMA coreografía y otra paleta: el diff entre `oscuro-scene.jsx` y
+   `comerciocity-scene.jsx` es solo colores, el logotipo y cuatro duraciones de escena
+   (ver ESCENAS). Por eso el tema no toca ni una fórmula de movimiento: elige uno de estos
+   dos objetos y nada más.
+
+   🔴 Los valores de `oscuro` son EXACTAMENTE los que la animación tenía escritos a mano
+   hasta ese día -- lo que se ve con tema oscuro no cambió en nada. Los de `claro` salen
+   del jsx claro, número por número.
+
+   Cada entrada es un valor CSS listo para usar, salvo las que llevan una parte que cambia
+   cuadro a cuadro (el calor del resplandor, el borde caliente de una tarjeta): esas
+   guardan los números y la fórmula sigue viviendo en el computed que la usa. */
+const PALETA = {
+  oscuro: {
+    /* ── el fondo a sangre ── */
+    fondo: '#04060b',
+    degrade: 'radial-gradient(115% 85% at 50% 34%, #0d1a33 0%, #070b15 52%, #04060b 100%)',
+    /* La viñeta que enmarca la pantalla. `null` = no se dibuja. */
+    vineta: 'radial-gradient(120% 100% at 50% 50%, rgba(0,0,0,0) 54%, rgba(0,0,0,0.6) 100%)',
+    circuito: 'rgba(92, 152, 255, 0.2)',
+    /* El resplandor que sigue al procesador: alfa = [base, cuánto suma el calor], y
+       hasta qué radio del círculo llega el degradé. */
+    resplandor_alfa: [0.19, 0.3],
+    resplandor_radio: '68%',
+    /* ── las seis tarjetas de problema ── */
+    tarjeta_fondo: 'linear-gradient(160deg, #1c2b4b 0%, #0c1424 100%)',
+    /* Borde: rgb fijo y alfa = [base, cuánto suma el borde caliente]. */
+    tarjeta_borde_rgb: '126,172,255',
+    tarjeta_borde_alfa: [0.18, 0.3],
+    /* Sombra de reposo; el halo caliente va aparte: radio máximo y alfa máxima. */
+    tarjeta_sombra: '0 18px 44px rgba(0,0,0,0.34)',
+    tarjeta_halo_radio: 34,
+    tarjeta_halo_alfa: 0.3,
+    disco_fondo: 'rgba(47, 123, 255, 0.14)',
+    disco_borde: 'rgba(126, 172, 255, 0.2)',
+    icono: '#5aa9ff',
+    /* La tinta: el color de los titulares y del rótulo de las tarjetas. */
+    tinta: '#f4f7fd',
+    /* Las partículas que viajan por los cables al procesador. */
+    particula: '#bcd9ff',
+    /* ── lo que emite el procesador ── */
+    logo: LOGOTIPO_WORDMARK_CLARO,
+    degrade_vende: 'linear-gradient(96deg, #7cc0ff 0%, #4f8dff 45%, #8f7dff 100%)',
+    barrido: 'linear-gradient(180deg, rgba(150,205,255,0) 0%, #e4f1ff 48%, rgba(150,205,255,0) 100%)',
+    barrido_sombra: '0 0 30px 10px rgba(90,169,255,0.5)',
+    rasgo: 'rgba(230, 239, 254, 0.94)',
+    /* La onda sobre el remate: [reposo, franja intermedia, núcleo]. Ver onda(). El blanco
+       fijo del medio es lo que la onda oscura tenía escrito a mano hasta el 11/9/2026. */
+    onda_ia: ['rgba(236,244,255,0.95)', '#ffffff', '#9ad4ff'],
+    onda_ia_enfasis: ['#b49bff', '#ffffff', '#e8dcff'],
+  },
+  claro: {
+    /* `PAGE` del jsx claro más sus tres degradés radiales, en UNA declaración de fondo:
+       en CSS la primera capa es la de arriba, así que van en orden inverso al de los
+       <div> del jsx (blanco al centro arriba de todo, el color liso al fondo). Sin viñeta. */
+    fondo: '#f6f8fc',
+    degrade:
+      'radial-gradient(62% 48% at 52% 44%, #ffffff 0%, rgba(255,255,255,0) 74%), ' +
+      'radial-gradient(74% 60% at 92% 96%, #d7cdf7 0%, rgba(215,205,247,0) 60%), ' +
+      'radial-gradient(78% 62% at 12% 6%, #c9dcfa 0%, rgba(201,220,250,0) 62%), ' +
+      '#f6f8fc',
+    vineta: null,
+    circuito: 'rgba(47, 123, 255, 0.17)',
+    resplandor_alfa: [0.1, 0.2],
+    resplandor_radio: '66%',
+    tarjeta_fondo: 'linear-gradient(160deg, #ffffff 0%, #eff4fd 100%)',
+    tarjeta_borde_rgb: ACENTO_RGB,
+    tarjeta_borde_alfa: [0.16, 0.34],
+    tarjeta_sombra: '0 14px 34px rgba(23,44,88,0.13)',
+    tarjeta_halo_radio: 30,
+    tarjeta_halo_alfa: 0.26,
+    disco_fondo: 'rgba(47, 123, 255, 0.10)',
+    disco_borde: 'rgba(47, 123, 255, 0.20)',
+    icono: ACENTO,
+    /* `INK` del jsx claro. */
+    tinta: '#111a2c',
+    particula: ACENTO,
+    logo: LOGOTIPO_WORDMARK_OSCURO,
+    degrade_vende: 'linear-gradient(96deg, #2f7bff 0%, #4a63f5 48%, #6d4dff 100%)',
+    barrido: 'linear-gradient(180deg, rgba(47,123,255,0) 0%, #2f7bff 48%, rgba(47,123,255,0) 100%)',
+    barrido_sombra: '0 0 26px 9px rgba(47,123,255,0.38)',
+    rasgo: 'rgba(17, 26, 44, 0.92)',
+    onda_ia: ['#111a2c', '#1b4fd0', '#2f7bff'],
+    onda_ia_enfasis: ['#6d4dff', '#4b28c8', '#7b5cff'],
+  },
+}
 
 /* Margen por lado que se le deja a un titular con `nowrap` antes de encogerlo, en unidades
    del escenario. El ancho útil sale de restárselo dos veces al ancho del espacio: 1020
@@ -383,7 +506,7 @@ const MARGEN_TEXTO = 30
 /**
  * La tabla de escenas del export (`window.OM_SCENES`). `dur` es lo que cada escena dura en
  * pantalla y `nat` la duración en la que fue coreografiada; el motor warpea una en la otra.
- * Los `dur` suman 23,5 s, que es la duración total de la animación.
+ * Los `dur` suman 22,4 s, que es la duración total de la animación.
  *
  * 🔴 Retocada el 11/9/2026 (misión experiencia-ajustes) contra el export nuevo de ese día:
  * Logo, Carga una vez, Vende en todos lados, Bajada y Whatsapp se acortaron en `dur` SIN
@@ -395,19 +518,25 @@ const MARGEN_TEXTO = 30
  * esas dos frases eran dos `Emitted` independientes que ni se cruzaban; ahora comparten un
  * solo lugar. Duración vieja: 24,4 s (ver el README de `marca/animacion-procesador/` en el
  * repo de conocimiento para la tabla completa, antes/después).
+ *
+ * 🔴 Y retocada otra vez el mismo 11/9/2026 (misión experiencia-landing), contra el export
+ * CLARO de Claude Design (`template-claro.html`, `OM_SCENES`): Conexion 1 → 0,6, Vende en
+ * todos lados 1,1 → 0,9, Bajada 1,1 → 0,8 y Procesado IA 1 → 0,8. De nuevo solo `dur`;
+ * ningún `nat` cambió. Los cuatro valen para los DOS temas: la coreografía es una sola y
+ * el tema cambia la paleta (ver PALETA), no el ritmo. Total: 22,4 s (antes 23,5 s).
  */
 const ESCENAS = [
   { name: 'Problemas', dur: 6.5, nat: 5.9 },
-  { name: 'Conexion', dur: 1, nat: 1.2 },
+  { name: 'Conexion', dur: 0.6, nat: 1.2 },
   { name: 'Procesado', dur: 1, nat: 1.4 },
   { name: 'Logo', dur: 0.8, nat: 1.1 },
   { name: 'Carga una vez', dur: 1.1, nat: 1.2 },
   { name: 'Transicion', dur: 1.1 },
-  { name: 'Vende en todos lados', dur: 1.1, nat: 1.3 },
-  { name: 'Bajada', dur: 1.1, nat: 1.4 },
+  { name: 'Vende en todos lados', dur: 0.9, nat: 1.3 },
+  { name: 'Bajada', dur: 0.8, nat: 1.4 },
   { name: 'Whatsapp', dur: 3.5, nat: 1.6 },
   { name: 'Absorcion', dur: 0.7, nat: 1.2 },
-  { name: 'Procesado IA', dur: 1, nat: 1.2 },
+  { name: 'Procesado IA', dur: 0.8, nat: 1.2 },
   { name: 'Onda IA', dur: 3 },
   { name: 'Cierre', dur: 1.6 },
 ]
@@ -421,20 +550,27 @@ const ESCENAS = [
 const TEXTOS = {
   carga: 'Cargá una vez',
   vende: 'Vendé en todos lados',
-  /* 🔴 Estas dos líneas son las que Lucas escribió en el pedido, NO las que traía el
-     export de Claude Design. El export venía con "Tienda Online" / "Atender a tus
-     clientes por WhatsApp" / "Sistema de gestión completo y amigable" -- los valores que
-     quedaron cargados en el editor mientras diseñaba-- y el port se los quedó sin que
-     nadie lo notara. Lo levantó el chequeo independiente el 10/9/2026 y Lucas eligió su
-     propio texto: se perdían IMÁGENES y CARGA DE FACTURAS, que son dos de las cosas que
-     más lo diferencian, y entraba una línea genérica que él nunca escribió.
+  /* 🔴 `f1` y `f2` son las que Lucas escribió en el pedido, NO las que traía el export
+     de Claude Design. El export venía con "Tienda Online" / "Atender a tus clientes por
+     WhatsApp" / "Sistema de gestión completo y amigable" -- los valores que quedaron
+     cargados en el editor mientras diseñaba-- y el port se los quedó sin que nadie lo
+     notara. Lo levantó el chequeo independiente el 10/9/2026 y Lucas eligió su propio
+     texto: se perdían IMÁGENES y CARGA DE FACTURAS, que son dos de las cosas que más lo
+     diferencian.
 
-     Y son DOS, no tres: su frase agrupa cuatro conceptos de a dos ("Imágenes y tienda
-     online, WhatsApp y carga de facturas"), y la tercera ranura del export decía
-     justamente la línea que se descartó. El remate sigue siendo `ia`, que ya era el
-     suyo. */
+     Son TRES desde el 11/9/2026. Entre el 10/9 y el 11/9 fueron dos: la frase de Lucas
+     agrupaba cuatro conceptos de a dos y la tercera ranura del export decía justamente la
+     línea genérica que se había descartado. Ese mismo 11/9 Lucas la pidió de vuelta, con
+     estas palabras: "que dejes el texto de 'Sistema de gestión completo y amigable' que
+     aparece en un momento" (misión experiencia-landing). Así que `f3` es la tercera
+     ranura del export, en su mismo lugar (Y_T3) y con sus mismos tiempos (K.wa + 0,62),
+     y `f2` volvió al tiempo del export (K.wa + 0,05) -- el corrimiento a + 0,35 que tuvo
+     mientras fueron dos ranuras existía sólo para no dejar un hueco al final de la escena
+     "Whatsapp", y con la tercera frase ese hueco lo ocupa ella. El remate sigue siendo
+     `ia`, que ya era el suyo. */
   f1: 'Imágenes y tienda online',
   f2: 'WhatsApp y carga de facturas',
+  f3: 'Sistema de gestión completo y amigable',
   /* Hasta el 10/9/2026 esto era una sola cadena. El export del 11/9/2026 partió el
      remate en dos <span> con estilo propio (ver ranura_carga_vende() y el método
      `onda()`): el cuerpo en azul y "nunca fue tan fácil" en cursiva y violeta. Es la
@@ -452,7 +588,8 @@ const TEXTOS = {
    ve y quedó vivo lo que se lee. Si TEXTOS cambia, esto cambia con él. */
 const ETIQUETA_ACCESIBLE =
   'ComercioCity: cargá una vez, vendé en todos lados. Imágenes y tienda online, ' +
-  'WhatsApp y carga de facturas, todo asistido por IA, nunca fue tan fácil.'
+  'WhatsApp y carga de facturas, sistema de gestión completo y amigable, ' +
+  'todo asistido por IA, nunca fue tan fácil.'
 
 /** Las seis cosas sueltas que hoy el comerciante maneja por separado. */
 const TARJETAS = [
@@ -527,13 +664,27 @@ export default {
       type: Number,
       default: null,
     },
+    /**
+     * Tema visual de la escena: `'oscuro'` (el de siempre) o `'claro'` (11/9/2026, misión
+     * experiencia-landing). Elige la entrada de PALETA y nada más: la coreografía, los
+     * tiempos y la geometría son los mismos en los dos.
+     *
+     * Default `'oscuro'` a propósito: es lo que hay en producción, así que un padre que
+     * todavía no pase la prop ve exactamente lo de siempre. Quien la pasa es
+     * ScrollDolor.vue, con el `tema` que le llega del setting `demo_experiencia_tema`.
+     */
+    tema: {
+      type: String,
+      default: 'oscuro',
+      validator: (valor) => valor === 'oscuro' || valor === 'claro',
+    },
   },
 
   emits: ['terminada'],
 
   data() {
     return {
-      /** Segundo de RELOJ, de 0 a 24,4. El tiempo autoral sale de acá vía el warp. */
+      /** Segundo de RELOJ, de 0 a 22,4. El tiempo autoral sale de acá vía el warp. */
       tiempo_reloj: 0,
       /**
        * La caja del componente, medida. De estos dos números sale TODO el encuadre: qué
@@ -575,6 +726,43 @@ export default {
     TRAZOS: () => TRAZOS,
     ACENTO: () => ACENTO,
     ETIQUETA_ACCESIBLE: () => ETIQUETA_ACCESIBLE,
+
+    /**
+     * La paleta del tema en uso. Si llega un valor que no está en PALETA (el validator
+     * de la prop ya avisa en consola), se cae al oscuro: es lo que había antes de que
+     * existiera el tema y nunca deja la escena sin colores.
+     *
+     * @returns {Object} una de las dos entradas de PALETA
+     */
+    paleta() {
+      return PALETA[this.tema] || PALETA.oscuro
+    },
+
+    /**
+     * Los colores FIJOS del tema, como variables CSS que se escriben en la raíz del
+     * componente: la hoja de estilos de abajo los lee con `var(--animacion-*)`. Acá van
+     * solo los que no cambian cuadro a cuadro; los que sí (resplandor, borde y halo de
+     * cada tarjeta, la onda del remate) los arma su propio computed leyendo `paleta`.
+     *
+     * @returns {Object}
+     */
+    variables_paleta() {
+      const P = this.paleta
+      return {
+        '--animacion-fondo': P.fondo,
+        '--animacion-degrade': P.degrade,
+        '--animacion-circuito': P.circuito,
+        '--animacion-tarjeta-fondo': P.tarjeta_fondo,
+        '--animacion-disco-fondo': P.disco_fondo,
+        '--animacion-disco-borde': P.disco_borde,
+        '--animacion-icono': P.icono,
+        '--animacion-tinta': P.tinta,
+        '--animacion-degrade-vende': P.degrade_vende,
+        '--animacion-barrido': P.barrido,
+        '--animacion-barrido-sombra': P.barrido_sombra,
+        '--animacion-rasgo': P.rasgo,
+      }
+    },
 
     /**
      * El encuadre entero, resuelto de una sola vez: qué composición entra, con qué escala,
@@ -657,7 +845,7 @@ export default {
       return derivar_escenas(ESCENAS)
     },
 
-    /** Duración total en tiempo de reloj: 24,4 s. */
+    /** Duración total en tiempo de reloj: 22,4 s (la suma de los `dur` de ESCENAS). */
     duracion() {
       return this.derivado.total
     },
@@ -816,14 +1004,23 @@ export default {
     },
 
     estilo_resplandor() {
+      const P = this.paleta
       return {
         /* Centrado en el procesador: mide 860 y el centro cae en left + 430. */
         left: this.geo.cx - 430 + 'px',
         top: this.chip_y - 430 + 'px',
+        /* El azul es el acento en los dos temas; lo que cambia con el tema es cuánto se
+           ve (alfa base + calor) y hasta dónde llega (ver PALETA.resplandor_*). */
         background:
-          'radial-gradient(circle, rgba(47,123,255,' +
-          (0.19 + 0.3 * this.calor).toFixed(3) +
-          ') 0%, rgba(47,123,255,0) 68%)',
+          'radial-gradient(circle, rgba(' +
+          ACENTO_RGB +
+          ',' +
+          (P.resplandor_alfa[0] + P.resplandor_alfa[1] * this.calor).toFixed(3) +
+          ') 0%, rgba(' +
+          ACENTO_RGB +
+          ',0) ' +
+          P.resplandor_radio +
+          ')',
         opacity: this.bloom,
       }
     },
@@ -843,6 +1040,7 @@ export default {
       const K = this.claves_escena
       const T = this.tiempo
       const g = this.geo
+      const P = this.paleta
       const lista = []
 
       for (let i = 0; i < N; i++) {
@@ -877,7 +1075,9 @@ export default {
         const escala = lerp(0.88 + 0.12 * aparece, 0.06, absorbe)
         const opacidad = aparece * (1 - absorbe * absorbe)
 
-        /* El borde brilla apenas llega y se enfría en tres cuartos de segundo. */
+        /* El borde brilla apenas llega y se enfría en tres cuartos de segundo. Los
+           colores del borde y del halo son del tema (PALETA.tarjeta_*); la curva del
+           enfriamiento, no. */
         const caliente = 1 - clamp((T - llegada(i) - 0.15) / 0.75, 0, 1)
 
         lista.push({
@@ -890,12 +1090,20 @@ export default {
             transform: 'scale(' + escala.toFixed(4) + ')',
             opacity: opacidad * atenua,
             zIndex: i + 1,
-            borderColor: 'rgba(126,172,255,' + (0.18 + 0.3 * caliente).toFixed(3) + ')',
+            borderColor:
+              'rgba(' +
+              P.tarjeta_borde_rgb +
+              ',' +
+              (P.tarjeta_borde_alfa[0] + P.tarjeta_borde_alfa[1] * caliente).toFixed(3) +
+              ')',
             boxShadow:
-              '0 18px 44px rgba(0,0,0,0.34), 0 0 ' +
-              (34 * caliente).toFixed(0) +
-              'px rgba(47,123,255,' +
-              (0.3 * caliente).toFixed(3) +
+              P.tarjeta_sombra +
+              ', 0 0 ' +
+              (P.tarjeta_halo_radio * caliente).toFixed(0) +
+              'px rgba(' +
+              ACENTO_RGB +
+              ',' +
+              (P.tarjeta_halo_alfa * caliente).toFixed(3) +
               ')',
           },
         })
@@ -984,11 +1192,13 @@ export default {
       const y = this.alto_reposo
       return {
         logo: this.emitir(K.Logo, K.Logo + 0.85, y(Y_LOGO), [K.bajada, K.bajada + 0.55]),
+        /* Las tres líneas salen en escalera (f1 durante "Bajada", f2 y f3 durante
+           "Whatsapp") y vuelven al procesador en el orden inverso, de abajo hacia arriba
+           (f3 primero, en K.abs; f1 última). Son los tiempos del export, los tres -- ver
+           el comentario de TEXTOS para el ida y vuelta de f2 entre el 10/9 y el 11/9. */
         f1: this.emitir(K.bajada + 0.35, K.bajada + 0.35 + EM, y(Y_T1), [K.abs + 0.3, K.abs + 0.92]),
-        /* K.wa + 0.35 y no + 0.05: la escena "Whatsapp" dura 4,1s porque en el export
-           salían DOS textos ahí adentro. Con uno solo, entrando al principio, quedaba
-           un hueco largo al final. Corrido al medio, la escena vuelve a tener su ritmo. */
-        f2: this.emitir(K.wa + 0.35, K.wa + 0.35 + EM, y(Y_T2), [K.abs + 0.15, K.abs + 0.77]),
+        f2: this.emitir(K.wa + 0.05, K.wa + 0.05 + EM, y(Y_T2), [K.abs + 0.15, K.abs + 0.77]),
+        f3: this.emitir(K.wa + 0.62, K.wa + 0.62 + EM, y(Y_T3), [K.abs, K.abs + 0.62]),
         logo_ia: this.emitir(K.ia + 0.45, K.onda - 0.1, y(Y_LOGO), null),
         ia: this.emitir(K.ia + 0.7, K.onda + 0.15, y(Y_IA), null),
       }
@@ -1018,6 +1228,29 @@ export default {
       const util = this.ancho_util
       if (combinado <= util) return {}
       return { transform: 'scale(' + (util / combinado).toFixed(4) + ')' }
+    },
+
+    /**
+     * El encogido compartido de las tres líneas de rasgos (f1/f2/f3), o un objeto vacío
+     * si las tres entran tal cual. Mismo criterio que `escala_ranura()` y
+     * `estilo_fila_ia()`: textos que forman un solo bloque se encogen JUNTOS, nunca cada
+     * uno por su cuenta. Con `ajuste()` línea por línea, en la composición vertical
+     * "Sistema de gestión completo y amigable" (742 unidades contra 540 útiles) quedaba
+     * al 73 % y las otras dos al 100 %: la tercera se leía como una nota al pie, no como
+     * parte del mismo bloque. Medido a 390×844 el 11/9/2026. En el cuadrado las tres
+     * entran (1020 útiles) y esto devuelve {}, así que en escritorio no cambia nada.
+     *
+     * @returns {Object}
+     */
+    estilo_rasgo() {
+      const ancho = Math.max(
+        this.anchos_texto.f1 || 0,
+        this.anchos_texto.f2 || 0,
+        this.anchos_texto.f3 || 0
+      )
+      const util = this.ancho_util
+      if (!ancho || ancho <= util) return {}
+      return { transform: 'scale(' + (util / ancho).toFixed(4) + ')' }
     },
 
     /**
@@ -1345,13 +1578,13 @@ export default {
     /**
      * El estilo de encogido de un titular, o un objeto vacío si entra tal cual.
      *
-     * Desde el 11/9/2026 ya NO se llama para 'carga'/'vende'/'ia' en el camino animado
-     * normal -- esos tres tienen su propio encogido de a PAR (`escala_ranura()` para
-     * la ranura, `estilo_fila_ia()` para el remate), porque ahora comparten espacio con
-     * otro texto y hay que encogerlos juntos, no cada uno por separado. Sigue viva para
-     * 'f1'/'f2' (que siguen solos) y para 'carga'/'vende' en el cuadro ESTÁTICO de
-     * `prefers-reduced-motion` (ver el `<template v-if="reduced_motion">` del
-     * componente), donde cada titular vuelve a mostrarse solo, en su propia línea.
+     * Desde el 11/9/2026 ya NO se llama en el camino animado normal: 'carga'/'vende'
+     * tienen `escala_ranura()`, el remate tiene `estilo_fila_ia()` y las tres líneas de
+     * rasgos tienen `estilo_rasgo` -- todos textos que comparten espacio con otro y se
+     * encogen juntos, no cada uno por separado. Sigue viva para 'carga'/'vende' en el
+     * cuadro ESTÁTICO de `prefers-reduced-motion` (ver el `<template
+     * v-if="reduced_motion">` del componente), donde cada titular vuelve a mostrarse
+     * solo, en su propia línea.
      *
      * @param {string} clave
      * @returns {Object}
@@ -1402,11 +1635,20 @@ export default {
      * vez como el de ayer. `avance` es el resto de recorrer `crudo` (0→1, una vez) tres
      * veces seguidas -- el `% 1` es lo que multiplica las pasadas sin alargar la escena.
      *
-     * @param {string} base color de reposo (y de las dos franjas fuera del núcleo)
-     * @param {string} core color del núcleo que cruza el texto
+     * Toma TRES paradas y no dos: la onda del jsx oscuro tenía un blanco fijo en las dos
+     * franjas que rodean al núcleo (`#ffffff` a 40% y 60%), y sobre fondo claro un blanco
+     * ahí borra el texto. El jsx claro las volvió un color más (`mid`), y se portó esa
+     * forma para los dos temas -- en el oscuro `mid` es el mismo blanco de siempre, así
+     * que se ve idéntico (ver PALETA.onda_ia / onda_ia_enfasis).
+     *
+     * @param {string[]} colores [reposo, franja intermedia, núcleo] -- reposo es también
+     *   el color plano fuera de la onda y el de los dos extremos del degradé
      * @returns {Object}
      */
-    onda(base, core) {
+    onda(colores) {
+      const base = colores[0]
+      const medio = colores[1]
+      const nucleo = colores[2]
       if (!this.ondeando) return { color: base }
 
       const K = this.claves_escena
@@ -1425,9 +1667,13 @@ export default {
           base +
           ' 0%,' +
           base +
-          ' 26%, #ffffff 40%, ' +
-          core +
-          ' 50%, #ffffff 60%,' +
+          ' 26%,' +
+          medio +
+          ' 40%,' +
+          nucleo +
+          ' 50%,' +
+          medio +
+          ' 60%,' +
           base +
           ' 74%,' +
           base +
@@ -1454,7 +1700,12 @@ export default {
        tarjetas en 7,9 px reales.
 
    Las excepciones son las tres capas del fondo (degradé, circuito y viñeta), que van a
-   sangre completa por fuera del escenario -- decisión de encuadre de Lucas, 10/9. */
+   sangre completa por fuera del escenario -- decisión de encuadre de Lucas, 10/9.
+
+   🔴 Y acá no hay UN SOLO color escrito a mano (desde el 11/9/2026, cuando la animación
+   ganó su tema claro): todo lo que es color lee una variable `--animacion-*` que escribe
+   el computed `variables_paleta` en la raíz, a partir de PALETA. Un color nuevo se suma
+   allá, en los dos temas, y acá se lo lee -- nunca al revés. */
 .animacion-procesador {
   position: relative;
   width: 100%;
@@ -1464,7 +1715,7 @@ export default {
      animación queda más alta que la pantalla. */
   min-height: 100svh;
   overflow: hidden;
-  background: #04060b;
+  background: var(--animacion-fondo);
   /* La tipografía de la página (Geist), que ya está cargada: no se suma ninguna webfont
      nueva. El fallback es el mismo stack que declaraba la escena original. */
   font-family: var(--demo-font-family, 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
@@ -1475,7 +1726,7 @@ export default {
 .animacion-procesador__degrade {
   position: absolute;
   inset: 0;
-  background: radial-gradient(115% 85% at 50% 34%, #0d1a33 0%, #070b15 52%, #04060b 100%);
+  background: var(--animacion-degrade);
 }
 
 /* `slice` en vez de estirar: la trama se agranda para cubrir la pantalla pero las
@@ -1486,17 +1737,18 @@ export default {
   width: 100%;
   height: 100%;
   fill: none;
-  stroke: rgba(92, 152, 255, 0.2);
+  stroke: var(--animacion-circuito);
   stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
+/* El degradé de la viñeta lo pone el template (PALETA.vineta), porque en el tema claro
+   directamente no existe y el nodo no se monta. */
 .animacion-procesador__vineta {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(120% 100% at 50% 50%, rgba(0, 0, 0, 0) 54%, rgba(0, 0, 0, 0.6) 100%);
 }
 
 /* ── El escenario ───────────────────────────────────────────────────────────────────── */
@@ -1558,8 +1810,10 @@ export default {
   align-items: center;
   gap: 13px;
   border-radius: 22px;
+  /* El color del borde y la sombra los escribe `tarjetas()` cuadro a cuadro: dependen de
+     cuánto hace que la tarjeta llegó (el borde "caliente"). */
   border: 1px solid transparent;
-  background: linear-gradient(160deg, #1c2b4b 0%, #0c1424 100%);
+  background: var(--animacion-tarjeta-fondo);
 }
 
 .animacion-procesador__caja-icono {
@@ -1570,15 +1824,15 @@ export default {
   align-items: center;
   justify-content: center;
   border-radius: 14px;
-  background: rgba(47, 123, 255, 0.14);
-  border: 1px solid rgba(126, 172, 255, 0.2);
+  background: var(--animacion-disco-fondo);
+  border: 1px solid var(--animacion-disco-borde);
 }
 
 .animacion-procesador__icono {
   display: block;
   flex: 0 0 auto;
   fill: none;
-  stroke: #5aa9ff;
+  stroke: var(--animacion-icono);
   stroke-width: 1.9;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -1590,7 +1844,7 @@ export default {
   font-size: 22px;
   line-height: 1.18;
   letter-spacing: -0.012em;
-  color: #f4f7fd;
+  color: var(--animacion-tinta);
   text-wrap: pretty;
 }
 
@@ -1619,11 +1873,11 @@ export default {
   font-size: 62px;
   letter-spacing: -0.035em;
   white-space: nowrap;
-  color: #f4f7fd;
+  color: var(--animacion-tinta);
 }
 
 .animacion-procesador__titular--degrade {
-  background-image: linear-gradient(96deg, #7cc0ff 0%, #4f8dff 45%, #8f7dff 100%);
+  background-image: var(--animacion-degrade-vende);
 }
 
 .animacion-procesador__rasgo {
@@ -1631,7 +1885,7 @@ export default {
   font-size: 40px;
   letter-spacing: -0.022em;
   white-space: nowrap;
-  color: rgba(230, 239, 254, 0.94);
+  color: var(--animacion-rasgo);
 }
 
 /* Desde el 11/9/2026 es la FILA del remate, no un solo texto: "Todo asistido por IA,"
@@ -1650,9 +1904,16 @@ export default {
   white-space: nowrap;
 }
 
+/* `padding-right` + `margin-right` negativo del mismo valor: la cursiva de Geist sobresale
+   del canto derecho de su caja y, con el degradé recortado contra el texto
+   (`background-clip: text`), la última letra quedaba guillotinada. El padding le da
+   fondo donde pintar y el margen negativo devuelve ese ancho para que la fila no se
+   corra. Viene del jsx claro del 11/9/2026 y vale para los dos temas. */
 .animacion-procesador__ia--enfasis {
   font-style: italic;
   font-weight: 600;
+  padding-right: 0.22em;
+  margin-right: -0.22em;
 }
 
 /* El recorte del degradé contra el texto. Va en una clase y no en el estilo inline porque
@@ -1688,8 +1949,8 @@ export default {
   bottom: -16px;
   width: 5px;
   margin-left: -2.5px;
-  background: linear-gradient(180deg, rgba(150, 205, 255, 0) 0%, #e4f1ff 48%, rgba(150, 205, 255, 0) 100%);
-  box-shadow: 0 0 30px 10px rgba(90, 169, 255, 0.5);
+  background: var(--animacion-barrido);
+  box-shadow: var(--animacion-barrido-sombra);
   pointer-events: none;
 }
 

@@ -43,6 +43,42 @@ const MOTION = {
   pop: (s, d) => animate({ from: 0, to: 1, start: s, end: s + (d || 0.7), ease: Easing.easeOutBack }),
 }
 
+/* El azul de acento, el mismo en los dos temas (ver ACENTO en AnimacionProcesador.vue). */
+const ACENTO_RGB = '47,123,255'
+
+/* ═══ LO QUE CAMBIA CON EL TEMA ══════════════════════════════════════════════════════
+   Del chip, el tema claro (11/9/2026, misión experiencia-landing) toca solo TRES cosas, y
+   las tres son luz que el chip tira sobre el fondo: los pines, el halo del cuerpo y el
+   anillo que se expande al arrancar cada tramo. El encapsulado oscuro, el surco y la
+   pastilla clara son iguales en los dos temas -- así está en el jsx claro, y tiene
+   sentido: el chip es el objeto, no el fondo.
+
+   🔴 `oscuro` son los valores que el componente tenía escritos a mano hasta ese día.
+   `claro` sale del diff `oscuro-scene.jsx` → `comerciocity-scene.jsx`. Las fórmulas
+   (alfa = base + rango × pulso, radio = base + rango × pulso) siguen en los computed. */
+const PALETA = {
+  oscuro: {
+    pin_rgb: '120,170,255',
+    pin_alfa: [0.34, 0.5],
+    /* Las dos sombras fijas del cuerpo (el filete interior y la sombra de apoyo); el halo
+       azul que late va aparte: radio y alfa como [base, rango]. */
+    cuerpo_sombra: '0 0 0 1px rgba(0,0,0,0.5) inset, 0 30px 80px rgba(0,0,0,0.55)',
+    cuerpo_halo_radio: [60, 80],
+    cuerpo_halo_alfa: [0.3, 0.38],
+    anillo_rgb: '90,169,255',
+    anillo_alfa: 0.58,
+  },
+  claro: {
+    pin_rgb: ACENTO_RGB,
+    pin_alfa: [0.42, 0.45],
+    cuerpo_sombra: '0 0 0 1px rgba(0,0,0,0.4) inset, 0 26px 64px rgba(23,44,88,0.30)',
+    cuerpo_halo_radio: [54, 70],
+    cuerpo_halo_alfa: [0.24, 0.32],
+    anillo_rgb: ACENTO_RGB,
+    anillo_alfa: 0.5,
+  },
+}
+
 export default {
   name: 'ChipProcesador',
 
@@ -109,9 +145,29 @@ export default {
       type: Boolean,
       default: false,
     },
+    /**
+     * Tema visual, `'oscuro'` | `'claro'`: elige la entrada de PALETA. Se lo pasa
+     * AnimacionProcesador.vue con el suyo; el default oscuro es lo que el chip mostró
+     * siempre.
+     */
+    tema: {
+      type: String,
+      default: 'oscuro',
+      validator: (valor) => valor === 'oscuro' || valor === 'claro',
+    },
   },
 
   computed: {
+    /**
+     * La paleta del tema en uso; con un valor desconocido cae al oscuro (mismo criterio
+     * que el `paleta` de AnimacionProcesador.vue).
+     *
+     * @returns {Object}
+     */
+    paleta() {
+      return PALETA[this.tema] || PALETA.oscuro
+    },
+
     /* ⛔ RETIRADO (10/9/2026, misión experiencia-nueva): el computed `radio()`, que
        devolvía la constante RADIO con el doc "Radio expuesto al template y a quien lo
        consulte". No lo consultaba nadie -- verificado con grep sobre todo src/: el
@@ -183,7 +239,9 @@ export default {
     },
 
     estilos_pines() {
-      const color = 'rgba(120,170,255,' + (0.34 + 0.5 * this.pulso).toFixed(3) + ')'
+      const P = this.paleta
+      const color =
+        'rgba(' + P.pin_rgb + ',' + (P.pin_alfa[0] + P.pin_alfa[1] * this.pulso).toFixed(3) + ')'
       const estilos = []
 
       for (let lado = 0; lado < 4; lado++) {
@@ -212,12 +270,16 @@ export default {
 
     estilo_cuerpo() {
       const p = this.pulso
+      const P = this.paleta
       return {
         boxShadow:
-          '0 0 0 1px rgba(0,0,0,0.5) inset, 0 30px 80px rgba(0,0,0,0.55), 0 0 ' +
-          (60 + 80 * p) +
-          'px rgba(47,123,255,' +
-          (0.3 + 0.38 * p).toFixed(3) +
+          P.cuerpo_sombra +
+          ', 0 0 ' +
+          (P.cuerpo_halo_radio[0] + P.cuerpo_halo_radio[1] * p) +
+          'px rgba(' +
+          ACENTO_RGB +
+          ',' +
+          (P.cuerpo_halo_alfa[0] + P.cuerpo_halo_alfa[1] * p).toFixed(3) +
           ')',
       }
     },
@@ -245,12 +307,13 @@ export default {
     estilo_anillo() {
       const a = this.anillo
       if (!this.encendido || a <= 0.01) return null
+      const P = this.paleta
       return {
         left: RADIO - 148 * a + 'px',
         top: RADIO - 148 * a + 'px',
         width: 296 * a + 'px',
         height: 296 * a + 'px',
-        borderColor: 'rgba(90,169,255,' + (0.58 * (1 - a)).toFixed(3) + ')',
+        borderColor: 'rgba(' + P.anillo_rgb + ',' + (P.anillo_alfa * (1 - a)).toFixed(3) + ')',
       }
     },
   },
