@@ -66,6 +66,36 @@
             max="240"
             :disabled="saving"
           />
+          <p class="text-muted small mb-0 mt-1">
+            Esto es lo que se le comunica al lead (mensaje de confirmación, fin de la demo). No
+            cambia cuánto dura de verdad su acceso — eso lo controla el campo de abajo.
+          </p>
+        </div>
+      </div>
+
+      <!-- Campo: bloqueo real de la instancia (11/9/2026). Separado a propósito de la duración de
+           arriba: esta es la que el lead escucha ("una hora"), esta otra es cuánto tiempo real
+           tiene antes de que la instancia se libere para otro lead o el link deje de servir para
+           reingresar. Van uno debajo del otro para que la relación entre los dos se lea de un
+           vistazo. -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-5">
+          <label class="form-label small" for="demo_bloqueo_real_minutos">Bloqueo real de la instancia (minutos)</label>
+          <!-- Cuánto tiempo, desde el inicio, la instancia sigue reservada para este lead y su link de reingreso sigue vigente -->
+          <input
+            id="demo_bloqueo_real_minutos"
+            v-model.number="local.bloqueo_real_minutos"
+            type="number"
+            class="form-control form-control-sm"
+            min="0"
+            max="240"
+            :disabled="saving"
+          />
+          <p class="text-muted small mb-0 mt-1">
+            Tiempo real que la instancia queda reservada para este lead (nadie más puede tomarla) y
+            que su link de reingreso sigue valiendo, aunque llegue tarde o quiera volver a entrar.
+            Al lead se le sigue diciendo la duración de arriba — este margen es solo interno.
+          </p>
         </div>
       </div>
 
@@ -678,6 +708,8 @@ export default {
             efecto en la dinámica 'nueva'. */
         experiencia_tema: 'oscuro',
         duracion_minutos: 60,
+        /** Minutos reales de bloqueo desde el inicio (11/9/2026); separado de duracion_minutos a propósito. */
+        bloqueo_real_minutos: 180,
         setup_minutos_antes: 15,
         gracia_minutos_post: 10,
         recordatorio_minutos_antes: 15,
@@ -748,6 +780,8 @@ export default {
         /** Espejo del servidor: tema visual de la página de experiencia. */
         experiencia_tema: 'oscuro',
         duracion_minutos: 60,
+        /** Espejo del servidor: bloqueo real de la instancia (11/9/2026). */
+        bloqueo_real_minutos: 180,
         setup_minutos_antes: 15,
         gracia_minutos_post: 10,
         recordatorio_minutos_antes: 15,
@@ -1015,6 +1049,7 @@ export default {
           experiencia_default:                 self.local.experiencia_default,
           experiencia_tema:                    self.local.experiencia_tema,
           duracion_minutos:                    self.local.duracion_minutos,
+          bloqueo_real_minutos:                self.local.bloqueo_real_minutos,
           setup_minutos_antes:                 self.local.setup_minutos_antes,
           gracia_minutos_post:                 self.local.gracia_minutos_post,
           recordatorio_minutos_antes:          self.local.recordatorio_minutos_antes,
