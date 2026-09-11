@@ -2,8 +2,35 @@
   <div class="vp-row">
     <label class="vp-label">Agendar demo</label>
 
+    <!-- Demo directa ({ahora: true}, misión demo-agendado-directo): no hay demo, fecha ni hora
+         que elegir — la instancia libre la asigna el backend al aprobar y la demo arranca 10
+         minutos después. Va ANTES del aviso de "sin demos disponibles" a propósito: esta forma
+         no depende de la disponibilidad publicada, así que se ve igual aunque `demos` venga
+         vacío. Tampoco aplica el aviso de "forzar horario": no hay slot que forzar. -->
+    <div v-if="ahora_form" class="vp-ahora">
+      <div class="vp-ahora-text">
+        <i class="bi bi-lightning-charge-fill me-1" aria-hidden="true" />
+        Demo para ahora mismo — la instancia libre se asigna al aprobar y arranca en 10 minutos.
+      </div>
+      <!-- Apagarlo desactiva la acción (value = null); volver a prenderlo la restituye. -->
+      <div class="form-check form-switch vp-mail-toggle">
+        <input
+          id="vp_asignar_demo_ahora"
+          class="form-check-input"
+          type="checkbox"
+          role="switch"
+          :checked="is_ahora"
+          :disabled="disabled"
+          @change="on_toggle_ahora($event.target.checked)"
+        />
+        <label class="form-check-label vp-label" for="vp_asignar_demo_ahora">
+          Asignar la demo al aprobar
+        </label>
+      </div>
+    </div>
+
     <!-- Sin demos disponibles: control deshabilitado con aviso breve. -->
-    <div v-if="!demos.length" class="vp-empty-hint">Sin demos disponibles.</div>
+    <div v-else-if="!demos.length" class="vp-empty-hint">Sin demos disponibles.</div>
 
     <template v-else>
       <div class="vp-demo-grid">
@@ -57,9 +84,15 @@
           </label>
         </div>
       </div>
+    </template>
 
-      <!-- Mail 1 (acceso a la demo): solo tiene sentido si hay demo en el paquete. -->
-      <div v-if="demo_id" class="form-check form-switch vp-mail-toggle">
+    <!-- Los tres toggles de abajo acompañan al control cuando está operativo: con demos
+         publicadas (forma con horario) o con el paquete en forma directa, que no depende de la
+         disponibilidad. Cuando no hay demos y el paquete no es directo, quedan ocultos junto con
+         el resto (mismo comportamiento de siempre). -->
+    <template v-if="ahora_form || demos.length">
+      <!-- Mail de acceso a la demo: solo tiene sentido si hay demo en el paquete (con horario o directa). -->
+      <div v-if="has_demo_in_package" class="form-check form-switch vp-mail-toggle">
         <input
           id="vp_enviar_mail_demo"
           class="form-check-input"
@@ -70,7 +103,7 @@
           @change="$emit('update:enviar_mail_demo', $event.target.checked)"
         />
         <label class="form-check-label vp-label" for="vp_enviar_mail_demo">
-          Enviar Mail 1 (acceso a la demo)
+          Enviar el mail de acceso a la demo
         </label>
       </div>
 
@@ -90,7 +123,7 @@
         </label>
       </div>
 
-      <!-- Reenviar Mail 1: para leads con demo ya agendada que no recibieron el acceso. -->
+      <!-- Reenviar el mail de acceso: para leads con demo ya agendada que no lo recibieron. -->
       <div class="form-check form-switch vp-mail-toggle">
         <input
           id="vp_reenviar_mail_demo"
@@ -102,7 +135,7 @@
           @change="$emit('update:reenviar_mail_demo', $event.target.checked)"
         />
         <label class="form-check-label vp-label" for="vp_reenviar_mail_demo">
-          Reenviar Mail 1 (el lead dice que no le llegó)
+          Reenviar el mail de acceso (el lead dice que no le llegó)
         </label>
       </div>
     </template>
@@ -117,6 +150,11 @@
  * (`panel_availability_json`, prompt 321). La hora de fin no se edita acá: la calcula el
  * backend al aplicar el paquete. Si el slot elegido no está entre los libres, ofrece marcar
  * "forzar horario" para que el backend lo agende igual.
+ *
+ * Desde la misión demo-agendado-directo el paquete tiene una segunda forma, `{ahora: true}`
+ * (demo directa): no hay demo, fecha ni hora que elegir, la instancia libre la asigna el backend
+ * al aprobar y la demo arranca 10 minutos después. En esa forma los tres selects se reemplazan
+ * por un bloque compacto con un único switch que prende/apaga la acción.
  */
 export default {
   name: 'VerificationDemoScheduleControl',
@@ -125,13 +163,13 @@ export default {
     demos: { type: Array, default: () => [] },
     /** Slots libres por demo: { [demo_id]: { 'Y-m-d': ['HH:MM', ...] } }. */
     slots: { type: Object, default: () => ({}) },
-    /** Selección actual { demo_id, demo_date, demo_start_time } o null. */
+    /** Selección actual: { demo_id, demo_date, demo_start_time } (con horario), { ahora: true } (demo directa) o null. */
     value: { type: Object, default: null },
     /** true si el admin marcó forzar el horario elegido aunque figure ocupado. */
     forzar_slot: { type: Boolean, default: false },
-    /** true si se debe enviar el Mail 1 (acceso a la demo) al aprobar. */
+    /** true si se debe enviar el mail de acceso a la demo al aprobar. */
     enviar_mail_demo: { type: Boolean, default: true },
-    /** true si se debe reenviar el Mail 1 a un lead que ya tiene demo agendada. */
+    /** true si se debe reenviar el mail de acceso a un lead que ya tiene demo agendada. */
     reenviar_mail_demo: { type: Boolean, default: false },
     /** true si el paquete debe cancelar/reagendar una demo ya existente. */
     cancelar_demo: { type: Boolean, default: false },
@@ -139,7 +177,26 @@ export default {
     disabled: { type: Boolean, default: false },
   },
   emits: ['update:value', 'update:forzar_slot', 'update:enviar_mail_demo', 'update:reenviar_mail_demo', 'update:cancelar_demo'],
+  data() {
+    return {
+      /**
+       * true una vez que el paquete llegó en la forma directa `{ahora: true}`. Se recuerda acá
+       * porque apagar el switch emite `null` (la acción se desactiva) y, si el bloque dependiera
+       * solo de `value.ahora`, desaparecería con el switch apagado y el operador no tendría cómo
+       * volver a prenderlo. Un `value` con `demo_id` la vuelve a apagar: el paquete cambió de forma.
+       */
+      ahora_form: false,
+    }
+  },
   computed: {
+    /** true si la acción de demo directa está activa (value = { ahora: true }). */
+    is_ahora() {
+      return Boolean(this.value && this.value.ahora)
+    },
+    /** true si hay demo en el paquete, en cualquiera de las dos formas (demo_id elegido o demo directa). */
+    has_demo_in_package() {
+      return Boolean(this.demo_id) || this.is_ahora
+    },
     /** Id de demo actualmente elegido (string para <select>, '' si ninguno). */
     demo_id() {
       return this.value && this.value.demo_id != null ? String(this.value.demo_id) : ''
@@ -172,7 +229,32 @@ export default {
       return this.available_times.indexOf(this.demo_start_time) !== -1
     },
   },
+  watch: {
+    /**
+     * Mantiene la memoria de la forma del paquete. `null` no la toca a propósito: es lo que
+     * emite el switch al apagarse, y ahí el bloque tiene que seguir visible.
+     */
+    value: {
+      immediate: true,
+      handler(value) {
+        if (value && value.ahora) {
+          this.ahora_form = true
+        } else if (value && value.demo_id != null) {
+          this.ahora_form = false
+        }
+      },
+    },
+  },
   methods: {
+    /**
+     * Prende o apaga la demo directa. Apagarla emite `null` (la acción se desactiva en el
+     * paquete final); volver a prenderla restituye `{ ahora: true }`.
+     * @param {boolean} checked estado nuevo del switch.
+     * @returns {void}
+     */
+    on_toggle_ahora(checked) {
+      this.$emit('update:value', checked ? { ahora: true } : null)
+    },
     /**
      * Cambia la demo elegida; resetea fecha/hora porque pertenecían a la demo anterior.
      * @param {string} raw_value id de demo elegido (string del <select>, '' = ninguna).
@@ -255,6 +337,19 @@ export default {
 .vp-force-slot-label {
   font-size: 0.75rem;
   color: #7a5c00;
+}
+/* Bloque compacto de la demo directa: reemplaza a la grilla de selects. */
+.vp-ahora {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.3rem 0.4rem;
+  background: rgba(37, 211, 102, 0.12);
+  border-radius: 6px;
+}
+.vp-ahora-text {
+  font-size: 0.75rem;
+  color: rgba(17, 27, 33, 0.7);
 }
 .vp-mail-toggle {
   display: flex;

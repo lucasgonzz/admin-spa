@@ -23,11 +23,16 @@ export default {
     return {
       /** Slug del estado sugerido a aplicar al aprobar (null = sin cambio). */
       estado_sugerido: null,
-      /** Selección de demo a agendar { demo_id, demo_date, demo_start_time } o null. */
+      /**
+       * Selección de demo a agendar, en una de dos formas (o null):
+       *  - { demo_id, demo_date, demo_start_time, ... }: demo con horario elegido.
+       *  - { ahora: true }: demo directa — la instancia libre se asigna al aprobar y arranca
+       *    10 minutos después; no hay fecha ni hora que elegir.
+       */
       agendar_demo: null,
       /** true si se debe agendar aunque el horario elegido no figure libre. */
       forzar_slot: false,
-      /** true si se debe enviar el Mail 1 (acceso a la demo) al aprobar. */
+      /** true si se debe enviar el mail de acceso a la demo al aprobar. */
       enviar_mail_demo: true,
       /** Nombre de contacto a guardar en el lead (vacío = no tocar). */
       guardar_nombre: '',
@@ -35,7 +40,7 @@ export default {
       guardar_email: '',
       /** true si el paquete debe cancelar/reagendar una demo ya existente. */
       cancelar_demo: false,
-      /** true si se debe reenviar el Mail 1 a un lead que ya tiene demo agendada (no intenta nueva agenda). */
+      /** true si se debe reenviar el mail de acceso a un lead que ya tiene demo agendada (no intenta nueva agenda). */
       reenviar_mail_demo: false,
       /** true si el lead necesita intervención humana antes de seguir. */
       requiere_intervencion_humana: false,
@@ -85,23 +90,33 @@ export default {
            se pierde en silencio. Y como todo agendamiento pasa por este panel antes de enviarse,
            perderla acá significa que la modalidad no llega nunca a la base — el lead recibe el
            mensaje que le promete la ventana y el sistema le agenda una demo normal de una hora. */
-        agendar_demo: this.agendar_demo && this.agendar_demo.demo_id
-          ? {
-            demo_id: this.agendar_demo.demo_id,
-            demo_date: this.agendar_demo.demo_date || '',
-            demo_start_time: this.agendar_demo.demo_start_time || '',
-            ventana_extendida: Boolean(this.agendar_demo.ventana_extendida),
-            /* 🔴 `ventana_hasta` (tarea 62): la franja que el agente negoció con el lead
-               ("de 12 a 18"). Mismo motivo que `ventana_extendida`: si no viaja, el backend
-               agenda hasta el tope automático y la franja negociada se pierde en silencio.
-               Solo se incluye la clave cuando HAY valor: mandarla en null también pisa la del
-               paquete original (el backend conserva la original únicamente cuando la clave no
-               viene). */
-            ...(this.agendar_demo.ventana_hasta
-              ? { ventana_hasta: this.agendar_demo.ventana_hasta }
-              : {}),
-          }
-          : null,
+        /* 🔴 Demo directa (misión demo-agendado-directo): `{ahora: true}` es una FORMA distinta
+           del paquete, no una clave más. Por lo mismo de arriba —este computed reconstruye
+           `agendar_demo` y el backend reemplaza el objeto entero con lo que llega— si la forma no
+           se reconoce acá, la rama de abajo devolvería `null` (no hay `demo_id`) y la demo directa
+           se desactivaría en silencio al aprobar, con el lead ya avisado de que entra en 10
+           minutos. Se manda pelada: `demo_id_previsto` y `url_tienda_prevista` son informativas,
+           las escribe el servidor, y el backend las conserva del paquete original cuando el panel
+           no las manda. */
+        agendar_demo: this.agendar_demo && this.agendar_demo.ahora
+          ? { ahora: true }
+          : this.agendar_demo && this.agendar_demo.demo_id
+            ? {
+              demo_id: this.agendar_demo.demo_id,
+              demo_date: this.agendar_demo.demo_date || '',
+              demo_start_time: this.agendar_demo.demo_start_time || '',
+              ventana_extendida: Boolean(this.agendar_demo.ventana_extendida),
+              /* 🔴 `ventana_hasta` (tarea 62): la franja que el agente negoció con el lead
+                 ("de 12 a 18"). Mismo motivo que `ventana_extendida`: si no viaja, el backend
+                 agenda hasta el tope automático y la franja negociada se pierde en silencio.
+                 Solo se incluye la clave cuando HAY valor: mandarla en null también pisa la del
+                 paquete original (el backend conserva la original únicamente cuando la clave no
+                 viene). */
+              ...(this.agendar_demo.ventana_hasta
+                ? { ventana_hasta: this.agendar_demo.ventana_hasta }
+                : {}),
+            }
+            : null,
         forzar_slot: Boolean(this.forzar_slot),
         enviar_mail_demo: Boolean(this.enviar_mail_demo),
         reenviar_mail_demo: Boolean(this.reenviar_mail_demo),
@@ -170,24 +185,32 @@ export default {
         suggested_status = String(pending.estado_sugerido)
       }
       this.estado_sugerido = suggested_status !== '' ? suggested_status : null
-      this.agendar_demo = pending.agendar_demo
-        ? {
-          demo_id: pending.agendar_demo.demo_id,
-          demo_date: pending.agendar_demo.demo_date || '',
-          demo_start_time: pending.agendar_demo.demo_start_time || '',
-          /* La modalidad que pidió el agente se conserva al precargar (misión 47): si se
-             perdiera acá, el computed de arriba la mandaría en false igual. */
-          ventana_extendida: Boolean(pending.agendar_demo.ventana_extendida),
-          /* Y la franja negociada (tarea 62), por el mismo motivo. */
-          ventana_hasta: pending.agendar_demo.ventana_hasta || null,
-        }
-        : null
+      if (pending.agendar_demo && typeof pending.agendar_demo === 'object' && pending.agendar_demo.ahora) {
+        /* Demo directa (misión demo-agendado-directo): el agente pidió `{ahora: true}` en vez de
+           demo/fecha/hora. No hay más que precargar que la forma misma; las claves informativas
+           que escribe el servidor (`demo_id_previsto`, `url_tienda_prevista`) no se copian porque
+           el backend las conserva del paquete original cuando el panel no las manda. */
+        this.agendar_demo = { ahora: true }
+      } else {
+        this.agendar_demo = pending.agendar_demo
+          ? {
+            demo_id: pending.agendar_demo.demo_id,
+            demo_date: pending.agendar_demo.demo_date || '',
+            demo_start_time: pending.agendar_demo.demo_start_time || '',
+            /* La modalidad que pidió el agente se conserva al precargar (misión 47): si se
+               perdiera acá, el computed de arriba la mandaría en false igual. */
+            ventana_extendida: Boolean(pending.agendar_demo.ventana_extendida),
+            /* Y la franja negociada (tarea 62), por el mismo motivo. */
+            ventana_hasta: pending.agendar_demo.ventana_hasta || null,
+          }
+          : null
+      }
       this.forzar_slot = Boolean(pending.forzar_slot)
       /* Default ON cuando Claude iba a mandarlo (o cuando el campo no vino informado). */
       this.enviar_mail_demo = pending.enviar_mail_demo !== undefined
         ? Boolean(pending.enviar_mail_demo)
         : true
-      /* Default OFF: solo se prende si Claude explícitamente lo sugirió (Mail 1 para demo existente). */
+      /* Default OFF: solo se prende si Claude explícitamente lo sugirió (reenvío del mail de acceso para demo existente). */
       this.reenviar_mail_demo = Boolean(pending.reenviar_mail_demo)
       this.guardar_nombre = pending.guardar_nombre || ''
       this.guardar_email = pending.guardar_email || ''
