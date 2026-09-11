@@ -1,11 +1,32 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>Admin ComercioCity</title>
+    <title>ComercioCity</title>
     <meta name="theme-color" content="#0d6efd" />
+
+    <!-- Open Graph (misión experiencia-landing, 11/9/2026). El link de la página de
+         experiencia (/experiencia/<telefono>) se manda por WhatsApp, y WhatsApp arma la
+         vista previa leyendo ESTE HTML sin ejecutar JS: el .htaccess devuelve index.html
+         para toda ruta, así que lo único que puede ver es lo que está escrito acá. Por eso
+         el <title> es "ComercioCity" y no "Admin ComercioCity" (el admin no escribe
+         document.title al navegar: App.vue usa meta.title sólo para su encabezado
+         interno), y por eso og:image va con URL absoluta: WhatsApp no resuelve relativas.
+         La imagen es public/og-experiencia.jpg (1200×630). -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ComercioCity" />
+    <meta property="og:title" content="ComercioCity — Cargá una vez. Vendé en todos lados." />
+    <meta property="og:description" content="Stock, ventas, facturación y tienda online en un solo lugar. Mirá cómo funciona." />
+    <meta property="og:image" content="https://admin.comerciocity.com/og-experiencia.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="ComercioCity — Cargá una vez. Vendé en todos lados." />
+    <meta name="twitter:description" content="Stock, ventas, facturación y tienda online en un solo lugar. Mirá cómo funciona." />
+    <meta name="twitter:image" content="https://admin.comerciocity.com/og-experiencia.jpg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
