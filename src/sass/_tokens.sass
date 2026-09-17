@@ -1,0 +1,50 @@
+// Tokens de diseño del admin.
+//
+// Son los valores del MODO CLARO de empresa-spa (src/sass/_dark_theme.sass y
+// src/common-vue/sass/_modals.sass). El admin no tiene modo oscuro y no se pidió uno, así que
+// acá hay una sola declaración: sin `html.dark-mode`, sin `@media (prefers-color-scheme)`.
+//
+// Van en :root y no en #app a propósito: BaseModal.vue monta su diálogo con
+// `<teleport to="body">`, o sea FUERA de #app. Las custom properties heredan por el árbol del
+// documento, así que un token declarado en #app no le llegaría a ningún modal.
+//
+// Bootstrap 5.3.8 se importa COMPILADO (main.js:8) y no se le puede pisar una sola $variable.
+// Estos tokens NO reemplazan a los --bs-*: los consume el CSS propio de _forms.sass, que se
+// carga después de bootstrap.min.css y le gana por orden.
+
+:root
+	// ─── Color ────────────────────────────────────────────────────────────────
+	--color-primary: #007bff
+	--color-text-primary: #212529
+	--color-text-secondary: #6c757d
+	--color-border: #dee2e6
+	--color-border-secondary: #e9ecef
+
+	// ─── Superficies ──────────────────────────────────────────────────────────
+	--bg-card: #fff
+	--bg-section: #f8f9fa
+	--bg-hover: #f1f3f5
+	--bg-nav: #E3E3E3
+	--bg-nav-hover: #e7f1ff
+
+	// Gris de la pista del toggle apagado. El encendido no se tokeniza: es el verde #22c55e,
+	// que en empresa es literal en los cuatro toggles del sistema.
+	--toggle-track-off: #d1d5db
+
+	// ─── Modales ──────────────────────────────────────────────────────────────
+	// Los 60px del header y del footer son a propósito: los dos comparten min-height para que
+	// se lean parejos. Son 60 y no 58 porque con `min-height` mandando el alto total ES el
+	// min-height (box-sizing border-box), pero si el CONTENIDO lo supera el borde se suma
+	// aparte: un footer con un botón de 38px mide 38 + 20 de padding + 1 de borde = 59. Con 58
+	// el header quedaba en 58 y el footer en 59 (medido en empresa el 11/8/2026).
+	--modal-radius: 16px
+	--modal-chrome-min-h: 60px
+	--modal-chrome-padding-y: 10px
+	--modal-chrome-padding-x: 20px
+
+	// ─── Controles de formulario ──────────────────────────────────────────────
+	// --toolbar-control-h es el alto de los controles del sistema: lo usan el input, el select
+	// y cualquier control que tenga que quedar a la misma altura que ellos.
+	--toolbar-control-h: 36px
+	--form-input-radius: 10px
+	--form-focus-ring: rgba(0, 123, 255, 0.15)
