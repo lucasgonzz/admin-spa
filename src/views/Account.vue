@@ -131,11 +131,13 @@
 
         <!-- Leads: identidad del agente Martín -->
         <!--
-          NO pasar a v-if: el perfil del agente es un textarea rows="6" de prosa con un solo botón
-          Guardar — el mismo tamaño que los textareas de lead-whatsapp-onboarding, que también
-          queda montada. Protegerlo allá y no acá sería incoherente, y cuesta 1 request.
+          NO pasar a v-if a secas: el perfil del agente es un textarea rows="6" de prosa con un
+          solo botón Guardar — el mismo tamaño que los textareas de lead-whatsapp-onboarding, que
+          también queda montada. Protegerlo allá y no acá sería incoherente.
+          Va con el par v-if/v-show de más abajo (ver el comentario de ai-system-prompt).
         -->
         <section
+          v-if="is_section_mounted('agent-identity')"
           v-show="active_section === 'agent-identity'"
           id="agent-identity"
           class="account-section"
@@ -154,14 +156,15 @@
 
         <!-- Leads: configuración de demos -->
         <!--
-          NO pasar a v-if: es el formulario más largo de toda la pantalla — 31 campos con un solo
-          botón Guardar — y su can_save() es el mismo dirty-check que el has_unsaved_changes de las
-          otras dos que quedan en v-show, solo que con otro nombre. Con v-if, cambiar de sección y
-          volver repisa los 31 campos con el valor del servidor, sin aviso.
-          Cuesta 1 sola request (hace un único GET en mounted), así que es la que mejor paga
-          quedarse montada.
+          NO pasar a v-if a secas: es el formulario más largo de toda la pantalla — 31 campos con
+          un solo botón Guardar — y su can_save() es el mismo dirty-check que el
+          has_unsaved_changes de las otras dos que quedan en v-show, solo que con otro nombre. Con
+          v-if a secas, cambiar de sección y volver repisa los 31 campos con el valor del
+          servidor, sin aviso.
+          Va con el par v-if/v-show de más abajo (ver el comentario de ai-system-prompt).
         -->
         <section
+          v-if="is_section_mounted('lead-demo-settings')"
           v-show="active_section === 'lead-demo-settings'"
           id="lead-demo-settings"
           class="account-section"
@@ -180,14 +183,15 @@
 
         <!-- Leads: WhatsApp onboarding -->
         <!--
-          NO pasar a v-if: es una de las tres secciones con formulario largo que se dejan montadas.
-          Cambiar de sección navega con $router.push({ hash }), que en vue-router 4 dispara
-          beforeRouteUpdate y NO beforeRouteLeave — o sea que el guard de más abajo no llega a
-          correr. Con v-if el componente se destruye al cambiar de sección y el formulario a medio
-          llenar se pierde sin ningún aviso. Las otras 13 secciones sí van con v-if para no
-          montarlas todas de una (ver comentario en ai-system-prompt).
+          NO pasar a v-if a secas: es una de las cuatro secciones con formulario largo que, una
+          vez abiertas, se dejan montadas. Cambiar de sección navega con $router.push({ hash }),
+          que en vue-router 4 dispara beforeRouteUpdate y NO beforeRouteLeave — o sea que el guard
+          de más abajo no llega a correr. Con v-if a secas el componente se destruye al cambiar de
+          sección y el formulario a medio llenar se pierde sin ningún aviso. Las otras 12
+          secciones sí van con v-if (ver comentario en ai-system-prompt).
         -->
         <section
+          v-if="is_section_mounted('lead-whatsapp-onboarding')"
           v-show="active_section === 'lead-whatsapp-onboarding'"
           id="lead-whatsapp-onboarding"
           class="account-section"
@@ -256,32 +260,42 @@
 
         <!-- Leads: system prompt -->
         <!--
-          NO pasar a v-if, mismo motivo que lead-whatsapp-onboarding: el guard de cambios sin
-          guardar no corre al cambiar de sección, y acá el costo es un textarea de 28 filas
+          NO pasar a v-if a secas, mismo motivo que lead-whatsapp-onboarding: el guard de cambios
+          sin guardar no corre al cambiar de sección, y acá el costo es un textarea de 28 filas
           perdido en silencio.
-          El criterio para dejar una sección en v-show NO es que el beforeRouteLeave la nombre: el
-          guard nombra dos por historia, no porque sean las dos que importan. Es esto, y hay siete
-          secciones con dirty-check (un has_unsaved_changes o un can_save contra lo guardado), así
-          que el dirty-check solo no alcanza para decidir:
+          El criterio para dejar una sección con el par v-if/v-show NO es que el beforeRouteLeave
+          la nombre: el guard nombra dos por historia, no porque sean las dos que importan. Es
+          esto, y hay siete secciones con dirty-check (un has_unsaved_changes o un can_save contra
+          lo guardado), así que el dirty-check solo no alcanza para decidir:
 
-            queda en v-show  =  dirty-check  Y  lo que se pierde es caro de retipear
-                                (prosa larga o muchos campos con un solo Guardar)
-                                Y  cuesta pocas requests dejarla montada
+            lleva v-if/v-show  =  dirty-check  Y  lo que se pierde es caro de retipear
+                                  (prosa larga o muchos campos con un solo Guardar)
 
           Las cuatro que cumplen: esta, lead-whatsapp-onboarding, lead-demo-settings (31 campos,
           un Guardar) y agent-identity (textarea rows="6" de prosa).
-          Las otras tres con dirty-check quedan en v-if a propósito:
+          Las otras tres con dirty-check quedan en v-if a secas a propósito:
             - implementation-settings: hace 10 GET en mounted, el 38% de la ráfaga, y cada uno de
               sus 9 campos tiene su propio botón Guardar.
             - support-ai-settings (2 checkboxes + 2 números) y support-alert-settings (1 número):
               retipearlos son segundos, no vale montarlos siempre.
 
-          Las 12 secciones restantes van con v-if porque con todas en v-show se montaban las 16 al
-          entrar a /cuenta y salían ~26 requests en ráfaga. Eso disparaba errores 2002 del hosting
-          (medido: una ráfaga de 24 conexiones alcanza, ver informe 20260825-limpieza-crons-hostinger).
+          Por qué el par v-if/v-show y no v-show solo: `is_section_mounted` se vuelve true la
+          primera vez que se elige la sección y no vuelve a false nunca. O sea, montaje perezoso
+          sin desmontaje — lo mejor de los dos. Antes, con v-show solo, estas cuatro se montaban
+          al entrar a /cuenta aunque nadie las mirara y costaban 4 requests de entrada
+          (/settings/agent-identity, /settings/lead-demo, /settings/lead-whatsapp-onboarding y
+          /ai-system-prompt); ahora esas requests salen recién cuando se abre la sección, y una
+          vez abierta el formulario se comporta igual que siempre: no se destruye al cambiar de
+          sección y nada de lo tipeado se pierde.
+
+          Las 12 secciones restantes van con v-if a secas porque con todas en v-show se montaban
+          las 16 al entrar a /cuenta y salían ~26 requests en ráfaga. Eso disparaba errores 2002
+          del hosting (medido: una ráfaga de 24 conexiones alcanza, ver informe
+          20260825-limpieza-crons-hostinger).
           Tampoco sirve keep-alive: pone el $ref en null al desactivar y rompería el guard de salida.
         -->
         <section
+          v-if="is_section_mounted('ai-system-prompt')"
           v-show="active_section === 'ai-system-prompt'"
           id="ai-system-prompt"
           class="account-section"
@@ -415,6 +429,14 @@ export default {
     return {
       /** Sección visible según hash de URL o selección en la barra lateral. */
       active_section: ACCOUNT_DEFAULT_SECTION_ID,
+      /**
+       * Secciones que ya se eligieron al menos una vez en esta visita a /cuenta.
+       * Solo lo miran las cuatro secciones con el par v-if/v-show: se montan la primera vez que
+       * se las abre y de ahí en más no se desmontan (ver el comentario de ai-system-prompt).
+       *
+       * @type {Object<string, boolean>}
+       */
+      mounted_sections: {},
       /** Indica request PUT /me en curso para la sección de soporte. */
       saving_support: false,
       /** Último error de soporte para mostrar bajo su checkbox. */
@@ -454,6 +476,18 @@ export default {
     '$route.hash'() {
       this.sync_active_section_from_route()
     },
+    /**
+     * Deja anotada la sección elegida para que no se vuelva a desmontar. Es lo único que hace
+     * falta para el montaje perezoso de las cuatro secciones con v-if/v-show.
+     */
+    active_section: {
+      immediate: true,
+      handler(section_id) {
+        if (section_id) {
+          this.mounted_sections[section_id] = true
+        }
+      },
+    },
   },
   beforeRouteLeave(to, from, next) {
     const ai_section = this.$refs.ai_system_prompt_section
@@ -477,6 +511,16 @@ export default {
     next()
   },
   methods: {
+    /**
+     * Indica si una sección con el par v-if/v-show ya fue elegida alguna vez en esta visita.
+     *
+     * @param {string} section_id Id de sección (sin #).
+     * @returns {boolean}
+     */
+    is_section_mounted(section_id) {
+      return this.mounted_sections[section_id] === true
+    },
+
     /**
      * Actualiza active_section leyendo el hash actual de vue-router.
      *
