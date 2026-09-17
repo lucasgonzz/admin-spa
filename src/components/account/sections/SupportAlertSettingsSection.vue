@@ -32,6 +32,7 @@
 
 <script>
 import api from '@/utils/axios'
+import { cached_get, MAX_AGE_SETTINGS } from '@/common-vue/helpers/request_cache_helper'
 
 /**
  * Sección en Cuenta: umbral de alertas por demora en respuesta de soporte.
@@ -81,10 +82,12 @@ export default {
       const self = this
       self.loading = true
       self.error_message = ''
-      api
-        .get('/settings/support-alert-minutes')
-        .then(function (res) {
-          const value = parseInt(res.data && res.data.value, 10)
+      /* `force`: esta sección es la que GUARDA el valor, así que siempre lee del servidor — un
+         valor cacheado acá sería guardar encima de lo que otro operador cambió. De paso deja el
+         caché al día para /soporte, que solo lo lee. */
+      cached_get('/settings/support-alert-minutes', { max_age_ms: MAX_AGE_SETTINGS, force: true })
+        .then(function (data) {
+          const value = parseInt(data && data.value, 10)
           if (!isNaN(value)) {
             self.local_value = value
             self.stored_value = value

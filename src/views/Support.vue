@@ -84,6 +84,7 @@ import UserTicketsNav from '@/components/support/UserTicketsNav.vue'
 import CreateTicketModal from '@/components/support/CreateTicketModal.vue'
 import { useSupportSocket } from '@/composables/useSupportSocket'
 import api from '@/utils/axios'
+import { cached_get, MAX_AGE_SETTINGS } from '@/common-vue/helpers/request_cache_helper'
 
 export default {
   name: 'ViewSupport',
@@ -331,10 +332,12 @@ export default {
      */
     load_support_alert_minutes() {
       const self = this
-      api
-        .get('/settings/support-alert-minutes')
-        .then(function (res) {
-          const value = parseInt(res.data && res.data.value, 10)
+      /* Cacheado: este umbral solo cambia cuando alguien lo guarda en /cuenta, y ese PUT invalida
+         la entrada. Acá solo se lee, así que no hace falta pedirlo de nuevo en cada entrada al
+         módulo. */
+      cached_get('/settings/support-alert-minutes', { max_age_ms: MAX_AGE_SETTINGS })
+        .then(function (data) {
+          const value = parseInt(data && data.value, 10)
           if (!isNaN(value)) {
             self.support_alert_minutes = value
           }

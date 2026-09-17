@@ -547,6 +547,7 @@
 <script>
 import { markRaw } from 'vue'
 import api from '@/utils/axios'
+import { cached_get, MAX_AGE_SETTINGS } from '@/common-vue/helpers/request_cache_helper'
 import ResourceView from '@/common-vue/components/view/Index.vue'
 import LeadExtraProps from '@/components/lead/extra-props/Index.vue'
 import LeadResumenTab from '@/components/lead/resumen/Index.vue'
@@ -1660,10 +1661,11 @@ export default {
      */
     load_demos_settings_and_leads() {
       var self = this
-      /* GET duración configurada para calcular "Llamar a las". */
-      api.get('/settings/lead-demo').then(function (res) {
-        if (res.data && res.data.duracion_minutos) {
-          self.duracion_minutos = parseInt(res.data.duracion_minutos, 10) || 60
+      /* GET duración configurada para calcular "Llamar a las". Cacheado: acá solo se lee, y el
+         PUT de /cuenta#lead-demo-settings invalida la entrada. */
+      cached_get('/settings/lead-demo', { max_age_ms: MAX_AGE_SETTINGS }).then(function (data) {
+        if (data && data.duracion_minutos) {
+          self.duracion_minutos = parseInt(data.duracion_minutos, 10) || 60
         }
         self.load_demos_agendadas()
       }).catch(function () {

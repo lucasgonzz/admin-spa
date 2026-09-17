@@ -746,6 +746,7 @@
 
 <script>
 import api from '@/utils/axios'
+import { cached_get, MAX_AGE_SETTINGS } from '@/common-vue/helpers/request_cache_helper'
 
 /**
  * Sección en Cuenta: configuración de demos.
@@ -1054,11 +1055,13 @@ export default {
       var self = this
       self.loading = true
       self.error_message = ''
-      api
-        .get('/settings/lead-demo')
-        .then(function (res) {
+      /* `force`: esta sección es la que GUARDA los 31 campos, así que siempre lee del servidor —
+         un valor cacheado acá sería guardar encima de lo que otro operador cambió. De paso deja
+         el caché al día para /leads, que solo lee la duración. */
+      cached_get('/settings/lead-demo', { max_age_ms: MAX_AGE_SETTINGS, force: true })
+        .then(function (response_data) {
           /* Poblar campos locales y almacenar los valores de referencia del servidor. */
-          var data = res.data || {}
+          var data = response_data || {}
           var fields = Object.keys(self.local)
           /* Campos que se tratan como string (no entero). */
           /* Los dos del CTA son texto aunque uno sea "un número": parseInt sobre un teléfono

@@ -148,16 +148,33 @@ function key_for_get(path) {
 /**
  * GET cacheado contra admin-api. Devuelve `res.data`, igual que si se hubiera hecho el GET a mano.
  *
+ * `force` es para el lado que **escribe** ese dato: una pantalla de edición no puede mostrar un
+ * valor cacheado y guardar encima de lo que otro operador cambió mientras tanto. Con `force`
+ * siempre se vuelve a pedir (salvo que ya haya un pedido en vuelo, en cuyo caso se engancha: más
+ * fresco que eso no hay) y de paso se deja el caché al día para los que solo leen.
+ *
  * @param {string} path Ruta relativa al baseURL de axios (ej. `/settings/lead-demo`).
  * @param {Object} [options]
  * @param {number} [options.max_age_ms] Ventana de frescura.
+ * @param {boolean} [options.force] Ignora la ventana y vuelve a pedir, refrescando el caché.
  * @param {Object} [options.request_config] Config extra de axios (ej. `{ silent_error: true }`).
  * @returns {Promise<*>} Cuerpo de la respuesta.
  */
 export function cached_get(path, options) {
   const opts = options || {}
+  const key = key_for_get(path)
+
+  if (opts.force === true) {
+    const entry = entry_for(key)
+    if (!entry.promise) {
+      entry.has_value = false
+      entry.resolved_at = 0
+      entry.value = null
+    }
+  }
+
   return run_once(
-    key_for_get(path),
+    key,
     function () {
       return api.get(path, opts.request_config).then(function (res) {
         return res.data

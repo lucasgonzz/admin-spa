@@ -176,6 +176,7 @@
 
 <script>
 import api from '@/utils/axios'
+import { cached_get, MAX_AGE_SETTINGS } from '@/common-vue/helpers/request_cache_helper'
 
 /** Demora mínima del mensaje de bienvenida: 0 = inmediato (debe coincidir con admin-api). */
 const DELAY_MIN_SECONDS = 0
@@ -338,10 +339,12 @@ export default {
       const self = this
       self.loading = true
       self.error_message = ''
-      api
-        .get('/settings/lead-whatsapp-onboarding')
-        .then(function (res) {
-          self.apply_from_response(res.data)
+      /* `force`: esta sección es la que GUARDA estos textos, así que siempre lee del servidor.
+         Va por cached_get igual para dejar la entrada al día: los que solo leen este setting
+         (Agente y la vista de conversación) pueden engancharse al valor sin volver a pedirlo. */
+      cached_get('/settings/lead-whatsapp-onboarding', { max_age_ms: MAX_AGE_SETTINGS, force: true })
+        .then(function (data) {
+          self.apply_from_response(data)
         })
         .catch(function () {
           self.error_message = 'No se pudo cargar la configuración.'
