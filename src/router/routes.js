@@ -69,6 +69,19 @@ const routes_def = [
     meta: { requiresAuth: true, nav: true, icon: 'people' },
   },
   {
+    /**
+     * Consumo de IA de todos los clientes juntos (misión tokens-por-cliente, 17/9/2026): total del
+     * período, serie por día, ranking de clientes y desglose por acción. Va pegado a Clientes
+     * porque es el mismo objeto mirado desde la plata, y el ranking manda a leer la pestaña
+     * "Tokens" de la ficha de quien empujó el número.
+     */
+    path: '/tokens',
+    name: 'tokens',
+    text: 'Tokens',
+    component: () => import('@/views/Tokens.vue'),
+    meta: { requiresAuth: true, nav: true, icon: 'cpu' },
+  },
+  {
     // Ítem padre con submenú: Sistema / Ecommerce. Redirige a Sistema por compatibilidad
     // con el link directo a "/instalaciones" que ya pueda existir.
     path: '/instalaciones',
