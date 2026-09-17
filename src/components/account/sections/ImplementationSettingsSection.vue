@@ -333,6 +333,32 @@
 import api from '@/utils/axios'
 
 /**
+ * Devuelve el cuerpo de un setting: del lote si vino en el lote, o del GET de a uno si no.
+ *
+ * Es lo que hace que el lote sea un cambio de ORIGEN y no de forma: `admin-api` devuelve cada
+ * entrada del lote con exactamente el mismo cuerpo que devuelve su ruta individual, así que el
+ * `.then` de cada loader es el mismo en los dos caminos, con su mismo fallback y su mismo mensaje
+ * de error.
+ *
+ * 🔴 Nada de esto pasa por el caché de `request_cache_helper`: esta pantalla GUARDA estos
+ * settings, así que lo que lee para el formulario tiene que ser lo que hay en el servidor ahora,
+ * no lo que alguien leyó hace un rato.
+ *
+ * @param {Object|null} bundle Objeto `settings` de GET /settings/implementation, o null.
+ * @param {string} clave Clave de este setting dentro del lote.
+ * @param {string} ruta Ruta del GET de a uno, para cuando no hay lote.
+ * @returns {Promise<Object>} Cuerpo del setting.
+ */
+function traer_setting(bundle, clave, ruta) {
+  if (bundle && bundle[clave]) {
+    return Promise.resolve(bundle[clave])
+  }
+  return api.get(ruta).then(function (res) {
+    return res.data
+  })
+}
+
+/**
  * Sección en Cuenta: configuración global del flujo de implementaciones.
  *
  * Gestiona tres settings independientes:
@@ -343,6 +369,10 @@ import api from '@/utils/axios'
  * - API key de Google para clientes nuevos: GET/PUT /settings/implementation-google-api-key-default
  * - API key de Google para demos: GET/PUT /settings/implementation-google-api-key-demo
  * - Cuota de Google por día para demos: GET/PUT /settings/implementation-google-cuota-demo
+ *
+ * Al montar, los nueve valores se leen con un solo `GET /settings/implementation`. Los GET de a
+ * uno de la lista de arriba siguen existiendo y son el respaldo: ver `load_settings()`. Los PUT no
+ * cambian — cada campo se guarda por su ruta.
  */
 export default {
   name: 'ImplementationSettingsSection',
@@ -724,20 +754,66 @@ export default {
   },
 
   mounted() {
-    /* Cargar todos los settings en paralelo al montar el componente. */
+    /* Cargar todos los settings al montar el componente. */
     this.load_admins()
-    this.load_setting()
-    this.load_file_wait_setting()
-    this.load_employees_wait_setting()
-    this.load_form_url_setting()
-    this.load_form_contact_delay_setting()
-    this.load_google_cuota_default_setting()
-    this.load_google_api_key_default_setting()
-    this.load_google_api_key_demo_setting()
-    this.load_google_cuota_demo_setting()
+    this.load_settings()
   },
 
   methods: {
+    /**
+     * Trae los nueve settings de la pantalla con UN request, y si no puede, con los nueve de
+     * siempre.
+     *
+     * Antes salían nueve GET al montar, uno por setting, todos contra la misma tabla.
+     * `GET /settings/implementation` los devuelve juntos.
+     *
+     * 🔴 El respaldo de a uno se queda. El endpoint del lote es nuevo, y admin-api y admin-spa no
+     * llegan juntos a producción: contra una API todavía sin la ruta esto sería un 404 y la
+     * pantalla quedaría vacía. Con el respaldo, ninguna de las dos mitades rompe sola.
+     *
+     * Y el respaldo entra con CUALQUIER error, no solo con el 404 de sondeo: el lote acá es una
+     * optimización pura —el mismo dato, del mismo lado—, así que si por lo que sea no llega, el
+     * camino de siempre hace exactamente lo que hacía, con sus mismos errores en pantalla. Por eso
+     * el lote va con `silent_error`: el aviso al operador, si corresponde, lo da el camino que
+     * efectivamente se usó, y no se duplica.
+     *
+     * @returns {void}
+     */
+    load_settings() {
+      const self = this
+
+      api
+        .get('/settings/implementation', { silent_error: true })
+        .then(function (res) {
+          self.apply_settings((res.data && res.data.settings) || null)
+        })
+        .catch(function () {
+          self.apply_settings(null)
+        })
+    },
+
+    /**
+     * Reparte el lote entre los nueve loaders. Con `bundle` en null, cada uno hace su propio GET.
+     *
+     * Son los mismos nueve métodos en los dos caminos a propósito: el valor por defecto de cada
+     * campo, su indicador de carga y su mensaje de error viven en un solo lugar y no se pueden
+     * desincronizar entre el lote y el respaldo.
+     *
+     * @param {Object|null} bundle Objeto `settings` de la respuesta en lote, o null.
+     * @returns {void}
+     */
+    apply_settings(bundle) {
+      this.load_setting(bundle)
+      this.load_file_wait_setting(bundle)
+      this.load_employees_wait_setting(bundle)
+      this.load_form_url_setting(bundle)
+      this.load_form_contact_delay_setting(bundle)
+      this.load_google_cuota_default_setting(bundle)
+      this.load_google_api_key_default_setting(bundle)
+      this.load_google_api_key_demo_setting(bundle)
+      this.load_google_cuota_demo_setting(bundle)
+    },
+
     /**
      * Carga la lista de admins para poblar el select.
      *
@@ -765,20 +841,21 @@ export default {
     },
 
     /**
-     * Carga el setting actual del admin asignado desde GET /settings/implementation-assigned-admin.
+     * Carga el setting actual del admin asignado: del lote, o de
+     * GET /settings/implementation-assigned-admin si no vino en el lote.
      *
+     * @param {Object|null} [bundle] Objeto `settings` del lote.
      * @returns {void}
      */
-    load_setting() {
+    load_setting(bundle) {
       const self = this
       self.loading = true
       self.error_message = ''
 
-      api
-        .get('/settings/implementation-assigned-admin')
-        .then(function (res) {
+      traer_setting(bundle, 'implementation-assigned-admin', '/settings/implementation-assigned-admin')
+        .then(function (data) {
           /** ID del admin actualmente configurado; puede ser null si no hay uno asignado. */
-          const admin_id = res.data && res.data.admin_id != null ? res.data.admin_id : null
+          const admin_id = data && data.admin_id != null ? data.admin_id : null
           self.local_admin_id  = admin_id
           self.stored_admin_id = admin_id
         })
@@ -791,20 +868,21 @@ export default {
     },
 
     /**
-     * Carga el setting de segundos de espera desde GET /settings/implementation-file-wait.
+     * Carga el setting de segundos de espera: del lote, o de
+     * GET /settings/implementation-file-wait si no vino en el lote.
      *
+     * @param {Object|null} [bundle] Objeto `settings` del lote.
      * @returns {void}
      */
-    load_file_wait_setting() {
+    load_file_wait_setting(bundle) {
       const self = this
       self.loading_file_wait = true
       self.error_file_wait_message = ''
 
-      api
-        .get('/settings/implementation-file-wait')
-        .then(function (res) {
+      traer_setting(bundle, 'implementation-file-wait', '/settings/implementation-file-wait')
+        .then(function (data) {
           /** Valor de segundos retornado por el servidor; fallback a 15. */
-          const seconds = res.data && res.data.seconds != null ? res.data.seconds : 15
+          const seconds = data && data.seconds != null ? data.seconds : 15
           self.local_file_wait_seconds  = seconds
           self.stored_file_wait_seconds = seconds
         })
@@ -896,20 +974,21 @@ export default {
     },
 
     /**
-     * Carga el setting de segundos de espera de empleados desde GET /settings/implementation-employees-wait.
+     * Carga el setting de segundos de espera de empleados: del lote, o de
+     * GET /settings/implementation-employees-wait si no vino en el lote.
      *
+     * @param {Object|null} [bundle] Objeto `settings` del lote.
      * @returns {void}
      */
-    load_employees_wait_setting() {
+    load_employees_wait_setting(bundle) {
       const self = this
       self.loading_employees_wait = true
       self.error_employees_wait_message = ''
 
-      api
-        .get('/settings/implementation-employees-wait')
-        .then(function (res) {
+      traer_setting(bundle, 'implementation-employees-wait', '/settings/implementation-employees-wait')
+        .then(function (data) {
           /** Valor de segundos retornado por el servidor; fallback a 30. */
-          const seconds = res.data && res.data.seconds != null ? res.data.seconds : 30
+          const seconds = data && data.seconds != null ? data.seconds : 30
           self.local_employees_wait_seconds  = seconds
           self.stored_employees_wait_seconds = seconds
         })
@@ -964,20 +1043,21 @@ export default {
     },
 
     /**
-     * Carga la URL base del formulario desde GET /settings/implementation-form-url.
+     * Carga la URL base del formulario: del lote, o de GET /settings/implementation-form-url si
+     * no vino en el lote.
      *
+     * @param {Object|null} [bundle] Objeto `settings` del lote.
      * @returns {void}
      */
-    load_form_url_setting() {
+    load_form_url_setting(bundle) {
       const self = this
       self.loading_form_url      = true
       self.error_form_url_message = ''
 
-      api
-        .get('/settings/implementation-form-url')
-        .then(function (res) {
+      traer_setting(bundle, 'implementation-form-url', '/settings/implementation-form-url')
+        .then(function (data) {
           /** URL retornada por el servidor; fallback a cadena vacía. */
-          const url = res.data && res.data.url != null ? res.data.url : ''
+          const url = data && data.url != null ? data.url : ''
           self.local_form_url  = url
           self.stored_form_url = url
         })
@@ -1022,21 +1102,26 @@ export default {
     },
 
     /**
-     * Carga el delay de contacto post-formulario desde GET /settings/implementation-form-contact-delay.
+     * Carga el delay de contacto post-formulario: del lote, o de
+     * GET /settings/implementation-form-contact-delay si no vino en el lote.
      * El servidor almacena el valor en segundos; se convierte a minutos para la UI.
      *
+     * @param {Object|null} [bundle] Objeto `settings` del lote.
      * @returns {void}
      */
-    load_form_contact_delay_setting() {
+    load_form_contact_delay_setting(bundle) {
       const self = this
       self.loading_form_contact_delay      = true
       self.error_form_contact_delay_message = ''
 
-      api
-        .get('/settings/implementation-form-contact-delay')
-        .then(function (res) {
+      traer_setting(
+        bundle,
+        'implementation-form-contact-delay',
+        '/settings/implementation-form-contact-delay'
+      )
+        .then(function (data) {
           /** Segundos retornados por el servidor; convertir a minutos para el input. */
-          const seconds = res.data && res.data.seconds != null ? res.data.seconds : 0
+          const seconds = data && data.seconds != null ? data.seconds : 0
           const minutes = Math.round(seconds / 60)
           self.local_form_contact_delay_minutes  = minutes
           self.stored_form_contact_delay_minutes = minutes
@@ -1095,20 +1180,25 @@ export default {
     },
 
     /**
-     * Carga la cuota de Google configurada desde GET /settings/implementation-google-cuota-default.
+     * Carga la cuota de Google configurada: del lote, o de
+     * GET /settings/implementation-google-cuota-default si no vino en el lote.
      *
+     * @param {Object|null} [bundle] Objeto `settings` del lote.
      * @returns {void}
      */
-    load_google_cuota_default_setting() {
+    load_google_cuota_default_setting(bundle) {
       const self = this
       self.loading_google_cuota_default = true
       self.error_google_cuota_default_message = ''
 
-      api
-        .get('/settings/implementation-google-cuota-default')
-        .then(function (res) {
+      traer_setting(
+        bundle,
+        'implementation-google-cuota-default',
+        '/settings/implementation-google-cuota-default'
+      )
+        .then(function (data) {
           /** Cuota retornada por el servidor; fallback a 100. */
-          const cuota = res.data && res.data.cuota != null ? res.data.cuota : 100
+          const cuota = data && data.cuota != null ? data.cuota : 100
           self.local_google_cuota_default  = cuota
           self.stored_google_cuota_default = cuota
         })
@@ -1177,20 +1267,25 @@ export default {
     },
 
     /**
-     * Carga la API key de Google para clientes reales desde GET /settings/implementation-google-api-key-default.
+     * Carga la API key de Google para clientes reales: del lote, o de
+     * GET /settings/implementation-google-api-key-default si no vino en el lote.
      *
+     * @param {Object|null} [bundle] Objeto `settings` del lote.
      * @returns {void}
      */
-    load_google_api_key_default_setting() {
+    load_google_api_key_default_setting(bundle) {
       const self = this
       self.loading_google_api_key_default = true
       self.error_google_api_key_default_message = ''
 
-      api
-        .get('/settings/implementation-google-api-key-default')
-        .then(function (res) {
+      traer_setting(
+        bundle,
+        'implementation-google-api-key-default',
+        '/settings/implementation-google-api-key-default'
+      )
+        .then(function (data) {
           /** API key retornada por el servidor; fallback a cadena vacía. */
-          const api_key = res.data && res.data.api_key != null ? res.data.api_key : ''
+          const api_key = data && data.api_key != null ? data.api_key : ''
           self.local_google_api_key_default  = api_key
           self.stored_google_api_key_default = api_key
         })
@@ -1242,20 +1337,25 @@ export default {
     },
 
     /**
-     * Carga la API key de Google para demos desde GET /settings/implementation-google-api-key-demo.
+     * Carga la API key de Google para demos: del lote, o de
+     * GET /settings/implementation-google-api-key-demo si no vino en el lote.
      *
+     * @param {Object|null} [bundle] Objeto `settings` del lote.
      * @returns {void}
      */
-    load_google_api_key_demo_setting() {
+    load_google_api_key_demo_setting(bundle) {
       const self = this
       self.loading_google_api_key_demo = true
       self.error_google_api_key_demo_message = ''
 
-      api
-        .get('/settings/implementation-google-api-key-demo')
-        .then(function (res) {
+      traer_setting(
+        bundle,
+        'implementation-google-api-key-demo',
+        '/settings/implementation-google-api-key-demo'
+      )
+        .then(function (data) {
           /** API key retornada por el servidor; fallback a cadena vacía. */
-          const api_key = res.data && res.data.api_key != null ? res.data.api_key : ''
+          const api_key = data && data.api_key != null ? data.api_key : ''
           self.local_google_api_key_demo  = api_key
           self.stored_google_api_key_demo = api_key
         })
@@ -1307,20 +1407,25 @@ export default {
     },
 
     /**
-     * Carga la cuota de Google para demos desde GET /settings/implementation-google-cuota-demo.
+     * Carga la cuota de Google para demos: del lote, o de
+     * GET /settings/implementation-google-cuota-demo si no vino en el lote.
      *
+     * @param {Object|null} [bundle] Objeto `settings` del lote.
      * @returns {void}
      */
-    load_google_cuota_demo_setting() {
+    load_google_cuota_demo_setting(bundle) {
       const self = this
       self.loading_google_cuota_demo = true
       self.error_google_cuota_demo_message = ''
 
-      api
-        .get('/settings/implementation-google-cuota-demo')
-        .then(function (res) {
+      traer_setting(
+        bundle,
+        'implementation-google-cuota-demo',
+        '/settings/implementation-google-cuota-demo'
+      )
+        .then(function (data) {
           /** Cuota retornada por el servidor; fallback a 100. */
-          const cuota = res.data && res.data.cuota != null ? res.data.cuota : 100
+          const cuota = data && data.cuota != null ? data.cuota : 100
           self.local_google_cuota_demo  = cuota
           self.stored_google_cuota_demo = cuota
         })
