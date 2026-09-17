@@ -1,7 +1,8 @@
 <template>
   <div>
     <form v-if="form" @submit.stop.prevent>
-      <!-- Grilla Bootstrap: col-lg-3 = 4 campos por fila (12/3); en md 2 por fila; en xs ancho completo. -->
+      <!-- Grilla Bootstrap con escalón intermedio, igual que empresa: xs 1 campo por fila,
+           md 2 (12/6), lg 3 (12/4) y xl 4 (12/3). -->
       <div class="row g-3">
         <div
           v-for="p in visible_form_properties"
@@ -19,7 +20,9 @@
           </template>
           <template v-else-if="is_only_show_field(p)">
             <field-label-with-help :text="p.text" :description="p.description" />
-            <p class="mb-0 text-body">{{ only_show_display_text(p) }}</p>
+            <!-- Píldora gris tipo "input deshabilitado": ocupa el mismo lugar que ocuparía el
+                 control y deja claro de un vistazo que el campo no se edita (estilo en _forms.sass). -->
+            <div class="model-form__only-show">{{ only_show_display_text(p) }}</div>
           </template>
           <template v-else>
             <div v-if="p.type === 'text'">
@@ -122,14 +125,28 @@
               </select>
             </div>
             <div v-else-if="p.type === 'checkbox'">
-              <label class="form-check-label d-flex align-items-center gap-2">
-                <input
-                  v-model="form[p.key]"
-                  type="checkbox"
-                  class="form-check-input"
-                  :disabled="is_readonly_field(p)"
-                />
-                {{ p.text }}
+              <!--
+                Toggle tipo iPhone (estilo en _forms.sass). El <label> sigue envolviendo al input
+                real y al texto, como hacía el form-check de Bootstrap que reemplaza: el click
+                vale igual sobre la perilla que sobre la etiqueta. El input no se oculta con
+                display:none —eso lo sacaría del orden de tabulación—, sino con opacity 0 y
+                tamaño 0, y conserva su v-model y su clave sin cambios.
+              -->
+              <label
+                class="model-form__toggle-row"
+                :class="{ 'model-form__toggle-row--disabled': is_readonly_field(p) }"
+              >
+                <span class="model-form__toggle">
+                  <input
+                    v-model="form[p.key]"
+                    type="checkbox"
+                    :disabled="is_readonly_field(p)"
+                  />
+                  <span class="model-form__toggle-track">
+                    <span class="model-form__toggle-thumb"></span>
+                  </span>
+                </span>
+                <span class="model-form__toggle-text">{{ p.text }}</span>
               </label>
             </div>
             <div v-else-if="p.type === 'custom' && p.custom_component === 'lead_personalized_demo_videos'">
@@ -183,7 +200,7 @@ import { store_catalog_relations } from '@/utils/store_catalog_relations'
  * `type: has_many` o propiedad con bloque `has_many` → tabla + modal anidado (`form/HasMany.vue`).
  * Filas del meta solo con `group_title` (sin `key`) agrupan campos.
  * El tablist de navegación se renderiza en `model/Index.vue` y aquí se recibe el grupo activo.
- * `only_show`: etiqueta + valor como texto en `<p>` (sin input).
+ * `only_show`: etiqueta + valor en una píldora gris `.model-form__only-show` (sin input).
  * `only_show` + `type: date`/`day`: la fecha se formatea a DD/MM/YYYY (con hora en `date`) en la
  *   zona horaria del navegador, en vez de pintar el ISO crudo del backend.
  * `exclude_on_update` sin `only_show`: sigue como control deshabilitado o solo lectura.
@@ -191,7 +208,9 @@ import { store_catalog_relations } from '@/utils/store_catalog_relations'
  * `from_parent_field`: select FK cuyas opciones se cargan desde un recurso padre (ej. client_apis del client_id).
  * `description`: texto de ayuda bajo la etiqueta (FieldLabelWithHelp).
  * `placeholder`: hint opcional en inputs de texto.
- * Layout: fila Bootstrap (`row g-3`) con columnas `col-lg-3` (cuatro campos por fila en lg+).
+ * `checkbox`: toggle tipo iPhone (`.model-form__toggle`), no el form-check de Bootstrap.
+ * Layout: fila Bootstrap (`row g-3`) con columnas `col-md-6 col-lg-4 col-xl-3` (2 campos por
+ *   fila en md, 3 en lg y 4 en xl).
  */
 export default {
   name: 'ModelForm',
@@ -358,7 +377,9 @@ export default {
       if (this.is_has_many_field(p) || (p && p.full_width)) {
         return 'col-12'
       }
-      return 'col-12 col-md-6 col-lg-3'
+      // El salto de md a lg iba de 2 campos por fila a 4 sin escalón intermedio: en un monitor
+      // de 1366px los campos quedaban angostos de golpe. Mismos anchos que empresa.
+      return 'col-12 col-md-6 col-lg-4 col-xl-3'
     },
     /**
      * Campo relacional has_many embebido (tabla + CRUD anidado).
