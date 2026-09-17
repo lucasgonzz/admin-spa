@@ -2172,68 +2172,6 @@ export default {
 }
 
 /*
-  Barra Resumen / Conversación: control segmentado plano, mismo azul que
-  btn-primary, badge "En progreso" y fila seleccionada del listado (#e7f1ff).
-*/
-.impl-right-nav {
-  padding: 10px 16px 12px;
-  background-color: #fff;
-  border-bottom: 1px solid #e9ecef;
-}
-
-/* Pista gris donde se deslizan las dos opciones (estilo pill, sin bordes de carpeta) */
-.impl-detail-tab-bar {
-  display: flex;
-  gap: 6px;
-  padding: 4px;
-  background-color: #f1f3f5;
-  border-radius: 8px;
-}
-
-/* Botón de pestaña: inactivo en gris secundario como los títulos de sección */
-.impl-detail-tab-btn {
-  flex: 1 1 0;
-  border: none;
-  border-radius: 6px;
-  padding: 8px 12px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  line-height: 1.25;
-  color: #6c757d;
-  background-color: transparent;
-  transition: color 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease;
-}
-
-.impl-detail-tab-btn:hover:not(.impl-detail-tab-btn--active) {
-  color: #0d6efd;
-  background-color: #e7f1ff;
-}
-
-.impl-detail-tab-btn:focus,
-.impl-detail-tab-btn:focus-visible {
-  box-shadow: none;
-  outline: none;
-}
-
-.impl-detail-tab-btn:focus-visible {
-  outline: 2px solid #0d6efd;
-  outline-offset: 2px;
-}
-
-/* Activo: mismo relleno azul sólido que el botón Avanzar etapa y el badge de estado */
-.impl-detail-tab-btn--active {
-  color: #fff;
-  background-color: #0d6efd;
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgba(13, 110, 253, 0.28);
-}
-
-.impl-detail-tab-btn--active:hover {
-  color: #fff;
-  background-color: #0b5ed7;
-}
-
-/*
   Cuerpo scrolleable del panel derecho: fondo gris neutro tipo Apple (#f5f5f7)
   para dar contraste contra las tarjetas blancas que cuelgan de cada sección.
 */

@@ -96,30 +96,17 @@
           </div>
         </div>
 
-        <!-- Tabs Resumen / Conversación -->
+        <!--
+          Tabs Resumen / Conversación: el nav segmentado común (antes estaba copiado a mano acá).
+          `stretch` conserva el ancho parejo que tenían las dos pestañas en esta columna angosta.
+        -->
         <div class="impl-right-nav flex-shrink-0">
-          <div class="impl-detail-tab-bar" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              class="impl-detail-tab-btn"
-              :class="{ 'impl-detail-tab-btn--active': detail_panel_tab === 'summary' }"
-              :aria-selected="detail_panel_tab === 'summary'"
-              @click="detail_panel_tab = 'summary'"
-            >
-              Resumen
-            </button>
-            <button
-              type="button"
-              role="tab"
-              class="impl-detail-tab-btn"
-              :class="{ 'impl-detail-tab-btn--active': detail_panel_tab === 'conversation' }"
-              :aria-selected="detail_panel_tab === 'conversation'"
-              @click="detail_panel_tab = 'conversation'"
-            >
-              Conversación
-            </button>
-          </div>
+          <horizontal-nav
+            :items="detail_panel_tabs"
+            :selected_item_value="detail_panel_tab"
+            stretch
+            @setSelected="on_detail_tab_select"
+          />
         </div>
 
         <!-- Cuerpo scrolleable -->
@@ -253,6 +240,15 @@
 
 <script>
 import api from '@/utils/axios'
+import HorizontalNav from '@/common-vue/components/horizontal-nav/Index.vue'
+
+/**
+ * Pestañas del panel de detalle. Fuera de `data()` para no recrear el array en cada instancia.
+ */
+const DETAIL_PANEL_TABS = [
+  { key: 'summary', label: 'Resumen' },
+  { key: 'conversation', label: 'Conversación' },
+]
 
 /**
  * Etiquetas legibles de los campos recolectados en la configuración de la tienda.
@@ -281,6 +277,7 @@ const ONLINE_PRICE_TYPE_LABELS = {
 
 export default {
   name: 'ViewEcommerceImplementations',
+  components: { HorizontalNav },
   data() {
     return {
       // Listado de implementaciones de ecommerce.
@@ -296,6 +293,8 @@ export default {
       deleting_implementation: false,
       // Pestaña activa del panel de detalle.
       detail_panel_tab: 'summary',
+      // Ítems del nav segmentado del panel de detalle.
+      detail_panel_tabs: DETAIL_PANEL_TABS,
       // Cantidad total de etapas del flujo de ecommerce.
       total_stages: 5,
       // Canal Pusher suscrito (para teardown).
@@ -340,6 +339,18 @@ export default {
     this.teardown_pusher()
   },
   methods: {
+    /**
+     * Cambia la pestaña del panel de detalle cuando el nav segmentado avisa un click.
+     *
+     * @param {{ key: string }} item ítem clickeado
+     * @returns {void}
+     */
+    on_detail_tab_select(item) {
+      if (!item || !item.key) {
+        return
+      }
+      this.detail_panel_tab = item.key
+    },
     /**
      * Carga el listado de implementaciones de ecommerce.
      *
@@ -741,44 +752,6 @@ export default {
   padding: 10px 16px 12px;
   background-color: #fff;
   border-bottom: 1px solid #e9ecef;
-}
-
-.impl-detail-tab-bar {
-  display: flex;
-  gap: 6px;
-  padding: 4px;
-  background-color: #f1f3f5;
-  border-radius: 8px;
-}
-
-.impl-detail-tab-btn {
-  flex: 1 1 0;
-  border: none;
-  border-radius: 6px;
-  padding: 8px 12px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  line-height: 1.25;
-  color: #6c757d;
-  background-color: transparent;
-  transition: color 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease;
-}
-
-.impl-detail-tab-btn:hover:not(.impl-detail-tab-btn--active) {
-  color: #0d6efd;
-  background-color: #e7f1ff;
-}
-
-.impl-detail-tab-btn--active {
-  color: #fff;
-  background-color: #0d6efd;
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgba(13, 110, 253, 0.28);
-}
-
-.impl-detail-tab-btn--active:hover {
-  color: #fff;
-  background-color: #0b5ed7;
 }
 
 .impl-right-body {

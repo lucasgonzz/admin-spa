@@ -13,26 +13,17 @@
     </div>
     <div v-else-if="draft" :class="{ 'lead-module': is_lead_model }">
       <template v-if="show_properties_nav">
-        <!-- Contenedor con scroll horizontal cuando las pestañas no entran (p. ej. móvil). -->
-        <div class="model-properties-nav mb-3">
-          <ul class="nav nav-tabs model-properties-nav__tabs" role="tablist">
-            <li
-              v-for="item in properties_nav_items"
-              :key="item.key"
-              class="nav-item"
-              role="presentation"
-            >
-              <button
-                type="button"
-                class="nav-link"
-                :class="{ active: active_tab === item.key }"
-                @click="active_tab = item.key"
-              >
-                {{ item.label }}
-              </button>
-            </li>
-          </ul>
-        </div>
+        <!--
+          Barra de grupos/extras: mismo nav segmentado que usa empresa y que ya estaba copiado a
+          mano en las vistas de implementaciones. Maneja solo su scroll horizontal cuando las
+          pestañas no entran (p. ej. móvil); quién es la activa lo sigue decidiendo este modal.
+        -->
+        <horizontal-nav
+          class="mb-3"
+          :items="properties_nav_items"
+          :selected_item_value="active_tab"
+          @setSelected="on_nav_select"
+        />
         <div v-show="should_show_group_form">
           <model-form
             :form="draft"
@@ -97,6 +88,7 @@ import api from '@/utils/axios'
 import { route_string } from '@/utils/route_string'
 import ModelForm from './form/Index.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
+import HorizontalNav from '@/common-vue/components/horizontal-nav/Index.vue'
 
 /**
  * Modal CRUD: crea o actualiza vía API admin.
@@ -108,7 +100,7 @@ import BaseModal from '@/components/ui/BaseModal.vue'
  */
 export default {
   name: 'ModelModal',
-  components: { ModelForm, BaseModal },
+  components: { ModelForm, BaseModal, HorizontalNav },
   props: {
     show: { type: Boolean, default: false },
     model_name: { type: String, required: true },
@@ -416,6 +408,17 @@ export default {
     },
   },
   methods: {
+    /**
+     * Cambia de pestaña cuando el nav avisa un click. El nav solo pinta y emite: la pestaña
+     * activa la sigue guardando este modal, igual que cuando la barra estaba escrita acá adentro.
+     * @param {{ key: string }} item ítem clickeado de `properties_nav_items`
+     */
+    on_nav_select(item) {
+      if (!item || !item.key) {
+        return
+      }
+      this.active_tab = item.key
+    },
     /**
      * Fila meta que corresponde a un campo del formulario (editable o solo lectura).
      * @param {Object|null} p definición de propiedad
@@ -1125,29 +1128,4 @@ export default {
   },
 }
 </script>
-
-<style scoped>
-/* Barra de grupos/extras del modal: scroll horizontal si no caben en una fila. */
-.model-properties-nav {
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-  max-width: 100%;
-  padding-bottom: 0.15rem;
-}
-
-.model-properties-nav__tabs {
-  flex-wrap: nowrap;
-  width: max-content;
-  min-width: 100%;
-}
-
-.model-properties-nav__tabs .nav-item {
-  flex-shrink: 0;
-}
-
-.model-properties-nav__tabs .nav-link {
-  white-space: nowrap;
-}
-</style>
 
