@@ -81,6 +81,27 @@ textarea.form-control#{$fuera-de-las-pantallas-propias}
 .form-select-sm#{$fuera-de-las-pantallas-propias}
 	padding-right: 2rem
 
+// El bloque chico de arriba pesa 0,1,0 y `textarea.form-control` pesa 0,1,1: un
+// <textarea class="form-control form-control-sm"> se quedaba con el padding del control GRANDE
+// (0.45rem 0.7rem) en vez del chico. Se nota en los editores inline de las conversaciones, que
+// viven dentro de una burbuja angosta. Esta regla empata en peso (0,1,1) y gana por orden.
+// El min-height sigue en 0 por el mismo motivo que el grande: el textarea crece con su contenido.
+textarea.form-control-sm#{$fuera-de-las-pantallas-propias}
+	min-height: 0
+	padding: 0.25rem 0.5rem
+
+// Bootstrap achica el control de adentro de un `.input-group-sm` desde el CONTENEDOR
+// (`.input-group-sm > .form-control`, que pesa 0,2,0): le baja el padding y la tipografía, pero
+// NO le toca el min-height, porque el suyo no le estorba. Al de esta hoja sí: el bloque de más
+// arriba le pone el alto de la barra de herramientas (36px) con 0,1,0, y como el min-height no se
+// lo pisa nadie, el control queda 5px más alto — y se lleva puesto al `.input-group-text`, que
+// estira por el `align-items: stretch` del grupo. Medido: 31px → 36px en los dos.
+// Solo pasa cuando el control NO lleva además la clase `.form-control-sm` (los tres buscadores de
+// plantillas sí la llevan y están bien; los editores de versiones y de comandos, no).
+.input-group-sm > .form-control#{$fuera-de-las-pantallas-propias},
+.input-group-sm > .form-select#{$fuera-de-las-pantallas-propias}
+	min-height: calc(1.5em + 0.5rem + 2px)
+
 // ══════════════════════════════════════════════════════════════════════════════
 // Etiquetas
 // ══════════════════════════════════════════════════════════════════════════════
