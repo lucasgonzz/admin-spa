@@ -224,8 +224,11 @@ export default {
   },
 
   created() {
-    // Cargar tareas y admins en paralelo al montar la vista.
-    this.$store.dispatch('task/get_models')
+    /* Cargar tareas y admins en paralelo al montar la vista.
+       `ensure_models_fresh` y no `get_models`: el Nav ya pidió la misma lista para su badge, y
+       entrar a /tareas montaba los dos casi en el mismo tick. Pasado medio minuto vuelve a pedir
+       igual, y cualquier escritura sobre /task invalida la ventana. */
+    this.$store.dispatch('task/ensure_models_fresh')
     this.$store.dispatch('task/fetch_admins')
   },
 

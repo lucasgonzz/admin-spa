@@ -520,7 +520,7 @@ export default {
       if (!this.current_admin_id) {
         return
       }
-      this.$store.dispatch('support_ticket/fetch_unread_badges').then(function () {
+      this.$store.dispatch('support_ticket/ensure_unread_badges_fresh').then(function () {
         if (self.current_admin_id) {
           self.support_badge_socket_instance = useSupportBadgeSocket({ admin_id: self.current_admin_id })
         }
@@ -544,7 +544,7 @@ export default {
       if (!this.current_admin_id) {
         return
       }
-      this.$store.dispatch('lead/fetch_unread_badges').then(function () {
+      this.$store.dispatch('lead/ensure_unread_badges_fresh').then(function () {
         if (self.current_admin_id) {
           self.lead_socket_instance = useLeadSocket({ admin_id: self.current_admin_id })
         }
@@ -553,13 +553,22 @@ export default {
     /**
      * Pide la lista de tareas al backend para alimentar el badge del menú (sin bloquear la UI).
      *
+     * 🔴 Las cuatro cargas de badges de este componente van por sus variantes `ensure_*`, que no
+     * repiten el pedido si el dato se trajo hace menos de medio minuto. El motivo: el Nav está
+     * bajo un `v-if="show_nav"` en App.vue, así que se DESMONTA al entrar a
+     * /leads/:id/conversacion y, al volver, este watcher (que es `immediate`) dispara las cuatro
+     * requests de nuevo aunque los números ya estén en memoria. Y lo hace justo en el mismo tick
+     * en que /leads y /tareas piden lo suyo.
+     * La ventana es corta a propósito: mientras el Nav está desmontado sus sockets están caídos,
+     * así que pasado el umbral hay que volver a preguntar de verdad.
+     *
      * @returns {void}
      */
     refresh_task_nav_count() {
       if (!this.current_admin_id) {
         return
       }
-      this.$store.dispatch('task/get_models').catch(function () {
+      this.$store.dispatch('task/ensure_models_fresh').catch(function () {
         return null
       })
     },
@@ -573,7 +582,7 @@ export default {
       if (!this.current_admin_id) {
         return
       }
-      this.$store.dispatch('implementation/fetch_ready_to_advance_count').catch(function () {
+      this.$store.dispatch('implementation/ensure_ready_to_advance_count_fresh').catch(function () {
         return null
       })
     },

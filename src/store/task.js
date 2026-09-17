@@ -5,6 +5,7 @@
  */
 import __base_store from '@/common-vue/store/__base_store'
 import api from '@/utils/axios'
+import { run_once, MAX_AGE_BADGES } from '@/common-vue/helpers/request_cache_helper'
 
 export default __base_store({
   state() {
@@ -125,6 +126,30 @@ export default __base_store({
   },
 
   actions: {
+    /**
+     * Trae las tareas solo si lo que hay en memoria se pidió hace más de medio minuto.
+     *
+     * La lista de tareas la piden dos lugares que se montan casi a la vez: el Nav (para el badge
+     * de «Tareas») y la vista /tareas. Y el Nav vive bajo un `v-if` en App.vue, así que la vuelve
+     * a pedir cada vez que se lo remonta — por ejemplo, al salir de la conversación de un lead.
+     *
+     * La clave arranca con `GET ` a propósito: cualquier escritura sobre `/task` (crear, editar,
+     * borrar, reordenar) invalida la ventana desde el interceptor del helper, así que una tarea
+     * recién tocada nunca queda afuera de la próxima lectura.
+     *
+     * @param {Object} context Contexto del módulo Vuex.
+     * @returns {Promise}
+     */
+    ensure_models_fresh({ dispatch }) {
+      return run_once(
+        'GET /task',
+        function () {
+          return dispatch('get_models')
+        },
+        { max_age_ms: MAX_AGE_BADGES }
+      )
+    },
+
     /**
      * Carga la lista de admins para poblar el selector de asignación al crear o editar tareas.
      *

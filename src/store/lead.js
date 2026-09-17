@@ -1,6 +1,37 @@
 import __base_store, { set_global_filter_loading } from '@/common-vue/store/__base_store'
 import api from '@/utils/axios'
 import { route_string } from '@/utils/route_string'
+import { run_once, MAX_AGE_BADGES } from '@/common-vue/helpers/request_cache_helper'
+
+/**
+ * Pide los totales de mensajes sin leer y los vuelca al store.
+ *
+ * Va por `run_once` con la clave del GET: dos llamadores en el mismo tick comparten la misma
+ * request, y como la clave arranca con `GET `, cualquier escritura sobre esa ruta la invalida
+ * sola desde el interceptor del helper.
+ *
+ * @param {Object} context Contexto del módulo Vuex.
+ * @param {number} [max_age_ms] Si se pasa, no vuelve a pedir mientras el valor sea más nuevo.
+ * @returns {Promise<number>} Total de no leídos vigente en el store.
+ */
+function pedir_unread_badges(context, max_age_ms) {
+  const commit = context.commit
+  return run_once(
+    'GET /lead/unread-badges',
+    function () {
+      return api.get('/lead/unread-badges').then((res) => {
+        if (res.data && res.data.unread_total != null) {
+          commit('set_unread_total', res.data.unread_total)
+        }
+        if (res.data && res.data.unread_by_status != null) {
+          commit('set_unread_by_status', res.data.unread_by_status)
+        }
+        return context.state.unread_total
+      })
+    },
+    { max_age_ms: max_age_ms }
+  )
+}
 
 /**
  * Fusiona mensajes del hilo conservando adjuntos si el payload nuevo no los trae.
@@ -1340,16 +1371,26 @@ export default __base_store({
      * @returns {Promise<number>}
      */
     fetch_unread_badges(context) {
-      const commit = context.commit
-      return api.get('/lead/unread-badges').then((res) => {
-        if (res.data && res.data.unread_total != null) {
-          commit('set_unread_total', res.data.unread_total)
-        }
-        if (res.data && res.data.unread_by_status != null) {
-          commit('set_unread_by_status', res.data.unread_by_status)
-        }
-        return context.state.unread_total
-      })
+      return pedir_unread_badges(context)
+    },
+    /**
+     * Igual que `fetch_unread_badges`, pero no vuelve a pedir si los badges se trajeron hace
+     * menos de medio minuto.
+     *
+     * Para qué: el Nav vive bajo un `v-if` en App.vue, así que se DESMONTA al entrar a la
+     * conversación de un lead y al volver repite sus cuatro badges — justo cuando /leads también
+     * pide el suyo. Los dos pedidos salen en el mismo tick y traen lo mismo.
+     *
+     * La ventana es corta a propósito: mientras el Nav está desmontado sus sockets están
+     * caídos, así que pasado el umbral hay que volver a preguntar de verdad. Lo que sí no puede
+     * pasar es que un evento real quede sin efecto — por eso los sockets y el
+     * `mark_whatsapp_messages_read` siguen llamando a `fetch_unread_badges`, que siempre pide.
+     *
+     * @param {Object} context
+     * @returns {Promise<number>}
+     */
+    ensure_unread_badges_fresh(context) {
+      return pedir_unread_badges(context, MAX_AGE_BADGES)
     },
     /**
      * GET /lead/status-cards: conteos globales por estado para las tarjetas de arriba de la grilla.

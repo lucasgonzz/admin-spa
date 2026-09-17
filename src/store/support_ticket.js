@@ -1,5 +1,38 @@
 import __base_store from '@/common-vue/store/__base_store'
 import api from '@/utils/axios'
+import { run_once, MAX_AGE_BADGES } from '@/common-vue/helpers/request_cache_helper'
+
+/**
+ * Pide los contadores de la bandeja y los vuelca al store. Nunca rechaza.
+ *
+ * Va por `run_once` con la clave del GET: dos llamadores en el mismo tick comparten la request.
+ *
+ * @param {Function} commit Committer del módulo.
+ * @param {number} [max_age_ms] Si se pasa, no vuelve a pedir mientras el valor sea más nuevo.
+ * @returns {Promise}
+ */
+function pedir_unread_badges(commit, max_age_ms) {
+  return run_once(
+    'GET /support-ticket/unread-badges',
+    function () {
+      return api.get('/support-ticket/unread-badges').then(function (response) {
+        if (response.data && response.data.unread_totals) {
+          commit('set_unread_totals', response.data.unread_totals)
+        }
+        if (response.data && response.data.inbox_nav) {
+          commit('set_inbox_nav', response.data.inbox_nav)
+        }
+      })
+    },
+    { max_age_ms: max_age_ms }
+    /* El catch va acá afuera y no adentro del runner a propósito: si fuera adentro, `run_once`
+       vería una promesa resuelta y le abriría ventana de frescura a un pedido que falló — el
+       badge se quedaría con el número viejo sin reintentar. Acá adentro el error sigue
+       invalidando la entrada, y para el llamador la acción sigue sin rechazar, como antes. */
+  ).catch(function (error) {
+    console.log(error)
+  })
+}
 
 /**
  * Resuelve status operativo al fusionar filas de bandeja (index, PUT, Pusher).
@@ -200,19 +233,16 @@ export default __base_store({
      * Refresca solo contadores de badges (Pusher o tras marcar leído).
      */
     fetch_unread_badges({ commit }) {
-      return api
-        .get('/support-ticket/unread-badges')
-        .then(function (response) {
-          if (response.data && response.data.unread_totals) {
-            commit('set_unread_totals', response.data.unread_totals)
-          }
-          if (response.data && response.data.inbox_nav) {
-            commit('set_inbox_nav', response.data.inbox_nav)
-          }
-        })
-        .catch(function (error) {
-          console.log(error)
-        })
+      return pedir_unread_badges(commit)
+    },
+    /**
+     * Igual que `fetch_unread_badges`, pero no vuelve a pedir si se trajeron hace menos de medio
+     * minuto. Lo usa el Nav, que se desmonta y se remonta al entrar y salir de la conversación de
+     * un lead (ver el comentario largo en `lead.js`). Los sockets y el marcado de leído siguen
+     * usando `fetch_unread_badges`, que siempre pide.
+     */
+    ensure_unread_badges_fresh({ commit }) {
+      return pedir_unread_badges(commit, MAX_AGE_BADGES)
     },
     /**
      * Expone mutación de contador no leídos en un ticket (llamada desde módulo support_message).

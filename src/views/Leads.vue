@@ -880,12 +880,20 @@ export default {
     this.sync_only_calificados_from_store()
     /* Sincronizar la barra de navegación de estados con un filtro activo previo en el store. */
     this.sync_status_nav_from_store()
-    /* Totales de no leídos por estado para los badges de la barra de navegación. */
-    this.$store.dispatch('lead/fetch_unread_badges')
+    /* Totales de no leídos por estado para los badges de la barra de navegación.
+       `ensure_*`: el Nav pide lo mismo en este mismo tick (y lo repite cada vez que se remonta,
+       que es cada vez que se sale de la conversación de un lead). */
+    this.$store.dispatch('lead/ensure_unread_badges_fresh')
     /* Conteos globales por estado para las tarjetas de arriba de la grilla. */
     this.$store.dispatch('lead/fetch_status_cards')
     /* Restaurar scroll si el usuario volvió desde la conversación WhatsApp de un lead (primera carga). */
     this.restore_scroll_position()
+    /* keep-alive: activated() corre INMEDIATAMENTE después de este mounted() en el primer
+       montaje, y su rama "vengo de otro módulo" repite todo lo de acá arriba más un _get_models
+       que ResourceView ya está haciendo por su cuenta. Medido: entrar a /leads salían dos
+       GET /lead, dos /lead/status-cards y dos /lead/unread-badges. Esta bandera hace que la
+       primera activación no haga nada: no hay nada que refrescar, se acaba de cargar todo. */
+    this._primera_activacion_pendiente = true
   },
 
   /**
@@ -897,6 +905,12 @@ export default {
    * @returns {void}
    */
   activated() {
+    /* Primer montaje: mounted() acaba de cargar todo hace un instante (ver el comentario de la
+       bandera allá). Refrescarlo acá sería pedir de nuevo lo mismo en el mismo tick. */
+    if (this._primera_activacion_pendiente) {
+      this._primera_activacion_pendiente = false
+      return
+    }
     var current_version = this.$store.state.lead.leads_reload_version
     if (current_version !== this._last_leads_reload_version) {
       this.reload_module_from_nav()
@@ -922,7 +936,9 @@ export default {
       this.$store.commit('lead/set_selected', [])
       this.$store.dispatch('lead/_get_models')
     }
-    this.$store.dispatch('lead/fetch_unread_badges')
+    /* `ensure_*`: volver de la conversación remonta también el Nav, que pide este mismo badge en
+       el mismo tick. Uno de los dos sobra. */
+    this.$store.dispatch('lead/ensure_unread_badges_fresh')
     this.$store.dispatch('lead/fetch_status_cards')
     this.restore_scroll_position()
     /* Fix keep-alive: revisar ?lead_id también en esta rama (ver comentario arriba). */
