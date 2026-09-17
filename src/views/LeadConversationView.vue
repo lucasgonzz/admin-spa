@@ -610,6 +610,7 @@ import TemplatePickerModal from '@/components/lead/conversation/TemplatePickerMo
 import ScheduleMessageModal from '@/components/lead/conversation/ScheduleMessageModal.vue'
 import ImageAnnotationEditor from '@/components/common/ImageAnnotationEditor.vue'
 import api from '@/utils/axios'
+import { cached_get, MAX_AGE_SETTINGS } from '@/common-vue/helpers/request_cache_helper'
 import { copy_lead_conversation_to_clipboard } from '@/utils/lead_conversation_clipboard'
 import lead_conversation_date_dividers from '@/mixins/lead_conversation_date_dividers'
 import conversation_scroll_behavior from '@/mixins/conversation_scroll_behavior'
@@ -2331,14 +2332,15 @@ export default {
      */
     load_ai_suggestion_settings() {
       const self = this
-      api
-        .get('/settings/lead-whatsapp-onboarding')
-        .then(function (res) {
-          const delay = parseInt(res.data && res.data.ai_suggestion_delay_seconds, 10)
+      /* Cacheado: acá solo se lee. Es el mismo setting que piden /cuenta y /agente, y el PUT de
+         /cuenta#lead-whatsapp-onboarding invalida la entrada. */
+      cached_get('/settings/lead-whatsapp-onboarding', { max_age_ms: MAX_AGE_SETTINGS })
+        .then(function (data) {
+          const delay = parseInt(data && data.ai_suggestion_delay_seconds, 10)
           if (!isNaN(delay)) {
             self.ai_suggestion_delay_seconds = delay
           }
-          const auto_send_delay = parseInt(res.data && res.data.ai_suggestion_auto_send_delay_seconds, 10)
+          const auto_send_delay = parseInt(data && data.ai_suggestion_auto_send_delay_seconds, 10)
           if (!isNaN(auto_send_delay)) {
             self.ai_suggestion_auto_send_delay_seconds = auto_send_delay
           }

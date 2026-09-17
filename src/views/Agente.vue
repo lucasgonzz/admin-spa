@@ -274,6 +274,7 @@
 
 <script>
 import api from '@/utils/axios'
+import { cached_get, MAX_AGE_SETTINGS } from '@/common-vue/helpers/request_cache_helper'
 
 /**
  * Vista del módulo Agente: panel de variantes A/B y sección de análisis.
@@ -369,10 +370,11 @@ export default {
      */
     load_global_delay() {
       const self = this
-      api
-        .get('/settings/lead-whatsapp-onboarding')
-        .then(function (res) {
-          const seconds = parseInt(res.data && res.data.welcome_delay_seconds, 10)
+      /* Cacheado: acá solo se lee. Es el mismo setting que piden /cuenta y la conversación de un
+         lead, y el PUT de /cuenta#lead-whatsapp-onboarding invalida la entrada. */
+      cached_get('/settings/lead-whatsapp-onboarding', { max_age_ms: MAX_AGE_SETTINGS })
+        .then(function (data) {
+          const seconds = parseInt(data && data.welcome_delay_seconds, 10)
           if (!isNaN(seconds) && seconds >= 0) {
             self.global_welcome_delay_seconds = seconds
           }
