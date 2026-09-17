@@ -1,7 +1,7 @@
 import __base_store, { set_global_filter_loading } from '@/common-vue/store/__base_store'
 import api from '@/utils/axios'
 import { route_string } from '@/utils/route_string'
-import { run_once, MAX_AGE_BADGES } from '@/common-vue/helpers/request_cache_helper'
+import { run_once } from '@/common-vue/helpers/request_cache_helper'
 
 /**
  * Pide los totales de mensajes sin leer y los vuelca al store.
@@ -10,16 +10,24 @@ import { run_once, MAX_AGE_BADGES } from '@/common-vue/helpers/request_cache_hel
  * request, y como la clave arranca con `GET `, cualquier escritura sobre esa ruta la invalida
  * sola desde el interceptor del helper.
  *
+ * Sin ventana de frescura a propósito: lo único que se deduplica es lo simultáneo. Con `force`
+ * ni eso, porque el que llama ya sabe que el número cambió (ver `fetch_unread_badges`).
+ *
  * @param {Object} context Contexto del módulo Vuex.
- * @param {number} [max_age_ms] Si se pasa, no vuelve a pedir mientras el valor sea más nuevo.
+ * @param {boolean} [force] Pedir de nuevo aunque haya un GET en vuelo.
  * @returns {Promise<number>} Total de no leídos vigente en el store.
  */
-function pedir_unread_badges(context, max_age_ms) {
+function pedir_unread_badges(context, force) {
   const commit = context.commit
   return run_once(
     'GET /lead/unread-badges',
-    function () {
+    function (sigue_vigente) {
       return api.get('/lead/unread-badges').then((res) => {
+        /* Si un `force` salió después que este GET y ya volvió, este trae el número de ANTES del
+           evento: commitearlo sería atrasar el badge a mano. */
+        if (!sigue_vigente()) {
+          return context.state.unread_total
+        }
         if (res.data && res.data.unread_total != null) {
           commit('set_unread_total', res.data.unread_total)
         }
@@ -29,7 +37,7 @@ function pedir_unread_badges(context, max_age_ms) {
         return context.state.unread_total
       })
     },
-    { max_age_ms: max_age_ms }
+    { force: force === true }
   )
 }
 
@@ -1367,30 +1375,35 @@ export default __base_store({
     /**
      * GET totales de mensajes del lead sin leer (badge nav Leads).
      *
+     * Este pide SIEMPRE, y con `force`: lo llaman el socket de leads y el `mark_..._read`, o sea
+     * los dos que ya saben que el número acaba de cambiar. Engancharse a un GET en vuelo no
+     * alcanzaría, porque ese GET pudo salir antes del evento y volver con el número viejo.
+     *
      * @param {Object} context
      * @returns {Promise<number>}
      */
     fetch_unread_badges(context) {
-      return pedir_unread_badges(context)
+      return pedir_unread_badges(context, true)
     },
     /**
-     * Igual que `fetch_unread_badges`, pero no vuelve a pedir si los badges se trajeron hace
-     * menos de medio minuto.
+     * Igual que `fetch_unread_badges`, pero se engancha al GET que ya esté en vuelo en vez de
+     * abrir uno propio.
      *
      * Para qué: el Nav vive bajo un `v-if` en App.vue, así que se DESMONTA al entrar a la
      * conversación de un lead y al volver repite sus cuatro badges — justo cuando /leads también
      * pide el suyo. Los dos pedidos salen en el mismo tick y traen lo mismo.
      *
-     * La ventana es corta a propósito: mientras el Nav está desmontado sus sockets están
-     * caídos, así que pasado el umbral hay que volver a preguntar de verdad. Lo que sí no puede
-     * pasar es que un evento real quede sin efecto — por eso los sockets y el
-     * `mark_whatsapp_messages_read` siguen llamando a `fetch_unread_badges`, que siempre pide.
+     * 🔴 Y ahí se termina la optimización: NO hay ventana de frescura. Mientras el Nav está
+     * desmontado sus sockets están caídos, así que el GET del remonte es la única forma de
+     * enterarse de lo que entró en el medio. Con una ventana de medio minuto, una ida y vuelta a
+     * una conversación más rápida que eso dejaba el badge sin contar los mensajes nuevos, y sin
+     * nadie que lo avisara después.
      *
      * @param {Object} context
      * @returns {Promise<number>}
      */
     ensure_unread_badges_fresh(context) {
-      return pedir_unread_badges(context, MAX_AGE_BADGES)
+      return pedir_unread_badges(context)
     },
     /**
      * GET /lead/status-cards: conteos globales por estado para las tarjetas de arriba de la grilla.

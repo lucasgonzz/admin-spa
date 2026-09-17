@@ -553,14 +553,17 @@ export default {
     /**
      * Pide la lista de tareas al backend para alimentar el badge del menú (sin bloquear la UI).
      *
-     * 🔴 Las cuatro cargas de badges de este componente van por sus variantes `ensure_*`, que no
-     * repiten el pedido si el dato se trajo hace menos de medio minuto. El motivo: el Nav está
-     * bajo un `v-if="show_nav"` en App.vue, así que se DESMONTA al entrar a
+     * 🔴 Las cuatro cargas de badges de este componente van por sus variantes `ensure_*`, que se
+     * enganchan al GET que la vista ya tenga en vuelo en vez de abrir uno propio. El motivo: el
+     * Nav está bajo un `v-if="show_nav"` en App.vue, así que se DESMONTA al entrar a
      * /leads/:id/conversacion y, al volver, este watcher (que es `immediate`) dispara las cuatro
-     * requests de nuevo aunque los números ya estén en memoria. Y lo hace justo en el mismo tick
-     * en que /leads y /tareas piden lo suyo.
-     * La ventana es corta a propósito: mientras el Nav está desmontado sus sockets están caídos,
-     * así que pasado el umbral hay que volver a preguntar de verdad.
+     * requests justo en el mismo tick en que /leads y /tareas piden lo suyo.
+     *
+     * 🔴 Lo que esas variantes NO hacen es saltear el pedido porque el dato sea reciente, y es a
+     * propósito: los sockets de badges se instancian acá adentro, así que mientras el Nav está
+     * desmontado están caídos y todo evento que llegue se pierde. Este GET del remonte es la
+     * única forma de recuperarlo. Con una ventana de medio minuto, una ida y vuelta a una
+     * conversación más corta que eso dejaba el badge sin contar lo que entró en el medio.
      *
      * @returns {void}
      */

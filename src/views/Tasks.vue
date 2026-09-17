@@ -226,9 +226,15 @@ export default {
   created() {
     /* Cargar tareas y admins en paralelo al montar la vista.
        `ensure_models_fresh` y no `get_models`: el Nav ya pidió la misma lista para su badge, y
-       entrar a /tareas montaba los dos casi en el mismo tick. Pasado medio minuto vuelve a pedir
-       igual, y cualquier escritura sobre /task invalida la ventana. */
-    this.$store.dispatch('task/ensure_models_fresh')
+       entrar a /tareas monta los dos casi en el mismo tick, así que esta vista se engancha a ese
+       mismo pedido. No hay ventana de frescura de por medio: si el GET del Nav ya terminó, este
+       sale igual.
+       El catch es porque `ensure_models_fresh` sí rechaza cuando el GET falla (el error ya quedó
+       logueado en el store). Acá no hay nada que hacer con él, pero sin catch quedaría una
+       promesa rechazada sin manejar en la consola. */
+    this.$store.dispatch('task/ensure_models_fresh').catch(function () {
+      return null
+    })
     this.$store.dispatch('task/fetch_admins')
   },
 

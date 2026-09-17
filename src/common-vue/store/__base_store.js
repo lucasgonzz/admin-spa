@@ -182,7 +182,12 @@ export default function __base_store(options = {}) {
   }
 
   const base_actions = {
-    get_models({ commit, state, dispatch }) {
+    /**
+     * @param {Object}  context
+     * @param {Object}  [payload]
+     * @param {boolean} [payload.rethrow] Ver `_get_models`.
+     */
+    get_models({ commit, state, dispatch }, payload) {
       commit('set_selected', [])
       commit('set_filtered', [])
       commit('set_is_filtered', false)
@@ -190,10 +195,24 @@ export default function __base_store(options = {}) {
         commit('set_page', 1)
         commit('set_models', [])
       }
-      return dispatch('_get_models')
+      return dispatch('_get_models', payload)
     },
 
-    _get_models({ commit, state }) {
+    /**
+     * Por defecto se traga el error del GET y resuelve igual, que es lo que esperan todas las
+     * vistas que lo llaman y solo miran el state.
+     *
+     * 🔴 `payload.rethrow` lo cambia para el que necesita SABER si falló. El caso concreto es
+     * `run_once`: si el runner resuelve aunque el pedido haya fallado, el helper da por bueno un
+     * request que no trajo nada y se lo deja cacheado. Es opcional para no cambiarle el
+     * comportamiento a ningún llamador que no lo pida.
+     *
+     * @param {Object}  context
+     * @param {Object}  [payload]
+     * @param {boolean} [payload.rethrow] Si el GET falla, rechazar en vez de resolver.
+     */
+    _get_models({ commit, state }, payload) {
+      const rethrow = !!(payload && payload.rethrow)
       commit('set_loading', true)
       const path = '/' + api_resource_segment(state)
       const q = state.use_per_page
@@ -217,6 +236,9 @@ export default function __base_store(options = {}) {
         .catch((err) => {
           commit('set_loading', false)
           log_debug(err)
+          if (rethrow) {
+            throw err
+          }
         })
     },
 

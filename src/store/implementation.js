@@ -1,26 +1,31 @@
 import api from '@/utils/axios'
-import { run_once, MAX_AGE_BADGES } from '@/common-vue/helpers/request_cache_helper'
+import { run_once } from '@/common-vue/helpers/request_cache_helper'
 
 /**
  * Pide el conteo de implementaciones listas para avanzar y lo vuelca al store.
  *
  * Va por `run_once` con la clave del GET: dos llamadores en el mismo tick comparten la request.
+ * Sin ventana de frescura a propósito — lo único que se deduplica es lo simultáneo.
  *
  * @param {Function} commit Committer del módulo.
- * @param {number} [max_age_ms] Si se pasa, no vuelve a pedir mientras el valor sea más nuevo.
+ * @param {boolean} [force] Pedir de nuevo aunque haya un GET en vuelo.
  * @returns {Promise<void>}
  */
-function pedir_ready_to_advance_count(commit, max_age_ms) {
+function pedir_ready_to_advance_count(commit, force) {
   return run_once(
     'GET /implementation/ready-to-advance-count',
-    function () {
+    function (sigue_vigente) {
       return api.get('/implementation/ready-to-advance-count').then(function (res) {
+        /* Si un `force` salió después y ya volvió, esta respuesta es la de antes del evento. */
+        if (!sigue_vigente()) {
+          return
+        }
         if (res.data && res.data.count != null) {
           commit('set_ready_to_advance_count', res.data.count)
         }
       })
     },
-    { max_age_ms: max_age_ms }
+    { force: force === true }
   )
 }
 
@@ -88,19 +93,22 @@ export default {
      * @returns {Promise<void>}
      */
     fetch_ready_to_advance_count({ commit }) {
-      return pedir_ready_to_advance_count(commit)
+      return pedir_ready_to_advance_count(commit, true)
     },
 
     /**
-     * Igual que `fetch_ready_to_advance_count`, pero no vuelve a pedir si el conteo se trajo hace
-     * menos de medio minuto. Lo usa el Nav, que se desmonta y se remonta al entrar y salir de la
-     * conversación de un lead (ver el comentario largo en `lead.js`).
+     * Igual que `fetch_ready_to_advance_count`, pero se engancha al GET que ya esté en vuelo en
+     * vez de abrir uno propio. Lo usa el Nav, que se desmonta y se remonta al entrar y salir de
+     * la conversación de un lead (ver el comentario largo en `lead.js`).
+     *
+     * 🔴 Sin ventana de frescura: mientras el Nav está desmontado su canal está caído, y el GET
+     * del remonte es lo único que recupera lo que pasó en el medio.
      *
      * @param {Object} context Contexto del módulo Vuex con commit.
      * @returns {Promise<void>}
      */
     ensure_ready_to_advance_count_fresh({ commit }) {
-      return pedir_ready_to_advance_count(commit, MAX_AGE_BADGES)
+      return pedir_ready_to_advance_count(commit)
     },
   },
 }

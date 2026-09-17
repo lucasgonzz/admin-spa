@@ -5,7 +5,7 @@
  */
 import __base_store from '@/common-vue/store/__base_store'
 import api from '@/utils/axios'
-import { run_once, MAX_AGE_BADGES } from '@/common-vue/helpers/request_cache_helper'
+import { run_once } from '@/common-vue/helpers/request_cache_helper'
 
 export default __base_store({
   state() {
@@ -127,27 +127,28 @@ export default __base_store({
 
   actions: {
     /**
-     * Trae las tareas solo si lo que hay en memoria se pidió hace más de medio minuto.
+     * Trae las tareas, pero si ya hay un `GET /task` en vuelo se engancha a ese en vez de abrir
+     * otro.
      *
      * La lista de tareas la piden dos lugares que se montan casi a la vez: el Nav (para el badge
      * de «Tareas») y la vista /tareas. Y el Nav vive bajo un `v-if` en App.vue, así que la vuelve
      * a pedir cada vez que se lo remonta — por ejemplo, al salir de la conversación de un lead.
+     * Los dos pedidos salen en el mismo tick, así que con deduplicar lo simultáneo alcanza.
      *
-     * La clave arranca con `GET ` a propósito: cualquier escritura sobre `/task` (crear, editar,
-     * borrar, reordenar) invalida la ventana desde el interceptor del helper, así que una tarea
-     * recién tocada nunca queda afuera de la próxima lectura.
+     * 🔴 Y ahí se termina: NO hay ventana de frescura. Con una, entrar a /tareas dentro del
+     * umbral no disparaba ningún pedido — y si el GET anterior había fallado, la pantalla decía
+     * «No hay tareas pendientes» sin spinner ni error hasta que la ventana venciera.
+     *
+     * 🔴 `rethrow` no es decorativo: sin él, `_get_models` se traga el error del GET y resuelve
+     * igual, y `run_once` daría por buena y cachearía una lectura que nunca trajo nada.
      *
      * @param {Object} context Contexto del módulo Vuex.
      * @returns {Promise}
      */
     ensure_models_fresh({ dispatch }) {
-      return run_once(
-        'GET /task',
-        function () {
-          return dispatch('get_models')
-        },
-        { max_age_ms: MAX_AGE_BADGES }
-      )
+      return run_once('GET /task', function () {
+        return dispatch('get_models', { rethrow: true })
+      })
     },
 
     /**

@@ -1,21 +1,26 @@
 import __base_store from '@/common-vue/store/__base_store'
 import api from '@/utils/axios'
-import { run_once, MAX_AGE_BADGES } from '@/common-vue/helpers/request_cache_helper'
+import { run_once } from '@/common-vue/helpers/request_cache_helper'
 
 /**
  * Pide los contadores de la bandeja y los vuelca al store. Nunca rechaza.
  *
  * Va por `run_once` con la clave del GET: dos llamadores en el mismo tick comparten la request.
+ * Sin ventana de frescura a propósito — lo único que se deduplica es lo simultáneo.
  *
  * @param {Function} commit Committer del módulo.
- * @param {number} [max_age_ms] Si se pasa, no vuelve a pedir mientras el valor sea más nuevo.
+ * @param {boolean} [force] Pedir de nuevo aunque haya un GET en vuelo.
  * @returns {Promise}
  */
-function pedir_unread_badges(commit, max_age_ms) {
+function pedir_unread_badges(commit, force) {
   return run_once(
     'GET /support-ticket/unread-badges',
-    function () {
+    function (sigue_vigente) {
       return api.get('/support-ticket/unread-badges').then(function (response) {
+        /* Si un `force` salió después y ya volvió, esta respuesta es la de antes del evento. */
+        if (!sigue_vigente()) {
+          return
+        }
         if (response.data && response.data.unread_totals) {
           commit('set_unread_totals', response.data.unread_totals)
         }
@@ -24,11 +29,11 @@ function pedir_unread_badges(commit, max_age_ms) {
         }
       })
     },
-    { max_age_ms: max_age_ms }
+    { force: force === true }
     /* El catch va acá afuera y no adentro del runner a propósito: si fuera adentro, `run_once`
-       vería una promesa resuelta y le abriría ventana de frescura a un pedido que falló — el
-       badge se quedaría con el número viejo sin reintentar. Acá adentro el error sigue
-       invalidando la entrada, y para el llamador la acción sigue sin rechazar, como antes. */
+       vería una promesa resuelta y daría por bueno un pedido que falló, dejando el valor fallido
+       cacheado en la entrada. Acá adentro el error sigue invalidando la entrada, y para el
+       llamador la acción sigue sin rechazar, como antes. */
   ).catch(function (error) {
     console.log(error)
   })
@@ -231,18 +236,23 @@ export default __base_store({
     },
     /**
      * Refresca solo contadores de badges (Pusher o tras marcar leído).
+     *
+     * Va con `force`: los dos que lo llaman ya saben que el número cambió, así que engancharse a
+     * un GET en vuelo —que pudo salir antes del evento— traería el número viejo.
      */
     fetch_unread_badges({ commit }) {
-      return pedir_unread_badges(commit)
+      return pedir_unread_badges(commit, true)
     },
     /**
-     * Igual que `fetch_unread_badges`, pero no vuelve a pedir si se trajeron hace menos de medio
-     * minuto. Lo usa el Nav, que se desmonta y se remonta al entrar y salir de la conversación de
-     * un lead (ver el comentario largo en `lead.js`). Los sockets y el marcado de leído siguen
-     * usando `fetch_unread_badges`, que siempre pide.
+     * Igual que `fetch_unread_badges`, pero se engancha al GET que ya esté en vuelo en vez de
+     * abrir uno propio. Lo usa el Nav, que se desmonta y se remonta al entrar y salir de la
+     * conversación de un lead (ver el comentario largo en `lead.js`).
+     *
+     * 🔴 Sin ventana de frescura: mientras el Nav está desmontado su socket está caído, y el GET
+     * del remonte es lo único que recupera lo que entró en el medio.
      */
     ensure_unread_badges_fresh({ commit }) {
-      return pedir_unread_badges(commit, MAX_AGE_BADGES)
+      return pedir_unread_badges(commit)
     },
     /**
      * Expone mutación de contador no leídos en un ticket (llamada desde módulo support_message).
