@@ -1,5 +1,52 @@
 import api from '@/utils/axios'
 
+/**
+ * Cuántos ids entran en cada POST masivo de "marcar leído". El backend valida hasta 500 por
+ * request; 200 deja margen y sigue siendo un solo pedido para cualquier hilo real.
+ */
+const MARK_READ_BULK_CHUNK = 200
+
+/**
+ * Marca leídos los mensajes entrantes de un hilo con un solo POST.
+ *
+ * Antes salía un `POST /support-message/{id}/mark-read` por cada mensaje sin leer: abrir un
+ * ticket con 40 mensajes entrantes eran 40 requests, todas con el mismo efecto y todas contra un
+ * servidor que atiende de a una.
+ *
+ * Si el endpoint masivo no existe (404/405 — el SPA y la API no llegan juntos a producción), se
+ * cae al camino viejo de a uno, así ninguna de las dos mitades rompe sola. Va con
+ * `silent_error` para que ese 404 de sondeo no le dispare una toast de error al operador.
+ *
+ * @param {Array<number>} ids Ids de los mensajes a marcar.
+ * @returns {Promise}
+ */
+function mark_messages_read(ids) {
+  const chunks = []
+  let offset = 0
+  while (offset < ids.length) {
+    chunks.push(ids.slice(offset, offset + MARK_READ_BULK_CHUNK))
+    offset = offset + MARK_READ_BULK_CHUNK
+  }
+
+  return Promise.all(
+    chunks.map(function (chunk) {
+      return api
+        .post('/support-message/mark-read-bulk', { ids: chunk }, { silent_error: true })
+        .catch(function (err) {
+          const status = err && err.response ? err.response.status : null
+          if (status !== 404 && status !== 405) {
+            throw err
+          }
+          return Promise.all(
+            chunk.map(function (id) {
+              return api.post('/support-message/' + id + '/mark-read')
+            })
+          )
+        })
+    })
+  )
+}
+
 export default {
   namespaced: true,
   /**
@@ -219,19 +266,19 @@ export default {
           if (ticket_row && ticket_row.id != null) {
             dispatch('support_ticket/apply_ticket_row', ticket_row, { root: true })
           }
-          const mark_promises = []
+          const unread_ids = []
           messages.forEach(function (message) {
             if (message.sender_type == 'user' && !message.read_at) {
-              mark_promises.push(api.post('/support-message/' + message.id + '/mark-read'))
+              unread_ids.push(message.id)
             }
           })
-          if (mark_promises.length) {
+          if (unread_ids.length) {
             dispatch(
               'support_ticket/patch_ticket_unread_count',
               { ticket_id: ticket_id, unread_messages_count: 0 },
               { root: true }
             )
-            return Promise.all(mark_promises)
+            return mark_messages_read(unread_ids)
               .then(function () {
                 return dispatch('support_ticket/fetch_unread_badges', null, { root: true })
               })
