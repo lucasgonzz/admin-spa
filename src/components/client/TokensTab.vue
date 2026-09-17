@@ -212,6 +212,55 @@
       </div>
 
       <!-- ============================================================ -->
+      <!-- Quién lo gastó.                                              -->
+      <!--                                                              -->
+      <!-- 🔴 Sin columna de plata, y el pie lo dice: este corte no     -->
+      <!-- trae el modelo, y sin modelo no hay precio. Repartir el      -->
+      <!-- costo total en proporción a los tokens sería inventar un     -->
+      <!-- número que parece medido.                                    -->
+      <!-- ============================================================ -->
+      <div class="card border-0 tokens-panel mb-4">
+        <div class="card-body">
+          <p class="tokens-panel__titulo mb-3">Por persona</p>
+
+          <p v-if="por_persona.length === 0" class="text-muted small fst-italic mb-0">
+            Sin datos por persona en este período.
+          </p>
+
+          <div v-else>
+            <div class="table-responsive">
+              <table class="table table-sm align-middle mb-0 tokens-tabla">
+                <thead>
+                  <tr>
+                    <th>Persona</th>
+                    <th class="text-end">Llamadas</th>
+                    <th class="text-end">Tokens</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="fila in por_persona" :key="fila.es_automatico ? 'auto' : fila.auth_user_id">
+                    <td>
+                      {{ fila.nombre }}
+                      <span v-if="fila.es_automatico" class="tokens-tabla__nota d-block">
+                        embeddings del catálogo, informes por comando y demás tareas sin nadie atrás
+                      </span>
+                    </td>
+                    <td class="text-end">{{ numero(fila.llamadas) }}</td>
+                    <td class="text-end">{{ numero(fila.tokens) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p class="tokens-tabla__nota mb-0 mt-2">
+              Este corte va en tokens, no en dólares: el sistema del cliente no informa con qué
+              modelo gastó cada persona, y sin el modelo no hay precio que aplicar.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
       <!-- Estado de la recolección + "Traer ahora".                    -->
       <!--                                                              -->
       <!-- 🔴 El cartel de `no_soportado` no es decorativo: sin él, un  -->
@@ -323,6 +372,11 @@ export default {
       por_proceso: [],
       // Desglose por modelo, con `tiene_precio` resuelto por el backend.
       por_modelo: [],
+      /*
+       * Desglose por persona, ya plegado y ordenado por el backend. Viene SIN costo a propósito:
+       * este corte no trae el modelo y sin modelo no hay precio (ver el panel "Por persona").
+       */
+      por_persona: [],
       // Estado persistido de la última recolección.
       sync_status: null,
       sync_message: '',
@@ -599,6 +653,7 @@ export default {
       this.por_dia = Array.isArray(cuerpo.por_dia) ? cuerpo.por_dia : []
       this.por_proceso = Array.isArray(cuerpo.por_proceso) ? cuerpo.por_proceso : []
       this.por_modelo = Array.isArray(cuerpo.por_modelo) ? cuerpo.por_modelo : []
+      this.por_persona = Array.isArray(cuerpo.por_persona) ? cuerpo.por_persona : []
 
       const sync = cuerpo.sincronizacion || {}
       this.sync_status = sync.estado || null
