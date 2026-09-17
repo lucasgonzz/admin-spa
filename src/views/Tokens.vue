@@ -53,7 +53,7 @@
       {{ load_error }}
     </div>
 
-    <div v-else>
+    <div v-else class="tokens-cuerpo">
       <!-- Las tres cifras del período, para todos los clientes juntos. -->
       <div class="row g-3 mb-4">
         <div class="col-12 col-md-4">
@@ -504,6 +504,19 @@ export default {
 </script>
 
 <style scoped>
+
+/* 🔴 Los `.row` de Bootstrap traen margen horizontal NEGATIVO (-.5rem por lado con `g-3`) para
+   compensar el padding que sus columnas ponen por dentro. Adentro de un contenedor sin padding
+   horizontal ese margen no lo compensa nadie y la fila se sale 8px por la derecha: medido, 1360
+   contra 1352. No tapa nada ni genera scroll de página, pero es ancho fantasma y se ve.
+
+   Se le devuelve al contenedor el padding que el gutter espera —la mitad de `--bs-gutter-x` de
+   `g-3`, o sea 8px—, que además es lo que deja el contenido de las columnas alineado con el de
+   los paneles que NO están en una fila. */
+.tokens-cuerpo {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
 .tokens-cifra {
   background: #f7f7f8;
   border-radius: 0.75rem;
@@ -554,8 +567,15 @@ export default {
 }
 
 .tokens-serie__col {
-  flex: 1 0 14px;
-  min-width: 14px;
+  /* 🔴 28px y no 14px: "19/08" necesita 25px a 0.625rem (medido), y con la columna más angosta la
+     etiqueta se sale de su caja y se pisa con la de al lado — a 820px la columna daba 21px y a
+     360px, 14px. Una fecha cortada a la mitad es lo peor de los dos mundos: ni se lee ni se sabe
+     que falta. Si con eso no entran todos los días, la serie scrollea, que es el patrón que ya
+     usa el resto de la pantalla para lo ancho.
+     El techo es para el otro extremo: con 7 días y `flex-grow`, las barras se volvían losas. */
+  flex: 1 0 28px;
+  min-width: 28px;
+  max-width: 56px;
   display: flex;
   flex-direction: column;
   align-items: center;
