@@ -126,25 +126,28 @@ export default __base_store({
 
   actions: {
     /**
-     * Carga la lista de admins desde GET /admin/admin.
-     * Se usa para poblar el selector de asignación al crear o editar tareas.
+     * Carga la lista de admins para poblar el selector de asignación al crear o editar tareas.
+     *
+     * Delega en el módulo `admin`, que es el único que hace el `GET /admin`: antes este store y
+     * el de task_template tenían cada uno su propia copia de la misma lista. Acá se sigue
+     * espejando en `state.admins` para no tocar a los componentes que ya la leen de ahí.
      *
      * @returns {Promise}
      */
-    fetch_admins({ commit, state }) {
-      // Si ya están cargados, no volver a pedir.
+    fetch_admins({ commit, dispatch, state }) {
       if (state.admins.length > 0) {
         return Promise.resolve(state.admins)
       }
       commit('set_admins_loading', true)
-      return api
-        .get('/admin')
-        .then(function (res) {
-          commit('set_admins', res.data.admins || [])
+      return dispatch('admin/fetch_admins', null, { root: true })
+        .then(function (admins) {
+          commit('set_admins', admins)
           commit('set_admins_loading', false)
+          return state.admins
         })
         .catch(function () {
           commit('set_admins_loading', false)
+          return state.admins
         })
     },
 

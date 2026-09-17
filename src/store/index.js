@@ -1,5 +1,7 @@
 import { createStore } from 'vuex'
 import auth from './auth'
+// Lista de operadores (GET /admin): única fuente para todos los selectores de asignación.
+import admin from './admin'
 import meta from './meta'
 import general from './general'
 import version from './version'
@@ -37,6 +39,8 @@ import demo_media from './demo_media'
 export default createStore({
   modules: {
     auth,
+    // Operadores del equipo; no confundir con auth.admin, que es el operador logueado.
+    admin,
     meta,
     general,
     version,

@@ -47,25 +47,27 @@ export default __base_store({
 
   actions: {
     /**
-     * Carga admins desde GET /admin para el select «Asignado a».
+     * Carga admins para el select «Asignado a».
+     *
+     * Delega en el módulo `admin`, que es el único que hace el `GET /admin` (ver el comentario
+     * de ese módulo); acá se espeja en `state.admins` para no tocar al ABM que ya la lee de ahí.
      *
      * @returns {Promise<Array>}
      */
-    fetch_admins({ commit, state }) {
+    fetch_admins({ commit, dispatch, state }) {
       if (state.admins.length > 0) {
         return Promise.resolve(state.admins)
       }
       commit('set_admins_loading', true)
-      return api
-        .get('/admin')
-        .then(function (res) {
-          commit('set_admins', res.data.admins || [])
+      return dispatch('admin/fetch_admins', null, { root: true })
+        .then(function (admins) {
+          commit('set_admins', admins)
           commit('set_admins_loading', false)
           return state.admins
         })
         .catch(function () {
           commit('set_admins_loading', false)
-          return []
+          return state.admins
         })
     },
 

@@ -739,7 +739,11 @@ export default {
 
   methods: {
     /**
-     * Carga la lista de admins desde GET /admin para poblar el select.
+     * Carga la lista de admins para poblar el select.
+     *
+     * Va por el módulo `admin` del store en vez de hacer su propio `GET /admin`: es la misma
+     * lista que ya pidió /tareas o las plantillas de tareas, y este era el tercer pedido de lo
+     * mismo (el segundo dentro de /cuenta).
      *
      * @returns {void}
      */
@@ -747,11 +751,10 @@ export default {
       const self = this
       self.loading_admins = true
 
-      api
-        .get('/admin')
-        .then(function (res) {
-          /* La API retorna { admins: [...] } o { models: [...] } según el controller. */
-          self.admins = res.data.admins || res.data.models || []
+      this.$store
+        .dispatch('admin/fetch_admins')
+        .then(function (admins) {
+          self.admins = admins || []
         })
         .catch(function () {
           self.admins = []
