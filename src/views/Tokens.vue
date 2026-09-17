@@ -62,7 +62,7 @@
               <p class="tokens-cifra__rotulo mb-1">Costo estimado</p>
               <p class="tokens-cifra__valor mb-0">{{ costo_visible(totales.costo_usd) }}</p>
               <p v-if="hay_sin_precio" class="tokens-cifra__pie mb-0">
-                No incluye {{ totales.modelos_sin_precio.join(', ') }}: sin precio cargado.
+                No incluye {{ modelos_sin_precio_texto }}: sin precio cargado.
               </p>
             </div>
           </div>
@@ -141,12 +141,11 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr
-                      v-for="fila in por_cliente"
-                      :key="fila.client_id"
-                      class="tokens-tabla__fila"
-                      @click="abrir_clientes"
-                    >
+                    <!-- Sin @click ni cursor de mano: el modal de la ficha es del ResourceView
+                         genérico y no se puede abrir por URL, así que lo único que podía hacer un
+                         clic acá era llevar al listado. Una fila que se ve clickeable y te deja en
+                         otro lado es peor que una fila que no promete nada. -->
+                    <tr v-for="fila in por_cliente" :key="fila.client_id">
                       <td>
                         {{ fila.cliente || 'Cliente #' + fila.client_id }}
                         <span v-if="!fila.cliente" class="tokens-tabla__nota d-block">
@@ -213,10 +212,11 @@ import api, { resolve_error_message } from '@/utils/axios'
  * instancia de cliente, así que abrir esta pantalla no depende de que los cuarenta y cinco
  * sistemas estén arriba.
  *
- * ⚠️ El clic en una fila del ranking lleva al módulo Clientes, no directo a la ficha de ese
- * cliente: la ficha es un modal del `ResourceView` genérico y hoy no se puede abrir por URL. Darle
- * esa capacidad es tocar un componente compartido por todos los módulos del admin, y eso no entra
- * en esta misión.
+ * ⚠️ Las filas del ranking NO son clickeables, y es a propósito. La ficha de un cliente es un
+ * modal del `ResourceView` genérico y hoy no se puede abrir por URL; darle esa capacidad es tocar
+ * un componente compartido por todos los módulos del admin y no entra en esta misión. Antes que
+ * una fila con cursor de mano que te deja en el listado —prometiendo algo que no hace—, el nombre
+ * del cliente se lee y se lo busca en Clientes.
  */
 export default {
   name: 'ViewTokens',
@@ -274,6 +274,11 @@ export default {
       const dias = []
       const cursor = new Date(this.desde + 'T00:00:00')
       const fin = new Date(this.hasta + 'T00:00:00')
+      /* Red de seguridad, no un recorte real: el backend rechaza con 422 cualquier rango de más
+         de 366 días, así que este bucle nunca llega a 400 vueltas con una respuesta legítima. Está
+         para que un `desde`/`hasta` corrupto en el estado local no cuelgue el navegador. Si algún
+         día sube el techo del backend, este número tiene que subir con él o la tarjeta de "N días"
+         empieza a mentir. */
       let vueltas = 0
       while (cursor <= fin && vueltas < 400) {
         const clave =
@@ -314,6 +319,24 @@ export default {
      */
     hay_sin_precio() {
       return Array.isArray(this.totales.modelos_sin_precio) && this.totales.modelos_sin_precio.length > 0
+    },
+    /**
+     * Los modelos sin precio, listos para meter en una frase.
+     *
+     * Una fila con el `modelo` vacío es un caso real —el cliente no informó con qué modelo gastó—
+     * y llega como cadena vacía. Sin esto, la frase queda "No incluye : sin precio cargado.", que
+     * se lee como un error de la pantalla en vez de como el dato que es.
+     * @returns {string}
+     */
+    modelos_sin_precio_texto() {
+      const lista = Array.isArray(this.totales.modelos_sin_precio)
+        ? this.totales.modelos_sin_precio
+        : []
+      return lista
+        .map(function (modelo) {
+          return String(modelo || '').trim() === '' ? '(sin modelo)' : String(modelo)
+        })
+        .join(', ')
     },
   },
   mounted() {
@@ -390,13 +413,6 @@ export default {
           self.load_error = resolve_error_message(error)
           self.loading = false
         })
-    },
-    /**
-     * Lleva al módulo Clientes. Ver la advertencia del docblock del componente.
-     * @returns {void}
-     */
-    abrir_clientes() {
-      this.$router.push({ name: 'clients' })
     },
     /**
      * Alto de la barra de un día, como porcentaje del día más alto de la serie.
@@ -584,14 +600,6 @@ export default {
 .tokens-tabla__nota {
   font-size: 0.7rem;
   color: #8a8a8f;
-}
-
-.tokens-tabla__fila {
-  cursor: pointer;
-}
-
-.tokens-tabla__fila:hover {
-  background: #f7f7f8;
 }
 
 @media (max-width: 575.98px) {

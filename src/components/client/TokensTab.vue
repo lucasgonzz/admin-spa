@@ -75,7 +75,7 @@
               <p class="tokens-cifra__rotulo mb-1">Costo estimado</p>
               <p class="tokens-cifra__valor mb-0">{{ costo_visible(totales.costo_usd) }}</p>
               <p v-if="hay_sin_precio" class="tokens-cifra__pie mb-0">
-                No incluye {{ totales.modelos_sin_precio.join(', ') }}: sin precio cargado.
+                No incluye {{ modelos_sin_precio_texto }}: sin precio cargado.
               </p>
             </div>
           </div>
@@ -418,7 +418,11 @@ export default {
       const dias = []
       const cursor = new Date(this.desde + 'T00:00:00')
       const fin = new Date(this.hasta + 'T00:00:00')
-      /* Tope de seguridad: un rango absurdo escrito a mano no puede colgar el navegador. */
+      /* Red de seguridad, no un recorte real: el backend rechaza con 422 cualquier rango de más
+         de 366 días, así que este bucle nunca llega a 400 vueltas con una respuesta legítima. Está
+         para que un `desde`/`hasta` corrupto en el estado local no cuelgue el navegador. Si algún
+         día sube el techo del backend, este número tiene que subir con él o la tarjeta de "N días"
+         empieza a mentir. */
       let vueltas = 0
       while (cursor <= fin && vueltas < 400) {
         const clave =
@@ -461,6 +465,24 @@ export default {
      */
     hay_sin_precio() {
       return Array.isArray(this.totales.modelos_sin_precio) && this.totales.modelos_sin_precio.length > 0
+    },
+    /**
+     * Los modelos sin precio, listos para meter en una frase.
+     *
+     * Una fila con el `modelo` vacío es un caso real —el cliente no informó con qué modelo gastó—
+     * y llega como cadena vacía. Sin esto, la frase queda "No incluye : sin precio cargado.", que
+     * se lee como un error de la pantalla en vez de como el dato que es.
+     * @returns {string}
+     */
+    modelos_sin_precio_texto() {
+      const lista = Array.isArray(this.totales.modelos_sin_precio)
+        ? this.totales.modelos_sin_precio
+        : []
+      return lista
+        .map(function (modelo) {
+          return String(modelo || '').trim() === '' ? '(sin modelo)' : String(modelo)
+        })
+        .join(', ')
     },
     /**
      * Texto de la línea de estado de la recolección.
