@@ -377,8 +377,9 @@ export default {
       if (this.is_has_many_field(p) || (p && p.full_width)) {
         return 'col-12'
       }
-      // El salto de md a lg iba de 2 campos por fila a 4 sin escalón intermedio: en un monitor
-      // de 1366px los campos quedaban angostos de golpe. Mismos anchos que empresa.
+      // El salto de md a lg iba de 2 campos por fila a 4 sin escalón intermedio: entre 992 y
+      // 1199px los campos quedaban angostos de golpe. Ese tramo pasa a ir de a 3 y los 4 por
+      // fila arrancan recién en xl (1200px). Mismos anchos que empresa.
       return 'col-12 col-md-6 col-lg-4 col-xl-3'
     },
     /**
