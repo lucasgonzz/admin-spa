@@ -32,25 +32,36 @@
             :parent_model_name="effective_parent_model_name"
           />
         </div>
-        <div
-          v-for="t in extra_tabs"
-          v-show="active_tab === ('extra:' + t.key)"
-          :key="'extra-pane-' + t.key"
-        >
-          <component
-            v-if="t.component"
-            :is="t.component"
-            :key="'extra-component-' + t.key + '-' + (draft && draft.id ? draft.id : 'new')"
-            v-bind="extra_tab_scope"
-            @record-updated="on_extra_record_updated"
-            @open-conversation="on_extra_open_conversation"
-          />
-          <slot
-            v-else
-            :name="'model-extra-' + t.key"
-            v-bind="extra_tab_scope"
-          />
-        </div>
+        <!--
+          Montaje perezoso: una pestaña extra existe en el DOM recién cuando el usuario la abre.
+          Antes se montaban TODAS al abrir el modal (estaban con `v-show`) y cada una disparaba sus
+          propios requests aunque estuvieras parado en la primera.
+
+          Una vez abierta se queda montada (`v-show` para ocultarla) y no se destruye hasta cerrar
+          el modal: hay pestañas —Mensualidad y Horarios del cliente— que guardan lo que el usuario
+          está editando en su propio estado, no en el borrador del modal, y desmontarlas al cambiar
+          de solapa le borraría lo tipeado sin decirle nada.
+        -->
+        <template v-for="t in extra_tabs" :key="'extra-pane-' + t.key">
+          <div
+            v-if="should_render_extra_tab(t.key)"
+            v-show="active_tab === ('extra:' + t.key)"
+          >
+            <component
+              v-if="t.component"
+              :is="t.component"
+              :key="'extra-component-' + t.key + '-' + (draft && draft.id ? draft.id : 'new')"
+              v-bind="extra_tab_scope"
+              @record-updated="on_extra_record_updated"
+              @open-conversation="on_extra_open_conversation"
+            />
+            <slot
+              v-else
+              :name="'model-extra-' + t.key"
+              v-bind="extra_tab_scope"
+            />
+          </div>
+        </template>
       </template>
       <model-form
         v-else
@@ -149,6 +160,11 @@ export default {
       deleting: false,
       /** Pestaña activa: `group:<name>` o `extra:<key>`. */
       active_tab: null,
+      /**
+       * Pestañas extra que el usuario ya abrió en esta apertura del modal (`{ 'extra:<key>': true }`).
+       * Se usan para montarlas de a una y no desmontarlas después. Se limpia al cerrar el modal.
+       */
+      mounted_extra_tabs: {},
       /** Registro completo obtenido al abrir edición (p. ej. versión con relaciones). */
       fetched_record: null,
       /** true mientras se descarga el detalle completo antes de armar el borrador. */
@@ -397,7 +413,21 @@ export default {
           this.draft = null
           /* Se cierra el modal: limpiar el momento de carga para que no se filtre a la próxima apertura. */
           this.draft_loaded_at = null
+          /* Y las pestañas extra que estaban montadas: la próxima apertura arranca solo con la activa. */
+          this.mounted_extra_tabs = {}
         }
+      },
+    },
+    /**
+     * Deja marcada la pestaña extra que se abre para que no se desmonte al cambiar de solapa.
+     */
+    active_tab: {
+      immediate: true,
+      handler(tab_key) {
+        if (!tab_key || String(tab_key).indexOf('extra:') !== 0) {
+          return
+        }
+        this.mounted_extra_tabs[tab_key] = true
       },
     },
     all_properties: {
@@ -408,6 +438,22 @@ export default {
     },
   },
   methods: {
+    /**
+     * ¿Hay que tener esta pestaña extra en el DOM?
+     *
+     * Sí cuando es la que el usuario está mirando, o cuando ya la abrió antes en esta apertura del
+     * modal. Con eso, abrir el modal monta una sola pestaña (la activa) en vez de todas.
+     *
+     * @param {string} tab_key clave del `extra_tab` (sin el prefijo `extra:`)
+     * @returns {boolean}
+     */
+    should_render_extra_tab(tab_key) {
+      const full_key = 'extra:' + tab_key
+      if (this.active_tab === full_key) {
+        return true
+      }
+      return Boolean(this.mounted_extra_tabs[full_key])
+    },
     /**
      * Cambia de pestaña cuando el nav avisa un click. El nav solo pinta y emite: la pestaña
      * activa la sigue guardando este modal, igual que cuando la barra estaba escrita acá adentro.
