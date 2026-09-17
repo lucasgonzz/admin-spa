@@ -12,6 +12,7 @@ import ClientInstallationsTab from '@/components/client/InstallationsTab.vue'
 import EcommerceImplementationTab from '@/components/client/EcommerceImplementationTab.vue'
 import MensualidadTab from '@/components/client/MensualidadTab.vue'
 import ClientScheduleTab from '@/components/client/ScheduleTab.vue'
+import ClientTokensTab from '@/components/client/TokensTab.vue'
 
 /**
  * Vista principal de clientes.
@@ -48,6 +49,13 @@ export default {
           key: 'horarios',
           label: 'Horarios',
           component: markRaw(ClientScheduleTab),
+        },
+        {
+          /* Consumo de IA de este cliente (misión tokens-por-cliente, 17/9/2026): cuánto gastó,
+             por día y por acción, con el costo estimado en dólares. */
+          key: 'tokens',
+          label: 'Tokens',
+          component: markRaw(ClientTokensTab),
         },
       ],
     }
