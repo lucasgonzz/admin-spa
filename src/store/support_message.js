@@ -14,8 +14,12 @@ const MARK_READ_BULK_CHUNK = 200
  * servidor que atiende de a una.
  *
  * Si el endpoint masivo no existe (404/405 — el SPA y la API no llegan juntos a producción), se
- * cae al camino viejo de a uno, así ninguna de las dos mitades rompe sola. Va con
- * `silent_error` para que ese 404 de sondeo no le dispare una toast de error al operador.
+ * cae al camino viejo de a uno, así ninguna de las dos mitades rompe sola.
+ *
+ * 🔴 Va con `silent_error_statuses` y no con `silent_error: true`: lo que hay que callar es el
+ * 404/405 del sondeo, no cualquier error. Con el flag a secas, un 500 del bulk dejaba al operador
+ * viendo el contador rebotar a cero y volver al número real, sin un solo aviso, y el ticket seguía
+ * sin leer en el servidor — cuando con los POST de a uno sí salía el aviso.
  *
  * @param {Array<number>} ids Ids de los mensajes a marcar.
  * @returns {Promise}
@@ -31,7 +35,11 @@ function mark_messages_read(ids) {
   return Promise.all(
     chunks.map(function (chunk) {
       return api
-        .post('/support-message/mark-read-bulk', { ids: chunk }, { silent_error: true })
+        .post(
+          '/support-message/mark-read-bulk',
+          { ids: chunk },
+          { silent_error_statuses: [404, 405] }
+        )
         .catch(function (err) {
           const status = err && err.response ? err.response.status : null
           if (status !== 404 && status !== 405) {

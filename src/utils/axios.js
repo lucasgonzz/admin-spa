@@ -208,7 +208,16 @@ api.interceptors.response.use(
     const status_code = error && error.response ? error.response.status : null
     /** Peticiones con silent_error: true no muestran toast (p. ej. debug/virtual-time 404 en producción). */
     const silent_error = error && error.config && error.config.silent_error === true
-    if (status_code !== 401 && !silent_error) {
+    /**
+     * `silent_error_statuses: [404, 405]` silencia SOLO esos status y deja avisar a todos los
+     * demás. Es para el que sondea un endpoint que puede no existir todavía (el SPA y la API no
+     * llegan juntos a producción) y tiene un camino de respaldo: el 404 del sondeo no es un
+     * problema del operador, pero un 500 sí — y con `silent_error: true` a secas se perdía.
+     */
+    const silent_statuses = (error && error.config && error.config.silent_error_statuses) || null
+    const silenciado_por_status =
+      Array.isArray(silent_statuses) && silent_statuses.indexOf(status_code) !== -1
+    if (status_code !== 401 && !silent_error && !silenciado_por_status) {
       /** Mensaje final que se mostrará en la toast. */
       const error_message = resolve_error_message(error)
       emit_api_error_toast(error_message)
