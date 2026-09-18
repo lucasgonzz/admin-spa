@@ -41,6 +41,14 @@
                   Adelantar 1 mes
                 </button>
               </div>
+              <!-- Aviso (hallazgo del chequeo independiente, 18/9/2026): desde el pedido 7,
+                   "Registrar pago" ya adelanta esta misma fecha solo (y avisa al sistema del
+                   cliente) cuando el pago cierra el mes. Si además se usa este botón manual antes
+                   de registrar el pago, el vencimiento saltaría dos meses en vez de uno. Sigue
+                   sirviendo para atrasos o casos manuales — no se deshabilita, solo se avisa. -->
+              <p class="text-muted small mb-0 mt-1">
+                Para el pago del mes: ya no hace falta — "Registrar pago" adelanta la fecha y avisa al cliente solo.
+              </p>
             </div>
 
             <!-- Primer mes que se cobra (misión modulo-cobranzas, 18/9/2026). Es lo que le dice
@@ -403,6 +411,13 @@
               {{ sync_no_soportado_motivo }}
             </span>
           </div>
+          <!-- Aviso (hallazgo del chequeo independiente, 18/9/2026): mismo motivo que el de
+               "Adelantar 1 mes" de más arriba — "Registrar pago" ya empuja la fecha al cliente
+               solo cuando corresponde, así que usar este botón manual antes puede duplicar el
+               avance. Sigue sirviendo para actualizar precios o forzar un reenvío puntual. -->
+          <p class="text-muted small mb-0 mt-1">
+            Para el pago del mes: ya no hace falta — "Registrar pago" adelanta la fecha y avisa al cliente solo.
+          </p>
 
           <div class="d-flex justify-content-end mt-3">
             <button type="button" class="btn btn-primary btn-sm" :disabled="saving" @click="guardar">
@@ -619,7 +634,7 @@
           <div v-if="factura_result" class="mb-3">
             <div v-if="factura_result.ok" class="alert alert-success py-2 small mb-0">
               <span v-if="factura_result.ya_facturado">Este período ya estaba facturado.</span>
-              <span v-else>Factura emitida correctamente.</span>
+              <span v-else>Factura emitida correctamente por ${{ format_numero(factura_result.importe_total) }}.</span>
               CAE: <strong>{{ factura_result.cae }}</strong> — Comprobante N°
               <strong>{{ factura_result.cbte_numero }}</strong>
               <div class="mt-2">
@@ -1704,6 +1719,12 @@ export default {
      * Emite la Factura C de la mensualidad del cliente (POST emitir-factura),
      * previa alerta de confirmación porque genera un comprobante fiscal real
      * e irreversible. No toca la fecha de pago.
+     *
+     * 🔴 Sin monto en el confirm() (hallazgo del chequeo independiente, 18/9/2026): el backend
+     * sincroniza empleados ANTES de facturar, así que el total que termina facturado puede no
+     * coincidir con `record_total_mensualidad` (lo que admin tiene cargado en este momento) si
+     * cambió la cantidad de empleados desde la última sincronización. El monto real se muestra
+     * recién en el resultado, con `importe_total` (ya es un hecho consumado ahí).
      * @returns {void}
      */
     emitir_factura() {
@@ -1715,10 +1736,9 @@ export default {
       const confirmado = window.confirm(
         '¿Emitir la factura de la mensualidad de ' +
           (this.record.company_name || this.record.name || 'este cliente') +
-          ' por $' +
-          this.format_numero(this.record_total_mensualidad) +
           ' (' + etiqueta_larga(this.periodo_factura) + ')' +
-          '? Genera un comprobante fiscal real e irreversible.'
+          '? El total se recalcula con los empleados actualizados del cliente antes de facturar. ' +
+          'Genera un comprobante fiscal real e irreversible.'
       )
       if (!confirmado) {
         return
@@ -1736,9 +1756,11 @@ export default {
           if (self.factura_result && self.factura_result.ok) {
             window.dispatchEvent(new CustomEvent('admin-spa-toast', {
               detail: {
+                // `importe_total` es lo que efectivamente facturó AFIP, con los empleados ya
+                // sincronizados: es el monto real, a diferencia del que se sacó del confirm().
                 message: self.factura_result.ya_facturado
                   ? 'Este período ya estaba facturado.'
-                  : 'Factura emitida correctamente (CAE ' + self.factura_result.cae + ').',
+                  : 'Factura emitida correctamente por $' + self.format_numero(self.factura_result.importe_total) + ' (CAE ' + self.factura_result.cae + ').',
                 variant: 'success',
               },
             }))
