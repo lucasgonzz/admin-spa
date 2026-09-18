@@ -112,7 +112,12 @@
               <th class="text-end">Monto mensual</th>
               <th class="text-end">Empleados</th>
               <th>Última act. oficial</th>
-              <th v-for="mes in meses_columnas" :key="'th-' + mes" class="text-center text-nowrap" :class="{ 'cobranzas-tabla__ref': mes === mes_referencia }">
+              <th
+                v-for="mes in meses_columnas"
+                :key="'th-' + mes"
+                class="text-center text-nowrap cobranzas-tabla__mes"
+                :class="{ 'cobranzas-tabla__ref': mes === mes_referencia }"
+              >
                 {{ etiqueta_larga(mes) }}
               </th>
               <th class="text-end text-nowrap">Acciones · {{ etiqueta_larga(mes_referencia) }}</th>
@@ -152,7 +157,12 @@
                 </template>
                 <span v-else class="badge text-bg-secondary">Sin registrar</span>
               </td>
-              <td v-for="mes in meses_columnas" :key="cliente.id + '-' + mes" class="text-center" :class="{ 'cobranzas-tabla__ref': mes === mes_referencia }">
+              <td
+                v-for="mes in meses_columnas"
+                :key="cliente.id + '-' + mes"
+                class="text-center cobranzas-tabla__mes"
+                :class="{ 'cobranzas-tabla__ref': mes === mes_referencia }"
+              >
                 <estado-mensualidad-badge :estado_de="estado_de(cliente, mes)" />
               </td>
               <td class="text-end text-nowrap" @click.stop>
@@ -678,13 +688,16 @@ export default {
       if (this.hay_accion_en_curso(cliente)) {
         return
       }
-      const estado = this.estado_de(cliente, this.mes_referencia)
-      const monto = estado && estado.monto_esperado !== null && estado.monto_esperado !== undefined
-        ? estado.monto_esperado
-        : cliente.total_mensualidad
+      // 🔴 Sin monto en el confirm() (hallazgo del chequeo independiente, 18/9/2026): el backend
+      // sincroniza empleados ANTES de facturar (punto E del plan), así que el total que termina
+      // facturado puede no coincidir con lo que admin tiene cargado en este momento, si cambió
+      // la cantidad de empleados desde la última sincronización. Prometerle acá un número que
+      // después no coincide es peor que no prometer ninguno — es un comprobante fiscal
+      // irreversible; el monto real se muestra recién en el toast de éxito, con `importe_total`.
       const confirmado = window.confirm(
         '¿Emitir la factura de la mensualidad de ' + (cliente.nombre || 'este cliente') +
-        ' por ' + format_plata(monto) + ' (' + etiqueta_larga(this.mes_referencia) + ')? ' +
+        ' (' + etiqueta_larga(this.mes_referencia) + ')? ' +
+        'El total se recalcula con los empleados actualizados del cliente antes de facturar. ' +
         'Genera un comprobante fiscal real e irreversible.'
       )
       if (!confirmado) {
@@ -697,9 +710,12 @@ export default {
           const data = res.data || {}
           self.marcar_accion(cliente, null)
           if (data.ok) {
+            // `importe_total` es lo que efectivamente facturó AFIP (ya con los empleados
+            // sincronizados): acá sí es un hecho consumado, a diferencia del monto que se sacó
+            // del confirm() de arriba.
             self.avisar(data.ya_facturado
               ? etiqueta_larga(self.mes_referencia) + ' de ' + cliente.nombre + ' ya estaba facturado.'
-              : 'Factura emitida a ' + cliente.nombre + ' (CAE ' + data.cae + ').')
+              : 'Factura emitida a ' + cliente.nombre + ' por ' + format_plata(data.importe_total) + ' (CAE ' + data.cae + ').')
           } else {
             self.avisar(data.error_message || 'No se pudo emitir la factura.', 'danger')
           }
@@ -785,8 +801,11 @@ export default {
      * cualquier dispositivo — es justo lo que hace falta para mandarlo por WhatsApp, donde el
      * cliente lo abre más tarde y no en el momento del click.
      *
-     * Normaliza el teléfono al mismo criterio que `build_whatsapp_href()` de CloserLeadCard.vue
-     * (solo dígitos): no se reinventa esa regla acá.
+     * 🔴 El teléfono NO se normaliza acá (hallazgo del chequeo independiente, 18/9/2026): el
+     * `.replace(/\D/g, '')` que usa `build_whatsapp_href()` de CloserLeadCard.vue asume que el
+     * teléfono ya viene con el +54 9 adelante, y `clients.phone` no lo garantiza. El backend
+     * manda `cliente.phone_whatsapp` YA normalizado con el normalizador canónico del proyecto
+     * (o `null` si no pudo); acá se lee tal cual, sin tocarlo.
      * @param {Object} cliente
      */
     enviar_por_whatsapp(cliente) {
@@ -798,8 +817,11 @@ export default {
       if (!factura) {
         return
       }
-      const digitos = String(cliente.phone || '').replace(/\D/g, '')
+      const digitos = cliente.phone_whatsapp
       if (!digitos) {
+        // `phone_whatsapp` en null es "no hay a quién escribirle" desde la perspectiva del
+        // operador, sea porque el cliente no tiene teléfono cargado o porque el backend no pudo
+        // normalizarlo — mismo aviso para los dos casos, la causa técnica no le sirve a Lucas acá.
         self.avisar('Este cliente no tiene teléfono cargado.', 'warning')
         return
       }
@@ -925,6 +947,33 @@ export default {
 .cobranzas-tabla-wrap {
   border: 1px solid #ededf0;
   border-radius: 0.75rem;
+  /* 🔴 Hallazgo del chequeo independiente (18/9/2026): `.table-responsive` de Bootstrap ya trae
+     `overflow-x: auto`, pero se declara también acá, explícito, para no depender del orden de
+     carga entre este `<style scoped>` y el CSS global de Bootstrap. `overflow-y: hidden` es el
+     que recorta las esquinas redondeadas de la tabla (antes lo hacía `overflow: hidden` en
+     `.table`, ver `.cobranzas-tabla` más abajo) — tiene que ser DOS declaraciones separadas: un
+     `overflow: hidden` acá (shorthand) pisaría el `overflow-x: auto` y mataría el scroll
+     horizontal entero. */
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* 🔴 Cancela el `overflow: hidden` global de `.table` (`_app.sass`, TODAS las tablas del admin)
+   para ESTA tabla puntual. Con ese `overflow: hidden` puesto, la propia `<table>` queda como un
+   scrollport intermedio que nunca scrollea (el que scrollea es `.cobranzas-tabla-wrap`, de
+   arriba) — y un ancestro con `overflow` distinto de `visible` que no sea el contenedor que
+   scrollea de verdad corta la cadena de `position: sticky` para todo lo de adentro. Por eso
+   ninguna columna quedaba fija: no era un problema de `left`/`z-index`, era este `overflow` de
+   más. `table-layout: fixed` es la otra mitad del arreglo: con el layout automático que trae una
+   tabla por default, el `width` de una columna es apenas una sugerencia que el navegador puede
+   ignorar según el contenido — con `fixed`, el `width` del `<th>` de la primera fila manda de
+   verdad, así que ahora hace falta declararlo en TODAS las columnas (ver las reglas de abajo),
+   no solo en las que quedan fijas: una columna sin `width` se reparte el espacio sobrante de
+   forma pareja entre todas las que tampoco lo tengan, que tampoco es lo que se quiere para los
+   meses (que sean angostos y parejos, no elásticos según cuántos estén seleccionados). */
+.cobranzas-tabla {
+  overflow: visible;
+  table-layout: fixed;
 }
 
 /* Mientras se recarga la tabla no se tapa: se atenúa apenas, para que no salte. */
@@ -984,11 +1033,17 @@ export default {
 /* Bootstrap, y esa variable la setea `table-success`/`-warning`/ */
 /* `-danger` puesta en el <tr> (`clase_fila`) — hereda hacia las  */
 /* celdas hijas aunque no tengan la clase puesta directamente.    */
-/* Alcanza con la posición + el ancho para que el `left` de cada  */
-/* una sea estable.                                               */
-/* Anchos de partida (a verificar contra la app corriendo, regla  */
-/* 17/17bis — no son una medida final): Cliente 200px, Monto      */
-/* mensual 110px, Empleados 80px, Última act. 150px.               */
+/* Con `table-layout: fixed` (ver `.cobranzas-tabla` más arriba)  */
+/* el `width` de acá manda de verdad, así que TODAS las columnas  */
+/* lo necesitan, no solo las fijas — una sin `width` se reparte   */
+/* el espacio sobrante parejo con las demás que tampoco lo        */
+/* tengan, y ahí los meses quedarían elásticos según cuántos      */
+/* estén seleccionados en vez de angostos y parejos.              */
+/* Medidas verificadas contra una reproducción real en Chromium   */
+/* (getBoundingClientRect antes/después de scrollear, ver informe */
+/* de esta misión): Cliente 200px, Monto mensual 110px, Empleados */
+/* 80px, Última act. 160px, cada mes 130px, Acciones 300px (los   */
+/* cuatro botones con texto entran de a dos por fila, dos filas). */
 /* ============================================================ */
 .cobranzas-tabla th:nth-child(1),
 .cobranzas-tabla td:nth-child(1) {
@@ -1015,35 +1070,47 @@ export default {
 .cobranzas-tabla td:nth-child(4) {
   position: sticky;
   left: 390px;
-  width: 150px;
+  width: 160px;
+}
+
+/* Columnas de mes: NO son `:nth-child` (la posición varía según cuántos meses estén
+   seleccionados), así que van por esta clase que el template les pone a todas por igual. Sin
+   `position: sticky`: son justamente las que sí tienen que scrollear. */
+.cobranzas-tabla__mes {
+  width: 130px;
 }
 
 .cobranzas-tabla th:last-child,
 .cobranzas-tabla td:last-child {
   position: sticky;
   right: 0;
+  width: 300px;
 }
 
 @media (max-width: 575.98px) {
-  /* En teléfono el bloque fijo completo (4 columnas + Acciones) por sí solo ya ocupa más que el
-     viewport y no deja ver ni un mes: queda fija SOLO "Cliente" (angosta, con ellipsis) y el
-     resto de las columnas hoy-fijas-en-desktop vuelve a scrollear junto con los meses. Acciones
-     se mantiene fija a la derecha pero con los botones apilados (ver `.cobranzas-acciones` más
-     abajo) para ocupar menos ancho. */
+  /* 🔴 Medido en la reproducción real (18/9/2026, segunda vuelta del chequeo independiente):
+     con Cliente (110px) Y Acciones (140px) fijas a la vez en un viewport de 375px, el wrapper
+     queda con ~273px útiles y entre las dos puntas fijas sobrevive una tira de apenas ~23px para
+     los meses — un hilo de color, no una columna legible. Se suelta también Acciones acá: en
+     teléfono queda fija SOLO "Cliente" (angosta, con ellipsis) y TODO el resto —Monto, Empleados,
+     Última act. Y Acciones— vuelve a scrollear junto con los meses, en su mismo ancho de siempre
+     (no hace falta tocar `width` en esas: alcanza con soltar el `position`, `table-layout: fixed`
+     ya les da un ancho estable). Así queda un mes entero visible por vez, y Acciones se alcanza
+     scrolleando hasta el final — mismo patrón que cualquier tabla angosta de celular. */
   .cobranzas-tabla th:nth-child(2),
   .cobranzas-tabla td:nth-child(2),
   .cobranzas-tabla th:nth-child(3),
   .cobranzas-tabla td:nth-child(3),
   .cobranzas-tabla th:nth-child(4),
-  .cobranzas-tabla td:nth-child(4) {
+  .cobranzas-tabla td:nth-child(4),
+  .cobranzas-tabla th:last-child,
+  .cobranzas-tabla td:last-child {
     position: static;
-    width: auto;
   }
 
   .cobranzas-tabla th:nth-child(1),
   .cobranzas-tabla td:nth-child(1) {
     width: 110px;
-    max-width: 110px;
   }
 
   .cobranzas-tabla td:nth-child(1) .fw-semibold {
