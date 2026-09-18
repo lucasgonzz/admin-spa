@@ -726,10 +726,18 @@ export default {
   font-weight: 600;
   border-bottom-width: 1px;
   white-space: nowrap;
+  /* Por encima de cualquier celda fija del body (ver "Columnas fijas" más abajo). Va acá y no en
+     una regla `thead th` aparte: un selector con `:nth-child` tiene más especificidad que
+     `thead th` y le hubiera ganado a un z-index puesto ahí, aunque viniera después en el
+     archivo — con un solo lugar que lo setea, no hay dos reglas peleando por z-index. */
+  z-index: 3;
 }
 
 .cobranzas-tabla td {
   font-size: 0.875rem;
+  /* Ídem: por debajo del header, ver el comentario de arriba. Sin efecto en las celdas que no
+     son sticky (z-index no hace nada sin `position` distinto de `static`). */
+  z-index: 2;
 }
 
 .cobranzas-tabla__fila {
@@ -760,7 +768,6 @@ export default {
 .cobranzas-tabla td:nth-child(1) {
   position: sticky;
   left: 0;
-  z-index: 2;
   width: 200px;
 }
 
@@ -768,7 +775,6 @@ export default {
 .cobranzas-tabla td:nth-child(2) {
   position: sticky;
   left: 200px;
-  z-index: 2;
   width: 90px;
 }
 
@@ -776,7 +782,6 @@ export default {
 .cobranzas-tabla td:nth-child(3) {
   position: sticky;
   left: 290px;
-  z-index: 2;
   width: 70px;
 }
 
@@ -784,7 +789,6 @@ export default {
 .cobranzas-tabla td:nth-child(4) {
   position: sticky;
   left: 360px;
-  z-index: 2;
   width: 110px;
 }
 
@@ -792,7 +796,6 @@ export default {
 .cobranzas-tabla td:nth-child(5) {
   position: sticky;
   left: 470px;
-  z-index: 2;
   width: 110px;
 }
 
@@ -800,12 +803,7 @@ export default {
 .cobranzas-tabla td:nth-child(6) {
   position: sticky;
   left: 580px;
-  z-index: 2;
   width: 110px;
-}
-
-.cobranzas-tabla thead th {
-  z-index: 3;
 }
 
 @media (max-width: 575.98px) {
