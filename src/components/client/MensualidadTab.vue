@@ -28,7 +28,7 @@
         <div class="card-body">
           <div class="row g-3">
             <!-- Fecha de próximo pago con botones de referencia para atrasar/adelantar 1 mes -->
-            <div class="col-md-6">
+            <div class="col-md-4">
               <label class="form-label small mb-1 fw-semibold">Fecha de próximo pago</label>
               <div class="input-group">
                 <input v-model="form.payment_expired_at" type="date" class="form-control" />
@@ -43,8 +43,17 @@
               </div>
             </div>
 
+            <!-- Primer mes que se cobra (misión modulo-cobranzas, 18/9/2026). Es lo que le dice
+                 al módulo Cobranzas desde qué mes reclamar: antes de este mes cada período es
+                 "no aplica" y no pinta la fila de rojo. Viaja al PUT como YYYY-MM-01. -->
+            <div class="col-md-4">
+              <label class="form-label small mb-1 fw-semibold">Se cobra desde</label>
+              <input v-model="form.mensualidad_inicio" type="month" class="form-control" />
+              <div class="form-text small">Primer mes de mensualidad. Vacío = no se le reclaman meses.</div>
+            </div>
+
             <!-- Cantidad de empleados: input principal para clientes viejos, se carga a mano -->
-            <div class="col-md-6">
+            <div class="col-md-4">
               <label class="form-label small mb-1 fw-semibold">Cantidad de empleados</label>
               <input
                 v-model.number="form.cantidad_empleados"
@@ -55,25 +64,53 @@
               />
             </div>
 
-            <!-- Precio base del plan (fijo, cubre al dueño) -->
-            <div class="col-md-6">
-              <label class="form-label small mb-1 fw-semibold">Precio base del plan</label>
-              <input v-model.number="form.precio_plan" type="number" min="0" step="0.01" class="form-control" />
+            <!-- Precios vigentes, SOLO LECTURA (misión modulo-cobranzas, 18/9/2026). Antes se
+                 editaban acá y no quedaba rastro de cuándo ni cuánto cambiaron; ahora cada cambio
+                 es una "actualización de precios" (bloque de más abajo) que aplica los precios y
+                 deja el historial. Los valores siguen en `form` porque el PUT los manda tal cual
+                 y el backend los sigue aceptando: no se rompe nada para el SPA que ya está en
+                 producción. -->
+            <div class="col-12">
+              <hr class="my-2" />
+              <div class="d-flex flex-wrap align-items-baseline gap-2 mb-2">
+                <span class="small fw-semibold">Precios vigentes</span>
+                <span class="text-muted small">Se cambian registrando una actualización de precios, más abajo.</span>
+              </div>
+              <div class="row g-2 precios-vigentes">
+                <div class="col-6 col-md">
+                  <div class="text-muted small">Plan</div>
+                  <div class="fw-semibold">${{ format_numero(form.precio_plan) }}</div>
+                </div>
+                <div class="col-6 col-md">
+                  <div class="text-muted small">Por cuenta</div>
+                  <div class="fw-semibold">${{ format_numero(form.precio_por_cuenta) }}</div>
+                </div>
+                <div class="col-4 col-md">
+                  <div class="text-muted small">Ecommerce</div>
+                  <div class="fw-semibold">
+                    ${{ format_numero(precio_ecommerce_efectivo) }}
+                    <span v-if="form.precio_ecommerce === null" class="text-muted small fw-normal">(por defecto)</span>
+                  </div>
+                </div>
+                <div class="col-4 col-md">
+                  <div class="text-muted small">Mercado Libre</div>
+                  <div class="fw-semibold">
+                    ${{ format_numero(precio_mercado_libre_efectivo) }}
+                    <span v-if="form.precio_mercado_libre === null" class="text-muted small fw-normal">(por defecto)</span>
+                  </div>
+                </div>
+                <div class="col-4 col-md">
+                  <div class="text-muted small">Tienda Nube</div>
+                  <div class="fw-semibold">
+                    ${{ format_numero(precio_tienda_nube_efectivo) }}
+                    <span v-if="form.precio_tienda_nube === null" class="text-muted small fw-normal">(por defecto)</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <!-- Precio por cuenta: base para empleados y fallback de los módulos -->
-            <div class="col-md-6">
-              <label class="form-label small mb-1 fw-semibold">Precio por cuenta</label>
-              <input
-                v-model.number="form.precio_por_cuenta"
-                type="number"
-                min="0"
-                step="0.01"
-                class="form-control"
-              />
-            </div>
-
-            <!-- Toggles de módulos: se editan a mano (sin datos vivos, salvo el sync opcional del 335) -->
+            <!-- Toggles de módulos: se editan a mano (sin datos vivos, salvo el sync opcional del 335).
+                 Los precios individuales de cada módulo ya no se tocan acá: van con la actualización. -->
             <div class="col-12">
               <hr class="my-2" />
               <div class="row g-3">
@@ -87,14 +124,6 @@
                     />
                     <label class="form-check-label small" for="mensualidad-ecommerce">Ecommerce</label>
                   </div>
-                  <input
-                    v-model.number="form.precio_ecommerce"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    class="form-control form-control-sm mt-1"
-                    :placeholder="'Por defecto: $' + format_numero(form.precio_por_cuenta)"
-                  />
                 </div>
                 <div class="col-md-4">
                   <div class="form-check form-switch">
@@ -106,14 +135,6 @@
                     />
                     <label class="form-check-label small" for="mensualidad-mercado-libre">Mercado Libre</label>
                   </div>
-                  <input
-                    v-model.number="form.precio_mercado_libre"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    class="form-control form-control-sm mt-1"
-                    :placeholder="'Por defecto: $' + format_numero(form.precio_por_cuenta)"
-                  />
                 </div>
                 <div class="col-md-4">
                   <div class="form-check form-switch">
@@ -125,14 +146,6 @@
                     />
                     <label class="form-check-label small" for="mensualidad-tienda-nube">Tienda Nube</label>
                   </div>
-                  <input
-                    v-model.number="form.precio_tienda_nube"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    class="form-control form-control-sm mt-1"
-                    :placeholder="'Por defecto: $' + format_numero(form.precio_por_cuenta)"
-                  />
                 </div>
               </div>
             </div>
@@ -194,6 +207,173 @@
           </div>
 
           <!-- ============================================================ -->
+          <!-- Actualizaciones de precio (misión modulo-cobranzas, 18/9/26). -->
+          <!-- Cada cambio de precio se registra como una actualización con  -->
+          <!-- fecha; la que lleva el check "oficial" es la que cuenta para  -->
+          <!-- saber hace cuánto no se actualiza la mensualidad y cuándo     -->
+          <!-- toca la próxima (cada N meses, según el contrato; IPC).       -->
+          <!-- ============================================================ -->
+          <div class="border-top pt-3 mt-3">
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+              <strong class="small">Actualizaciones de precio</strong>
+              <span v-if="resumen_actualizacion && resumen_actualizacion.meses" class="text-muted small">
+                · cada {{ resumen_actualizacion.meses }} meses según contrato
+              </span>
+              <button
+                type="button"
+                class="btn btn-outline-primary btn-sm ms-auto"
+                :disabled="registrando_actualizacion"
+                @click="alternar_form_actualizacion"
+              >
+                {{ mostrar_form_actualizacion ? 'Cancelar' : 'Nueva actualización de precios' }}
+              </button>
+            </div>
+
+            <!-- Línea de estado: cuándo fue la última oficial y cuándo toca la próxima -->
+            <p v-if="!resumen_actualizacion" class="text-muted small mb-2">Sin datos de actualización.</p>
+            <p v-else-if="resumen_actualizacion.sin_oficial" class="small mb-2 text-danger">
+              <i class="bi bi-exclamation-circle me-1"></i>Sin actualización oficial registrada.
+            </p>
+            <p v-else class="small mb-2 d-flex flex-wrap align-items-center gap-2">
+              <span>
+                Última actualización oficial: <strong>{{ formatear_fecha_corta(resumen_actualizacion.ultima_oficial_fecha) }}</strong>
+                <span class="text-muted"> · {{ texto_hace_meses(resumen_actualizacion.ultima_oficial_fecha) }}</span>
+                <span v-if="resumen_actualizacion.proxima_fecha" class="text-muted">
+                  · próxima {{ formatear_fecha_corta(resumen_actualizacion.proxima_fecha) }}
+                </span>
+              </span>
+              <span v-if="resumen_actualizacion.vencida" class="badge text-bg-danger">Vencida</span>
+              <span
+                v-else-if="resumen_actualizacion.dias_restantes !== null && resumen_actualizacion.dias_restantes !== undefined && resumen_actualizacion.dias_restantes <= 30"
+                class="badge text-bg-warning"
+              >Vence en {{ resumen_actualizacion.dias_restantes }} días</span>
+              <span v-else class="badge text-bg-success">Al día</span>
+            </p>
+
+            <!-- Formulario colapsable de la nueva actualización. Los cinco precios arrancan con
+                 los vigentes: lo normal es tocar uno o dos y dejar el resto. -->
+            <div v-if="mostrar_form_actualizacion" class="bg-light rounded p-3 mb-3">
+              <div class="row g-2">
+                <div class="col-6 col-md-2">
+                  <label class="form-label small mb-1">Fecha</label>
+                  <input v-model="form_actualizacion.fecha" type="date" class="form-control form-control-sm" />
+                </div>
+                <div class="col-6 col-md-2">
+                  <label class="form-label small mb-1">Plan</label>
+                  <input v-model.number="form_actualizacion.precio_plan" type="number" min="0" step="0.01" class="form-control form-control-sm" />
+                </div>
+                <div class="col-6 col-md-2">
+                  <label class="form-label small mb-1">Por cuenta</label>
+                  <input v-model.number="form_actualizacion.precio_por_cuenta" type="number" min="0" step="0.01" class="form-control form-control-sm" />
+                </div>
+                <div class="col-6 col-md-2">
+                  <label class="form-label small mb-1">Ecommerce</label>
+                  <input v-model.number="form_actualizacion.precio_ecommerce" type="number" min="0" step="0.01" class="form-control form-control-sm" placeholder="Por defecto" />
+                </div>
+                <div class="col-6 col-md-2">
+                  <label class="form-label small mb-1">Mercado Libre</label>
+                  <input v-model.number="form_actualizacion.precio_mercado_libre" type="number" min="0" step="0.01" class="form-control form-control-sm" placeholder="Por defecto" />
+                </div>
+                <div class="col-6 col-md-2">
+                  <label class="form-label small mb-1">Tienda Nube</label>
+                  <input v-model.number="form_actualizacion.precio_tienda_nube" type="number" min="0" step="0.01" class="form-control form-control-sm" placeholder="Por defecto" />
+                </div>
+                <div class="col-12 col-md-8">
+                  <label class="form-label small mb-1">Observación</label>
+                  <input v-model="form_actualizacion.observacion" type="text" class="form-control form-control-sm" placeholder="Opcional: motivo, índice aplicado, acuerdo con el cliente" />
+                </div>
+                <div class="col-12 col-md-4 d-flex align-items-end">
+                  <div class="form-check">
+                    <input
+                      id="actualizacion-oficial"
+                      v-model="form_actualizacion.es_oficial"
+                      class="form-check-input"
+                      type="checkbox"
+                    />
+                    <label class="form-check-label small" for="actualizacion-oficial">
+                      Es la actualización oficial de la mensualidad
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div class="d-flex justify-content-end mt-2">
+                <button
+                  type="button"
+                  class="btn btn-primary btn-sm"
+                  :disabled="registrando_actualizacion"
+                  @click="registrar_actualizacion"
+                >
+                  {{ registrando_actualizacion ? 'Registrando...' : 'Registrar actualización' }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Historial, la más reciente primero -->
+            <div v-if="cargando_actualizaciones" class="text-muted small">
+              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+              Cargando actualizaciones...
+            </div>
+            <p v-else-if="actualizaciones.length === 0" class="text-muted small mb-0">
+              Todavía no hay actualizaciones de precio registradas para este cliente.
+            </p>
+            <div v-else class="table-responsive">
+              <table class="table table-sm table-bordered small mb-0 align-middle">
+                <thead>
+                  <tr class="table-light">
+                    <th>Fecha</th>
+                    <th class="text-end">Plan</th>
+                    <th class="text-end">Por cuenta</th>
+                    <th class="text-end">Ecommerce</th>
+                    <th class="text-end">ML</th>
+                    <th class="text-end">TN</th>
+                    <th>Oficial</th>
+                    <th>Observación</th>
+                    <th>Admin</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="actualizacion in actualizaciones" :key="actualizacion.id">
+                    <td class="text-nowrap">{{ formatear_fecha_corta(actualizacion.fecha) }}</td>
+                    <td class="text-end">${{ format_numero(actualizacion.precio_plan) }}</td>
+                    <td class="text-end">${{ format_numero(actualizacion.precio_por_cuenta) }}</td>
+                    <td class="text-end">{{ precio_opcional(actualizacion.precio_ecommerce) }}</td>
+                    <td class="text-end">{{ precio_opcional(actualizacion.precio_mercado_libre) }}</td>
+                    <td class="text-end">{{ precio_opcional(actualizacion.precio_tienda_nube) }}</td>
+                    <td>
+                      <!-- El badge es un botón: alterna el check oficial con un PATCH. -->
+                      <button
+                        type="button"
+                        class="btn btn-sm p-0 border-0 bg-transparent"
+                        :disabled="actualizacion_en_curso_id === actualizacion.id"
+                        :title="actualizacion.es_oficial ? 'Quitar la marca de oficial' : 'Marcar como la actualización oficial'"
+                        @click="alternar_oficial(actualizacion)"
+                      >
+                        <span class="badge" :class="actualizacion.es_oficial ? 'text-bg-primary' : 'text-bg-light text-muted border'">
+                          {{ actualizacion.es_oficial ? 'Oficial' : 'No oficial' }}
+                        </span>
+                      </button>
+                    </td>
+                    <td class="small">{{ actualizacion.observacion || '' }}</td>
+                    <td class="small text-muted text-nowrap">{{ actualizacion.admin_nombre || '—' }}</td>
+                    <td class="text-end text-nowrap">
+                      <button
+                        type="button"
+                        class="btn btn-outline-danger btn-sm py-0"
+                        title="Eliminar esta actualización (no revierte los precios)"
+                        :disabled="actualizacion_en_curso_id === actualizacion.id"
+                        @click="eliminar_actualizacion(actualizacion)"
+                      >
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- ============================================================ -->
           <!-- Sincronización OPCIONAL con la empresa-api del cliente        -->
           <!-- (prompt 335). Se degrada sola si el cliente no la soporta:    -->
           <!-- los botones quedan deshabilitados con un aviso, sin romper el -->
@@ -228,6 +408,138 @@
             <button type="button" class="btn btn-primary btn-sm" :disabled="saving" @click="guardar">
               {{ saving ? 'Guardando...' : 'Guardar' }}
             </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- Bloque nuevo: Pagos de la mensualidad (misión modulo-         -->
+      <!-- cobranzas, 18/9/2026). Un renglón por mes con el estado que   -->
+      <!-- calcula el backend (pagado / facturada / pendiente / parcial  -->
+      <!-- / sin cargo), lo esperado, lo pagado y la factura si la hay.  -->
+      <!-- Es la misma información que la fila del cliente en el módulo  -->
+      <!-- Cobranzas, pero mes a mes y con los pagos desplegables.       -->
+      <!-- ============================================================ -->
+      <div class="card mb-3">
+        <div class="card-header bg-white d-flex flex-wrap align-items-center gap-2">
+          <strong>Pagos de la mensualidad</strong>
+          <button
+            type="button"
+            class="btn btn-outline-primary btn-sm ms-auto"
+            @click="abrir_registrar_pago(null)"
+          >
+            <i class="bi bi-cash-coin me-1"></i>Registrar pago
+          </button>
+        </div>
+        <div class="card-body">
+          <div v-if="cargando_periodos" class="text-muted small">
+            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+            Cargando meses...
+          </div>
+
+          <!-- Sin mes de inicio no hay nada que reclamar: se le dice al operador qué cargar. -->
+          <p v-else-if="periodos_visibles.length === 0" class="text-muted small mb-0">
+            <span v-if="!form.mensualidad_inicio">
+              Este cliente no tiene cargado desde qué mes se cobra. Completá "Se cobra desde" y guardá.
+            </span>
+            <span v-else>No hay meses para mostrar.</span>
+          </p>
+
+          <div v-else class="table-responsive">
+            <table class="table table-sm table-bordered small mb-0 align-middle">
+              <thead>
+                <tr class="table-light">
+                  <th>Mes</th>
+                  <th>Estado</th>
+                  <th class="text-end">Esperado</th>
+                  <th class="text-end">Pagado</th>
+                  <th>Factura</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <template v-for="periodo in periodos_visibles" :key="periodo.periodo">
+                  <tr :class="clase_fila_periodo(periodo)">
+                    <td class="text-nowrap">
+                      {{ etiqueta_larga(periodo.periodo) }}
+                      <span v-if="periodo.periodo === mes_corriente_actual" class="text-muted">· actual</span>
+                    </td>
+                    <td>
+                      <estado-mensualidad-badge :estado_de="periodo" />
+                      <div v-if="periodo.observacion" class="text-muted small">{{ periodo.observacion }}</div>
+                    </td>
+                    <td class="text-end">{{ periodo.monto_esperado !== null && periodo.monto_esperado !== undefined ? '$' + format_numero(periodo.monto_esperado) : '—' }}</td>
+                    <td class="text-end">{{ Number(periodo.monto_pagado || 0) > 0 ? '$' + format_numero(periodo.monto_pagado) : '—' }}</td>
+                    <td class="text-nowrap">{{ periodo.factura ? formatear_comprobante(periodo.factura) : '—' }}</td>
+                    <td class="text-end text-nowrap">
+                      <!-- Acciones por mes. Se ocultan las que no tienen sentido en ese estado
+                           en vez de deshabilitarlas: cinco botones grises por fila es ruido. -->
+                      <button
+                        v-if="periodo.estado !== 'no_aplica'"
+                        type="button"
+                        class="btn btn-outline-primary btn-sm py-0"
+                        title="Registrar un pago de este mes"
+                        :disabled="periodo_en_curso === periodo.periodo"
+                        @click="abrir_registrar_pago(periodo)"
+                      >
+                        <i class="bi bi-cash-coin"></i>
+                      </button>
+                      <button
+                        v-if="periodo.estado === 'pendiente' || periodo.estado === 'facturado' || periodo.estado === 'parcial'"
+                        type="button"
+                        class="btn btn-outline-secondary btn-sm py-0 ms-1"
+                        title="Marcar el mes como sin cargo"
+                        :disabled="periodo_en_curso === periodo.periodo"
+                        @click="marcar_periodo(periodo, 'sin_cargo')"
+                      >
+                        Sin cargo
+                      </button>
+                      <button
+                        v-if="periodo.estado === 'pagado' || periodo.estado === 'sin_cargo'"
+                        type="button"
+                        class="btn btn-outline-secondary btn-sm py-0 ms-1"
+                        title="Volver a dejar el mes pendiente"
+                        :disabled="periodo_en_curso === periodo.periodo"
+                        @click="marcar_periodo(periodo, 'pendiente')"
+                      >
+                        Reabrir
+                      </button>
+                      <button
+                        v-if="periodo.pagos && periodo.pagos.length"
+                        type="button"
+                        class="btn btn-link btn-sm py-0 ms-1 text-decoration-none"
+                        :title="periodo_expandido === periodo.periodo ? 'Ocultar los pagos' : 'Ver los pagos de este mes'"
+                        @click="alternar_pagos(periodo)"
+                      >
+                        {{ periodo.pagos.length }} {{ periodo.pagos.length === 1 ? 'pago' : 'pagos' }}
+                        <i class="bi" :class="periodo_expandido === periodo.periodo ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+                      </button>
+                    </td>
+                  </tr>
+                  <!-- Pagos del mes, desplegados debajo de la fila -->
+                  <tr v-if="periodo_expandido === periodo.periodo && periodo.pagos && periodo.pagos.length">
+                    <td colspan="6" class="bg-light">
+                      <div v-for="pago in periodo.pagos" :key="pago.id" class="d-flex flex-wrap align-items-center gap-2 py-1">
+                        <span class="text-nowrap">{{ pago.fecha_pago ? formatear_fecha_corta(pago.fecha_pago) : 'Sin fecha' }}</span>
+                        <span class="fw-semibold text-nowrap">{{ pago.monto !== null && pago.monto !== undefined ? '$' + format_numero(pago.monto) : 'Sin importe' }}</span>
+                        <span v-if="pago.medio" class="text-muted">{{ pago.medio }}</span>
+                        <span v-if="pago.observacion" class="text-muted">{{ pago.observacion }}</span>
+                        <span v-if="pago.importado" class="badge text-bg-light text-muted border">Importado</span>
+                        <button
+                          type="button"
+                          class="btn btn-outline-danger btn-sm py-0 ms-auto"
+                          title="Eliminar este pago"
+                          :disabled="periodo_en_curso === periodo.periodo"
+                          @click="eliminar_pago(periodo, pago)"
+                        >
+                          <i class="bi bi-trash"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -325,14 +637,23 @@
             </div>
           </div>
 
-          <button
-            type="button"
-            class="btn btn-warning btn-sm"
-            :disabled="emitiendo_factura"
-            @click="emitir_factura"
-          >
-            {{ emitiendo_factura ? 'Emitiendo...' : 'Emitir factura' }}
-          </button>
+          <!-- Mes que se factura (misión modulo-cobranzas, 18/9/2026): antes el POST no mandaba
+               período y el backend asumía el mes corriente; ahora se elige, para poder facturar
+               un mes atrasado sin esperar a que cambie el calendario. -->
+          <div class="d-flex flex-wrap align-items-end gap-2">
+            <div>
+              <label class="form-label small mb-1 fw-semibold">Mes a facturar</label>
+              <input v-model="periodo_factura" type="month" class="form-control form-control-sm" />
+            </div>
+            <button
+              type="button"
+              class="btn btn-warning btn-sm"
+              :disabled="emitiendo_factura || !periodo_factura"
+              @click="emitir_factura"
+            >
+              {{ emitiendo_factura ? 'Emitiendo...' : 'Emitir factura' }}
+            </button>
+          </div>
 
           <!-- ============================================================ -->
           <!-- Historial de facturas emitidas (prompt 365). Se carga al      -->
@@ -353,8 +674,10 @@
             Todavía no se emitieron facturas para este cliente.
           </p>
 
-          <!-- Tabla de historial: incluye autorizadas y rechazadas -->
-          <table v-else class="table table-sm table-bordered small mb-0">
+          <!-- Tabla de historial: incluye autorizadas y rechazadas. Dentro de .table-responsive
+               para que en teléfono scrollee ella y no el modal entero. -->
+          <div v-else class="table-responsive">
+          <table class="table table-sm table-bordered small mb-0">
             <thead>
               <tr class="table-light">
                 <th>Período</th>
@@ -395,24 +718,49 @@
               </tr>
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </div>
+
+    <!-- Modal de registrar pago, apilado sobre el modal del cliente (stack_level 1). Se monta una
+         sola vez y se rearma en cada apertura con el mes y el monto de la fila clickeada. -->
+    <registrar-pago-modal
+      v-if="record && record.id"
+      :show="modal_pago.show"
+      :cliente="record"
+      :periodo="modal_pago.periodo"
+      :monto_esperado="modal_pago.monto_esperado"
+      :stack_level="1"
+      @update:show="modal_pago.show = $event"
+      @saved="on_pago_guardado"
+    />
   </div>
 </template>
 
 <script>
-import api, { admin_api_origin } from '@/utils/axios'
+import api, { admin_api_origin, resolve_error_message } from '@/utils/axios'
+import RegistrarPagoModal from '@/components/cobranzas/RegistrarPagoModal.vue'
+import EstadoMensualidadBadge from '@/components/cobranzas/EstadoMensualidadBadge.vue'
+import { etiqueta_larga, formatear_fecha, hoy_iso, mes_corriente, primer_dia_de, texto_hace_meses } from '@/components/cobranzas/meses'
 
 /**
  * Pestaña "Mensualidad" del detalle del cliente (admin-spa).
  *
- * Dos bloques con acciones propias, sobre un mismo formulario:
+ * Tres bloques con acciones propias, sobre un mismo formulario:
  *  1. Mensualidad: formulario con desglose reactivo calculado en el front,
  *     que se guarda vía PUT admin/client/{id}/mensualidad (el total final
  *     lo confirma siempre el backend, en `ClientMensualidadService`). Tiene
- *     su propio botón Guardar.
- *  2. Facturación: los datos fiscales (CUIT, razón social, condición IVA,
+ *     su propio botón Guardar. Desde la misión modulo-cobranzas (18/9/2026)
+ *     los precios son de solo lectura acá: se cambian registrando una
+ *     "actualización de precios" (POST .../mensualidad/actualizaciones), que
+ *     aplica los precios al cliente y deja historial con fecha y check de
+ *     oficial, para saber hace cuánto no se actualiza la mensualidad.
+ *  2. Pagos de la mensualidad (misión modulo-cobranzas): un renglón por mes
+ *     con el estado que calcula `CobranzasMensualidadService` y los pagos
+ *     registrados; desde acá se registra un pago, se marca un mes sin cargo
+ *     o se reabre.
+ *  3. Facturación: los datos fiscales (CUIT, razón social, condición IVA,
  *     domicilio) viven en el mismo `form` y viajan en el mismo PUT, así que
  *     tiene su propio botón Guardar que dispara exactamente `guardar()` —
  *     no depende de que el usuario apriete el botón de la otra tarjeta.
@@ -421,15 +769,61 @@ import api, { admin_api_origin } from '@/utils/axios'
  *
  * Es autónoma: no llama a la empresa-api del cliente (esa sincronización
  * opcional de conteos vivos vive aparte, prompt 335).
+ *
+ * El `record` puede venir del modal genérico de Clientes (el borrador del
+ * ResourceView) o del modal chico del módulo Cobranzas (`{id, name,
+ * company_name}`): acá solo se usan esas tres claves.
  */
 export default {
   name: 'ClientMensualidadTab',
+  components: { RegistrarPagoModal, EstadoMensualidadBadge },
   props: {
     /** Cliente actualmente abierto en el modal de detalle de ResourceView. */
     record: { type: Object, default: null },
   },
   data() {
     return {
+      // ---- Actualizaciones de precio (misión modulo-cobranzas) ----
+      // Resumen `{ultima_oficial_fecha, meses, proxima_fecha, vencida, dias_restantes, sin_oficial}`;
+      // llega en el snapshot (`actualizacion`) y en cada respuesta de las rutas de actualizaciones.
+      resumen_actualizacion: null,
+      // Historial de actualizaciones, la más reciente primero.
+      actualizaciones: [],
+      // true mientras se carga el historial.
+      cargando_actualizaciones: false,
+      // true mientras se muestra el formulario colapsable de nueva actualización.
+      mostrar_form_actualizacion: false,
+      // true mientras corre el POST de la nueva actualización.
+      registrando_actualizacion: false,
+      // id de la actualización sobre la que corre un PATCH/DELETE (null = ninguna), para
+      // deshabilitar solo esa fila.
+      actualizacion_en_curso_id: null,
+      // Formulario de la nueva actualización; se rearma con los precios vigentes al abrirlo.
+      form_actualizacion: {
+        fecha: '',
+        precio_plan: 0,
+        precio_por_cuenta: 0,
+        precio_ecommerce: null,
+        precio_mercado_libre: null,
+        precio_tienda_nube: null,
+        es_oficial: true,
+        observacion: '',
+      },
+      // ---- Pagos de la mensualidad (misión modulo-cobranzas) ----
+      // Lista de `estado_de` mes a mes (con `pagos`), tal como la devuelve GET .../mensualidad/periodos.
+      periodos: [],
+      // true mientras se cargan los meses.
+      cargando_periodos: false,
+      // Período (`YYYY-MM`) cuyos pagos están desplegados (null = ninguno).
+      periodo_expandido: null,
+      // Período sobre el que corre un PUT/DELETE (null = ninguno), para deshabilitar solo esa fila.
+      periodo_en_curso: null,
+      // Mes corriente según el backend (cae al del navegador hasta que responda).
+      mes_corriente_actual: mes_corriente(),
+      // Estado del modal "Registrar pago" apilado sobre este modal.
+      modal_pago: { show: false, periodo: '', monto_esperado: null },
+      // Mes que se factura con "Emitir factura" (`YYYY-MM`); default el corriente.
+      periodo_factura: mes_corriente(),
       // true mientras se carga el snapshot inicial de mensualidad.
       loading: false,
       // Mensaje de error si falla la carga inicial (null = sin error).
@@ -470,6 +864,8 @@ export default {
        */
       form: {
         payment_expired_at: '',
+        // Primer mes que se cobra, como `YYYY-MM` (input type=month); viaja al PUT como YYYY-MM-01.
+        mensualidad_inicio: '',
         precio_plan: 0,
         precio_por_cuenta: 0,
         cantidad_empleados: 0,
@@ -550,6 +946,24 @@ export default {
       const d = this.desglose
       return d.plan + d.empleados + d.ecommerce + d.mercado_libre + d.tienda_nube
     },
+    /**
+     * Meses de la tabla de pagos: los que devolvió el backend, sin los futuros (no hay nada que
+     * hacer con ellos y solo alejan el mes actual de la vista) y del más reciente al más viejo,
+     * porque lo que se viene a mirar es el mes en curso, no agosto del año pasado. Un pago por
+     * adelantado se registra igual con el botón de arriba, eligiendo el mes en el modal.
+     * @returns {Array<Object>}
+     */
+    periodos_visibles() {
+      const self = this
+      return this.periodos
+        .filter(function (periodo) {
+          return periodo && periodo.estado !== 'futuro' && periodo.periodo <= self.mes_corriente_actual
+        })
+        .slice()
+        .sort(function (a, b) {
+          return a.periodo < b.periodo ? 1 : a.periodo > b.periodo ? -1 : 0
+        })
+    },
   },
   watch: {
     /** Si cambia el cliente abierto en el modal, recarga el snapshot. */
@@ -558,6 +972,11 @@ export default {
         this.cargar_mensualidad()
         // Nuevo cliente: recarga también su historial de facturas (si no, se vería el del cliente anterior).
         this.cargar_facturas()
+        // Y las dos listas nuevas de la misión modulo-cobranzas, por el mismo motivo.
+        this.cargar_actualizaciones()
+        this.cargar_periodos()
+        this.mostrar_form_actualizacion = false
+        this.periodo_expandido = null
         // Nuevo cliente: se vuelve a detectar el soporte de sincronización desde cero.
         this.sync_no_soportado = false
         this.sync_no_soportado_motivo = ''
@@ -567,8 +986,381 @@ export default {
   mounted() {
     this.cargar_mensualidad()
     this.cargar_facturas()
+    this.cargar_actualizaciones()
+    this.cargar_periodos()
   },
   methods: {
+    etiqueta_larga,
+    texto_hace_meses,
+    /**
+     * Fecha `YYYY-MM-DD` o ISO como dd/mm/yyyy, sin pasar por `new Date` (ver meses.js).
+     * @param {string|null} fecha
+     * @returns {string}
+     */
+    formatear_fecha_corta(fecha) {
+      return formatear_fecha(fecha)
+    },
+    /**
+     * Precio opcional de un módulo en el historial: "$X" o "—" cuando la actualización lo dejó
+     * en el fallback de precio por cuenta.
+     * @param {number|string|null} valor
+     * @returns {string}
+     */
+    precio_opcional(valor) {
+      if (valor === null || valor === undefined || valor === '') {
+        return '—'
+      }
+      return '$' + this.format_numero(valor)
+    },
+    /**
+     * Toast global del admin.
+     * @param {string} message
+     * @param {string} [variant] variante Bootstrap (success por defecto)
+     * @returns {void}
+     */
+    avisar(message, variant) {
+      window.dispatchEvent(new CustomEvent('admin-spa-toast', {
+        detail: { message: String(message), variant: variant || 'success' },
+      }))
+    },
+    // ------------------------------------------------------------------
+    // Actualizaciones de precio (misión modulo-cobranzas, 18/9/2026)
+    // ------------------------------------------------------------------
+    /**
+     * Carga el historial de actualizaciones y el resumen de la última oficial
+     * (GET client/{id}/mensualidad/actualizaciones).
+     * @returns {void}
+     */
+    cargar_actualizaciones() {
+      const self = this
+      if (!this.record || !this.record.id) {
+        return
+      }
+      const client_id = this.record.id
+      self.cargando_actualizaciones = true
+      api
+        .get('/client/' + client_id + '/mensualidad/actualizaciones', { silent_error: true })
+        .then(function (res) {
+          self.cargando_actualizaciones = false
+          // Se cambió de cliente mientras respondía: no es la lista de este.
+          if (!self.record || self.record.id !== client_id) {
+            return
+          }
+          self.aplicar_actualizaciones(res.data || {})
+        })
+        .catch(function () {
+          self.cargando_actualizaciones = false
+          self.avisar('No se pudo cargar el historial de actualizaciones de precio.', 'danger')
+        })
+    },
+    /**
+     * Vuelca `{actualizaciones, resumen}` de cualquier respuesta de las rutas de actualizaciones.
+     * @param {Object} data
+     * @returns {void}
+     */
+    aplicar_actualizaciones(data) {
+      if (Array.isArray(data.actualizaciones)) {
+        this.actualizaciones = data.actualizaciones
+      }
+      if (data.resumen) {
+        this.resumen_actualizacion = data.resumen
+      }
+    },
+    /**
+     * Abre o cierra el formulario de nueva actualización. Al abrirlo se precargan los precios
+     * vigentes y la fecha de hoy: lo normal es tocar uno o dos valores y registrar.
+     * @returns {void}
+     */
+    alternar_form_actualizacion() {
+      if (this.mostrar_form_actualizacion) {
+        this.mostrar_form_actualizacion = false
+        return
+      }
+      this.form_actualizacion = {
+        fecha: hoy_iso(),
+        precio_plan: Number(this.form.precio_plan || 0),
+        precio_por_cuenta: Number(this.form.precio_por_cuenta || 0),
+        precio_ecommerce: this.form.precio_ecommerce,
+        precio_mercado_libre: this.form.precio_mercado_libre,
+        precio_tienda_nube: this.form.precio_tienda_nube,
+        es_oficial: true,
+        observacion: '',
+      }
+      this.mostrar_form_actualizacion = true
+    },
+    /**
+     * Registra la actualización (POST client/{id}/mensualidad/actualizaciones). El backend
+     * aplica los precios al cliente y devuelve el snapshot nuevo, que se vuelca al form para
+     * que los precios vigentes y el desglose cambien en el acto.
+     * @returns {void}
+     */
+    registrar_actualizacion() {
+      const self = this
+      if (!this.record || !this.record.id || this.registrando_actualizacion) {
+        return
+      }
+      const f = this.form_actualizacion
+      /** Normaliza un precio opcional: '' o null → null (fallback a precio por cuenta). */
+      const opcional = function (valor) {
+        return valor === '' || valor === null || valor === undefined ? null : Number(valor)
+      }
+      self.registrando_actualizacion = true
+      api
+        .post('/client/' + this.record.id + '/mensualidad/actualizaciones', {
+          fecha: f.fecha || hoy_iso(),
+          precio_plan: Number(f.precio_plan || 0),
+          precio_por_cuenta: Number(f.precio_por_cuenta || 0),
+          precio_ecommerce: opcional(f.precio_ecommerce),
+          precio_mercado_libre: opcional(f.precio_mercado_libre),
+          precio_tienda_nube: opcional(f.precio_tienda_nube),
+          es_oficial: !!f.es_oficial,
+          observacion: f.observacion || null,
+        }, { silent_error: true })
+        .then(function (res) {
+          const data = res.data || {}
+          self.registrando_actualizacion = false
+          self.mostrar_form_actualizacion = false
+          if (data.snapshot) {
+            self.aplicar_snapshot(data.snapshot)
+          }
+          self.aplicar_actualizaciones(data)
+          // Los montos esperados de los meses sin fila propia salen del total: se refrescan.
+          self.cargar_periodos()
+          self.avisar('Actualización registrada. Total confirmado: $' + self.format_numero(self.record_total_mensualidad))
+        })
+        .catch(function (error) {
+          self.registrando_actualizacion = false
+          self.avisar(resolve_error_message(error), 'danger')
+        })
+    },
+    /**
+     * Alterna el check "oficial" de una actualización (PATCH .../actualizaciones/{id}).
+     * @param {Object} actualizacion
+     * @returns {void}
+     */
+    alternar_oficial(actualizacion) {
+      const self = this
+      if (!this.record || !this.record.id || !actualizacion || this.actualizacion_en_curso_id) {
+        return
+      }
+      self.actualizacion_en_curso_id = actualizacion.id
+      api
+        .patch('/client/' + this.record.id + '/mensualidad/actualizaciones/' + actualizacion.id, {
+          es_oficial: !actualizacion.es_oficial,
+        }, { silent_error: true })
+        .then(function (res) {
+          self.actualizacion_en_curso_id = null
+          self.aplicar_actualizaciones(res.data || {})
+        })
+        .catch(function (error) {
+          self.actualizacion_en_curso_id = null
+          self.avisar(resolve_error_message(error), 'danger')
+        })
+    },
+    /**
+     * Elimina una actualización del historial (DELETE .../actualizaciones/{id}). No revierte
+     * los precios del cliente: si se quiere volver atrás, se registra otra actualización.
+     * @param {Object} actualizacion
+     * @returns {void}
+     */
+    eliminar_actualizacion(actualizacion) {
+      const self = this
+      if (!this.record || !this.record.id || !actualizacion || this.actualizacion_en_curso_id) {
+        return
+      }
+      const confirmado = window.confirm(
+        '¿Eliminar la actualización del ' + formatear_fecha(actualizacion.fecha) + '? ' +
+        'Se borra del historial; los precios actuales del cliente no cambian.'
+      )
+      if (!confirmado) {
+        return
+      }
+      self.actualizacion_en_curso_id = actualizacion.id
+      api
+        .delete('/client/' + this.record.id + '/mensualidad/actualizaciones/' + actualizacion.id, { silent_error: true })
+        .then(function (res) {
+          self.actualizacion_en_curso_id = null
+          self.aplicar_actualizaciones(res.data || {})
+          self.avisar('Actualización eliminada.')
+        })
+        .catch(function (error) {
+          self.actualizacion_en_curso_id = null
+          self.avisar(resolve_error_message(error), 'danger')
+        })
+    },
+    // ------------------------------------------------------------------
+    // Pagos de la mensualidad (misión modulo-cobranzas, 18/9/2026)
+    // ------------------------------------------------------------------
+    /**
+     * Carga los meses con su estado y sus pagos (GET client/{id}/mensualidad/periodos, con el
+     * rango por defecto del backend: desde el inicio de la mensualidad hasta tres meses adelante).
+     * @returns {void}
+     */
+    cargar_periodos() {
+      const self = this
+      if (!this.record || !this.record.id) {
+        return
+      }
+      const client_id = this.record.id
+      self.cargando_periodos = true
+      api
+        .get('/client/' + client_id + '/mensualidad/periodos', { silent_error: true })
+        .then(function (res) {
+          self.cargando_periodos = false
+          if (!self.record || self.record.id !== client_id) {
+            return
+          }
+          const data = res.data || {}
+          self.periodos = Array.isArray(data.periodos) ? data.periodos : []
+          if (data.mes_corriente) {
+            self.mes_corriente_actual = String(data.mes_corriente)
+          }
+        })
+        .catch(function () {
+          self.cargando_periodos = false
+          self.avisar('No se pudieron cargar los meses de la mensualidad.', 'danger')
+        })
+    },
+    /**
+     * Clase de la fila de un mes, con los mismos colores que la tabla del módulo Cobranzas.
+     * @param {Object} periodo `estado_de`
+     * @returns {string}
+     */
+    clase_fila_periodo(periodo) {
+      if (!periodo) {
+        return ''
+      }
+      if (periodo.estado === 'pagado') {
+        return 'table-success'
+      }
+      if (periodo.estado === 'facturado' || periodo.estado === 'parcial') {
+        return 'table-warning'
+      }
+      if (periodo.estado === 'pendiente') {
+        return 'table-danger'
+      }
+      return ''
+    },
+    /**
+     * Abre el modal de registrar pago para un mes (o para el corriente si no se pasa ninguno),
+     * prefijando el monto esperado de ese mes o, si no lo hay, el total de la mensualidad.
+     * @param {Object|null} periodo `estado_de` de la fila, o null desde el botón del encabezado
+     * @returns {void}
+     */
+    abrir_registrar_pago(periodo) {
+      const esperado = periodo && periodo.monto_esperado !== null && periodo.monto_esperado !== undefined
+        ? periodo.monto_esperado
+        : this.record_total_mensualidad
+      this.modal_pago = {
+        show: true,
+        periodo: periodo ? periodo.periodo : this.mes_corriente_actual,
+        monto_esperado: esperado,
+      }
+    },
+    /**
+     * El modal registró un pago: el backend devolvió el `estado_de` del mes recalculado.
+     * @param {Object|null} periodo_actualizado
+     * @returns {void}
+     */
+    on_pago_guardado(periodo_actualizado) {
+      this.reemplazar_periodo(periodo_actualizado)
+    },
+    /**
+     * Reemplaza (o agrega) un mes en la lista con el `estado_de` fresco del backend. Si el mes
+     * no estaba en la lista (un pago por adelantado fuera del rango), se recarga todo.
+     * @param {Object|null} periodo_actualizado
+     * @returns {void}
+     */
+    reemplazar_periodo(periodo_actualizado) {
+      if (!periodo_actualizado || !periodo_actualizado.periodo) {
+        this.cargar_periodos()
+        return
+      }
+      let reemplazado = false
+      this.periodos = this.periodos.map(function (periodo) {
+        if (periodo.periodo === periodo_actualizado.periodo) {
+          reemplazado = true
+          return periodo_actualizado
+        }
+        return periodo
+      })
+      if (!reemplazado) {
+        this.cargar_periodos()
+      }
+    },
+    /**
+     * Marca un mes como sin cargo o lo reabre como pendiente (PUT .../periodos/{periodo}).
+     * @param {Object} periodo `estado_de` de la fila
+     * @param {string} estado `sin_cargo` | `pendiente`
+     * @returns {void}
+     */
+    marcar_periodo(periodo, estado) {
+      const self = this
+      if (!this.record || !this.record.id || !periodo || this.periodo_en_curso) {
+        return
+      }
+      if (estado === 'pendiente') {
+        const confirmado = window.confirm(
+          '¿Reabrir ' + etiqueta_larga(periodo.periodo) + '? El mes vuelve a quedar pendiente.'
+        )
+        if (!confirmado) {
+          return
+        }
+      }
+      self.periodo_en_curso = periodo.periodo
+      api
+        .put('/client/' + this.record.id + '/mensualidad/periodos/' + periodo.periodo, {
+          estado: estado,
+        }, { silent_error: true })
+        .then(function (res) {
+          self.periodo_en_curso = null
+          self.reemplazar_periodo((res.data && res.data.periodo) || null)
+          self.avisar(estado === 'sin_cargo' ? etiqueta_larga(periodo.periodo) + ' quedó sin cargo.' : etiqueta_larga(periodo.periodo) + ' quedó pendiente.')
+        })
+        .catch(function (error) {
+          self.periodo_en_curso = null
+          self.avisar(resolve_error_message(error), 'danger')
+        })
+    },
+    /**
+     * Despliega o pliega los pagos de un mes.
+     * @param {Object} periodo
+     * @returns {void}
+     */
+    alternar_pagos(periodo) {
+      this.periodo_expandido = this.periodo_expandido === periodo.periodo ? null : periodo.periodo
+    },
+    /**
+     * Elimina un pago de un mes (DELETE .../pagos/{pagoId}); el backend recalcula el estado.
+     * @param {Object} periodo `estado_de` del mes
+     * @param {Object} pago fila de `periodo.pagos`
+     * @returns {void}
+     */
+    eliminar_pago(periodo, pago) {
+      const self = this
+      if (!this.record || !this.record.id || !pago || this.periodo_en_curso) {
+        return
+      }
+      const confirmado = window.confirm(
+        '¿Eliminar el pago de ' + (pago.monto !== null && pago.monto !== undefined ? '$' + this.format_numero(pago.monto) : 'sin importe') +
+        ' de ' + etiqueta_larga(periodo.periodo) + '? El estado del mes se recalcula.'
+      )
+      if (!confirmado) {
+        return
+      }
+      self.periodo_en_curso = periodo.periodo
+      api
+        .delete('/client/' + this.record.id + '/mensualidad/pagos/' + pago.id, { silent_error: true })
+        .then(function (res) {
+          self.periodo_en_curso = null
+          self.reemplazar_periodo((res.data && res.data.periodo) || null)
+          self.avisar('Pago eliminado.')
+        })
+        .catch(function (error) {
+          self.periodo_en_curso = null
+          self.avisar(resolve_error_message(error), 'danger')
+        })
+    },
     /**
      * Formatea un número para mostrarlo con separador de miles y sin decimales,
      * igual criterio visual que la Blade de referencia de empresa-api.
@@ -665,6 +1457,8 @@ export default {
       this.form = {
         /* La fecha viene en formato ISO (con hora); nos quedamos solo con la parte de fecha para el input type=date */
         payment_expired_at: snapshot.payment_expired_at ? String(snapshot.payment_expired_at).slice(0, 10) : '',
+        /* Primer mes que se cobra: el backend guarda un date (YYYY-MM-01); el input type=month quiere YYYY-MM. */
+        mensualidad_inicio: snapshot.mensualidad_inicio ? String(snapshot.mensualidad_inicio).slice(0, 7) : '',
         precio_plan: Number(snapshot.precio_plan || 0),
         precio_por_cuenta: Number(snapshot.precio_por_cuenta || 0),
         cantidad_empleados: Number(snapshot.cantidad_empleados || 0),
@@ -680,6 +1474,21 @@ export default {
         afip_domicilio: snapshot.afip_domicilio || '',
       }
       this.record_total_mensualidad = Number(snapshot.total_mensualidad || 0)
+      /* El snapshot trae el resumen de actualización desde la misión modulo-cobranzas; un backend
+         viejo no lo manda y en ese caso se conserva lo que ya hubiera. */
+      if (snapshot.actualizacion) {
+        this.resumen_actualizacion = snapshot.actualizacion
+      }
+    },
+    /**
+     * Cuerpo del PUT de mensualidad: el form tal cual, con `mensualidad_inicio` convertido de
+     * `YYYY-MM` (input type=month) a `YYYY-MM-01` (date del backend), o null si está vacío.
+     * @returns {Object}
+     */
+    armar_payload_mensualidad() {
+      return Object.assign({}, this.form, {
+        mensualidad_inicio: this.form.mensualidad_inicio ? primer_dia_de(this.form.mensualidad_inicio) : null,
+      })
     },
     /**
      * Suma o resta un mes a `form.payment_expired_at`, cuidando el overflow
@@ -717,10 +1526,12 @@ export default {
       }
       self.saving = true
       api
-        .put('/client/' + this.record.id + '/mensualidad', self.form)
+        .put('/client/' + this.record.id + '/mensualidad', self.armar_payload_mensualidad())
         .then(function (res) {
           self.aplicar_snapshot(res.data || {})
           self.saving = false
+          // Si cambió "Se cobra desde" o el total, los meses de la tarjeta de pagos cambian con ellos.
+          self.cargar_periodos()
           window.dispatchEvent(new CustomEvent('admin-spa-toast', {
             detail: {
               message: 'Datos guardados. Total confirmado: $' + self.format_numero(self.record_total_mensualidad),
@@ -860,6 +1671,7 @@ export default {
           (this.record.company_name || this.record.name || 'este cliente') +
           ' por $' +
           this.format_numero(this.record_total_mensualidad) +
+          ' (' + etiqueta_larga(this.periodo_factura) + ')' +
           '? Genera un comprobante fiscal real e irreversible.'
       )
       if (!confirmado) {
@@ -869,7 +1681,9 @@ export default {
       self.emitiendo_factura = true
       self.factura_result = null
       api
-        .post('/client/' + this.record.id + '/emitir-factura')
+        // El período viaja explícito (misión modulo-cobranzas); el backend ya lo aceptaba con
+        // default al mes corriente, así que un SPA viejo sigue andando igual.
+        .post('/client/' + this.record.id + '/emitir-factura', { periodo: this.periodo_factura })
         .then(function (res) {
           self.factura_result = res.data || null
           self.emitiendo_factura = false
@@ -884,6 +1698,8 @@ export default {
             }))
             // Refresca el historial para que la factura recién emitida aparezca sin recargar el modal.
             self.cargar_facturas()
+            // Y los meses: el facturado pasa de rojo a amarillo.
+            self.cargar_periodos()
           } else {
             window.dispatchEvent(new CustomEvent('admin-spa-toast', {
               detail: {
@@ -1066,3 +1882,12 @@ export default {
   },
 }
 </script>
+
+<style scoped>
+/* Precios vigentes de solo lectura: se leen como dato, no como campo. Tamaño de input para que
+   la fila no cambie de altura respecto de los campos que tiene al lado. */
+.precios-vigentes .fw-semibold {
+  font-size: 1rem;
+  line-height: 1.5;
+}
+</style>
