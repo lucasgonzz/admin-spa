@@ -62,6 +62,12 @@
             El mes queda pagado completo
           </label>
         </div>
+        <!-- Informativo (pedido 7, 18/9/2026): un solo click hace todo — registra el pago,
+             adelanta el vencimiento y avisa al sistema del cliente. Sin confirm() extra a
+             propósito: agregar un click más iría contra el pedido de simplificar el flujo. -->
+        <p v-if="form.cerrar_periodo" class="text-muted small mt-1 mb-0">
+          Al registrar este pago se adelanta un mes el vencimiento y se avisa al sistema del cliente.
+        </p>
         <div v-if="faltante > 0" class="small mt-1" :class="form.cerrar_periodo ? 'text-warning-emphasis' : 'text-muted'">
           Faltarían {{ format_plata(faltante) }}.
           <span v-if="form.cerrar_periodo">Si es un pago parcial, desmarcá la casilla para que el mes quede en amarillo.</span>
@@ -83,7 +89,7 @@
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
 import BaseModal from '@/components/ui/BaseModal.vue'
-import { etiqueta_larga, hoy_iso, mes_corriente, partes_de_periodo } from './meses'
+import { etiqueta_larga, formatear_fecha, hoy_iso, mes_corriente, partes_de_periodo } from './meses'
 import { format_plata } from './plata'
 
 /**
@@ -229,6 +235,12 @@ export default {
     /**
      * POST del pago. El backend recalcula el estado del mes (pagado / parcial / pendiente) y lo
      * devuelve; se emite tal cual en `saved` y se cierra.
+     *
+     * Desde el pedido 7 (18/9/2026) este mismo POST puede además adelantar
+     * `payment_expired_at` del cliente y avisar al sistema del cliente (cuando el pago cierra el
+     * mes y admin ya tenía una fecha de próximo pago cargada) — el backend lo informa en la
+     * clave nueva `vencimiento_avanzado` de la respuesta, que acá se refleja en el toast para
+     * que quede claro que este único click hizo más de lo que hacía antes.
      */
     guardar() {
       const self = this
@@ -248,11 +260,21 @@ export default {
         .then(function (res) {
           const periodo = (res.data && res.data.periodo) || null
           self.guardando = false
+          const vencimiento = periodo && periodo.vencimiento_avanzado ? periodo.vencimiento_avanzado : null
+          let mensaje = 'Pago registrado para ' + etiqueta_larga(self.form.periodo) + '.'
+          let variante = 'success'
+          if (vencimiento && vencimiento.ocurrio) {
+            mensaje += ' Próximo vencimiento: ' + formatear_fecha(vencimiento.nueva_fecha) + '.'
+            if (!vencimiento.sincronizado) {
+              // Se adelantó en admin pero no se pudo avisar al sistema del cliente (best-effort,
+              // punto D del plan): no es un error del pago en sí, pero merece un tono distinto.
+              mensaje += ' No se pudo avisar al sistema del cliente' +
+                (vencimiento.motivo_no_sincronizado ? ' (' + vencimiento.motivo_no_sincronizado + ')' : '') + '.'
+              variante = 'warning'
+            }
+          }
           window.dispatchEvent(new CustomEvent('admin-spa-toast', {
-            detail: {
-              message: 'Pago registrado para ' + etiqueta_larga(self.form.periodo) + '.',
-              variant: 'success',
-            },
+            detail: { message: mensaje, variant: variante },
           }))
           self.$emit('saved', periodo)
           self.$emit('update:show', false)
