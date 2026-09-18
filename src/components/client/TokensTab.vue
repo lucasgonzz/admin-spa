@@ -467,7 +467,7 @@ export default {
       // Aviso cuando el refresco a mano tuvo que recortar el rango (lo manda el backend).
       nota_refresco: '',
       // ---- Paquete de IA del cliente (misión foto-sucursal-y-asistente-configurable, 17/9/2026) ----
-      // Paquetes disponibles (GET /ai-plans) para el <select> de asignación.
+      // Paquetes disponibles (GET /ai-plan) para el <select> de asignación.
       paquetes: [],
       // true mientras se cargan los paquetes.
       cargando_paquetes: false,
@@ -944,7 +944,7 @@ export default {
       this.cargar_paquetes()
     },
     /**
-     * Trae los paquetes de IA (GET /ai-plans). Silencioso a propósito: mientras el admin-api todavía
+     * Trae los paquetes de IA (GET /ai-plan). Silencioso a propósito: mientras el admin-api todavía
      * no expone el endpoint, un 404 no debe romper la solapa de consumo; el <select> queda solo con
      * "Sin paquete".
      * @returns {void}
@@ -953,7 +953,7 @@ export default {
       const self = this
       self.cargando_paquetes = true
       api
-        .get('/ai-plans', { silent_error: true })
+        .get('/ai-plan', { silent_error: true })
         .then(function (res) {
           self.paquetes = self.extraer_lista_paquetes(res.data)
           self.cargando_paquetes = false
@@ -1023,7 +1023,7 @@ export default {
      */
     aplicar_estado_plan(fuente) {
       const f = fuente || {}
-      const sync = f.sync || f.push || f.ai_plan_sync || {}
+      const sync = f.sincronizacion || f.sync || f.push || f.ai_plan_sync || {}
       this.plan_sync_status = f.ai_plan_sync_status || sync.estado || sync.status || null
       this.plan_sync_message = f.ai_plan_sync_message || sync.mensaje || sync.message || ''
       this.plan_synced_at = f.ai_plan_synced_at || sync.sincronizado_at || sync.synced_at || null

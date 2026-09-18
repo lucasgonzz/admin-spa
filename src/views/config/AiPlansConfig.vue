@@ -216,9 +216,9 @@ import api, { resolve_error_message } from '@/utils/axios'
  * ficha (solapa Tokens). Un tope vacío/0 significa SIN tope: el sistema del cliente nunca corta.
  *
  * Rutas asumidas (el admin-api las construye en paralelo; confirmar contra routes/api.php):
- *   GET    /api/admin/ai-plans        -> lista
- *   POST   /api/admin/ai-plans        -> alta
- *   PUT    /api/admin/ai-plans/{id}   -> edición (y baja lógica: activo=false)
+ *   GET    /api/admin/ai-plan        -> lista
+ *   POST   /api/admin/ai-plan        -> alta
+ *   PUT    /api/admin/ai-plan/{id}   -> edición (y baja lógica: activo=false)
  * La baja es lógica vía `activo` (no se borra la fila), tal como pide el contrato: se resuelve con
  * un PUT que invierte `activo`, sin depender de un DELETE cuya semántica (soft delete vs marca) no
  * está especificada.
@@ -286,7 +286,7 @@ export default {
 
   methods: {
     /**
-     * Trae la lista de paquetes (GET /ai-plans), tolerando varias formas de envoltura de la
+     * Trae la lista de paquetes (GET /ai-plan), tolerando varias formas de envoltura de la
      * respuesta (array plano, {data}, {ai_plans}, {planes}).
      * @returns {void}
      */
@@ -295,7 +295,7 @@ export default {
       self.loading = true
       self.load_error = null
       api
-        .get('/ai-plans', { silent_error: true })
+        .get('/ai-plan', { silent_error: true })
         .then(function (res) {
           self.paquetes = self.extraer_lista(res.data)
           self.loading = false
@@ -422,8 +422,8 @@ export default {
 
       self.saving = true
       const peticion = this.editando_id
-        ? api.put('/ai-plans/' + this.editando_id, payload)
-        : api.post('/ai-plans', payload)
+        ? api.put('/ai-plan/' + this.editando_id, payload)
+        : api.post('/ai-plan', payload)
 
       peticion
         .then(function () {
@@ -461,7 +461,7 @@ export default {
         activo: !paquete.activo,
       }
       api
-        .put('/ai-plans/' + paquete.id, payload)
+        .put('/ai-plan/' + paquete.id, payload)
         .then(function () {
           self.cambiando_estado_id = null
           self.cargar()
