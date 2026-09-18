@@ -11,6 +11,8 @@ import ResourceView from '@/common-vue/components/view/Index.vue'
 import ClientInstallationsTab from '@/components/client/InstallationsTab.vue'
 import EcommerceImplementationTab from '@/components/client/EcommerceImplementationTab.vue'
 import MensualidadTab from '@/components/client/MensualidadTab.vue'
+import ContratoTab from '@/components/client/ContratoTab.vue'
+import LicenciasTab from '@/components/client/LicenciasTab.vue'
 import ClientScheduleTab from '@/components/client/ScheduleTab.vue'
 import ClientTokensTab from '@/components/client/TokensTab.vue'
 
@@ -44,6 +46,20 @@ export default {
           key: 'mensualidad',
           label: 'Mensualidad',
           component: markRaw(MensualidadTab),
+        },
+        {
+          /* Contrato del cliente (misión modulo-cobranzas, 18/9/2026): hasta ahora vivía solo en
+             el lead; al promoverlo se copia acá y desde acá se edita y se genera el PDF. */
+          key: 'contrato',
+          label: 'Contrato',
+          component: markRaw(ContratoTab),
+        },
+        {
+          /* Cuotas de la licencia (misma misión): monto y mes de cada cuota del contrato, con
+             pagos parciales. Es la otra mitad de la plata del cliente, junto a Mensualidad. */
+          key: 'licencias',
+          label: 'Licencias',
+          component: markRaw(LicenciasTab),
         },
         {
           key: 'horarios',
