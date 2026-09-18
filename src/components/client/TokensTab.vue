@@ -5,8 +5,83 @@
       Guardá el cliente primero para ver su consumo de IA.
     </p>
 
+    <template v-else>
+      <!-- ============================================================ -->
+      <!-- Paquete de IA del cliente. El paquete define el tope de       -->
+      <!-- tokens/mes e interacciones/día que se empujan a su instancia  -->
+      <!-- al asignarlo, y acá se ve en la misma solapa que el consumo   -->
+      <!-- real contra ese tope. "Sincronizar ahora" asigna el paquete   -->
+      <!-- elegido y lo empuja al sistema del cliente en un solo paso.   -->
+      <!-- Va fuera del bloque de carga del consumo: su estado sale del  -->
+      <!-- `record`, así que se ve aunque el GET del consumo falle.      -->
+      <!-- ============================================================ -->
+      <div class="card border-0 tokens-panel mb-4">
+        <div class="card-body">
+          <p class="tokens-panel__titulo mb-3">Paquete de IA</p>
+
+          <div v-if="cargando_paquetes" class="text-muted small">
+            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" />
+            Cargando paquetes...
+          </div>
+
+          <template v-else>
+            <div class="row g-3 align-items-end">
+              <div class="col-12 col-md-7">
+                <label class="form-label small text-muted mb-1 d-block">Paquete asignado</label>
+                <select v-model="ai_plan_id_elegido" class="form-select form-select-sm">
+                  <option :value="null">Sin paquete (sin tope)</option>
+                  <option v-for="paquete in paquetes_para_select" :key="paquete.id" :value="paquete.id">
+                    {{ paquete.nombre }} — {{ precio_visible(paquete.precio_usd) }}{{ paquete.activo ? '' : ' (dado de baja)' }}
+                  </option>
+                </select>
+              </div>
+
+              <div class="col-12 col-md-5 d-flex">
+                <button
+                  type="button"
+                  class="btn btn-outline-primary btn-sm"
+                  :disabled="sincronizando"
+                  @click="sincronizar_plan"
+                >
+                  <span
+                    v-if="sincronizando"
+                    class="spinner-border spinner-border-sm me-1"
+                    role="status"
+                    aria-hidden="true"
+                  />
+                  Sincronizar ahora
+                </button>
+              </div>
+            </div>
+
+            <p v-if="paquete_elegido_obj" class="tokens-tabla__nota mb-0 mt-2">
+              Tope: {{ tope_visible(paquete_elegido_obj.tope_tokens_mensual) }} tokens/mes ·
+              {{ tope_visible(paquete_elegido_obj.tope_interacciones_diarias) }} interacciones/día.
+            </p>
+            <p v-else class="tokens-tabla__nota mb-0 mt-2">
+              Sin paquete asignado: el sistema del cliente no corta por tope.
+            </p>
+
+            <div class="mt-3">
+              <p class="mb-1 small text-muted">{{ plan_sync_texto }}</p>
+
+              <div v-if="plan_sync_status === 'no_soportado'" class="alert alert-warning py-2 small mb-0">
+                <strong>Este cliente todavía no acepta el plan por sincronización.</strong>
+                Su sistema no conoce el endpoint que recibe el paquete (versión vieja), así que el
+                tope no se aplica todavía y el cliente sigue sin límite. El paquete queda asignado y
+                se aplica solo cuando el cliente se actualice.
+              </div>
+
+              <div v-else-if="plan_sync_status === 'failed'" class="alert alert-danger py-2 small mb-0">
+                {{ plan_sync_message || 'La última sincronización del plan falló.' }}
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
     <!-- Carga inicial -->
-    <div v-else-if="loading" class="text-center py-4">
+    <div v-if="loading" class="text-center py-4">
       <span class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true" />
       <p class="text-muted small mt-2 mb-0">Cargando consumo...</p>
     </div>
@@ -308,6 +383,7 @@
         </div>
       </div>
     </div>
+    </template>
   </div>
 </template>
 
@@ -390,6 +466,19 @@ export default {
       no_soportado_en_esta_sesion: false,
       // Aviso cuando el refresco a mano tuvo que recortar el rango (lo manda el backend).
       nota_refresco: '',
+      // ---- Paquete de IA del cliente (misión foto-sucursal-y-asistente-configurable, 17/9/2026) ----
+      // Paquetes disponibles (GET /ai-plans) para el <select> de asignación.
+      paquetes: [],
+      // true mientras se cargan los paquetes.
+      cargando_paquetes: false,
+      // Id del paquete elegido en el <select> (null = sin paquete).
+      ai_plan_id_elegido: null,
+      // true mientras corre "Sincronizar ahora" (POST client/{id}/ai-plan).
+      sincronizando: false,
+      // Estado de la última sincronización del plan (columnas del cliente): success | no_soportado | failed.
+      plan_sync_status: null,
+      plan_sync_message: '',
+      plan_synced_at: null,
       // Atajos de período. Tres alcanzan: el mes es el corte natural del gasto.
       atajos: [
         { dias: 7, label: '7 días' },
@@ -502,17 +591,75 @@ export default {
       }
       return 'Todavía no se trajo nada de este cliente.'
     },
+    /**
+     * Paquetes que se ofrecen en el <select>: los activos, más el actualmente asignado si quedó
+     * dado de baja (para no perder la referencia de lo que el cliente tiene hoy).
+     * @returns {Array<Object>}
+     */
+    paquetes_para_select() {
+      const activos = this.paquetes.filter(function (paquete) {
+        return !!paquete.activo
+      })
+      const elegido = this.ai_plan_id_elegido
+      const ya_esta = activos.some(function (paquete) {
+        return paquete.id === elegido
+      })
+      if (elegido && !ya_esta) {
+        const obj = this.paquetes.find(function (paquete) {
+          return paquete.id === elegido
+        })
+        if (obj) {
+          return activos.concat([obj])
+        }
+      }
+      return activos
+    },
+    /**
+     * Objeto del paquete actualmente elegido, o null si no hay ninguno.
+     * @returns {Object|null}
+     */
+    paquete_elegido_obj() {
+      const elegido = this.ai_plan_id_elegido
+      if (!elegido) {
+        return null
+      }
+      return (
+        this.paquetes.find(function (paquete) {
+          return paquete.id === elegido
+        }) || null
+      )
+    },
+    /**
+     * Texto de la línea de estado de la última sincronización del plan.
+     * @returns {string}
+     */
+    plan_sync_texto() {
+      if (this.plan_sync_status === 'success') {
+        return this.plan_synced_at
+          ? 'Plan sincronizado el ' + this.formatear_fecha_hora(this.plan_synced_at) + '.'
+          : 'Plan sincronizado.'
+      }
+      if (this.plan_sync_status === 'no_soportado') {
+        return 'El sistema de este cliente todavía no acepta el plan por sincronización.'
+      }
+      if (this.plan_sync_status === 'failed') {
+        return 'La última sincronización del plan falló.'
+      }
+      return 'Todavía no se sincronizó ningún plan con este cliente.'
+    },
   },
   watch: {
-    /** Si cambia el cliente abierto en el modal, recarga su consumo. */
+    /** Si cambia el cliente abierto en el modal, recarga su consumo y su paquete de IA. */
     'record.id': function (nuevo_id, viejo_id) {
       if (nuevo_id && nuevo_id !== viejo_id) {
         this.elegir_atajo(this.dias_elegidos || 30)
+        this.inicializar_plan()
       }
     },
   },
   mounted() {
     this.elegir_atajo(30)
+    this.inicializar_plan()
   },
   methods: {
     /**
@@ -786,6 +933,170 @@ export default {
       return (
         'US$ ' + numero.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       )
+    },
+    /**
+     * Inicializa el bloque de paquete de IA para el cliente abierto: lee el estado persistido del
+     * plan desde el `record` y carga la lista de paquetes disponibles.
+     * @returns {void}
+     */
+    inicializar_plan() {
+      this.aplicar_estado_plan(this.record || {})
+      this.cargar_paquetes()
+    },
+    /**
+     * Trae los paquetes de IA (GET /ai-plans). Silencioso a propósito: mientras el admin-api todavía
+     * no expone el endpoint, un 404 no debe romper la solapa de consumo; el <select> queda solo con
+     * "Sin paquete".
+     * @returns {void}
+     */
+    cargar_paquetes() {
+      const self = this
+      self.cargando_paquetes = true
+      api
+        .get('/ai-plans', { silent_error: true })
+        .then(function (res) {
+          self.paquetes = self.extraer_lista_paquetes(res.data)
+          self.cargando_paquetes = false
+        })
+        .catch(function () {
+          self.paquetes = []
+          self.cargando_paquetes = false
+        })
+    },
+    /**
+     * Normaliza la lista de paquetes, tolerando varias envolturas de la respuesta.
+     * @param {*} cuerpo
+     * @returns {Array<Object>}
+     */
+    extraer_lista_paquetes(cuerpo) {
+      if (Array.isArray(cuerpo)) {
+        return cuerpo
+      }
+      if (cuerpo && Array.isArray(cuerpo.data)) {
+        return cuerpo.data
+      }
+      if (cuerpo && Array.isArray(cuerpo.ai_plans)) {
+        return cuerpo.ai_plans
+      }
+      if (cuerpo && Array.isArray(cuerpo.planes)) {
+        return cuerpo.planes
+      }
+      return []
+    },
+    /**
+     * Asigna el paquete elegido al cliente y lo empuja a su instancia en un solo paso
+     * (POST client/{id}/ai-plan). La respuesta trae el estado del push, que se aplica y se avisa.
+     * @returns {void}
+     */
+    sincronizar_plan() {
+      const self = this
+      if (!this.record || !this.record.id) {
+        return
+      }
+      self.sincronizando = true
+      api
+        .post(
+          '/client/' + this.record.id + '/ai-plan',
+          { ai_plan_id: this.ai_plan_id_elegido },
+          { silent_error: true }
+        )
+        .then(function (res) {
+          const cuerpo = res.data || {}
+          self.aplicar_estado_plan(cuerpo)
+          self.sincronizando = false
+          self.avisar_sync_plan()
+        })
+        .catch(function (error) {
+          self.sincronizando = false
+          window.dispatchEvent(
+            new CustomEvent('admin-spa-toast', {
+              detail: { message: resolve_error_message(error), variant: 'danger' },
+            })
+          )
+        })
+    },
+    /**
+     * Vuelca a estado local el estado del plan, sea del `record` (al abrir) o de la respuesta del
+     * POST. Tolera la forma plana (columnas del cliente) y una anidada por si el backend la envuelve.
+     * @param {Object} fuente
+     * @returns {void}
+     */
+    aplicar_estado_plan(fuente) {
+      const f = fuente || {}
+      const sync = f.sync || f.push || f.ai_plan_sync || {}
+      this.plan_sync_status = f.ai_plan_sync_status || sync.estado || sync.status || null
+      this.plan_sync_message = f.ai_plan_sync_message || sync.mensaje || sync.message || ''
+      this.plan_synced_at = f.ai_plan_synced_at || sync.sincronizado_at || sync.synced_at || null
+      /* La asignación deja el ai_plan_id en el cliente aunque el push falle o no esté soportado:
+         se refleja en el <select> con lo que devuelve la fuente. */
+      if (Object.prototype.hasOwnProperty.call(f, 'ai_plan_id')) {
+        this.ai_plan_id_elegido = f.ai_plan_id !== undefined ? f.ai_plan_id : null
+      }
+    },
+    /**
+     * Toast según el desenlace de la sincronización del plan.
+     * @returns {void}
+     */
+    avisar_sync_plan() {
+      if (this.plan_sync_status === 'success') {
+        window.dispatchEvent(
+          new CustomEvent('admin-spa-toast', {
+            detail: {
+              message: 'Paquete asignado y sincronizado con el sistema del cliente.',
+              variant: 'success',
+            },
+          })
+        )
+        return
+      }
+      if (this.plan_sync_status === 'no_soportado') {
+        window.dispatchEvent(
+          new CustomEvent('admin-spa-toast', {
+            detail: {
+              message:
+                'Paquete asignado. El sistema del cliente todavía no acepta el plan (versión vieja); se aplicará al actualizarse.',
+              variant: 'warning',
+            },
+          })
+        )
+        return
+      }
+      if (this.plan_sync_status === 'failed') {
+        window.dispatchEvent(
+          new CustomEvent('admin-spa-toast', {
+            detail: {
+              message: this.plan_sync_message || 'No se pudo sincronizar el plan con el cliente.',
+              variant: 'danger',
+            },
+          })
+        )
+        return
+      }
+      window.dispatchEvent(
+        new CustomEvent('admin-spa-toast', {
+          detail: { message: 'Paquete asignado.', variant: 'success' },
+        })
+      )
+    },
+    /**
+     * Precio de un paquete, listo para mostrar.
+     * @param {number|null} valor
+     * @returns {string}
+     */
+    precio_visible(valor) {
+      const numero = Number(valor || 0)
+      return 'US$ ' + numero.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    },
+    /**
+     * Tope de un paquete, listo para mostrar. null/0 = "sin tope".
+     * @param {number|null} valor
+     * @returns {string}
+     */
+    tope_visible(valor) {
+      if (valor === null || valor === undefined || Number(valor) === 0) {
+        return 'sin tope'
+      }
+      return Number(valor).toLocaleString('es-AR')
     },
   },
 }
