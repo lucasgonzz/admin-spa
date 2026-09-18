@@ -272,6 +272,13 @@ export default {
                 (vencimiento.motivo_no_sincronizado ? ' (' + vencimiento.motivo_no_sincronizado + ')' : '') + '.'
               variante = 'warning'
             }
+          } else if (vencimiento && self.form.cerrar_periodo && vencimiento.motivo) {
+            // 🔴 Hallazgo del chequeo independiente (18/9/2026): el mes cerró completo (se
+            // tildó "queda pagado completo") pero el vencimiento NO se adelantó por algún
+            // motivo puntual (`motivo`, nuevo campo del backend) — antes el toast quedaba mudo
+            // acá y daba a entender que sí había avanzado la fecha cuando no pasó.
+            mensaje += ' El vencimiento no se adelantó: ' + vencimiento.motivo
+            variante = 'warning'
           }
           window.dispatchEvent(new CustomEvent('admin-spa-toast', {
             detail: { message: mensaje, variant: variante },
