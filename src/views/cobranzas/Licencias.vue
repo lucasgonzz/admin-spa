@@ -117,10 +117,18 @@
               <th>Cliente</th>
               <th class="text-nowrap">Ingreso</th>
               <th class="text-end">Cuotas</th>
-              <th class="text-end text-nowrap">Total</th>
-              <th class="text-end text-nowrap">Pagado</th>
-              <th class="text-end text-nowrap">Pendiente</th>
-              <th v-for="mes in meses_columnas" :key="'th-' + mes" class="text-center text-nowrap" :class="{ 'cobranzas-tabla__ref': mes === mes_corriente_actual }">
+              <!-- Sin text-nowrap (a diferencia de antes): un cliente con cuotas en las dos
+                   monedas muestra algo como "USD 1.200 · ARS 500.000", más ancho que la columna
+                   — pasa a una segunda línea en vez de recortarse (nunca se trunca un monto). -->
+              <th class="text-end">Total</th>
+              <th class="text-end">Pagado</th>
+              <th class="text-end">Pendiente</th>
+              <th
+                v-for="mes in meses_columnas"
+                :key="'th-' + mes"
+                class="text-center text-nowrap cobranzas-tabla__mes"
+                :class="{ 'cobranzas-tabla__ref': mes === mes_corriente_actual }"
+              >
                 {{ etiqueta_larga(mes) }}
               </th>
             </tr>
@@ -139,15 +147,15 @@
               </td>
               <td class="text-nowrap">{{ cliente.mensualidad_inicio ? etiqueta_corta(cliente.mensualidad_inicio) : '—' }}</td>
               <td class="text-end">{{ cliente.cuotas ? cliente.cuotas.length : 0 }}</td>
-              <td class="text-end text-nowrap">{{ format_por_moneda(resumen_de(cliente).total_por_moneda) }}</td>
-              <td class="text-end text-nowrap">{{ format_por_moneda(resumen_de(cliente).pagado_por_moneda) }}</td>
-              <td class="text-end text-nowrap" :class="{ 'text-danger fw-semibold': tiene_pendiente(cliente) }">
+              <td class="text-end">{{ format_por_moneda(resumen_de(cliente).total_por_moneda) }}</td>
+              <td class="text-end">{{ format_por_moneda(resumen_de(cliente).pagado_por_moneda) }}</td>
+              <td class="text-end" :class="{ 'text-danger fw-semibold': tiene_pendiente(cliente) }">
                 {{ format_por_moneda(resumen_de(cliente).pendiente_por_moneda) }}
               </td>
               <td
                 v-for="mes in meses_columnas"
                 :key="cliente.id + '-' + mes"
-                class="text-center text-nowrap cobranzas-celda-mes"
+                class="text-center text-nowrap cobranzas-celda-mes cobranzas-tabla__mes"
                 :class="clase_celda(cliente, mes)"
               >
                 <template v-for="cuota in cuotas_del_mes(cliente, mes)" :key="cuota.id">
@@ -176,7 +184,7 @@
 import api, { resolve_error_message } from '@/utils/axios'
 import ClienteModal from '@/components/cobranzas/ClienteModal.vue'
 import { etiqueta_corta, etiqueta_larga, formatear_fecha, lista_de_meses, mes_corriente } from '@/components/cobranzas/meses'
-import { format_numero, format_monto_con_moneda, format_por_moneda } from '@/components/cobranzas/plata'
+import { format_monto_con_moneda, format_por_moneda } from '@/components/cobranzas/plata'
 
 /** Tope de meses seleccionables a la vez: el mismo que valida el backend (CobranzasController). */
 const MAXIMO_MESES = 24
@@ -342,7 +350,6 @@ export default {
     etiqueta_corta,
     etiqueta_larga,
     formatear_fecha,
-    format_numero,
     format_monto_con_moneda,
     format_por_moneda,
     /**
@@ -708,6 +715,15 @@ export default {
 .cobranzas-tabla-wrap {
   border: 1px solid #ededf0;
   border-radius: 0.75rem;
+  /* Ver el comentario largo equivalente en Mensualidades.vue: hallazgo del chequeo independiente
+     del 18/9/2026, mismo arreglo en las dos vistas. */
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.cobranzas-tabla {
+  overflow: visible;
+  table-layout: fixed;
 }
 
 .cobranzas-tabla-wrap--actualizando {
@@ -758,11 +774,17 @@ export default {
 /* columnas de antes de los meses (Cliente, Ingreso, Cuotas,      */
 /* Total, Pagado, Pendiente) quedan fijas a la izquierda; no hay  */
 /* columna de acciones acá, así que nada queda fijo a la derecha. */
-/* Mismo criterio que Mensualidades.vue: el fondo NO se pisa a    */
-/* mano (ver el comentario largo allá), alcanza con la posición.  */
-/* Anchos de partida (a verificar contra la app corriendo, regla  */
-/* 17/17bis — no son una medida final): Cliente 200px, Ingreso    */
-/* 90px, Cuotas 70px, Total/Pagado/Pendiente 110px cada una.      */
+/* Mismo criterio que Mensualidades.vue (ver el comentario largo  */
+/* allá): el fondo no se pisa a mano, y con `table-layout: fixed` */
+/* el `width` de acá manda de verdad — hace falta declararlo en   */
+/* TODAS las columnas, ver `.cobranzas-tabla__mes` más abajo para */
+/* las de mes. Total/Pagado/Pendiente quedaron más anchas que el  */
+/* primer intento (110px → 160px) porque un cliente con cuotas en */
+/* las dos monedas muestra algo como "USD 1.200 · ARS 500.000":   */
+/* si ni con 160px entra en una línea, pasa a dos (se sacó el     */
+/* text-nowrap de esas tres celdas en el template) antes que      */
+/* agrandar más la columna a costa de tapar meses.                */
+/* Medidas verificadas contra una reproducción real en Chromium.  */
 /* ============================================================ */
 .cobranzas-tabla th:nth-child(1),
 .cobranzas-tabla td:nth-child(1) {
@@ -789,27 +811,37 @@ export default {
 .cobranzas-tabla td:nth-child(4) {
   position: sticky;
   left: 360px;
-  width: 110px;
+  width: 160px;
 }
 
 .cobranzas-tabla th:nth-child(5),
 .cobranzas-tabla td:nth-child(5) {
   position: sticky;
-  left: 470px;
-  width: 110px;
+  left: 520px;
+  width: 160px;
 }
 
 .cobranzas-tabla th:nth-child(6),
 .cobranzas-tabla td:nth-child(6) {
   position: sticky;
-  left: 580px;
-  width: 110px;
+  left: 680px;
+  width: 160px;
+}
+
+/* Columnas de mes: no son `:nth-child` (la posición varía según cuántos meses estén
+   seleccionados), van por esta clase que el template les pone a todas por igual. Sin `position:
+   sticky`: son las que sí tienen que scrollear. Pisa el `min-width: 6.5rem` que traía
+   `.cobranzas-celda-mes` — con `table-layout: fixed` el que manda es `width`, tener los dos
+   declarados por separado en la misma celda es redundante. */
+.cobranzas-tabla__mes {
+  width: 130px;
 }
 
 @media (max-width: 575.98px) {
   /* En teléfono, mismo criterio que Mensualidades.vue: el bloque fijo completo (seis columnas)
      por sí solo ya ocupa más que el viewport y no deja ver ni un mes. Queda fija SOLO "Cliente"
-     (angosta) y el resto vuelve a scrollear junto con los meses. */
+     (angosta) y el resto vuelve a scrollear junto con los meses, en su mismo ancho de siempre
+     (alcanza con soltar el `position`, `table-layout: fixed` ya les da un ancho estable). */
   .cobranzas-tabla th:nth-child(2),
   .cobranzas-tabla td:nth-child(2),
   .cobranzas-tabla th:nth-child(3),
@@ -821,13 +853,11 @@ export default {
   .cobranzas-tabla th:nth-child(6),
   .cobranzas-tabla td:nth-child(6) {
     position: static;
-    width: auto;
   }
 
   .cobranzas-tabla th:nth-child(1),
   .cobranzas-tabla td:nth-child(1) {
     width: 110px;
-    max-width: 110px;
   }
 
   .cobranzas-tabla td:nth-child(1) .fw-semibold {
@@ -843,13 +873,11 @@ export default {
 
 /* Celdas de mes con los colores de Bootstrap para las tablas, pero aplicados a la celda y no a
    la fila: acá cada mes tiene su propio estado. `--bs-table-bg` es lo que usa `table-*`, así
-   el color pisa el de la fila (que también se pinta) sin pelearse con él. Ancho subido de
-   4.25rem a 6.5rem (pedido 6, 18/9/2026): con la moneda adelante ("ARS 500.000") el número ya
-   no entra en el ancho angosto que alcanzaba para un número pelado. */
-.cobranzas-celda-mes {
-  min-width: 6.5rem;
-}
-
+   el color pisa el de la fila (que también se pinta) sin pelearse con él. El ancho lo pone
+   `.cobranzas-tabla__mes` (130px, ver "Columnas fijas / scrolleables" más abajo) — antes de
+   `table-layout: fixed` este archivo tenía acá un `min-width: 6.5rem` para la moneda adelante
+   ("ARS 500.000"); con `fixed` el `min-width` no manda, así que se sacó para no dejar dos
+   declaraciones de ancho peleando por la misma celda. */
 .cobranzas-celda-mes--pagada {
   --bs-table-bg: #d1e7dd;
   --bs-table-accent-bg: #d1e7dd;
