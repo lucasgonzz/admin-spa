@@ -149,7 +149,7 @@
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
 import ClienteModal from '@/components/cobranzas/ClienteModal.vue'
-import { etiqueta_corta, etiqueta_larga, formatear_fecha, lista_de_meses, mes_corriente } from '@/components/cobranzas/meses'
+import { etiqueta_corta, formatear_fecha, lista_de_meses, mes_corriente } from '@/components/cobranzas/meses'
 import { format_numero, format_monto_con_moneda, format_por_moneda } from '@/components/cobranzas/plata'
 
 /**
@@ -273,7 +273,6 @@ export default {
   },
   methods: {
     etiqueta_corta,
-    etiqueta_larga,
     formatear_fecha,
     format_numero,
     format_por_moneda,
@@ -291,6 +290,11 @@ export default {
           self.clientes = Array.isArray(data.clientes) ? data.clientes : []
           if (data.rango) {
             self.rango = { desde: data.rango.desde || '', hasta: data.rango.hasta || '' }
+          }
+          // El mes corriente lo dice el backend (como en Mensualidades): "vencida" se decide con
+          // el reloj del servidor, no con el del navegador.
+          if (data.mes_corriente) {
+            self.mes_corriente_actual = String(data.mes_corriente)
           }
           self.loading = false
           self.cargado_alguna_vez = true

@@ -154,7 +154,7 @@
           </thead>
           <tbody>
             <template v-for="cuota in cuotas" :key="cuota.id">
-              <tr :class="clase_fila(cuota)">
+              <tr :class="[clase_fila(cuota), { 'licencias-fila--abierta': pago.id === cuota.id || edicion.id === cuota.id }]">
                 <td>{{ cuota.numero }}</td>
                 <td class="text-nowrap">{{ etiqueta_corta(cuota.periodo) }}</td>
                 <td class="text-nowrap">{{ cuota.vencimiento ? formatear_fecha(cuota.vencimiento) : '—' }}</td>
@@ -203,99 +203,99 @@
                   </button>
                 </td>
               </tr>
-
-              <!-- Registrar pago, inline -->
-              <tr v-if="pago.id === cuota.id">
-                <td colspan="8" class="bg-light">
-                  <div class="row g-2 align-items-end">
-                    <div class="col-6 col-md-3">
-                      <label class="form-label small mb-1">Monto pagado ({{ cuota.moneda }})</label>
-                      <input v-model="pago.form.monto_pagado" type="number" min="0" step="1" class="form-control form-control-sm" />
-                    </div>
-                    <div class="col-6 col-md-3">
-                      <label class="form-label small mb-1">Fecha de pago</label>
-                      <input v-model="pago.form.fecha_pago" type="date" class="form-control form-control-sm" />
-                    </div>
-                    <div class="col-12 col-md-4">
-                      <label class="form-label small mb-1">Observación</label>
-                      <input v-model="pago.form.observacion" type="text" class="form-control form-control-sm" placeholder="Opcional" />
-                    </div>
-                    <div class="col-12 col-md-2">
-                      <div class="form-check">
-                        <input :id="'cuota-completa-' + cuota.id" v-model="pago.form.completa" class="form-check-input" type="checkbox" />
-                        <label class="form-check-label small" :for="'cuota-completa-' + cuota.id">Cuota completa</label>
-                      </div>
-                    </div>
-                  </div>
-                  <p v-if="faltante_con_pago(cuota) > 0 && !pago.form.completa" class="text-muted small mb-0 mt-1">
-                    Quedarían pendientes {{ format_monto_con_moneda(faltante_con_pago(cuota), cuota.moneda) }}.
-                  </p>
-                  <div class="d-flex justify-content-end gap-2 mt-2">
-                    <button type="button" class="btn btn-secondary btn-sm" @click="pago.id = null">Cancelar</button>
-                    <button
-                      type="button"
-                      class="btn btn-primary btn-sm"
-                      :disabled="en_curso_id === cuota.id || pago.form.monto_pagado === '' || pago.form.monto_pagado === null"
-                      @click="registrar_pago(cuota)"
-                    >
-                      {{ en_curso_id === cuota.id ? 'Guardando...' : 'Registrar pago' }}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-
-              <!-- Edición, inline -->
-              <tr v-if="edicion.id === cuota.id">
-                <td colspan="8" class="bg-light">
-                  <div class="row g-2">
-                    <div class="col-6 col-md-2">
-                      <label class="form-label small mb-1">Moneda</label>
-                      <select v-model="edicion.form.moneda" class="form-select form-select-sm">
-                        <option value="USD">USD</option>
-                        <option value="ARS">ARS</option>
-                      </select>
-                    </div>
-                    <div class="col-6 col-md-2">
-                      <label class="form-label small mb-1">Monto</label>
-                      <input v-model="edicion.form.monto" type="number" min="0" step="1" class="form-control form-control-sm" />
-                    </div>
-                    <div class="col-6 col-md-2">
-                      <label class="form-label small mb-1">Mes</label>
-                      <input v-model="edicion.form.periodo" type="month" class="form-control form-control-sm" />
-                    </div>
-                    <div class="col-6 col-md-2">
-                      <label class="form-label small mb-1">Vencimiento</label>
-                      <input v-model="edicion.form.vencimiento" type="date" class="form-control form-control-sm" />
-                    </div>
-                    <div class="col-6 col-md-2">
-                      <label class="form-label small mb-1">Estado</label>
-                      <select v-model="edicion.form.estado" class="form-select form-select-sm">
-                        <option value="pendiente">Pendiente</option>
-                        <option value="parcial">Parcial</option>
-                        <option value="pagada">Pagada</option>
-                      </select>
-                    </div>
-                    <div class="col-12 col-md-2">
-                      <label class="form-label small mb-1">Observación</label>
-                      <input v-model="edicion.form.observacion" type="text" class="form-control form-control-sm" />
-                    </div>
-                  </div>
-                  <div class="d-flex justify-content-end gap-2 mt-2">
-                    <button type="button" class="btn btn-secondary btn-sm" @click="edicion.id = null">Cancelar</button>
-                    <button
-                      type="button"
-                      class="btn btn-primary btn-sm"
-                      :disabled="en_curso_id === cuota.id"
-                      @click="guardar_edicion(cuota)"
-                    >
-                      {{ en_curso_id === cuota.id ? 'Guardando...' : 'Guardar cambios' }}
-                    </button>
-                  </div>
-                </td>
-              </tr>
             </template>
           </tbody>
         </table>
+      </div>
+
+      <!-- Los formularios van DEBAJO de la tabla y no adentro de una fila: en teléfono la
+           tabla scrollea a lo ancho y una fila-formulario quedaba con la mitad de los campos
+           fuera de vista. Acá ocupan el ancho de la pestaña, siempre. -->
+      <!-- Registrar pago -->
+      <div v-if="cuota_del_pago" class="bg-light rounded p-2 mt-2 licencias-inline">
+        <p class="small fw-semibold mb-2">Registrar pago · cuota {{ cuota_del_pago.numero }} ({{ etiqueta_corta(cuota_del_pago.periodo) }})</p>
+        <div class="row g-2 align-items-end">
+          <div class="col-6 col-md-3">
+            <label class="form-label small mb-1">Monto pagado ({{ cuota_del_pago.moneda }})</label>
+            <input v-model="pago.form.monto_pagado" type="number" min="0" step="1" class="form-control form-control-sm" />
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label small mb-1">Fecha de pago</label>
+            <input v-model="pago.form.fecha_pago" type="date" class="form-control form-control-sm" />
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label small mb-1">Observación</label>
+            <input v-model="pago.form.observacion" type="text" class="form-control form-control-sm" placeholder="Opcional" />
+          </div>
+          <div class="col-12 col-md-2">
+            <div class="form-check">
+              <input :id="'cuota-completa-' + cuota_del_pago.id" v-model="pago.form.completa" class="form-check-input" type="checkbox" />
+              <label class="form-check-label small" :for="'cuota-completa-' + cuota_del_pago.id">Cuota completa</label>
+            </div>
+          </div>
+        </div>
+        <p v-if="faltante_con_pago(cuota_del_pago) > 0 && !pago.form.completa" class="text-muted small mb-0 mt-1">
+          Quedarían pendientes {{ format_monto_con_moneda(faltante_con_pago(cuota_del_pago), cuota_del_pago.moneda) }}.
+        </p>
+        <div class="d-flex justify-content-end gap-2 mt-2">
+          <button type="button" class="btn btn-secondary btn-sm" @click="pago.id = null">Cancelar</button>
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            :disabled="en_curso_id === cuota_del_pago.id || pago.form.monto_pagado === '' || pago.form.monto_pagado === null"
+            @click="registrar_pago(cuota_del_pago)"
+          >
+            {{ en_curso_id === cuota_del_pago.id ? 'Guardando...' : 'Registrar pago' }}
+          </button>
+        </div>
+      </div>
+      <!-- Editar -->
+      <div v-if="cuota_en_edicion" class="bg-light rounded p-2 mt-2 licencias-inline">
+        <p class="small fw-semibold mb-2">Editar · cuota {{ cuota_en_edicion.numero }} ({{ etiqueta_corta(cuota_en_edicion.periodo) }})</p>
+        <div class="row g-2">
+          <div class="col-6 col-md-2">
+            <label class="form-label small mb-1">Moneda</label>
+            <select v-model="edicion.form.moneda" class="form-select form-select-sm">
+              <option value="USD">USD</option>
+              <option value="ARS">ARS</option>
+            </select>
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label small mb-1">Monto</label>
+            <input v-model="edicion.form.monto" type="number" min="0" step="1" class="form-control form-control-sm" />
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label small mb-1">Mes</label>
+            <input v-model="edicion.form.periodo" type="month" class="form-control form-control-sm" />
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label small mb-1">Vencimiento</label>
+            <input v-model="edicion.form.vencimiento" type="date" class="form-control form-control-sm" />
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label small mb-1">Estado</label>
+            <select v-model="edicion.form.estado" class="form-select form-select-sm">
+              <option value="pendiente">Pendiente</option>
+              <option value="parcial">Parcial</option>
+              <option value="pagada">Pagada</option>
+            </select>
+          </div>
+          <div class="col-12 col-md-2">
+            <label class="form-label small mb-1">Observación</label>
+            <input v-model="edicion.form.observacion" type="text" class="form-control form-control-sm" />
+          </div>
+        </div>
+        <div class="d-flex justify-content-end gap-2 mt-2">
+          <button type="button" class="btn btn-secondary btn-sm" @click="edicion.id = null">Cancelar</button>
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            :disabled="en_curso_id === cuota_en_edicion.id"
+            @click="guardar_edicion(cuota_en_edicion)"
+          >
+            {{ en_curso_id === cuota_en_edicion.id ? 'Guardando...' : 'Guardar cambios' }}
+          </button>
+        </div>
       </div>
     </template>
   </div>
@@ -304,7 +304,7 @@
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
 import { etiqueta_corta, formatear_fecha, hoy_iso, mes_corriente, partes_de_periodo } from '@/components/cobranzas/meses'
-import { format_monto_con_moneda, format_por_moneda, format_numero } from '@/components/cobranzas/plata'
+import { format_monto_con_moneda, format_por_moneda } from '@/components/cobranzas/plata'
 
 /**
  * Pestaña "Licencias" del cliente (misión modulo-cobranzas, 18/9/2026).
@@ -356,6 +356,23 @@ export default {
     }
   },
   computed: {
+    /**
+     * La cuota cuyo formulario de pago está abierto (null si ninguno). El formulario vive
+     * debajo de la tabla, así que necesita resolver la cuota por id.
+     * @returns {Object|null}
+     */
+    cuota_del_pago() {
+      const self = this
+      return this.pago.id ? this.cuotas.find(function (c) { return c.id === self.pago.id }) || null : null
+    },
+    /**
+     * La cuota en edición (null si ninguna). Mismo motivo que `cuota_del_pago`.
+     * @returns {Object|null}
+     */
+    cuota_en_edicion() {
+      const self = this
+      return this.edicion.id ? this.cuotas.find(function (c) { return c.id === self.edicion.id }) || null : null
+    },
     /**
      * true si el contrato tiene un precio de licencia o una financiación de donde sacar cuotas.
      * @returns {boolean}
@@ -416,7 +433,6 @@ export default {
     formatear_fecha,
     format_monto_con_moneda,
     format_por_moneda,
-    format_numero,
     /**
      * Toast global del admin.
      * @param {string} message
@@ -676,7 +692,10 @@ export default {
           vencimiento: f.vencimiento || null,
           periodo: partes_de_periodo(f.periodo) ? f.periodo : null,
           observacion: f.observacion || null,
-          estado: f.estado || null,
+          /* El estado viaja solo si el operador lo cambió: sin estado explícito el backend lo
+             recalcula contra lo pagado al cambiar el monto (bajar una cuota parcial por debajo
+             de lo cobrado la deja pagada sola). Mandarlo siempre anulaba esa regla. */
+          estado: f.estado && f.estado !== cuota.estado ? f.estado : null,
         }, { silent_error: true })
         .then(function (res) {
           self.en_curso_id = null
@@ -745,6 +764,11 @@ export default {
 </script>
 
 <style scoped>
+/* La fila cuyo formulario (pago o edición) está abierto debajo de la tabla, para que se vea cuál es. */
+.licencias-fila--abierta > td:first-child {
+  box-shadow: inset 3px 0 0 #0d6efd;
+}
+
 /* Misma familia visual que la pestaña Tokens: paneles claros sin borde pesado. */
 .licencias-panel {
   background: #f7f7f8;

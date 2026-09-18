@@ -516,30 +516,31 @@
                       </button>
                     </td>
                   </tr>
-                  <!-- Pagos del mes, desplegados debajo de la fila -->
-                  <tr v-if="periodo_expandido === periodo.periodo && periodo.pagos && periodo.pagos.length">
-                    <td colspan="6" class="bg-light">
-                      <div v-for="pago in periodo.pagos" :key="pago.id" class="d-flex flex-wrap align-items-center gap-2 py-1">
-                        <span class="text-nowrap">{{ pago.fecha_pago ? formatear_fecha_corta(pago.fecha_pago) : 'Sin fecha' }}</span>
-                        <span class="fw-semibold text-nowrap">{{ pago.monto !== null && pago.monto !== undefined ? '$' + format_numero(pago.monto) : 'Sin importe' }}</span>
-                        <span v-if="pago.medio" class="text-muted">{{ pago.medio }}</span>
-                        <span v-if="pago.observacion" class="text-muted">{{ pago.observacion }}</span>
-                        <span v-if="pago.importado" class="badge text-bg-light text-muted border">Importado</span>
-                        <button
-                          type="button"
-                          class="btn btn-outline-danger btn-sm py-0 ms-auto"
-                          title="Eliminar este pago"
-                          :disabled="periodo_en_curso === periodo.periodo"
-                          @click="eliminar_pago(periodo, pago)"
-                        >
-                          <i class="bi bi-trash"></i>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
                 </template>
               </tbody>
             </table>
+          </div>
+
+          <!-- Pagos del mes desplegado, DEBAJO de la tabla y no adentro de una fila: en teléfono la
+               tabla scrollea a lo ancho y una fila-lista dejaba el tacho fuera de vista. -->
+          <div v-if="periodo_desplegado" class="bg-light rounded p-2 mt-2">
+            <p class="small fw-semibold mb-1">Pagos de {{ etiqueta_larga(periodo_desplegado.periodo) }}</p>
+            <div v-for="pago in periodo_desplegado.pagos" :key="pago.id" class="d-flex flex-wrap align-items-center gap-2 py-1">
+              <span class="text-nowrap">{{ pago.fecha_pago ? formatear_fecha_corta(pago.fecha_pago) : 'Sin fecha' }}</span>
+              <span class="fw-semibold text-nowrap">{{ pago.monto !== null && pago.monto !== undefined ? '$' + format_numero(pago.monto) : 'Sin importe' }}</span>
+              <span v-if="pago.medio" class="text-muted">{{ pago.medio }}</span>
+              <span v-if="pago.observacion" class="text-muted">{{ pago.observacion }}</span>
+              <span v-if="pago.importado" class="badge text-bg-light text-muted border">Importado</span>
+              <button
+                type="button"
+                class="btn btn-outline-danger btn-sm py-0 ms-auto"
+                title="Eliminar este pago"
+                :disabled="periodo_en_curso === periodo_desplegado.periodo"
+                @click="eliminar_pago(periodo_desplegado, pago)"
+              >
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -742,7 +743,10 @@
 import api, { admin_api_origin, resolve_error_message } from '@/utils/axios'
 import RegistrarPagoModal from '@/components/cobranzas/RegistrarPagoModal.vue'
 import EstadoMensualidadBadge from '@/components/cobranzas/EstadoMensualidadBadge.vue'
-import { etiqueta_larga, formatear_fecha, hoy_iso, mes_corriente, primer_dia_de, texto_hace_meses } from '@/components/cobranzas/meses'
+/* `formatear_fecha` de meses.js se importa con otro nombre a propósito: este componente ya tiene un
+   método `formatear_fecha` para timestamps con hora (`created_at`), y el de meses.js es para fechas
+   sin hora (`YYYY-MM-DD`), que con `new Date()` en UTC-3 corren un día. */
+import { etiqueta_larga, formatear_fecha as formatear_fecha_sin_hora, hoy_iso, mes_corriente, primer_dia_de, texto_hace_meses } from '@/components/cobranzas/meses'
 
 /**
  * Pestaña "Mensualidad" del detalle del cliente (admin-spa).
@@ -884,6 +888,19 @@ export default {
   },
   computed: {
     /**
+     * El mes cuyos pagos están desplegados (null si ninguno). La lista vive debajo de la tabla,
+     * así que se resuelve por período y no dentro del v-for.
+     * @returns {Object|null}
+     */
+    periodo_desplegado() {
+      const self = this
+      if (!this.periodo_expandido) {
+        return null
+      }
+      const periodo = this.periodos.find(function (p) { return p.periodo === self.periodo_expandido })
+      return periodo && periodo.pagos && periodo.pagos.length ? periodo : null
+    },
+    /**
      * Si el CUIT cargado tiene los 11 dígitos que ARCA necesita para responder.
      * Se cuentan solo los dígitos: el campo acepta guiones y puntos.
      * @returns {boolean}
@@ -1003,7 +1020,7 @@ export default {
      * @returns {string}
      */
     formatear_fecha_corta(fecha) {
-      return formatear_fecha(fecha)
+      return formatear_fecha_sin_hora(fecha)
     },
     /**
      * Precio opcional de un módulo en el historial: "$X" o "—" cuando la actualización lo dejó
@@ -1125,8 +1142,11 @@ export default {
           const data = res.data || {}
           self.registrando_actualizacion = false
           self.mostrar_form_actualizacion = false
+          /* Solo los precios y el total: `aplicar_snapshot` pisaría el form ENTERO y se llevaría
+             lo que el operador tenga sin guardar en la misma tarjeta ("Se cobra desde", empleados,
+             toggles, datos fiscales). Una actualización de precios cambia precios, nada más. */
           if (data.snapshot) {
-            self.aplicar_snapshot(data.snapshot)
+            self.aplicar_precios_del_snapshot(data.snapshot)
           }
           self.aplicar_actualizaciones(data)
           // Los montos esperados de los meses sin fila propia salen del total: se refrescan.
@@ -1174,7 +1194,7 @@ export default {
         return
       }
       const confirmado = window.confirm(
-        '¿Eliminar la actualización del ' + formatear_fecha(actualizacion.fecha) + '? ' +
+        '¿Eliminar la actualización del ' + formatear_fecha_sin_hora(actualizacion.fecha) + '? ' +
         'Se borra del historial; los precios actuales del cliente no cambian.'
       )
       if (!confirmado) {
@@ -1481,6 +1501,27 @@ export default {
       this.record_total_mensualidad = Number(snapshot.total_mensualidad || 0)
       /* El snapshot trae el resumen de actualización desde la misión modulo-cobranzas; un backend
          viejo no lo manda y en ese caso se conserva lo que ya hubiera. */
+      if (snapshot.actualizacion) {
+        this.resumen_actualizacion = snapshot.actualizacion
+      }
+    },
+    /**
+     * Vuelca al form SOLO los cinco precios, el total confirmado y el resumen de actualización.
+     * Es lo que corresponde después de registrar una actualización de precios: el resto del form
+     * (fecha, inicio, empleados, toggles, fiscales) puede tener ediciones sin guardar y no se toca.
+     * @param {Object} snapshot
+     * @returns {void}
+     */
+    aplicar_precios_del_snapshot(snapshot) {
+      const opcional = function (valor) {
+        return valor !== null && valor !== undefined ? Number(valor) : null
+      }
+      this.form.precio_plan = Number(snapshot.precio_plan || 0)
+      this.form.precio_por_cuenta = Number(snapshot.precio_por_cuenta || 0)
+      this.form.precio_ecommerce = opcional(snapshot.precio_ecommerce)
+      this.form.precio_mercado_libre = opcional(snapshot.precio_mercado_libre)
+      this.form.precio_tienda_nube = opcional(snapshot.precio_tienda_nube)
+      this.record_total_mensualidad = Number(snapshot.total_mensualidad || 0)
       if (snapshot.actualizacion) {
         this.resumen_actualizacion = snapshot.actualizacion
       }

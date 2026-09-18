@@ -159,8 +159,8 @@
                 <button
                   type="button"
                   class="btn btn-outline-secondary btn-sm cobranzas-accion"
-                  title="Emitir factura del mes de referencia"
-                  :disabled="hay_accion_en_curso(cliente)"
+                  :title="puede_facturar(cliente) ? 'Emitir factura del mes de referencia' : 'No se factura un mes que no aplica o todavía no llegó'"
+                  :disabled="hay_accion_en_curso(cliente) || !puede_facturar(cliente)"
                   @click="emitir_factura(cliente)"
                 >
                   <span v-if="accion_en_curso[cliente.id] === 'factura'" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
@@ -221,7 +221,10 @@ import ClienteModal from '@/components/cobranzas/ClienteModal.vue'
 import RegistrarPagoModal from '@/components/cobranzas/RegistrarPagoModal.vue'
 import EstadoMensualidadBadge from '@/components/cobranzas/EstadoMensualidadBadge.vue'
 import { etiqueta_corta, etiqueta_larga, formatear_fecha, lista_de_meses, mes_corriente, sumar_meses, texto_hace_meses } from '@/components/cobranzas/meses'
-import { format_plata, format_numero } from '@/components/cobranzas/plata'
+import { format_plata } from '@/components/cobranzas/plata'
+
+/** Tope de meses seleccionables a la vez: el mismo que valida el backend (CobranzasController). */
+const MAXIMO_MESES = 24
 
 /**
  * Cobranzas › Mensualidades (misión modulo-cobranzas, 18/9/2026).
@@ -263,6 +266,8 @@ export default {
       accion_en_curso: {},
       // Timer del debounce de guardar preferencias + recargar.
       timer_preferencias: null,
+      // Número de la última carga pedida: una respuesta vieja que llega tarde no pisa a la nueva.
+      secuencia_carga: 0,
       // true si en la ráfaga de clicks en curso cambió algún mes (hay que recargar la tabla).
       recarga_pendiente: false,
       // Estado del modal del cliente.
@@ -375,7 +380,6 @@ export default {
     formatear_fecha,
     texto_hace_meses,
     format_plata,
-    format_numero,
     /**
      * Toast global del admin.
      * @param {string} message
@@ -419,6 +423,16 @@ export default {
      * no tiene sentido. Después programa el guardado y la recarga.
      * @param {string} mes
      */
+    /**
+     * Un comprobante fiscal es irreversible: no se ofrece para un mes anterior al inicio del
+     * cliente ni para uno que todavía no llegó (la tira muestra tres meses hacia adelante).
+     * @param {Object} cliente
+     * @returns {boolean}
+     */
+    puede_facturar(cliente) {
+      const estado = this.estado_de(cliente, this.mes_referencia).estado
+      return estado !== 'futuro' && estado !== 'no_aplica'
+    },
     alternar_mes(mes) {
       const indice = this.meses_seleccionados.indexOf(mes)
       if (indice !== -1) {
@@ -427,6 +441,12 @@ export default {
         }
         this.meses_seleccionados.splice(indice, 1)
       } else {
+        // Mismo tope que el backend (422 pasado ese número): se frena acá, con aviso, y no con
+        // una tabla tapada por el error.
+        if (this.meses_seleccionados.length >= MAXIMO_MESES) {
+          this.avisar('Se pueden ver hasta ' + MAXIMO_MESES + ' meses a la vez.', 'warning')
+          return
+        }
         this.meses_seleccionados.push(mes)
       }
       this.programar_guardado(true)
@@ -505,6 +525,9 @@ export default {
      */
     cargar() {
       const self = this
+      /* Dos cargas pueden solaparse (el debounce de la tira y la recarga al cerrar el modal) y
+         llegar en orden invertido: solo la última pedida escribe en pantalla. */
+      const secuencia = ++self.secuencia_carga
       self.loading = true
       self.load_error = null
       api
@@ -513,6 +536,9 @@ export default {
           silent_error: true,
         })
         .then(function (res) {
+          if (secuencia !== self.secuencia_carga) {
+            return
+          }
           const data = res.data || {}
           self.clientes = Array.isArray(data.clientes) ? data.clientes : []
           if (data.rango) {
@@ -523,11 +549,30 @@ export default {
           }
           self.loading = false
           self.cargado_alguna_vez = true
+          self.enfocar_mes_referencia()
         })
         .catch(function (error) {
+          if (secuencia !== self.secuencia_carga) {
+            return
+          }
           self.load_error = resolve_error_message(error)
           self.loading = false
         })
+    },
+    /**
+     * Lleva la tira hasta el mes de referencia: con la planilla importada arranca en ago-2025 y
+     * en teléfono entran seis botones, así que el mes corriente quedaba fuera de vista en cada
+     * carga.
+     * @returns {void}
+     */
+    enfocar_mes_referencia() {
+      const self = this
+      this.$nextTick(function () {
+        const boton = self.$el && self.$el.querySelector ? self.$el.querySelector('.cobranzas-meses__btn--referencia') : null
+        if (boton && typeof boton.scrollIntoView === 'function') {
+          boton.scrollIntoView({ inline: 'center', block: 'nearest' })
+        }
+      })
     },
     /**
      * Rango numérico de una fila para el orden elegido, según el estado del mes de referencia.
@@ -812,9 +857,11 @@ export default {
   cursor: pointer;
 }
 
-/* La columna del mes de referencia se distingue apenas del resto: es la que manda el color. */
+/* La columna del mes de referencia se distingue apenas del resto: es la que manda el color.
+   Va por la variable de acento y no por `background-color`: la clase scoped le ganaría al
+   fondo de `table-danger`/`table-success` y la celda que decide el color quedaría gris. */
 .cobranzas-tabla__ref {
-  background-color: rgba(0, 0, 0, 0.03);
+  --bs-table-accent-bg: rgba(0, 0, 0, 0.03);
 }
 
 .cobranzas-tabla__nota {

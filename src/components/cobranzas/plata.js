@@ -29,15 +29,21 @@ export function format_plata(valor) {
 }
 
 /**
- * Monto con la moneda adelante: `USD 1.200`, `ARS 500.000`. Es la forma de las licencias, donde
- * conviven las dos monedas y un número pelado no dice nada.
+ * Monto con la moneda adelante: `USD 1.200`, `USD 666,67`, `ARS 500.000`. Es la forma de las
+ * licencias, donde conviven las dos monedas y un número pelado no dice nada.
  *
  * @param {number|string|null|undefined} valor
  * @param {string|null|undefined} moneda código de tres letras; si falta se asume USD
  * @returns {string}
  */
 export function format_monto_con_moneda(valor, moneda) {
-  return String(moneda || 'USD').toUpperCase() + ' ' + format_numero(valor)
+  /* Hasta dos decimales, y solo si los hay: las cuotas en dólares de la planilla vienen como
+     666,67 o 552,30 (una licencia dividida en partes), y redondearlas a 667 hace que las tres
+     cuotas no sumen el total que se muestra al lado. En pesos casi nunca aparecen y no molestan. */
+  const n = Number(valor || 0)
+  const tiene_centavos = Math.round(n * 100) % 100 !== 0
+  const numero = n.toLocaleString('es-AR', { minimumFractionDigits: tiene_centavos ? 2 : 0, maximumFractionDigits: 2 })
+  return String(moneda || 'USD').toUpperCase() + ' ' + numero
 }
 
 /**
