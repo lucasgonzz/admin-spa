@@ -118,6 +118,23 @@
           <label class="form-label">Fecha primer pago mensual</label>
           <input v-model="record.contract_fecha_primer_pago_mensual" type="date" class="form-control" />
         </div>
+        <!--
+          Cada cuántos meses se actualiza el precio de la mensualidad (misión modulo-cobranzas,
+          18/9/2026). Sale en el PDF reemplazando el "seis (6) meses" fijo y, cuando el lead se
+          promueve, viaja al cliente para calcular la próxima actualización oficial. El índice
+          sigue siendo el IPC: eso no se elige, es texto fijo del contrato.
+        -->
+        <div class="col-md-4">
+          <label class="form-label">Meses entre actualizaciones de precio (IPC)</label>
+          <input
+            v-model.number="record.contract_meses_actualizacion"
+            type="number"
+            min="1"
+            max="60"
+            step="1"
+            class="form-control"
+          />
+        </div>
       </div>
     </div>
 
@@ -335,6 +352,11 @@ export default {
       if (this.record.contract_perfiles_ecommerce == null || this.record.contract_perfiles_ecommerce === '') {
         this.record.contract_perfiles_ecommerce = 0
       }
+      /* Default 6: es lo que el contrato decía fijo hasta ahora ("seis (6) meses"), así un lead
+         viejo sin el campo cargado sigue generando el mismo PDF de siempre. */
+      if (this.record.contract_meses_actualizacion == null || this.record.contract_meses_actualizacion === '') {
+        this.record.contract_meses_actualizacion = 6
+      }
       this.ensure_financiacion_on_record()
       this.ensure_clausulas_on_record()
     },
@@ -450,6 +472,7 @@ export default {
         contract_perfiles_ecommerce: this.record.contract_perfiles_ecommerce,
         contract_precio_perfil_ecommerce: this.record.contract_precio_perfil_ecommerce || null,
         contract_fecha_primer_pago_mensual: this.to_date_only_for_payload(this.record.contract_fecha_primer_pago_mensual),
+        contract_meses_actualizacion: this.record.contract_meses_actualizacion,
       }
     },
     /**
