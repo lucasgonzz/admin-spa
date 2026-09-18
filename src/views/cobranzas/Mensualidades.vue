@@ -1041,9 +1041,14 @@ export default {
 /* estén seleccionados en vez de angostos y parejos.              */
 /* Medidas verificadas contra una reproducción real en Chromium   */
 /* (getBoundingClientRect antes/después de scrollear, ver informe */
-/* de esta misión): Cliente 200px, Monto mensual 110px, Empleados */
+/* de esta misión): Cliente 200px, Monto mensual 130px, Empleados */
 /* 80px, Última act. 160px, cada mes 130px, Acciones 300px (los   */
 /* cuatro botones con texto entran de a dos por fila, dos filas). */
+/* Monto mensual subió de 110 a 130px (tercera vuelta del chequeo */
+/* independiente, 18/9/2026): el header "MONTO MENSUAL" en        */
+/* mayúscula mide 116px reales y perdía la última letra contra la */
+/* columna de al lado. El `left` de las dos columnas siguientes    */
+/* está encadenado a este ancho — se corrigen las dos.             */
 /* ============================================================ */
 .cobranzas-tabla th:nth-child(1),
 .cobranzas-tabla td:nth-child(1) {
@@ -1056,20 +1061,20 @@ export default {
 .cobranzas-tabla td:nth-child(2) {
   position: sticky;
   left: 200px;
-  width: 110px;
+  width: 130px;
 }
 
 .cobranzas-tabla th:nth-child(3),
 .cobranzas-tabla td:nth-child(3) {
   position: sticky;
-  left: 310px;
+  left: 330px;
   width: 80px;
 }
 
 .cobranzas-tabla th:nth-child(4),
 .cobranzas-tabla td:nth-child(4) {
   position: sticky;
-  left: 390px;
+  left: 410px;
   width: 160px;
 }
 
@@ -1087,16 +1092,24 @@ export default {
   width: 300px;
 }
 
-@media (max-width: 575.98px) {
-  /* 🔴 Medido en la reproducción real (18/9/2026, segunda vuelta del chequeo independiente):
-     con Cliente (110px) Y Acciones (140px) fijas a la vez en un viewport de 375px, el wrapper
-     queda con ~273px útiles y entre las dos puntas fijas sobrevive una tira de apenas ~23px para
-     los meses — un hilo de color, no una columna legible. Se suelta también Acciones acá: en
-     teléfono queda fija SOLO "Cliente" (angosta, con ellipsis) y TODO el resto —Monto, Empleados,
-     Última act. Y Acciones— vuelve a scrollear junto con los meses, en su mismo ancho de siempre
-     (no hace falta tocar `width` en esas: alcanza con soltar el `position`, `table-layout: fixed`
-     ya les da un ancho estable). Así queda un mes entero visible por vez, y Acciones se alcanza
-     scrolleando hasta el final — mismo patrón que cualquier tabla angosta de celular. */
+@media (max-width: 1365.98px) {
+  /* 🔴 Tercera vuelta del chequeo independiente (18/9/2026): con datos reales sembrados, en
+     TABLET (768–1024px) el bloque fijo completo (Cliente + Monto + Empleados + Última act. +
+     Acciones ≈ 850px de "presupuesto") no le dejaba aire a NINGÚN mes — a 820px los cinco meses
+     sembrados quedaban completamente invisibles, la fila saltaba directo de "Última act." a
+     "Acciones". Este bloque (antes acotado a `max-width: 575.98px`, solo teléfono) se probó y
+     confirmó funcionando ahí — la solución más simple y más segura, dado que ya van dos vueltas
+     de números que no sobrevivieron al navegador real, es ENSANCHARLO para que cubra todo lo que
+     no sea escritorio, en vez de inventar un tercer estado intermedio sin probar. El corte queda
+     justo debajo de los ≥1366px que este proyecto usa como piso de "escritorio" (regla 17 del
+     contexto maestro): así el mismo bloque que ya funciona en 375px pasa a aplicarse también en
+     768px y en 1024px, sin ningún ancho nuevo sin verificar en el medio.
+
+     Queda fija SOLO "Cliente" (angosta, con ellipsis) y TODO el resto —Monto, Empleados, Última
+     act. y Acciones— vuelve a scrollear junto con los meses, en su mismo ancho de siempre (no
+     hace falta tocar `width` en esas: alcanza con soltar el `position`, `table-layout: fixed` ya
+     les da un ancho estable). Así queda un mes entero visible por vez en cualquier punto del
+     rango, y Acciones se alcanza scrolleando hasta el final. */
   .cobranzas-tabla th:nth-child(2),
   .cobranzas-tabla td:nth-child(2),
   .cobranzas-tabla th:nth-child(3),

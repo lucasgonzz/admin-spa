@@ -837,11 +837,16 @@ export default {
   width: 130px;
 }
 
-@media (max-width: 575.98px) {
-  /* En teléfono, mismo criterio que Mensualidades.vue: el bloque fijo completo (seis columnas)
-     por sí solo ya ocupa más que el viewport y no deja ver ni un mes. Queda fija SOLO "Cliente"
-     (angosta) y el resto vuelve a scrollear junto con los meses, en su mismo ancho de siempre
-     (alcanza con soltar el `position`, `table-layout: fixed` ya les da un ancho estable). */
+@media (max-width: 1365.98px) {
+  /* 🔴 Ensanchado de `575.98px` a `1365.98px` (tercera vuelta del chequeo independiente,
+     18/9/2026): mismo motivo que en Mensualidades.vue — en TABLET (768–1024px) el bloque de seis
+     columnas fijas (≈680-840px de "presupuesto") no dejaba aire para ningún mes (a 820px
+     "Pagado" tapaba casi entero a "Pendiente"; a 1024px, julio y agosto quedaban invisibles
+     detrás de "Pendiente"). El bloque de acá abajo ya estaba comprobado funcionando en 375px —
+     se ensancha el breakpoint para que cubra todo lo que no sea escritorio (piso ≥1366px de este
+     proyecto), en vez de inventar un tercer estado intermedio sin probar. Queda fija SOLO
+     "Cliente" (angosta) y el resto vuelve a scrollear junto con los meses, en su mismo ancho de
+     siempre (alcanza con soltar el `position`, `table-layout: fixed` ya les da un ancho estable). */
   .cobranzas-tabla th:nth-child(2),
   .cobranzas-tabla td:nth-child(2),
   .cobranzas-tabla th:nth-child(3),
