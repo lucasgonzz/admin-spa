@@ -87,15 +87,15 @@
             </div>
           </div>
 
-          <!-- Logo de la factura de mensualidad: preview + subida de un archivo nuevo -->
+          <!-- Logo de ComercioCity en el encabezado de la factura de mensualidad: preview + subida -->
           <div class="col-12">
-            <label class="form-label small mb-1 fw-semibold">Logo de factura</label>
+            <label class="form-label small mb-1 fw-semibold">Logo de ComercioCity (encabezado)</label>
             <div class="d-flex align-items-center gap-3">
               <!-- Preview del logo actual (o el default si nunca se subió uno propio) -->
               <img
                 v-if="!logo_load_error"
                 :src="logo_preview_url"
-                alt="Logo de factura"
+                alt="Logo de ComercioCity"
                 style="width: 120px; height: 120px; object-fit: contain"
                 class="border rounded"
                 @error="logo_load_error = true"
@@ -126,6 +126,10 @@
                   {{ subiendo_logo ? 'Subiendo...' : 'Subir logo' }}
                 </button>
               </div>
+            </div>
+            <div class="form-text">
+              Este logo va solo en el encabezado. El logo junto al QR ("Comprobante Autorizado")
+              es el oficial de AFIP/ARCA, es fijo y no se puede reemplazar desde acá.
             </div>
           </div>
         </div>
@@ -279,7 +283,7 @@ export default {
      */
     logo_preview_url() {
       /** Ruta pública del logo (default si la config todavía no tiene uno propio). */
-      const path = this.form.logo_path || '/afip/logo.jpg'
+      const path = this.form.logo_path || '/afip/logo_comerciocity.png'
       return admin_api_origin() + path + '?v=' + (this.logo_updated_at || '')
     },
 
