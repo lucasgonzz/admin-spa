@@ -295,6 +295,20 @@ const routes_def = [
     meta: { requiresAuth: true, nav: true, icon: 'camera-reels' },
   },
   {
+    /**
+     * Configuración de paquetes de IA (misión foto-sucursal-y-asistente-configurable, 17/9/2026):
+     * CRUD de los planes de suscripción de IA (nombre, precio USD, tope de tokens/mes y de
+     * interacciones/día, activo). Cada paquete se asigna a un cliente desde la solapa "Tokens" de
+     * su ficha y, desde ahí, se empuja a su instancia. Va junto a las otras configuraciones del
+     * admin (Configuración fiscal, Multimedia demo).
+     */
+    path: '/paquetes-ia',
+    name: 'ai_plans_config',
+    text: 'Paquetes de IA',
+    component: () => import('@/views/config/AiPlansConfig.vue'),
+    meta: { requiresAuth: true, nav: true, icon: 'boxes' },
+  },
+  {
     path: '/cuenta',
     name: 'account',
     text: 'Cuenta',
