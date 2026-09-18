@@ -82,6 +82,38 @@ const routes_def = [
     meta: { requiresAuth: true, nav: true, icon: 'cpu' },
   },
   {
+    /**
+     * Módulo Cobranzas (misión modulo-cobranzas, 18/9/2026): la planilla de administración de
+     * Lucas adentro del admin. Mensualidades (una fila por cliente, una columna por mes, con
+     * emitir factura / registrar pago / traer empleados) y Licencias (las cuotas del contrato,
+     * con pagos parciales). Va pegado a Clientes y Tokens porque es el mismo objeto mirado
+     * desde la plata que entra. Redirige a Mensualidades, que es la pantalla de entrada.
+     */
+    path: '/cobranzas',
+    name: 'cobranzas',
+    text: 'Cobranzas',
+    redirect: '/cobranzas/mensualidades',
+    meta: { requiresAuth: true, nav: true, icon: 'cash-coin' },
+    children: [
+      {
+        /** Seguimiento mes a mes de la mensualidad de cada cliente. */
+        path: '/cobranzas/mensualidades',
+        name: 'cobranzas_mensualidades',
+        text: 'Mensualidades',
+        component: () => import('@/views/cobranzas/Mensualidades.vue'),
+        meta: { requiresAuth: true, nav: false },
+      },
+      {
+        /** Cuotas de la licencia de cada cliente, con pagos parciales. */
+        path: '/cobranzas/licencias',
+        name: 'cobranzas_licencias',
+        text: 'Licencias',
+        component: () => import('@/views/cobranzas/Licencias.vue'),
+        meta: { requiresAuth: true, nav: false },
+      },
+    ],
+  },
+  {
     // Ítem padre con submenú: Sistema / Ecommerce. Redirige a Sistema por compatibilidad
     // con el link directo a "/instalaciones" que ya pueda existir.
     path: '/instalaciones',

@@ -948,16 +948,21 @@ export default {
     },
     /**
      * Meses de la tabla de pagos: los que devolvió el backend, sin los futuros (no hay nada que
-     * hacer con ellos y solo alejan el mes actual de la vista) y del más reciente al más viejo,
-     * porque lo que se viene a mirar es el mes en curso, no agosto del año pasado. Un pago por
-     * adelantado se registra igual con el botón de arriba, eligiendo el mes en el modal.
+     * hacer con ellos y solo alejan el mes actual de la vista) ni los `no_aplica` (sin mes de
+     * inicio cargado el backend devuelve un año entero de "—", que es ruido: mejor la tabla vacía
+     * con el aviso de qué cargar), y del más reciente al más viejo, porque lo que se viene a
+     * mirar es el mes en curso, no agosto del año pasado. Un pago por adelantado se registra
+     * igual con el botón de arriba, eligiendo el mes en el modal.
      * @returns {Array<Object>}
      */
     periodos_visibles() {
       const self = this
       return this.periodos
         .filter(function (periodo) {
-          return periodo && periodo.estado !== 'futuro' && periodo.periodo <= self.mes_corriente_actual
+          return periodo &&
+            periodo.estado !== 'futuro' &&
+            periodo.estado !== 'no_aplica' &&
+            periodo.periodo <= self.mes_corriente_actual
         })
         .slice()
         .sort(function (a, b) {
