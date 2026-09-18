@@ -67,7 +67,7 @@
       <!-- Las tres cifras del mes de referencia -->
       <div class="row g-2 g-md-3 mb-3">
         <div class="col-12 col-md-4">
-          <div class="card h-100 border-0 cobranzas-cifra">
+          <div class="card h-100 cobranzas-cifra cobranzas-cifra--success">
             <div class="card-body py-3">
               <p class="cobranzas-cifra__rotulo mb-1">Cobrado · {{ etiqueta_larga(mes_referencia) }}</p>
               <p class="cobranzas-cifra__valor mb-0">{{ format_plata(cifras.cobrado) }}</p>
@@ -76,7 +76,7 @@
           </div>
         </div>
         <div class="col-6 col-md-4">
-          <div class="card h-100 border-0 cobranzas-cifra">
+          <div class="card h-100 cobranzas-cifra cobranzas-cifra--danger">
             <div class="card-body py-3">
               <p class="cobranzas-cifra__rotulo mb-1">Pendientes</p>
               <p class="cobranzas-cifra__valor mb-0" :class="{ 'text-danger': cifras.pendientes > 0 }">{{ cifras.pendientes }}</p>
@@ -85,7 +85,7 @@
           </div>
         </div>
         <div class="col-6 col-md-4">
-          <div class="card h-100 border-0 cobranzas-cifra">
+          <div class="card h-100 cobranzas-cifra cobranzas-cifra--warning">
             <div class="card-body py-3">
               <p class="cobranzas-cifra__rotulo mb-1">Facturadas sin pago</p>
               <p class="cobranzas-cifra__valor mb-0" :class="{ 'text-warning-emphasis': cifras.facturadas > 0 }">{{ cifras.facturadas }}</p>
@@ -113,7 +113,7 @@
               <th class="text-end">Empleados</th>
               <th>Última act. oficial</th>
               <th v-for="mes in meses_columnas" :key="'th-' + mes" class="text-center text-nowrap" :class="{ 'cobranzas-tabla__ref': mes === mes_referencia }">
-                {{ etiqueta_corta(mes) }}
+                {{ etiqueta_larga(mes) }}
               </th>
               <th class="text-end text-nowrap">Acciones · {{ etiqueta_larga(mes_referencia) }}</th>
             </tr>
@@ -156,35 +156,47 @@
                 <estado-mensualidad-badge :estado_de="estado_de(cliente, mes)" />
               </td>
               <td class="text-end text-nowrap" @click.stop>
-                <button
-                  type="button"
-                  class="btn btn-outline-secondary btn-sm cobranzas-accion"
-                  :title="puede_facturar(cliente) ? 'Emitir factura del mes de referencia' : 'No se factura un mes que no aplica o todavía no llegó'"
-                  :disabled="hay_accion_en_curso(cliente) || !puede_facturar(cliente)"
-                  @click="emitir_factura(cliente)"
-                >
-                  <span v-if="accion_en_curso[cliente.id] === 'factura'" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-                  <i v-else class="bi bi-receipt"></i>
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-outline-secondary btn-sm cobranzas-accion ms-1"
-                  title="Registrar pago del mes de referencia"
-                  :disabled="hay_accion_en_curso(cliente)"
-                  @click="abrir_registrar_pago(cliente)"
-                >
-                  <i class="bi bi-cash-coin"></i>
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-outline-secondary btn-sm cobranzas-accion ms-1"
-                  title="Traer la cantidad de empleados del sistema del cliente"
-                  :disabled="hay_accion_en_curso(cliente)"
-                  @click="traer_empleados(cliente)"
-                >
-                  <span v-if="accion_en_curso[cliente.id] === 'empleados'" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-                  <i v-else class="bi bi-people"></i>
-                </button>
+                <div class="d-flex flex-wrap gap-1 justify-content-end cobranzas-acciones">
+                  <button
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm cobranzas-accion"
+                    :title="puede_facturar(cliente) ? 'Emitir factura del mes de referencia' : 'No se factura un mes que no aplica o todavía no llegó'"
+                    :disabled="hay_accion_en_curso(cliente) || !puede_facturar(cliente)"
+                    @click="emitir_factura(cliente)"
+                  >
+                    <span v-if="accion_en_curso[cliente.id] === 'factura'" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                    <template v-else><i class="bi bi-receipt me-1"></i>Emitir factura</template>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm cobranzas-accion"
+                    title="Registrar pago del mes de referencia"
+                    :disabled="hay_accion_en_curso(cliente)"
+                    @click="abrir_registrar_pago(cliente)"
+                  >
+                    <i class="bi bi-cash-coin me-1"></i>Registrar pago
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm cobranzas-accion"
+                    title="Traer la cantidad de empleados del sistema del cliente"
+                    :disabled="hay_accion_en_curso(cliente)"
+                    @click="traer_empleados(cliente)"
+                  >
+                    <span v-if="accion_en_curso[cliente.id] === 'empleados'" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                    <template v-else><i class="bi bi-people me-1"></i>Traer empleados</template>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm cobranzas-accion"
+                    :title="factura_de_referencia(cliente) ? 'Enviar por WhatsApp la factura de ' + etiqueta_larga(mes_referencia) : 'Todavía no hay factura de este mes para enviar'"
+                    :disabled="hay_accion_en_curso(cliente) || !factura_de_referencia(cliente)"
+                    @click="enviar_por_whatsapp(cliente)"
+                  >
+                    <span v-if="accion_en_curso[cliente.id] === 'whatsapp'" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                    <template v-else><i class="bi bi-whatsapp me-1"></i>Enviar WhatsApp</template>
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -216,7 +228,7 @@
 </template>
 
 <script>
-import api, { resolve_error_message } from '@/utils/axios'
+import api, { admin_api_origin, resolve_error_message } from '@/utils/axios'
 import ClienteModal from '@/components/cobranzas/ClienteModal.vue'
 import RegistrarPagoModal from '@/components/cobranzas/RegistrarPagoModal.vue'
 import EstadoMensualidadBadge from '@/components/cobranzas/EstadoMensualidadBadge.vue'
@@ -754,6 +766,69 @@ export default {
           self.avisar(resolve_error_message(error), 'danger')
         })
     },
+    /**
+     * La factura del mes de referencia de este cliente, o null si todavía no se facturó (o el
+     * backend no mandó estado para ese mes). Fuente única para habilitar "Enviar WhatsApp" y para
+     * sacar el `invoiceId` al clickearlo: así el botón y la acción nunca se desincronizan sobre
+     * qué factura están mirando.
+     * @param {Object} cliente
+     * @returns {Object|null} `{id, cbte_numero, punto_venta, cae}` o null
+     */
+    factura_de_referencia(cliente) {
+      const estado = this.estado_de(cliente, this.mes_referencia)
+      return estado && estado.factura ? estado.factura : null
+    },
+    /**
+     * "Enviar WhatsApp" de la factura del mes de referencia (pedido 10). A diferencia de "Ver PDF"
+     * (que usa un token de un solo uso, `pdf-access-token` + `pdf-view`), acá se pide un link
+     * PÚBLICO Y DURABLE (`link-whatsapp` + `pdf-publico`): se puede reabrir después, desde
+     * cualquier dispositivo — es justo lo que hace falta para mandarlo por WhatsApp, donde el
+     * cliente lo abre más tarde y no en el momento del click.
+     *
+     * Normaliza el teléfono al mismo criterio que `build_whatsapp_href()` de CloserLeadCard.vue
+     * (solo dígitos): no se reinventa esa regla acá.
+     * @param {Object} cliente
+     */
+    enviar_por_whatsapp(cliente) {
+      const self = this
+      if (this.hay_accion_en_curso(cliente)) {
+        return
+      }
+      const factura = this.factura_de_referencia(cliente)
+      if (!factura) {
+        return
+      }
+      const digitos = String(cliente.phone || '').replace(/\D/g, '')
+      if (!digitos) {
+        self.avisar('Este cliente no tiene teléfono cargado.', 'warning')
+        return
+      }
+      self.marcar_accion(cliente, 'whatsapp')
+      api
+        .post('/client/' + cliente.id + '/factura/' + factura.id + '/link-whatsapp', {}, { silent_error: true })
+        .then(function (res) {
+          self.marcar_accion(cliente, null)
+          const token = res.data && res.data.token
+          if (!token) {
+            self.avisar('No se pudo generar el link de la factura.', 'danger')
+            return
+          }
+          // Ruta pública registrada fuera del grupo `admin` (sin Sanctum), igual criterio que
+          // `pdf-view` en MensualidadTab.vue: se arma con `admin_api_origin()` porque no vive
+          // bajo el prefijo /api/admin del cliente axios compartido.
+          const url_pdf =
+            admin_api_origin() +
+            '/api/client/' + cliente.id +
+            '/factura/' + factura.id +
+            '/pdf-publico/' + token
+          const mensaje = 'Hola, te acercamos la factura del mes de ' + etiqueta_larga(self.mes_referencia) + ': ' + url_pdf
+          window.open('https://wa.me/' + digitos + '?text=' + encodeURIComponent(mensaje), '_blank')
+        })
+        .catch(function (error) {
+          self.marcar_accion(cliente, null)
+          self.avisar(resolve_error_message(error), 'danger')
+        })
+    },
   },
 }
 </script>
@@ -803,9 +878,28 @@ export default {
   color: #212529;
 }
 
+/* Contraste de las tarjetas (pedido 1, 18/9/2026): cada una toma el color semántico que ya usa
+   el resto del módulo para ese mismo concepto (filas de la tabla, EstadoMensualidadBadge) — las
+   variables `subtle` de Bootstrap 5.3 en vez de hex propios, para consistencia gratis con el
+   resto del admin y con los mismos badges de este módulo. */
 .cobranzas-cifra {
-  background: #f7f7f8;
   border-radius: 0.75rem;
+  border: 1px solid transparent;
+}
+
+.cobranzas-cifra--success {
+  background-color: var(--bs-success-bg-subtle);
+  border-color: var(--bs-success-border-subtle);
+}
+
+.cobranzas-cifra--danger {
+  background-color: var(--bs-danger-bg-subtle);
+  border-color: var(--bs-danger-border-subtle);
+}
+
+.cobranzas-cifra--warning {
+  background-color: var(--bs-warning-bg-subtle);
+  border-color: var(--bs-warning-border-subtle);
 }
 
 .cobranzas-cifra__rotulo {
@@ -839,11 +933,14 @@ export default {
   transition: opacity 0.15s ease-out;
 }
 
+/* Headers con más contraste (pedido 2, 18/9/2026): el fondo #444 sale de la regla global
+   `.table > thead > tr > th` de _app.sass (no se toca, es de TODO el admin); acá lo que se
+   arregla es el gris de bajo contraste que este archivo le pisaba encima con `color`. */
 .cobranzas-tabla th {
-  font-size: 0.7rem;
+  font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: #8a8a8f;
+  color: #fff;
   font-weight: 600;
   border-bottom-width: 1px;
   white-space: nowrap;
@@ -869,10 +966,112 @@ export default {
   color: #8a8a8f;
 }
 
+/* ============================================================ */
+/* Columnas fijas / scrolleables (pedido 5, 18/9/2026). Las      */
+/* cuatro columnas de antes de los meses quedan fijas a la       */
+/* izquierda, y Acciones fija a la derecha (va después de los    */
+/* meses en el DOM); solo los meses scrollean dentro de          */
+/* `.table-responsive`. El fondo NO se pisa a mano: cada celda ya */
+/* tiene `background-color: var(--bs-table-bg)` por la regla de  */
+/* Bootstrap, y esa variable la setea `table-success`/`-warning`/ */
+/* `-danger` puesta en el <tr> (`clase_fila`) — hereda hacia las  */
+/* celdas hijas aunque no tengan la clase puesta directamente.    */
+/* Alcanza con la posición + el ancho para que el `left` de cada  */
+/* una sea estable.                                               */
+/* Anchos de partida (a verificar contra la app corriendo, regla  */
+/* 17/17bis — no son una medida final): Cliente 200px, Monto      */
+/* mensual 110px, Empleados 80px, Última act. 150px.               */
+/* ============================================================ */
+.cobranzas-tabla th:nth-child(1),
+.cobranzas-tabla td:nth-child(1) {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  width: 200px;
+}
+
+.cobranzas-tabla th:nth-child(2),
+.cobranzas-tabla td:nth-child(2) {
+  position: sticky;
+  left: 200px;
+  z-index: 2;
+  width: 110px;
+}
+
+.cobranzas-tabla th:nth-child(3),
+.cobranzas-tabla td:nth-child(3) {
+  position: sticky;
+  left: 310px;
+  z-index: 2;
+  width: 80px;
+}
+
+.cobranzas-tabla th:nth-child(4),
+.cobranzas-tabla td:nth-child(4) {
+  position: sticky;
+  left: 390px;
+  z-index: 2;
+  width: 150px;
+}
+
+.cobranzas-tabla th:last-child,
+.cobranzas-tabla td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+}
+
+/* El header va por encima de cualquier celda fija del body (no debería notarse, esta tabla no
+   scrollea verticalmente sola, pero es la regla correcta si alguna vez lo hiciera). */
+.cobranzas-tabla thead th {
+  z-index: 3;
+}
+
+@media (max-width: 575.98px) {
+  /* En teléfono el bloque fijo completo (4 columnas + Acciones) por sí solo ya ocupa más que el
+     viewport y no deja ver ni un mes: queda fija SOLO "Cliente" (angosta, con ellipsis) y el
+     resto de las columnas hoy-fijas-en-desktop vuelve a scrollear junto con los meses. Acciones
+     se mantiene fija a la derecha pero con los botones apilados (ver `.cobranzas-acciones` más
+     abajo) para ocupar menos ancho. */
+  .cobranzas-tabla th:nth-child(2),
+  .cobranzas-tabla td:nth-child(2),
+  .cobranzas-tabla th:nth-child(3),
+  .cobranzas-tabla td:nth-child(3),
+  .cobranzas-tabla th:nth-child(4),
+  .cobranzas-tabla td:nth-child(4) {
+    position: static;
+    width: auto;
+  }
+
+  .cobranzas-tabla th:nth-child(1),
+  .cobranzas-tabla td:nth-child(1) {
+    width: 110px;
+    max-width: 110px;
+  }
+
+  .cobranzas-tabla td:nth-child(1) .fw-semibold {
+    display: inline-block;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+  }
+}
+
+/* Botones ícono + texto (pedido 8): ya no son cuadrados de ancho fijo como cuando eran
+   ícono-solo, fluyen con el contenido. El contenedor `.cobranzas-acciones` (flex-wrap) evita
+   que los cuatro se claven en una sola línea angosta. */
 .cobranzas-accion {
-  width: 2rem;
-  padding-left: 0;
-  padding-right: 0;
+  white-space: nowrap;
+}
+
+@media (max-width: 575.98px) {
+  .cobranzas-acciones {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 @media (max-width: 575.98px) {
