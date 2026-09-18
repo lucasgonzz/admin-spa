@@ -352,6 +352,11 @@ export default {
       if (this.record.contract_perfiles_ecommerce == null || this.record.contract_perfiles_ecommerce === '') {
         this.record.contract_perfiles_ecommerce = 0
       }
+      /* Default 15000: precio vigente de la cuenta/usuario extra (comercial/proceso_comercial.md).
+         Brisa lo puede sobreescribir a mano si un cliente puntual negocia otro valor. */
+      if (!this.record.contract_precio_usuario_extra) {
+        this.record.contract_precio_usuario_extra = '15000'
+      }
       /* Default 6: es lo que el contrato decía fijo hasta ahora ("seis (6) meses"), así un lead
          viejo sin el campo cargado sigue generando el mismo PDF de siempre. */
       if (this.record.contract_meses_actualizacion == null || this.record.contract_meses_actualizacion === '') {

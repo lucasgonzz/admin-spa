@@ -360,7 +360,8 @@ export default {
         contract_mensualidad_base: '',
         contract_usuarios_incluidos: 1,
         contract_usuarios_extra: 0,
-        contract_precio_usuario_extra: '',
+        // $15.000 es el precio vigente de la cuenta/usuario extra (comercial/proceso_comercial.md).
+        contract_precio_usuario_extra: '15000',
         contract_perfiles_ecommerce: 0,
         contract_precio_perfil_ecommerce: '',
         contract_fecha_primer_pago_mensual: '',
