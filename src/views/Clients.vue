@@ -15,6 +15,7 @@ import ContratoTab from '@/components/client/ContratoTab.vue'
 import LicenciasTab from '@/components/client/LicenciasTab.vue'
 import ClientScheduleTab from '@/components/client/ScheduleTab.vue'
 import ClientTokensTab from '@/components/client/TokensTab.vue'
+import ClientCandadoSesionTab from '@/components/client/CandadoSesionTab.vue'
 
 /**
  * Vista principal de clientes.
@@ -72,6 +73,14 @@ export default {
           key: 'tokens',
           label: 'Tokens',
           component: markRaw(ClientTokensTab),
+        },
+        {
+          /* Candado de sesión por pestaña (misión candado-sesion-por-pestana, 19/9/2026): mismo
+             criterio que Horarios y Tokens (pestaña propia porque hay un push a empresa-api y un
+             estado de sincronización para mostrar), no un checkbox más del formulario genérico. */
+          key: 'candado-sesion',
+          label: 'Candado de sesión',
+          component: markRaw(ClientCandadoSesionTab),
         },
       ],
     }
