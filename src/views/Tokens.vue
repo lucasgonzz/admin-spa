@@ -286,6 +286,7 @@
 
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
+import { nombre_proveedor } from '@/utils/ia'
 
 /**
  * Pantalla "Tokens": el consumo de IA de TODOS los clientes juntos.
@@ -575,13 +576,13 @@ export default {
       return total
     },
     /**
-     * Nombre humano de un proveedor. Un proveedor que no se conoce se muestra tal cual llegó.
+     * Nombre humano de un proveedor: el mapa compartido de `@/utils/ia`, expuesto como método
+     * para que el template lo pueda llamar. Es el mismo que usa la solapa de la ficha.
      * @param {string} proveedor
      * @returns {string}
      */
     nombre_proveedor(proveedor) {
-      const nombres = { anthropic: 'Claude', deepseek: 'DeepSeek', openai: 'OpenAI' }
-      return nombres[String(proveedor || '')] || String(proveedor || '')
+      return nombre_proveedor(proveedor)
     },
     /**
      * Alto de la barra de un día, como porcentaje del día más alto de la serie.

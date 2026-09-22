@@ -453,6 +453,7 @@
 
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
+import { nombre_proveedor, nombre_pensamiento } from '@/utils/ia'
 
 /**
  * Pestaña "Tokens" del detalle del cliente (admin-spa).
@@ -953,23 +954,21 @@ export default {
       return this.modelos_de(fila).length > 0
     },
     /**
-     * Nombre humano de un proveedor. Un proveedor que no se conoce se muestra tal cual llegó: es
-     * más honesto que esconderlo, y el id sigue siendo legible.
+     * Nombre humano de un proveedor: el mapa compartido de `@/utils/ia`, expuesto como método
+     * para que el template lo pueda llamar.
      * @param {string} proveedor
      * @returns {string}
      */
     nombre_proveedor(proveedor) {
-      const nombres = { anthropic: 'Claude', deepseek: 'DeepSeek', openai: 'OpenAI' }
-      return nombres[String(proveedor || '')] || String(proveedor || '')
+      return nombre_proveedor(proveedor)
     },
     /**
-     * Nombre humano del nivel de pensamiento, con el mismo criterio para lo desconocido.
+     * Nombre humano del nivel de pensamiento, del mismo mapa compartido.
      * @param {string} pensamiento
      * @returns {string}
      */
     nombre_pensamiento(pensamiento) {
-      const nombres = { agil: 'Ágil', equilibrado: 'Equilibrado', profundo: 'Profundo' }
-      return nombres[String(pensamiento || '')] || String(pensamiento || '')
+      return nombre_pensamiento(pensamiento)
     },
     /**
      * Alto de la barra de un día, como porcentaje del día más alto de la serie.
