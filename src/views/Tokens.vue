@@ -114,7 +114,7 @@
         </div>
       </div>
 
-      <div class="row g-3">
+      <div class="row g-3 mb-4">
         <!-- ========================================================== -->
         <!-- El ranking, que es el dato operativo de esta pantalla: con -->
         <!-- cuarenta y cinco clientes el gasto no se reparte parejo, y -->
@@ -195,6 +195,91 @@
           </div>
         </div>
       </div>
+
+      <!-- ============================================================ -->
+      <!-- Los dos paneles de proveedores-ia-deepseek (22/9/2026): en   -->
+      <!-- qué modelo se va la plata de toda la plataforma, y cuántos   -->
+      <!-- clientes eligieron cada inteligencia. Con un admin-api       -->
+      <!-- anterior las dos claves no vienen y los paneles quedan en    -->
+      <!-- "sin datos", sin romper nada.                                -->
+      <!-- ============================================================ -->
+      <div class="row g-3">
+        <div class="col-12 col-lg-7">
+          <div class="card border-0 tokens-panel h-100">
+            <div class="card-body">
+              <p class="tokens-panel__titulo mb-3">Por modelo</p>
+
+              <p v-if="por_modelo.length === 0" class="text-muted small fst-italic mb-0">
+                Sin datos.
+              </p>
+
+              <div v-else class="table-responsive">
+                <table class="table table-sm align-middle mb-0 tokens-tabla">
+                  <thead>
+                    <tr>
+                      <th>Modelo</th>
+                      <th class="text-end">Llamadas</th>
+                      <th class="text-end">Tokens</th>
+                      <th class="text-end">Costo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="fila in por_modelo" :key="fila.modelo + '|' + fila.proveedor">
+                      <td>
+                        <!-- Proveedor y modelo en dos renglones: a 360px un id como
+                             `deepseek-v4-pro` al lado del nombre del proveedor no entra. -->
+                        <span class="tokens-tabla__nota d-block">{{ nombre_proveedor(fila.proveedor) }}</span>
+                        <code class="tokens-tabla__modelo">{{ fila.modelo || '(sin modelo)' }}</code>
+                      </td>
+                      <td class="text-end">{{ numero(fila.llamadas) }}</td>
+                      <td class="text-end">{{ numero(fila.tokens) }}</td>
+                      <td class="text-end">
+                        <span v-if="fila.tiene_precio">{{ costo_visible(fila.costo_usd) }}</span>
+                        <span v-else class="tokens-tabla__nota">sin precio cargado</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cuántos clientes ACTIVOS eligieron cada proveedor, según lo que informó cada uno
+             en su última recolección. "Sin informar" son los que todavía corren una versión
+             que no manda la configuración: NO es "eligieron Claude". -->
+        <div class="col-12 col-lg-5">
+          <div class="card border-0 tokens-panel h-100">
+            <div class="card-body">
+              <p class="tokens-panel__titulo mb-3">Clientes por proveedor</p>
+
+              <div class="row g-2">
+                <div class="col-4">
+                  <p class="tokens-cifra__rotulo mb-1">Claude</p>
+                  <p class="tokens-proveedor__valor mb-0">{{ numero(clientes_claude) }}</p>
+                </div>
+                <div class="col-4">
+                  <p class="tokens-cifra__rotulo mb-1">DeepSeek</p>
+                  <p class="tokens-proveedor__valor mb-0">{{ numero(clientes_deepseek) }}</p>
+                </div>
+                <div class="col-4">
+                  <p class="tokens-cifra__rotulo mb-1">Sin informar</p>
+                  <p class="tokens-proveedor__valor mb-0">{{ numero(clientes_sin_informar) }}</p>
+                </div>
+              </div>
+
+              <p v-if="clientes_otros.length > 0" class="tokens-tabla__nota mb-0 mt-2">
+                Además: {{ clientes_otros_texto }}.
+              </p>
+
+              <p class="tokens-tabla__nota mb-0 mt-3">
+                Solo clientes activos. "Sin informar" es el que todavía corre una versión que no
+                manda qué modelo usa; no es que eligió Claude.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -206,7 +291,9 @@ import api, { resolve_error_message } from '@/utils/axios'
  * Pantalla "Tokens": el consumo de IA de TODOS los clientes juntos.
  *
  * Es la otra mitad de lo que pidió Lucas: la pestaña de la ficha contesta "cuánto gastó este
- * cliente" y esto contesta "cuánto estamos gastando, y quién se lo lleva".
+ * cliente" y esto contesta "cuánto estamos gastando, y quién se lo lleva". Desde la misión
+ * proveedores-ia-deepseek (22/9/2026) también contesta "en qué modelo se va" y "cuántos clientes
+ * eligieron cada proveedor".
  *
  * Lee de `GET admin/tokens/resumen`, que sale del espejo local del admin: no le pega a ninguna
  * instancia de cliente, así que abrir esta pantalla no depende de que los cuarenta y cinco
@@ -250,6 +337,13 @@ export default {
       por_cliente: [],
       // Desglose por acción, ya ordenado por costo desde el backend.
       por_proceso: [],
+      // Desglose por modelo de toda la plataforma, con `tiene_precio` resuelto por el backend.
+      por_modelo: [],
+      /*
+       * Cuántos clientes activos eligieron cada proveedor: [{ proveedor, clientes }], con
+       * `proveedor: null` para los que todavía no informan (versión anterior del sistema).
+       */
+      clientes_por_proveedor: [],
       atajos: [
         { dias: 7, label: '7 días' },
         { dias: 30, label: '30 días' },
@@ -338,6 +432,50 @@ export default {
         })
         .join(', ')
     },
+    /**
+     * Clientes que eligieron Claude (proveedor `anthropic`).
+     * @returns {number}
+     */
+    clientes_claude() {
+      return this.clientes_de('anthropic')
+    },
+    /**
+     * Clientes que eligieron DeepSeek.
+     * @returns {number}
+     */
+    clientes_deepseek() {
+      return this.clientes_de('deepseek')
+    },
+    /**
+     * Clientes que todavía no informan qué modelo usan (proveedor null).
+     * @returns {number}
+     */
+    clientes_sin_informar() {
+      return this.clientes_de(null)
+    },
+    /**
+     * Proveedores que no son ninguno de los tres esperados, si el backend informara alguno. No
+     * debería pasar, pero si pasa se muestra en vez de perderse: un total que no cierra sin
+     * explicación es peor que un renglón de más.
+     * @returns {Array<Object>}
+     */
+    clientes_otros() {
+      return this.clientes_por_proveedor.filter(function (fila) {
+        return fila.proveedor !== null && fila.proveedor !== 'anthropic' && fila.proveedor !== 'deepseek'
+      })
+    },
+    /**
+     * Los proveedores inesperados, listos para meter en una frase.
+     * @returns {string}
+     */
+    clientes_otros_texto() {
+      const self = this
+      return this.clientes_otros
+        .map(function (fila) {
+          return self.numero(fila.clientes) + ' con ' + self.nombre_proveedor(fila.proveedor)
+        })
+        .join(', ')
+    },
   },
   mounted() {
     this.elegir_atajo(30)
@@ -406,6 +544,12 @@ export default {
           self.por_dia = Array.isArray(cuerpo.por_dia) ? cuerpo.por_dia : []
           self.por_cliente = Array.isArray(cuerpo.por_cliente) ? cuerpo.por_cliente : []
           self.por_proceso = Array.isArray(cuerpo.por_proceso) ? cuerpo.por_proceso : []
+          /* Las dos claves de proveedores-ia-deepseek. Un admin-api anterior no las manda: los
+             paneles quedan en "sin datos" y en cero, sin romper nada. */
+          self.por_modelo = Array.isArray(cuerpo.por_modelo) ? cuerpo.por_modelo : []
+          self.clientes_por_proveedor = Array.isArray(cuerpo.clientes_por_proveedor)
+            ? cuerpo.clientes_por_proveedor
+            : []
           self.loading = false
           self.cargado_alguna_vez = true
         })
@@ -413,6 +557,31 @@ export default {
           self.load_error = resolve_error_message(error)
           self.loading = false
         })
+    },
+    /**
+     * Cuántos clientes informaron un proveedor dado (null = los que no informan). Suma por si el
+     * backend mandara la misma clave dos veces, que no debería, pero sumar es más honesto que
+     * quedarse con la primera.
+     * @param {string|null} proveedor
+     * @returns {number}
+     */
+    clientes_de(proveedor) {
+      let total = 0
+      this.clientes_por_proveedor.forEach(function (fila) {
+        if (fila.proveedor === proveedor) {
+          total += Number(fila.clientes || 0)
+        }
+      })
+      return total
+    },
+    /**
+     * Nombre humano de un proveedor. Un proveedor que no se conoce se muestra tal cual llegó.
+     * @param {string} proveedor
+     * @returns {string}
+     */
+    nombre_proveedor(proveedor) {
+      const nombres = { anthropic: 'Claude', deepseek: 'DeepSeek', openai: 'OpenAI' }
+      return nombres[String(proveedor || '')] || String(proveedor || '')
     },
     /**
      * Alto de la barra de un día, como porcentaje del día más alto de la serie.
@@ -622,9 +791,32 @@ export default {
   color: #8a8a8f;
 }
 
+/* El id del modelo en `code`: es un identificador, no una palabra, y así se distingue del nombre
+   humano del proveedor que va arriba. Mismo tono que en la pestaña del cliente. */
+.tokens-tabla__modelo {
+  font-size: 0.8em;
+  color: #1f1f24;
+  background: #f2f2f4;
+  border-radius: 3px;
+  padding: 0.05rem 0.3rem;
+}
+
+/* Las tres cifras de "Clientes por proveedor": más chicas que las tarjetas del total (son un
+   conteo, no la plata) pero con el mismo peso, para que se lean de un vistazo. */
+.tokens-proveedor__valor {
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
 @media (max-width: 575.98px) {
   .tokens-cifra__valor {
     font-size: 1.4rem;
+  }
+
+  .tokens-proveedor__valor {
+    font-size: 1.25rem;
   }
 
   .tokens-serie__pista {
