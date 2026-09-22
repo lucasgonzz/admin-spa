@@ -358,10 +358,17 @@
                       <td class="text-end">{{ numero(fila.tokens) }}</td>
                       <td class="text-end">
                         <!-- Sin corte por modelo: guion. Con corte pero un modelo sin precio: se
-                             dice. Con todo: la plata. -->
+                             dice. Con todo: la plata. Y si el corte por modelo no cubre todas las
+                             llamadas de la persona, el importe es PARCIAL y se dice cuántas cubre:
+                             sin eso, US$ 0,60 al lado de 3M tokens se lee como el total. -->
                         <span v-if="!tiene_modelos(fila)">—</span>
-                        <span v-else-if="fila.tiene_precio_completo">{{ costo_visible(fila.costo_usd) }}</span>
-                        <span v-else class="tokens-tabla__nota">sin precio cargado</span>
+                        <template v-else>
+                          <span v-if="tiene_costo(fila)">{{ costo_visible(fila.costo_usd) }}</span>
+                          <span v-else class="tokens-tabla__nota">sin precio cargado</span>
+                          <span v-if="fila.cobertura_parcial" class="tokens-tabla__nota d-block">
+                            (parcial: {{ numero(fila.llamadas_costeadas) }} de {{ numero(fila.llamadas) }} llamadas)
+                          </span>
+                        </template>
                       </td>
                     </tr>
                     <tr
@@ -394,6 +401,13 @@
             <p v-else class="tokens-tabla__nota mb-0 mt-2">
               Este corte va en tokens, no en dólares: el sistema del cliente no informa con qué
               modelo gastó cada persona, y sin el modelo no hay precio que aplicar.
+            </p>
+            <!-- El caso real del mes posterior a que el cliente se actualiza: el corte por persona
+                 ya cubre los 30 días y el corte por modelo recién los últimos. -->
+            <p v-if="hay_cobertura_parcial" class="tokens-tabla__nota mb-0 mt-1">
+              Hay personas con plata parcial: el corte por modelo empezó a llegar después que el
+              corte por persona. Se completa solo con la recolección nocturna, o ahora con Traer
+              ahora.
             </p>
           </div>
         </div>
@@ -520,8 +534,10 @@ export default {
       /*
        * Desglose por persona, ya plegado y ordenado por el backend. Cada fila trae `costo_usd`
        * (null si el cliente no informa el corte por modelo o si algún modelo no tiene precio),
-       * `tiene_precio_completo` y `modelos[]` con el desglose (vacío para un cliente de versión
-       * anterior). Ver el panel "Por persona".
+       * `modelos[]` con el desglose (vacío para un cliente de versión anterior),
+       * `cobertura_parcial` + `llamadas_costeadas` (cuando el corte por modelo no cubre todas las
+       * llamadas del corte por persona) y `tiene_precio_completo` (true solo cuando la plata es
+       * toda la verdad). Ver el panel "Por persona".
        */
       por_persona: [],
       /*
@@ -659,6 +675,16 @@ export default {
           return String(modelo || '').trim() === '' ? '(sin modelo)' : String(modelo)
         })
         .join(', ')
+    },
+    /**
+     * true si alguna persona tiene la plata parcial (el corte por modelo no cubre todas sus
+     * llamadas): dispara la línea del pie que explica por qué y cómo se completa.
+     * @returns {boolean}
+     */
+    hay_cobertura_parcial() {
+      return this.por_persona.some(function (fila) {
+        return fila.cobertura_parcial === true
+      })
     },
     /**
      * Texto de la línea de estado de la recolección.
@@ -952,6 +978,17 @@ export default {
      */
     tiene_modelos(fila) {
       return this.modelos_de(fila).length > 0
+    },
+    /**
+     * true si la persona tiene un importe para mostrar. El backend deja `costo_usd` en null
+     * cuando algún modelo no tiene precio, así que esto no se deduce de `tiene_precio_completo`
+     * —que también se apaga por cobertura parcial, y en ese caso el importe SÍ se muestra, con
+     * la nota de cuántas llamadas cubre.
+     * @param {Object} fila
+     * @returns {boolean}
+     */
+    tiene_costo(fila) {
+      return fila.costo_usd !== null && fila.costo_usd !== undefined
     },
     /**
      * Nombre humano de un proveedor: el mapa compartido de `@/utils/ia`, expuesto como método
