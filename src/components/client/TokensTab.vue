@@ -93,6 +93,29 @@
 
     <div v-else class="tokens-cuerpo">
       <!-- ============================================================ -->
+      <!-- Qué inteligencia eligió el dueño (misión proveedores-ia-     -->
+      <!-- deepseek, 22/9/2026). Es la foto de la última recolección,   -->
+      <!-- no depende del rango, y por eso va arriba del período.       -->
+      <!--                                                              -->
+      <!-- 🔴 Un cliente con la versión anterior no informa nada y se   -->
+      <!-- dice con todas las letras: null NO se muestra como "Claude", -->
+      <!-- porque adivinar el default del sistema del cliente desde     -->
+      <!-- acá sería inventar un dato.                                  -->
+      <!-- ============================================================ -->
+      <p class="tokens-config mb-4">
+        <span class="tokens-config__rotulo">Modelo elegido:</span>
+        <template v-if="configuracion.proveedor">
+          <span class="tokens-config__valor">
+            {{ nombre_proveedor(configuracion.proveedor) }}<template v-if="configuracion.pensamiento"> · {{ nombre_pensamiento(configuracion.pensamiento) }}</template>
+          </span>
+          <span v-if="configuracion.modelo" class="tokens-config__modelo">(<code>{{ configuracion.modelo }}</code>)</span>
+        </template>
+        <span v-else class="tokens-config__vacio">
+          Todavía no informó qué modelo usa (versión anterior del sistema).
+        </span>
+      </p>
+
+      <!-- ============================================================ -->
       <!-- Rango del período. Los tres atajos cubren el 99% de las      -->
       <!-- consultas; las fechas a mano quedan para el caso puntual.    -->
       <!-- ============================================================ -->
@@ -287,12 +310,21 @@
       </div>
 
       <!-- ============================================================ -->
-      <!-- Quién lo gastó.                                              -->
+      <!-- Quién lo gastó, y con qué modelo.                            -->
       <!--                                                              -->
-      <!-- 🔴 Sin columna de plata, y el pie lo dice: este corte no     -->
-      <!-- trae el modelo, y sin modelo no hay precio. Repartir el      -->
-      <!-- costo total en proporción a los tokens sería inventar un     -->
-      <!-- número que parece medido.                                    -->
+      <!-- La plata sale del corte por persona y modelo, que el         -->
+      <!-- sistema del cliente informa desde proveedores-ia-deepseek.   -->
+      <!-- Un cliente con la versión anterior sigue viéndose como       -->
+      <!-- antes —tokens y llamadas, guion en el costo— y el pie lo     -->
+      <!-- dice. 🔴 Lo que NO se hace en ningún caso es repartir el     -->
+      <!-- costo total en proporción a los tokens: sería inventar un    -->
+      <!-- número que parece medido. Y una persona con un modelo sin    -->
+      <!-- precio cargado queda SIN costo total, no con la suma de los  -->
+      <!-- otros: cero es "no costó nada", un guion es "no sé".         -->
+      <!--                                                              -->
+      <!-- Las sub-filas por modelo van siempre visibles y atenuadas,   -->
+      <!-- sin botón de "ver modelos": son una o dos por persona, y un  -->
+      <!-- toggle es un estado más para esconder lo que se vino a ver.  -->
       <!-- ============================================================ -->
       <div class="card border-0 tokens-panel mb-4">
         <div class="card-body">
@@ -310,24 +342,56 @@
                     <th>Persona</th>
                     <th class="text-end">Llamadas</th>
                     <th class="text-end">Tokens</th>
+                    <th class="text-end">Costo (USD)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="fila in por_persona" :key="fila.es_automatico ? 'auto' : fila.auth_user_id">
-                    <td>
-                      {{ fila.nombre }}
-                      <span v-if="fila.es_automatico" class="tokens-tabla__nota d-block">
-                        embeddings del catálogo, informes por comando y demás tareas sin nadie atrás
-                      </span>
-                    </td>
-                    <td class="text-end">{{ numero(fila.llamadas) }}</td>
-                    <td class="text-end">{{ numero(fila.tokens) }}</td>
-                  </tr>
+                  <template v-for="fila in por_persona" :key="clave_de_persona(fila)">
+                    <tr>
+                      <td>
+                        {{ fila.nombre }}
+                        <span v-if="fila.es_automatico" class="tokens-tabla__nota d-block">
+                          embeddings del catálogo, informes por comando y demás tareas sin nadie atrás
+                        </span>
+                      </td>
+                      <td class="text-end">{{ numero(fila.llamadas) }}</td>
+                      <td class="text-end">{{ numero(fila.tokens) }}</td>
+                      <td class="text-end">
+                        <!-- Sin corte por modelo: guion. Con corte pero un modelo sin precio: se
+                             dice. Con todo: la plata. -->
+                        <span v-if="!tiene_modelos(fila)">—</span>
+                        <span v-else-if="fila.tiene_precio_completo">{{ costo_visible(fila.costo_usd) }}</span>
+                        <span v-else class="tokens-tabla__nota">sin precio cargado</span>
+                      </td>
+                    </tr>
+                    <tr
+                      v-for="modelo in modelos_de(fila)"
+                      :key="clave_de_persona(fila) + '|' + modelo.proveedor + '|' + modelo.modelo"
+                      class="tokens-tabla__subfila"
+                    >
+                      <td>
+                        <!-- Proveedor y modelo en dos renglones: a 360px un id como
+                             `deepseek-v4-pro` al lado del nombre del proveedor no entra. -->
+                        <span class="tokens-tabla__subfila-proveedor d-block">{{ nombre_proveedor(modelo.proveedor) }}</span>
+                        <code class="tokens-tabla__modelo">{{ modelo.modelo || '(sin modelo)' }}</code>
+                      </td>
+                      <td class="text-end">{{ numero(modelo.llamadas) }}</td>
+                      <td class="text-end">{{ numero(modelo.tokens) }}</td>
+                      <td class="text-end">
+                        <span v-if="modelo.tiene_precio">{{ costo_visible(modelo.costo_usd) }}</span>
+                        <span v-else class="tokens-tabla__nota">sin precio cargado</span>
+                      </td>
+                    </tr>
+                  </template>
                 </tbody>
               </table>
             </div>
 
-            <p class="tokens-tabla__nota mb-0 mt-2">
+            <p v-if="informa_modelo_por_persona" class="tokens-tabla__nota mb-0 mt-2">
+              La plata sale del corte por modelo que informa el sistema del cliente; un modelo sin
+              precio cargado deja la persona sin costo total.
+            </p>
+            <p v-else class="tokens-tabla__nota mb-0 mt-2">
               Este corte va en tokens, no en dólares: el sistema del cliente no informa con qué
               modelo gastó cada persona, y sin el modelo no hay precio que aplicar.
             </p>
@@ -393,18 +457,22 @@ import api, { resolve_error_message } from '@/utils/axios'
 /**
  * Pestaña "Tokens" del detalle del cliente (admin-spa).
  *
- * Muestra cuánto gastó ese cliente en IA: el total en dólares y en tokens, la serie por día, el
- * desglose por acción y por modelo, y el estado de la última recolección, con un botón para
- * traerla a mano.
+ * Muestra cuánto gastó ese cliente en IA: qué inteligencia eligió su dueño, el total en dólares y
+ * en tokens, la serie por día, el desglose por acción, por modelo y por persona (con el costo de
+ * cada persona abierto por modelo cuando el cliente lo informa), y el estado de la última
+ * recolección, con un botón para traerla a mano.
  *
  * Tres cosas que NO se hacen acá, a propósito:
  *
  *  1. **No se calcula ningún costo en el front.** La tabla de precios vive en el admin-api y viaja
- *     ya aplicada. Si el precio de un modelo cambia, cambia en un solo lugar.
+ *     ya aplicada. Si el precio de un modelo cambia, cambia en un solo lugar. Vale también para el
+ *     costo por persona: la suma de sus modelos la hace el backend, y decide él cuándo es null.
  *  2. **No se estrena una librería de gráficos.** Las barras por día son divs con alto porcentual:
  *     alcanza de sobra para una serie diaria y no le agrega peso ni riesgo al build.
  *  3. **No se inventa un costo cero.** Un modelo sin precio cargado llega con `costo_usd: null` y
- *     se muestra como "sin precio cargado". Cero significaría que no costó nada.
+ *     se muestra como "sin precio cargado". Cero significaría que no costó nada. Y un cliente que
+ *     todavía no informa el modelo por persona llega con `costo_usd: null` y `modelos: []` en cada
+ *     persona: guion, no cero.
  *
  * El GET lee del espejo local del admin y no sale a la red, así que abrir la pestaña es barato. El
  * único camino que le pega al sistema del cliente es "Traer ahora", y por eso tiene su propio
@@ -449,10 +517,28 @@ export default {
       // Desglose por modelo, con `tiene_precio` resuelto por el backend.
       por_modelo: [],
       /*
-       * Desglose por persona, ya plegado y ordenado por el backend. Viene SIN costo a propósito:
-       * este corte no trae el modelo y sin modelo no hay precio (ver el panel "Por persona").
+       * Desglose por persona, ya plegado y ordenado por el backend. Cada fila trae `costo_usd`
+       * (null si el cliente no informa el corte por modelo o si algún modelo no tiene precio),
+       * `tiene_precio_completo` y `modelos[]` con el desglose (vacío para un cliente de versión
+       * anterior). Ver el panel "Por persona".
        */
       por_persona: [],
+      /*
+       * true cuando el sistema del cliente informó al menos una fila del corte por persona y
+       * modelo en el rango: es lo que decide el texto del pie de "Por persona". Un cliente con la
+       * versión anterior lo trae en false (o directamente no lo trae, con la API vieja).
+       */
+      informa_modelo_por_persona: false,
+      /*
+       * Qué inteligencia eligió el dueño, según la última recolección: proveedor (anthropic |
+       * deepseek), pensamiento (agil | equilibrado | profundo) y el id del modelo del asistente.
+       * Los tres en null = el cliente nunca lo informó (versión anterior del sistema).
+       */
+      configuracion: {
+        proveedor: null,
+        pensamiento: null,
+        modelo: null,
+      },
       // Estado persistido de la última recolección.
       sync_status: null,
       sync_message: '',
@@ -824,10 +910,66 @@ export default {
       this.por_modelo = Array.isArray(cuerpo.por_modelo) ? cuerpo.por_modelo : []
       this.por_persona = Array.isArray(cuerpo.por_persona) ? cuerpo.por_persona : []
 
+      /* Los dos bloques de proveedores-ia-deepseek. Un admin-api anterior no los manda: el
+         corte por persona queda como antes (sin plata) y el modelo elegido como "no informó". */
+      this.informa_modelo_por_persona = cuerpo.informa_modelo_por_persona === true
+
+      const config = cuerpo.configuracion || {}
+      this.configuracion = {
+        proveedor: config.proveedor || null,
+        pensamiento: config.pensamiento || null,
+        modelo: config.modelo || null,
+      }
+
       const sync = cuerpo.sincronizacion || {}
       this.sync_status = sync.estado || null
       this.sync_message = sync.mensaje || ''
       this.sync_synced_at = sync.sincronizado_at || null
+    },
+    /**
+     * Clave estable de una fila de "Por persona": los procesos automáticos no tienen id.
+     * @param {Object} fila
+     * @returns {string}
+     */
+    clave_de_persona(fila) {
+      return fila.es_automatico ? 'auto' : String(fila.auth_user_id)
+    },
+    /**
+     * Los modelos de una persona, o una lista vacía si el cliente no informa ese corte (o si la
+     * API es anterior y la clave directamente no viene).
+     * @param {Object} fila
+     * @returns {Array<Object>}
+     */
+    modelos_de(fila) {
+      return Array.isArray(fila.modelos) ? fila.modelos : []
+    },
+    /**
+     * true si la persona tiene desglose por modelo. Es lo que separa el guion ("no hay corte")
+     * de "sin precio cargado" ("hay corte, pero a un modelo le falta el precio").
+     * @param {Object} fila
+     * @returns {boolean}
+     */
+    tiene_modelos(fila) {
+      return this.modelos_de(fila).length > 0
+    },
+    /**
+     * Nombre humano de un proveedor. Un proveedor que no se conoce se muestra tal cual llegó: es
+     * más honesto que esconderlo, y el id sigue siendo legible.
+     * @param {string} proveedor
+     * @returns {string}
+     */
+    nombre_proveedor(proveedor) {
+      const nombres = { anthropic: 'Claude', deepseek: 'DeepSeek', openai: 'OpenAI' }
+      return nombres[String(proveedor || '')] || String(proveedor || '')
+    },
+    /**
+     * Nombre humano del nivel de pensamiento, con el mismo criterio para lo desconocido.
+     * @param {string} pensamiento
+     * @returns {string}
+     */
+    nombre_pensamiento(pensamiento) {
+      const nombres = { agil: 'Ágil', equilibrado: 'Equilibrado', profundo: 'Profundo' }
+      return nombres[String(pensamiento || '')] || String(pensamiento || '')
     },
     /**
      * Alto de la barra de un día, como porcentaje del día más alto de la serie.
@@ -1220,6 +1362,68 @@ export default {
 .tokens-tabla__nota {
   font-size: 0.7rem;
   color: #8a8a8f;
+}
+
+/* La línea "Modelo elegido": el rótulo en el mismo tono que los títulos de panel, el valor al
+   lado, y el id del modelo en `code` porque es un identificador y no una palabra. Se deja que
+   envuelva: a 360px "DeepSeek · Profundo (deepseek-v4-pro)" no entra en un renglón y partirlo es
+   mejor que recortarlo. */
+.tokens-config {
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.tokens-config__rotulo {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6c757d;
+  font-weight: 600;
+  margin-right: 0.35rem;
+}
+
+.tokens-config__valor {
+  font-weight: 600;
+}
+
+.tokens-config__modelo {
+  margin-left: 0.35rem;
+  color: #6c757d;
+}
+
+.tokens-config__modelo code,
+.tokens-tabla__modelo {
+  font-size: 0.8em;
+  color: #1f1f24;
+  background: #f2f2f4;
+  border-radius: 3px;
+  padding: 0.05rem 0.3rem;
+}
+
+.tokens-config__vacio {
+  color: #8a8a8f;
+  font-style: italic;
+}
+
+/* Sub-filas por modelo, debajo de cada persona: atenuadas, más chicas y con el nombre corrido a
+   la derecha, para que se lean como "de esta persona" y no como personas más. Las divisorias de
+   Bootstrap quedan (van por `border-bottom` de cada celda, no vale la pena pelearlas): con la
+   indentación y el tono alcanza para que el bloque se entienda. */
+.tokens-tabla__subfila td {
+  font-size: 0.8rem;
+  color: #6c757d;
+  padding-top: 0.15rem;
+  padding-bottom: 0.15rem;
+}
+
+.tokens-tabla__subfila td:first-child {
+  padding-left: 1.25rem;
+}
+
+.tokens-tabla__subfila-proveedor {
+  font-size: 0.7rem;
+  color: #8a8a8f;
+  line-height: 1.1;
 }
 
 /* Teléfono: las etiquetas de los días se saltean solas por el scroll, y las columnas se achican
