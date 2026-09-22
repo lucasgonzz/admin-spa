@@ -245,11 +245,61 @@
           </div>
         </div>
 
-        <!-- Cuántos clientes ACTIVOS eligieron cada proveedor, según lo que informó cada uno
-             en su última recolección. "Sin informar" son los que todavía corren una versión
-             que no manda la configuración: NO es "eligieron Claude". -->
-        <div class="col-12 col-lg-5">
-          <div class="card border-0 tokens-panel h-100">
+        <!-- La columna derecha apila dos paneles chicos. Cada uno se oculta si su clave no vino
+             en la respuesta (admin-api anterior): un "0 / 0 / 0" que en realidad es "no sé" es un
+             dato que miente, y la columna entera desaparece si no queda ninguno. -->
+        <div
+          v-if="por_proveedor !== null || clientes_por_proveedor !== null"
+          class="col-12 col-lg-5 d-flex flex-column gap-3"
+        >
+          <!-- En qué proveedor se va la plata. Un proveedor agrupa varios modelos y puede tener
+               unos con precio y otros sin: cuando pasa, el costo es un PISO y la fila nombra los
+               que quedaron afuera, igual que la tarjeta del total. -->
+          <div v-if="por_proveedor !== null" class="card border-0 tokens-panel">
+            <div class="card-body">
+              <p class="tokens-panel__titulo mb-3">Por proveedor</p>
+
+              <p v-if="por_proveedor.length === 0" class="text-muted small fst-italic mb-0">
+                Sin datos.
+              </p>
+
+              <div v-else class="table-responsive">
+                <table class="table table-sm align-middle mb-0 tokens-tabla">
+                  <thead>
+                    <tr>
+                      <th>Proveedor</th>
+                      <th class="text-end">Llamadas</th>
+                      <th class="text-end">Tokens</th>
+                      <th class="text-end">Costo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="fila in por_proveedor" :key="fila.proveedor">
+                      <td>{{ nombre_proveedor(fila.proveedor) || '(sin proveedor)' }}</td>
+                      <td class="text-end">{{ numero(fila.llamadas) }}</td>
+                      <td class="text-end">{{ numero(fila.tokens) }}</td>
+                      <td class="text-end">
+                        <span v-if="fila.costo_usd === null || fila.costo_usd === undefined" class="tokens-tabla__nota">
+                          sin precio cargado
+                        </span>
+                        <template v-else>
+                          {{ costo_visible(fila.costo_usd) }}
+                          <span v-if="tiene_sin_precio(fila)" class="tokens-tabla__nota d-block">
+                            piso: sin precio cargado para {{ sin_precio_texto(fila) }}
+                          </span>
+                        </template>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cuántos clientes ACTIVOS eligieron cada proveedor, según lo que informó cada uno
+               en su última recolección. "Sin informar" son los que todavía corren una versión
+               que no manda la configuración: NO es "eligieron Claude". -->
+          <div v-if="clientes_por_proveedor !== null" class="card border-0 tokens-panel flex-grow-1">
             <div class="card-body">
               <p class="tokens-panel__titulo mb-3">Clientes por proveedor</p>
 
@@ -341,10 +391,17 @@ export default {
       // Desglose por modelo de toda la plataforma, con `tiene_precio` resuelto por el backend.
       por_modelo: [],
       /*
+       * 🔴 Los dos de abajo arrancan en null y NO en []: null es "la clave no vino" (admin-api
+       * anterior) y su panel se oculta; [] es "vino y está vacío" y el panel dice "sin datos".
+       * Mostrar 0 / 0 / 0 cuando en realidad no se sabe es un dato que miente.
+       */
+      // Desglose por proveedor: [{ proveedor, llamadas, tokens, costo_usd, modelos_sin_precio }].
+      por_proveedor: null,
+      /*
        * Cuántos clientes activos eligieron cada proveedor: [{ proveedor, clientes }], con
        * `proveedor: null` para los que todavía no informan (versión anterior del sistema).
        */
-      clientes_por_proveedor: [],
+      clientes_por_proveedor: null,
       atajos: [
         { dias: 7, label: '7 días' },
         { dias: 30, label: '30 días' },
@@ -461,7 +518,7 @@ export default {
      * @returns {Array<Object>}
      */
     clientes_otros() {
-      return this.clientes_por_proveedor.filter(function (fila) {
+      return (this.clientes_por_proveedor || []).filter(function (fila) {
         return fila.proveedor !== null && fila.proveedor !== 'anthropic' && fila.proveedor !== 'deepseek'
       })
     },
@@ -545,12 +602,14 @@ export default {
           self.por_dia = Array.isArray(cuerpo.por_dia) ? cuerpo.por_dia : []
           self.por_cliente = Array.isArray(cuerpo.por_cliente) ? cuerpo.por_cliente : []
           self.por_proceso = Array.isArray(cuerpo.por_proceso) ? cuerpo.por_proceso : []
-          /* Las dos claves de proveedores-ia-deepseek. Un admin-api anterior no las manda: los
-             paneles quedan en "sin datos" y en cero, sin romper nada. */
+          /* Las claves de proveedores-ia-deepseek. Un admin-api anterior no las manda: "Por
+             modelo" queda en "sin datos", y los dos paneles de proveedor se OCULTAN (null), porque
+             un 0 / 0 / 0 que en realidad es "no sé" es un dato que miente. */
           self.por_modelo = Array.isArray(cuerpo.por_modelo) ? cuerpo.por_modelo : []
+          self.por_proveedor = Array.isArray(cuerpo.por_proveedor) ? cuerpo.por_proveedor : null
           self.clientes_por_proveedor = Array.isArray(cuerpo.clientes_por_proveedor)
             ? cuerpo.clientes_por_proveedor
-            : []
+            : null
           self.loading = false
           self.cargado_alguna_vez = true
         })
@@ -567,13 +626,37 @@ export default {
      * @returns {number}
      */
     clientes_de(proveedor) {
+      const filas = this.clientes_por_proveedor || []
       let total = 0
-      this.clientes_por_proveedor.forEach(function (fila) {
+      filas.forEach(function (fila) {
         if (fila.proveedor === proveedor) {
           total += Number(fila.clientes || 0)
         }
       })
       return total
+    },
+    /**
+     * true si una fila de "Por proveedor" dejó modelos sin costear: su costo es un piso, no el
+     * total.
+     * @param {Object} fila
+     * @returns {boolean}
+     */
+    tiene_sin_precio(fila) {
+      return Array.isArray(fila.modelos_sin_precio) && fila.modelos_sin_precio.length > 0
+    },
+    /**
+     * Los modelos sin precio de una fila de "Por proveedor", listos para meter en una frase. Un
+     * modelo vacío es un caso real (el cliente no lo informó) y se nombra como tal.
+     * @param {Object} fila
+     * @returns {string}
+     */
+    sin_precio_texto(fila) {
+      const lista = Array.isArray(fila.modelos_sin_precio) ? fila.modelos_sin_precio : []
+      return lista
+        .map(function (modelo) {
+          return String(modelo || '').trim() === '' ? '(sin modelo)' : String(modelo)
+        })
+        .join(', ')
     },
     /**
      * Nombre humano de un proveedor: el mapa compartido de `@/utils/ia`, expuesto como método
