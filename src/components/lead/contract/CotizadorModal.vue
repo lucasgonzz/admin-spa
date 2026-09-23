@@ -273,11 +273,13 @@ const MAX_DOLAR = 1000000
  * Redondeo a N decimales con el mismo criterio que `round()` de PHP: la media unidad se aleja
  * siempre del cero, después de limpiar la basura binaria del punto flotante.
  *
- * 🔴 NO es un `Math.round(x * 100) / 100`, y la diferencia no es teórica: en JavaScript
- * `2175.755 * 100` da `217575.49999999997`, así que ese redondeo devolvería `2175.75` mientras
- * el `round()` de PHP del backend devuelve `2175.76`. Un centavo de diferencia entre el número
- * que ve el operador en el preview y el que termina cobrando el link es exactamente lo que el
- * plan (§11) manda evitar. El `toPrecision(15)` recorta esa basura antes de redondear.
+ * 🔴 NO es un `Math.round(x * 100) / 100`, y la diferencia no es teórica. Medido el 22/9/2026
+ * con valores que este cotizador puede tener perfectamente: con `precio_usd = 500.01` y
+ * `dolar = 1056.5`, el producto da `528260.565`; `Math.round(528260.565 * 100) / 100` devuelve
+ * `528260.56` porque el `* 100` cae en `52826056.49999999`, mientras el `round()` de PHP del
+ * backend devuelve `528260.57`. Un centavo de diferencia entre el número que ve el operador en
+ * el preview y el que termina cobrando el link es exactamente lo que el plan (§11) manda
+ * evitar. El `toPrecision(15)` recorta esa basura binaria antes de redondear.
  *
  * @param {number|string|null|undefined} valor
  * @param {number} decimales
