@@ -344,6 +344,30 @@
           </div>
         </section>
 
+        <!-- Leads: cotizador de sistemas -->
+        <!--
+          Va con v-if a secas, como las otras 12: son cinco números con un solo botón Guardar y
+          retipearlos son segundos (mismo criterio que support-ai-settings; ver el comentario
+          largo de ai-system-prompt).
+        -->
+        <section
+          v-if="active_section === 'cotizador-settings'"
+          id="cotizador-settings"
+          class="account-section"
+        >
+          <div class="card account-config-card">
+            <div class="card-body">
+              <h2 class="h6 card-title">Cotizador de sistemas</h2>
+              <p class="text-muted small mb-3">
+                Precios por defecto de los tres sistemas, descuento por transferencia directa y
+                vencimiento del link de pago. Son los valores con los que arranca el cotizador que
+                se abre desde la solapa Contrato de un lead.
+              </p>
+              <cotizador-settings-section />
+            </div>
+          </div>
+        </section>
+
         <!-- Operaciones: plantillas de tareas -->
         <section
           v-if="active_section === 'task-templates'"
@@ -398,6 +422,7 @@ import ImplementationSettingsSection from '@/components/account/sections/Impleme
 import AgentIdentitySection from '@/components/account/sections/AgentIdentitySection.vue'
 import AgentPromptSyncSection from '@/components/account/sections/AgentPromptSyncSection.vue'
 import ContractSignatureSection from '@/components/account/sections/ContractSignatureSection.vue'
+import CotizadorSettingsSection from '@/components/account/sections/CotizadorSettingsSection.vue'
 import LeadDemoSettingsSection from '@/components/account/sections/LeadDemoSettingsSection.vue'
 import PushNotificationsSection from '@/components/account/sections/PushNotificationsSection.vue'
 import PwaInstallSection from '@/components/account/sections/PwaInstallSection.vue'
@@ -421,6 +446,7 @@ export default {
     AgentIdentitySection,
     AgentPromptSyncSection,
     ContractSignatureSection,
+    CotizadorSettingsSection,
     LeadDemoSettingsSection,
     PushNotificationsSection,
     PwaInstallSection,

@@ -74,6 +74,11 @@ export const ACCOUNT_SECTIONS = [
     group: 'Leads y ventas',
   },
   {
+    id: 'cotizador-settings',
+    label: 'Cotizador de sistemas',
+    group: 'Leads y ventas',
+  },
+  {
     id: 'task-templates',
     label: 'Plantillas de tareas',
     group: 'Operaciones',
