@@ -143,6 +143,10 @@
         >
           {{ saving ? 'Guardando…' : 'Guardar' }}
         </button>
+        <!-- El botón deshabilitado sin motivo se lee como que la pantalla está rota. -->
+        <span v-if="campo_vacio" class="text-muted small">
+          Completá todos los campos para poder guardar.
+        </span>
       </div>
 
       <!-- Mensajes de resultado inline -->
@@ -224,10 +228,35 @@ export default {
      * @returns {boolean}
      */
     can_save() {
+      if (this.campo_vacio) {
+        return false
+      }
+
       const fields = Object.keys(this.local)
       for (let i = 0; i < fields.length; i++) {
         const key = fields[i]
         if (this.local[key] !== this.stored[key]) {
+          return true
+        }
+      }
+      return false
+    },
+    /**
+     * true si algún campo quedó vacío.
+     *
+     * 🔴 Existe para que el botón Guardar no se habilite con un campo en blanco. Con
+     * `v-model.number`, borrar el contenido de un input deja `''`, que Laravel convierte a
+     * `null` (ConvertEmptyStringsToNull) y la validación rechaza: el usuario apretaba Guardar y
+     * se comía un error técnico por algo que la pantalla podía no dejarle hacer.
+     *
+     * @returns {boolean}
+     */
+    campo_vacio() {
+      const fields = Object.keys(this.local)
+      for (let i = 0; i < fields.length; i++) {
+        /** Valor actual del campo; `''` y `null` cuentan como vacío, `0` no. */
+        const valor = this.local[fields[i]]
+        if (valor === '' || valor === null || valor === undefined) {
           return true
         }
       }

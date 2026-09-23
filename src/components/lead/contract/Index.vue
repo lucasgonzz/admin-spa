@@ -245,7 +245,6 @@
       :stack_level="1"
       @update:show="cotizador_show = $event"
       @generada="on_cotizacion_generada"
-      @close="on_cotizador_cerrado"
     />
   </div>
 </template>
@@ -281,15 +280,6 @@ export default {
       incluir_firma: true,
       /** Visibilidad del modal del cotizador (misión cotizador-lead-mercado-pago, 22/9/2026). */
       cotizador_show: false,
-      /**
-       * Última cotización generada en esta apertura del modal, tal como la devolvió el servidor.
-       * Se guarda acá y no se aplica en el momento porque el total se copia al contrato recién
-       * AL CERRAR el modal: mientras está abierto el operador puede generar más de un link
-       * (cambió un precio, cambió el dólar) y el que vale es el último.
-       *
-       * @type {Object|null}
-       */
-      ultima_cotizacion: null,
     }
   },
   computed: {
@@ -614,57 +604,40 @@ export default {
       if (!this.record || !this.record.id) {
         return
       }
-      this.ultima_cotizacion = null
       this.cotizador_show = true
     },
     /**
      * El servidor generó el link y persistió la foto de la cotización en el lead.
      *
-     * Sincroniza la tabla de leads con el modelo devuelto —igual que save_contract()— y se
-     * queda con la cotización para copiarla al contrato cuando el modal se cierre.
+     * 🔴 El precio del contrato se refleja ACÁ, con lo que devolvió el servidor, y no se copia a
+     * mano al cerrar el modal. El backend guarda `contract_precio_licencia` y `contract_currency`
+     * en el mismo `save()` que la cotización (ver LeadCotizacionController): si acá se copiara al
+     * borrador, cerrar el lead sin apretar "Guardar datos del contrato" dejaría la cotización y
+     * el link ya guardados por un importe y el formulario mostrando otro.
+     *
+     * Se tocan solo esos dos campos y no el `record` entero, para no pisarle al operador algún
+     * otro campo del contrato que tenga a medio editar.
+     *
+     * Se copia el total en DÓLARES con la moneda en USD porque los tres precios del cotizador
+     * son en dólares (decisión de Lucas en la Fase 2 del plan): copiar el total en pesos dejaría
+     * el contrato atado al dólar del día que se cotizó.
      *
      * @param {Object} data respuesta del backend: `{model, cotizacion}`
      * @returns {void}
      */
     on_cotizacion_generada(data) {
-      if (!data) {
+      if (!data || !data.model) {
         return
       }
-      if (data.model) {
-        this.$store.dispatch('lead/upsert_model_in_lists', data.model)
-        this.$emit('record-updated', data.model)
+      this.$store.dispatch('lead/upsert_model_in_lists', data.model)
+      this.$emit('record-updated', data.model)
+
+      if (this.record) {
+        this.record.contract_precio_licencia = data.model.contract_precio_licencia
+        this.record.contract_currency = data.model.contract_currency
       }
-      this.ultima_cotizacion = data.cotizacion || null
-    },
-    /**
-     * Al cerrarse el modal, copia el total de la cotización al campo "Precio total (licencia +
-     * implementación)" del contrato para no tipearlo dos veces, y deja la moneda coherente.
-     *
-     * Se copia el total en DÓLARES con `contract_currency` en USD porque los tres precios del
-     * cotizador son en dólares (decisión de Lucas en la Fase 2 del plan): copiar el total en
-     * pesos dejaría el contrato atado al dólar del día que se cotizó.
-     *
-     * Mismo criterio que `ensure_contract_defaults()`: si el operador abrió el cotizador y lo
-     * cerró sin generar ninguna cotización, no se pisa nada de lo que ya había cargado.
-     *
-     * @returns {void}
-     */
-    on_cotizador_cerrado() {
-      if (!this.ultima_cotizacion || !this.record) {
-        return
-      }
-      /** Total en dólares que devolvió el servidor. */
-      const total_usd = this.ultima_cotizacion.total_usd
-      if (total_usd == null) {
-        this.ultima_cotizacion = null
-        return
-      }
-      this.record.contract_precio_licencia = String(total_usd)
-      this.record.contract_currency = 'USD'
-      this.ultima_cotizacion = null
-      this.open_feedback(
-        'Se copió el total de la cotización al precio del contrato. Acordate de guardar los datos del contrato.'
-      )
+
+      this.open_feedback('Link de pago generado. El total quedó guardado en el precio del contrato.')
     },
   },
 }

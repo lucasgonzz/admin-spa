@@ -111,9 +111,14 @@
         class="alert border mb-3"
         :class="mostrando_servidor ? 'alert-success' : 'alert-light'"
       >
+        <!-- La frase habla del TOTAL y de las cuotas, no del bloque entero: abajo también está
+             el precio por transferencia, que el link no cobra. Decir "esto es lo que va a pagar"
+             sobre un bloque que incluye los dos importes es la clase de texto que después
+             alguien cita por WhatsApp. -->
         <p v-if="mostrando_servidor" class="small mb-2">
-          Estos son los números que devolvió el servidor: son exactamente los que va a pagar el
-          lead con el link de abajo.
+          El total y las cuotas de acá abajo son los que devolvió el servidor: es exactamente lo
+          que va a cobrar el link de pago. El precio por transferencia es aparte y no se cobra
+          por Mercado Pago.
         </p>
 
         <template v-if="numeros.items.length">
@@ -187,15 +192,38 @@
         </p>
       </div>
 
-      <!-- ===================== Link de pago generado ===================== -->
-      <template v-if="cotizacion">
-        <h6 class="text-primary mb-2">Link de pago</h6>
+      <!-- ===================== Link de pago ===================== -->
+      <!-- Muestra el link recién generado o, si no se generó ninguno en esta apertura, el que
+           quedó guardado en el lead de una vez anterior. Lo segundo existe porque antes el link
+           se escribía en la base y no lo leía ninguna pantalla: cerrar el modal sin haberlo
+           copiado obligaba a generar una preferencia nueva. -->
+      <template v-if="cotizacion_en_pantalla">
+        <h6 class="text-primary mb-2">
+          {{ cotizacion ? 'Link de pago' : 'Última cotización generada' }}
+        </h6>
         <div class="alert alert-light border mb-3">
+          <!-- Cotización de una vez anterior: se dice cuándo se generó y por cuánto, para que no
+               se confunda con el resumen de arriba, que es el preview de lo que hay cargado. -->
+          <div
+            v-if="!cotizacion"
+            class="alert alert-secondary py-2 px-3 small"
+            role="alert"
+          >
+            Generada<span v-if="generada_texto"> el {{ generada_texto }}</span> por
+            <strong>{{ format_monto_con_moneda(cotizacion_en_pantalla.total_ars, 'ARS') }}</strong>
+            <span v-if="cotizacion_en_pantalla.total_usd">
+              (USD {{ format_monto_con_moneda(cotizacion_en_pantalla.total_usd, 'USD') }}<span
+                v-if="cotizacion_en_pantalla.dolar"
+              >, con el dólar a {{ format_monto_con_moneda(cotizacion_en_pantalla.dolar, 'ARS') }}</span>)
+            </span>.
+            El link sigue cobrando ese importe: generá uno nuevo si cambiaron los valores.
+          </div>
+
           <!-- 🔴 Si después de generar el link se tocó algún valor, el link ya NO corresponde a
                los números que están en pantalla. Se avisa en vez de esconderlo: el link viejo
                sigue sirviendo si ya se mandó, pero no es lo que se está mostrando arriba. -->
           <div
-            v-if="form_tocado_despues_de_generar"
+            v-else-if="form_tocado_despues_de_generar"
             class="alert alert-warning py-2 px-3 small"
             role="alert"
           >
@@ -210,7 +238,7 @@
           <div class="input-group">
             <input
               :id="link_input_id"
-              :value="cotizacion.link_pago"
+              :value="cotizacion_en_pantalla.link_pago"
               type="text"
               class="form-control"
               readonly
@@ -368,11 +396,20 @@ export default {
       /** Cotización que devolvió el servidor; null hasta que se genera el primer link. */
       cotizacion: null,
       /**
-       * true si se tocó algún valor del formulario después de generar el link. Mientras sea
-       * false, la pantalla muestra los números del servidor; cuando se vuelve true, vuelve a
-       * mostrar el preview y el link queda marcado como "de la cotización anterior".
+       * Última cotización que quedó guardada en el lead, reconstruida de sus columnas
+       * `contract_cotizacion_*` al abrir el modal.
+       *
+       * 🔴 Existe porque sin esto el link se perdía: se guardaba en la base y no lo leía ninguna
+       * pantalla, así que cerrar el modal sin haberlo copiado obligaba a generar una preferencia
+       * nueva. Es distinta de `cotizacion`, que es la generada en esta apertura del modal.
        */
-      form_tocado_despues_de_generar: false,
+      cotizacion_guardada: null,
+      /**
+       * Firma (dólar + sistemas + precios) con la que se generó el link que está en pantalla.
+       * Se compara contra la firma actual para saber si el formulario cambió — ver el computed
+       * `form_tocado_despues_de_generar`.
+       */
+      firma_generada: '',
       /** Feedback efímero del botón de copiar el link. */
       copiado: false,
     }
@@ -399,8 +436,13 @@ export default {
         if (!fila.incluir) {
           return
         }
-        /** Precio del sistema en dólares, tal como quedó en el input. */
-        const precio_usd = Number(fila.precio_usd || 0)
+        /* 🔴 El precio se redondea a 2 decimales ANTES de multiplicar, igual que el servidor
+           (CotizadorLeadService::cotizar). El input es `type="number" step="0.01"`, pero un valor
+           que viola el `step` se puede tipear y pegar igual: con 1500.555 y un dólar de 1450,5,
+           redondear después en vez de antes mostraba $2.176.555,03 mientras el link cobraba
+           $2.176.562,28. Esos $7,25 son exactamente la brecha entre el número que quien vende
+           dicta por WhatsApp y el que ve el lead en el checkout. */
+        const precio_usd = redondear(Number(fila.precio_usd || 0), 2)
         /* Fórmula 1: precio_ars(item) = round(precio_usd * dolar, 2) */
         const precio_ars = redondear(precio_usd * dolar, 2)
         items.push({
@@ -421,8 +463,12 @@ export default {
 
       /** Cantidad de cuotas sin interés; sale de la configuración del servidor. */
       const cuotas = Number(this.settings.cuotas || 0)
-      /* Fórmula 4: cuota_ars = round(total_ars / cuotas, 2) */
-      const cuota_ars = cuotas > 0 ? redondear(total_ars / cuotas, 2) : 0
+      /* Fórmula 4: cuota_ars = round(total_ars / cuotas, 2). Sin cuotas la "cuota" es el total
+         —que es lo que efectivamente se paga en un pago—, mismo criterio que el servidor. Antes
+         acá devolvía 0 y allá el total: dos respuestas distintas para la misma rama. Hoy no se
+         alcanza (get_cuotas() nunca devuelve 0), pero el día que las cuotas se vuelvan
+         configurables por cotización, una de las dos iba a estar mal. */
+      const cuota_ars = cuotas > 0 ? redondear(total_ars / cuotas, 2) : total_ars
 
       /** Porcentaje de descuento por transferencia directa. */
       const descuento = Number(this.settings.descuento_transferencia || 0)
@@ -450,6 +496,40 @@ export default {
      */
     mostrando_servidor() {
       return Boolean(this.cotizacion) && !this.form_tocado_despues_de_generar
+    },
+    /**
+     * Firma del estado actual del formulario: el dólar más cada sistema incluido con su precio.
+     * Es lo que define si dos cotizaciones son la misma.
+     *
+     * @returns {string}
+     */
+    firma_actual() {
+      /** Partes de la firma: primero el dólar, después un ítem por sistema incluido. */
+      const partes = [String(redondear(Number(this.dolar || 0), 2))]
+      this.filas.forEach(function (fila) {
+        if (fila.incluir) {
+          partes.push(fila.key + ':' + redondear(Number(fila.precio_usd || 0), 2))
+        }
+      })
+
+      return partes.join('|')
+    },
+    /**
+     * true si lo que hay en el formulario ya no es lo que generó el link que está en pantalla.
+     *
+     * 🔴 Se calcula COMPARANDO, y no con un flag que se prende al primer `@input`. Con el flag,
+     * cambiar un precio y devolverlo a su valor original dejaba el cartel rojo diciendo que el
+     * link no corresponde a lo que se muestra arriba, cuando sí correspondía. Un cartel que
+     * miente aunque sea por exceso es un cartel que se empieza a ignorar.
+     *
+     * @returns {boolean}
+     */
+    form_tocado_despues_de_generar() {
+      if (!this.cotizacion) {
+        return false
+      }
+
+      return this.firma_actual !== this.firma_generada
     },
     /**
      * Los números que efectivamente se muestran: los del servidor si la cotización está fresca,
@@ -564,20 +644,52 @@ export default {
      * @returns {string}
      */
     vence_texto() {
-      if (!this.cotizacion || !this.cotizacion.vence_at) {
+      /* Para la cotización recién generada, el vencimiento lo manda el servidor. Para una
+         guardada de antes no hay `vence_at` en la base, así que se deduce sumándole a la fecha
+         de generación los días de vigencia configurados — que es exactamente la cuenta que hizo
+         el servidor cuando creó la preferencia. */
+      if (this.cotizacion && this.cotizacion.vence_at) {
+        return this.formatear_fecha(this.cotizacion.vence_at)
+      }
+
+      if (!this.cotizacion_guardada || !this.cotizacion_guardada.generada_at) {
         return ''
       }
-      const fecha = new Date(this.cotizacion.vence_at)
-      if (isNaN(fecha.getTime())) {
+
+      /** Días de vigencia del link según la configuración vigente. */
+      const dias = Number(this.settings.link_vence_dias || 0)
+      if (dias <= 0) {
         return ''
       }
-      return fecha.toLocaleString('es-AR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
+
+      const vence = new Date(this.cotizacion_guardada.generada_at)
+      if (isNaN(vence.getTime())) {
+        return ''
+      }
+      vence.setDate(vence.getDate() + dias)
+
+      return this.formatear_fecha(vence)
+    },
+    /**
+     * Cuándo se generó la cotización que está en pantalla, para ubicar al que la lee después.
+     *
+     * @returns {string} Fecha formateada, o '' si no hay o no se puede leer.
+     */
+    generada_texto() {
+      if (!this.cotizacion_en_pantalla || !this.cotizacion_en_pantalla.generada_at) {
+        return ''
+      }
+
+      return this.formatear_fecha(this.cotizacion_en_pantalla.generada_at)
+    },
+    /**
+     * La cotización cuyo link se muestra: la generada en esta apertura del modal si la hay, y si
+     * no la que quedó guardada en el lead de una vez anterior.
+     *
+     * @returns {Object|null}
+     */
+    cotizacion_en_pantalla() {
+      return this.cotizacion || this.cotizacion_guardada
     },
   },
   watch: {
@@ -594,26 +706,6 @@ export default {
         this.reset()
         this.cargar_settings()
       }
-    },
-    /**
-     * Cualquier cambio en los sistemas elegidos o en sus precios invalida la cotización que ya
-     * se generó: los números de pantalla vuelven a ser los del preview.
-     *
-     * @returns {void}
-     */
-    filas: {
-      deep: true,
-      handler: function () {
-        this.marcar_form_tocado()
-      },
-    },
-    /**
-     * Ídem para el valor del dólar.
-     *
-     * @returns {void}
-     */
-    dolar() {
-      this.marcar_form_tocado()
     },
   },
   methods: {
@@ -652,20 +744,63 @@ export default {
       this.generando = false
       this.error_message = ''
       this.cotizacion = null
-      this.form_tocado_despues_de_generar = false
+      this.cotizacion_guardada = null
+      this.firma_generada = ''
       this.copiado = false
       this.settings_error = ''
     },
     /**
-     * Marca que el formulario cambió después de generar el link. No hace nada si todavía no se
-     * generó ninguno: sin cotización no hay nada que invalidar.
+     * Reconstruye la última cotización guardada del lead y deja el formulario como quedó.
+     *
+     * 🔴 Sin esto, el link generado se perdía al cerrar el modal: las columnas
+     * `contract_cotizacion_*` se escribían en la base y no las leía ninguna pantalla. Quien
+     * cotizaba y no copiaba el link en el momento tenía que generar una preferencia nueva.
+     *
+     * Además de mostrar el link, precarga los sistemas y los precios con los que se cotizó, para
+     * que reabrir el cotizador continúe donde quedó en vez de arrancar de cero.
      *
      * @returns {void}
      */
-    marcar_form_tocado() {
-      if (this.cotizacion) {
-        this.form_tocado_despues_de_generar = true
+    cargar_cotizacion_guardada() {
+      if (!this.lead || !this.lead.contract_cotizacion_link_pago) {
+        return
       }
+
+      /** Detalle guardado de qué se cotizó; puede venir vacío en un lead viejo. */
+      const items = Array.isArray(this.lead.contract_cotizacion_items)
+        ? this.lead.contract_cotizacion_items
+        : []
+
+      this.cotizacion_guardada = {
+        link_pago: this.lead.contract_cotizacion_link_pago,
+        preference_id: this.lead.contract_cotizacion_preference_id,
+        total_usd: Number(this.lead.contract_cotizacion_total_usd || 0),
+        total_ars: Number(this.lead.contract_cotizacion_total_ars || 0),
+        dolar: Number(this.lead.contract_cotizacion_dolar || 0),
+        generada_at: this.lead.contract_cotizacion_generada_at,
+        items: items,
+      }
+
+      /* Dejar el formulario como quedó la última vez: los sistemas que se cotizaron marcados,
+         con su precio. Si el detalle no vino, las filas quedan con los defaults. */
+      if (items.length === 0) {
+        return
+      }
+
+      /** Precio cotizado por cada key, para no recorrer el array adentro del map. */
+      const precios_por_key = {}
+      items.forEach(function (item) {
+        precios_por_key[item.key] = item.precio_usd
+      })
+
+      this.filas.forEach(function (fila) {
+        /** true si ese sistema entró en la última cotización guardada. */
+        const estaba = Object.prototype.hasOwnProperty.call(precios_por_key, fila.key)
+        fila.incluir = estaba
+        if (estaba) {
+          fila.precio_usd = precios_por_key[fila.key]
+        }
+      })
     },
     /**
      * GET /settings/cotizador — precios por defecto, descuento, cuotas y si Mercado Pago está
@@ -695,9 +830,9 @@ export default {
           if (self.lead && self.lead.contract_cotizacion_dolar) {
             self.dolar = String(self.lead.contract_cotizacion_dolar)
           }
-          /* Prellenar el dólar cuenta como "tocar el formulario"; como todavía no hay cotización
-             generada, `marcar_form_tocado` no hace nada, pero se deja explícito. */
-          self.form_tocado_despues_de_generar = false
+          /* Y el link que quedó de la última vez, con los sistemas y precios que lo generaron.
+             Va después de construir_filas() porque los pisa. */
+          self.cargar_cotizacion_guardada()
         })
         .catch(function (error) {
           self.settings_error = resolve_error_message(error)
@@ -786,7 +921,12 @@ export default {
           /** Respuesta del servidor: `{model, cotizacion}`. */
           const data = response.data || {}
           self.cotizacion = data.cotizacion || null
-          self.form_tocado_despues_de_generar = false
+          /* Con qué formulario se generó este link. El cartel de "cambiaste valores" compara
+             contra esto, así que volver un precio a su valor original lo apaga solo. */
+          self.firma_generada = self.firma_actual
+          /* Y pasa a ser también la última cotización guardada del lead: si se cierra y se
+             vuelve a abrir el modal, el link sigue estando. */
+          self.cotizacion_guardada = self.cotizacion
           self.copiado = false
           self.$emit('generada', data)
         })
@@ -803,6 +943,27 @@ export default {
      *
      * @returns {void}
      */
+    /**
+     * Formatea una fecha (string ISO o Date) al formato corto rioplatense.
+     *
+     * @param {string|Date} valor
+     * @returns {string} Fecha formateada, o '' si no se puede leer.
+     */
+    formatear_fecha(valor) {
+      /** La fecha como objeto, venga como string del servidor o ya construida. */
+      const fecha = valor instanceof Date ? valor : new Date(valor)
+      if (isNaN(fecha.getTime())) {
+        return ''
+      }
+
+      return fecha.toLocaleString('es-AR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    },
     copiar_link() {
       const self = this
       /** Input de solo lectura que tiene el link; también sirve para el respaldo por selección. */
