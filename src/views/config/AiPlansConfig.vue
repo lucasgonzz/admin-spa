@@ -8,7 +8,7 @@
           Los planes de suscripción de IA ($100 / $200 / $400, tentativos). Cada paquete define el
           tope de tokens por mes y de interacciones por día que se le envían al sistema del cliente
           cuando se le asigna. Un tope vacío significa <strong>sin límite</strong>: el cliente nunca
-          corta.
+          corta. La excepción son las búsquedas por código de barras: vacío es el defecto de 30 por día.
         </p>
       </div>
       <button
@@ -97,6 +97,23 @@
               <div class="form-text small">Dejalo vacío para no poner límite.</div>
             </div>
 
+            <!-- Tope de búsquedas por código de barras (con búsqueda web) por día, por negocio
+                 (misión asistente-fotos-barras-y-compras, 24/9/2026). A diferencia de los otros dos
+                 topes, vacío NO es "sin límite": cada búsqueda web se paga aparte, así que el sistema
+                 del cliente aplica su defecto de 30 por día. -->
+            <div class="col-md-6">
+              <label class="form-label small mb-1 fw-semibold">Búsquedas por código de barras por día</label>
+              <input
+                v-model="form.tope_busquedas_web_diarias"
+                type="number"
+                min="0"
+                step="1"
+                class="form-control"
+                placeholder="30"
+              />
+              <div class="form-text small">Vacío = 30.</div>
+            </div>
+
             <!-- Orden: define cómo se listan y aparecen en el select del cliente. -->
             <div class="col-md-6">
               <label class="form-label small mb-1 fw-semibold">Orden</label>
@@ -154,6 +171,7 @@
                 <th class="text-end">Precio</th>
                 <th class="text-end">Tope tokens/mes</th>
                 <th class="text-end">Tope interacciones/día</th>
+                <th class="text-end">Búsquedas código de barras/día</th>
                 <th class="text-center">Estado</th>
                 <th class="text-end">Acciones</th>
               </tr>
@@ -164,6 +182,7 @@
                 <td class="text-end">{{ precio_visible(paquete.precio_usd) }}</td>
                 <td class="text-end">{{ tope_visible(paquete.tope_tokens_mensual) }}</td>
                 <td class="text-end">{{ tope_visible(paquete.tope_interacciones_diarias) }}</td>
+                <td class="text-end">{{ tope_busquedas_visible(paquete.tope_busquedas_web_diarias) }}</td>
                 <td class="text-center">
                   <span class="badge" :class="paquete.activo ? 'bg-success' : 'bg-secondary'">
                     {{ paquete.activo ? 'Activo' : 'Inactivo' }}
@@ -215,6 +234,9 @@ import api, { resolve_error_message } from '@/utils/axios'
  * interacciones/día) que después se le empujan a la instancia del cliente al asignárselo desde su
  * ficha (solapa Tokens). Un tope vacío/0 significa SIN tope: el sistema del cliente nunca corta.
  *
+ * El tercer tope, búsquedas por código de barras por día (24/9/2026), viaja igual pero con otra
+ * lectura del vacío/0: ahí es el DEFECTO de 30 que aplica el sistema del cliente, no "sin tope".
+ *
  * Rutas asumidas (el admin-api las construye en paralelo; confirmar contra routes/api.php):
  *   GET    /api/admin/ai-plan        -> lista
  *   POST   /api/admin/ai-plan        -> alta
@@ -255,6 +277,7 @@ export default {
         precio_usd: '',
         tope_tokens_mensual: '',
         tope_interacciones_diarias: '',
+        tope_busquedas_web_diarias: '',
         orden: 0,
         activo: true,
       },
@@ -339,6 +362,7 @@ export default {
         precio_usd: '',
         tope_tokens_mensual: '',
         tope_interacciones_diarias: '',
+        tope_busquedas_web_diarias: '',
         orden: 0,
         activo: true,
       }
@@ -357,6 +381,7 @@ export default {
         precio_usd: paquete.precio_usd === null || paquete.precio_usd === undefined ? '' : String(paquete.precio_usd),
         tope_tokens_mensual: this.tope_a_input(paquete.tope_tokens_mensual),
         tope_interacciones_diarias: this.tope_a_input(paquete.tope_interacciones_diarias),
+        tope_busquedas_web_diarias: this.tope_a_input(paquete.tope_busquedas_web_diarias),
         orden: Number(paquete.orden || 0),
         activo: !!paquete.activo,
       }
@@ -416,6 +441,7 @@ export default {
         precio_usd: this.form.precio_usd === '' || this.form.precio_usd === null ? 0 : Number(this.form.precio_usd),
         tope_tokens_mensual: this.tope_a_payload(this.form.tope_tokens_mensual),
         tope_interacciones_diarias: this.tope_a_payload(this.form.tope_interacciones_diarias),
+        tope_busquedas_web_diarias: this.tope_a_payload(this.form.tope_busquedas_web_diarias),
         orden: Number(this.form.orden || 0),
         activo: !!this.form.activo,
       }
@@ -457,6 +483,7 @@ export default {
         precio_usd: paquete.precio_usd === null || paquete.precio_usd === undefined ? 0 : Number(paquete.precio_usd),
         tope_tokens_mensual: this.tope_a_payload(this.tope_a_input(paquete.tope_tokens_mensual)),
         tope_interacciones_diarias: this.tope_a_payload(this.tope_a_input(paquete.tope_interacciones_diarias)),
+        tope_busquedas_web_diarias: this.tope_a_payload(this.tope_a_input(paquete.tope_busquedas_web_diarias)),
         orden: Number(paquete.orden || 0),
         activo: !paquete.activo,
       }
@@ -499,6 +526,19 @@ export default {
     tope_visible(valor) {
       if (valor === null || valor === undefined || Number(valor) === 0) {
         return 'Sin tope'
+      }
+      return Number(valor).toLocaleString('es-AR')
+    },
+
+    /**
+     * Tope de búsquedas por código de barras, listo para mostrar. A diferencia de `tope_visible`,
+     * null/0 NO es "Sin tope": el sistema del cliente aplica su defecto de 30 por día.
+     * @param {number|null} valor
+     * @returns {string}
+     */
+    tope_busquedas_visible(valor) {
+      if (valor === null || valor === undefined || Number(valor) === 0) {
+        return '30 (defecto)'
       }
       return Number(valor).toLocaleString('es-AR')
     },
