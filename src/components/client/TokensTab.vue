@@ -56,7 +56,8 @@
 
             <p v-if="paquete_elegido_obj" class="tokens-tabla__nota mb-0 mt-2">
               Tope: {{ tope_visible(paquete_elegido_obj.tope_tokens_mensual) }} tokens/mes ·
-              {{ tope_visible(paquete_elegido_obj.tope_interacciones_diarias) }} interacciones/día.
+              {{ tope_visible(paquete_elegido_obj.tope_interacciones_diarias) }} interacciones/día ·
+              {{ tope_busquedas_visible(paquete_elegido_obj.tope_busquedas_web_diarias) }} búsquedas por código de barras/día.
             </p>
             <p v-else class="tokens-tabla__nota mb-0 mt-2">
               Sin paquete asignado: el sistema del cliente no corta por tope.
@@ -1273,6 +1274,21 @@ export default {
     tope_visible(valor) {
       if (valor === null || valor === undefined || Number(valor) === 0) {
         return 'sin tope'
+      }
+      return Number(valor).toLocaleString('es-AR')
+    },
+
+    /**
+     * Tope de búsquedas por código de barras del paquete (misión asistente-fotos-barras-y-compras,
+     * 24/9/2026), listo para mostrar. A diferencia de `tope_visible`, null/0 NO es "sin tope": el
+     * sistema del cliente aplica su defecto de 30 por día. Mismo criterio que la columna de
+     * AiPlansConfig.vue.
+     * @param {number|null} valor
+     * @returns {string}
+     */
+    tope_busquedas_visible(valor) {
+      if (valor === null || valor === undefined || Number(valor) === 0) {
+        return '30 (defecto)'
       }
       return Number(valor).toLocaleString('es-AR')
     },
