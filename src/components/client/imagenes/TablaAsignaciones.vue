@@ -43,10 +43,12 @@
               <td>{{ etiqueta(origenes, asignacion.origen) }}</td>
               <td>{{ etiqueta(estados, asignacion.status) }}</td>
               <td class="text-end">{{ numero(asignacion.total_articulos) }}</td>
+              <!-- Con 1 va en singular ("1 asignada", "1 no asignada"): en una asignación chica pasa
+                   seguido. "a revisar" no cambia con el número. -->
               <td class="imagenes-tabla__resultado">
-                {{ numero(asignacion.asignadas) }} asignadas ·
+                {{ numero(asignacion.asignadas) }} {{ Number(asignacion.asignadas) === 1 ? 'asignada' : 'asignadas' }} ·
                 {{ numero(asignacion.a_revisar) }} a revisar ·
-                {{ numero(asignacion.no_asignadas) }} no asignadas
+                {{ numero(asignacion.no_asignadas) }} {{ Number(asignacion.no_asignadas) === 1 ? 'no asignada' : 'no asignadas' }}
               </td>
               <td class="text-end">{{ numero(asignacion.busquedas) }}</td>
               <td class="text-end">{{ numero(asignacion.validaciones_ia) }}</td>

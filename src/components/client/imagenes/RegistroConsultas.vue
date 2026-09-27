@@ -415,12 +415,25 @@ export default {
     },
     /**
      * El error de una consulta, con el código HTTP cuando lo hubo.
+     *
+     * El código se agrega al final solo si el mensaje no lo nombra ya. El de Serper llega armado
+     * como "Serper respondió con error (HTTP 429): Too many requests." y el de la IA sin detalle es
+     * "HTTP 500" a secas: agregarlo igual mostraba el mismo código dos veces. Cuenta solo el MISMO
+     * número, sin otro dígito pegado atrás ("HTTP 4290" no es "HTTP 429"): un mensaje que no trae
+     * código (el de Google) o que nombra otro lleva el suyo al final, como siempre.
      * @param {Object} fila
      * @returns {string}
      */
     texto_de_error(fila) {
       const texto = fila.error && String(fila.error).trim() !== '' ? String(fila.error) : 'Error sin detalle'
-      return fila.http_status ? texto + ' (HTTP ' + fila.http_status + ')' : texto
+      const codigo = fila.http_status ? String(fila.http_status).trim() : ''
+      if (codigo === '') {
+        return texto
+      }
+      // Solo se busca un código de puros dígitos (la columna es un smallint): así entra al patrón
+      // sin escaparlo. Cualquier otra cosa se agrega al final sin buscarla.
+      const ya_lo_nombra = /^\d+$/.test(codigo) && new RegExp('HTTP\\s*' + codigo + '(?!\\d)', 'i').test(texto)
+      return ya_lo_nombra ? texto : texto + ' (HTTP ' + codigo + ')'
     },
     /**
      * Qué devolvió la consulta: el `resumen` legible que arma el cliente ("10 resultados",

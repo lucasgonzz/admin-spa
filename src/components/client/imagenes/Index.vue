@@ -252,7 +252,9 @@ export default {
         return 'La fecha "desde" no puede ser posterior a "hasta".'
       }
       if (this.dias_del_rango_elegido > MAX_DIAS) {
-        return 'El sistema del cliente acepta hasta ' + MAX_DIAS + ' días por consulta. Achicá el período.'
+        // "por vez" y no "por consulta": en esta solapa una consulta es una fila del registro (una
+        // búsqueda o una validación), no el pedido al sistema del cliente.
+        return 'El sistema del cliente acepta hasta ' + MAX_DIAS + ' días por vez. Achicá el período.'
       }
       return ''
     },

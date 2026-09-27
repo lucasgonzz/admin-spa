@@ -43,7 +43,7 @@
                 {{ numero(fila.cantidad) }} de {{ fila.nombre }}
               </span>
               <span v-if="busquedas_no_cobradas > 0" class="d-block">
-                {{ numero(busquedas_no_cobradas) }} no cobradas
+                {{ numero(busquedas_no_cobradas) }} {{ busquedas_no_cobradas === 1 ? 'no cobrada' : 'no cobradas' }}
               </span>
             </p>
           </div>
@@ -56,7 +56,7 @@
             <p class="imagenes-cifra__rotulo mb-1">Validaciones con IA</p>
             <p class="imagenes-cifra__valor mb-0">{{ numero(totales.validaciones_ia) }}</p>
             <p v-if="validaciones_no_cobradas > 0" class="imagenes-cifra__pie mb-0">
-              {{ numero(validaciones_no_cobradas) }} no cobradas
+              {{ numero(validaciones_no_cobradas) }} {{ validaciones_no_cobradas === 1 ? 'no cobrada' : 'no cobradas' }}
             </p>
           </div>
         </div>
@@ -194,8 +194,10 @@ export default {
         notas.push('No incluye ' + faltantes.join(', ') + ': sin precio cargado.')
       }
 
+      /* "El costo de las búsquedas" y no "las búsquedas": la cantidad es exacta, lo que no se sabe
+         exacto es la plata. "Búsquedas" en esta solapa son solo las consultas al buscador. */
       if (this.totales.costo_busquedas_es_techo === true) {
-        notas.push('Las búsquedas son un techo: hubo rechazos y no se sabe de qué proveedor eran.')
+        notas.push('El costo de las búsquedas es un techo: hubo rechazos y no se sabe de qué proveedor eran.')
       }
 
       const de_google = Number((this.totales.busquedas_por_proveedor || {}).google || 0)
