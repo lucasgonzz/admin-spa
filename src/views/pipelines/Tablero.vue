@@ -119,8 +119,8 @@
           v-model="q_input"
           type="search"
           class="form-control form-control-sm pl-filters__search"
-          placeholder="Buscar por nombre"
-          aria-label="Buscar por nombre"
+          placeholder="Buscar por nombre o empresa"
+          aria-label="Buscar por nombre o empresa"
         />
 
         <template v-if="view_mode === 'listado'">

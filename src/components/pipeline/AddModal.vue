@@ -54,8 +54,8 @@
           v-model="q_input"
           type="search"
           class="form-control form-control-sm pl-add__search"
-          :placeholder="type === 'client' ? 'Buscar cliente' : 'Buscar lead'"
-          aria-label="Buscar"
+          placeholder="Nombre, empresa, teléfono o mail"
+          :aria-label="type === 'client' ? 'Buscar clientes' : 'Buscar leads'"
         />
         <div v-if="type === 'client'" class="form-check form-switch mb-0">
           <input

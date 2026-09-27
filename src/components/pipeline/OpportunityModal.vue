@@ -518,9 +518,10 @@ export default {
     },
 
     /**
-     * Aplica la oportunidad que devolvió una escritura. Las respuestas de move/notas/PUT traen la
-     * forma estándar (sin el pipeline completo y, según el endpoint, sin el contacto del sujeto),
-     * así que se conservan esos dos datos de la ficha.
+     * Aplica la oportunidad que devolvió una escritura. El back devuelve en move, notas y PUT la
+     * misma forma completa de la ficha (contacto del sujeto y `pipeline` con sus etapas), así que
+     * normalmente reemplaza todo. Si alguna respuesta llegara sin el pipeline o sin el contacto, se
+     * conservan los de la ficha en vez de dejarla sin etapas para mover o sin teléfono.
      *
      * @param {Object|null} updated
      */
