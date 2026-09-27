@@ -19,7 +19,10 @@
               <th>Estado</th>
               <th class="text-end">Artículos</th>
               <th>Resultado</th>
-              <th class="text-end">Búsquedas</th>
+              <!-- "cobradas" porque el contador de la asignación suma solo las búsquedas que el
+                   proveedor respondió bien: el registro de abajo, filtrado por la asignación, trae
+                   también las que fallaron, y sin la aclaración los dos números no se entienden. -->
+              <th class="text-end">Búsquedas cobradas</th>
               <th class="text-end">Validaciones</th>
               <th class="text-end"><span class="visually-hidden">Acción</span></th>
             </tr>

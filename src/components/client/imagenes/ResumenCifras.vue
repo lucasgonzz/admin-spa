@@ -23,6 +23,12 @@
             <p v-for="nota in notas_del_costo" :key="nota" class="imagenes-cifra__nota mb-0">
               {{ nota }}
             </p>
+            <!-- La IA de las validaciones se cuenta acá Y en la solapa Tokens (es la misma plata, vista
+                 desde el circuito de imágenes): se aclara para que nadie sume las dos solapas. Solo
+                 cuando hubo validaciones: sin ellas, el costo es solo de búsquedas. -->
+            <p v-if="hubo_validaciones" class="imagenes-cifra__nota mb-0">
+              Incluye la validación con IA, que también figura en la solapa Tokens.
+            </p>
           </div>
         </div>
       </div>
@@ -61,9 +67,17 @@
           <div class="card-body">
             <p class="imagenes-cifra__rotulo mb-1">Tokens de IA</p>
             <p class="imagenes-cifra__valor mb-0">{{ numero(totales.tokens) }}</p>
+            <!-- Las cuatro puntas, para que las partes sumen el total; las de caché solo si hubo,
+                 porque casi siempre son cero y dos renglones en cero son ruido. -->
             <p class="imagenes-cifra__pie mb-0">
               <span class="d-block">{{ numero(totales.tokens_entrada) }} de entrada</span>
               <span class="d-block">{{ numero(totales.tokens_salida) }} de salida</span>
+              <span v-if="Number(totales.tokens_cache_escritura || 0) > 0" class="d-block">
+                {{ numero(totales.tokens_cache_escritura) }} escritos en caché
+              </span>
+              <span v-if="Number(totales.tokens_cache_lectura || 0) > 0" class="d-block">
+                {{ numero(totales.tokens_cache_lectura) }} leídos de caché
+              </span>
             </p>
           </div>
         </div>
@@ -137,6 +151,14 @@ export default {
         0,
         Number(this.totales.validaciones_ia || 0) - Number(this.totales.validaciones_ia_cobradas || 0)
       )
+    },
+    /**
+     * true si en el período hubo validaciones con IA: dispara la aclaración de que esa plata también
+     * figura en la solapa Tokens.
+     * @returns {boolean}
+     */
+    hubo_validaciones() {
+      return Number(this.totales.validaciones_ia || 0) > 0
     },
     /**
      * Consultas del período que terminaron en error (búsquedas y validaciones).

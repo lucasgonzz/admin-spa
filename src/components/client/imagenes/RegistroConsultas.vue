@@ -13,7 +13,9 @@
       <!-- bajan por prop: la tabla de asignaciones y el aviso de       -->
       <!-- errores del resumen también los cambian.                     -->
       <!-- ============================================================ -->
-      <div class="d-flex flex-wrap align-items-center gap-2 gap-md-3 mb-3">
+      <!-- Con la nota del filtro por asignación abajo, la fila se le arrima (mb-2): la nota es de
+           los filtros, no un párrafo aparte. -->
+      <div class="d-flex flex-wrap align-items-center gap-2 gap-md-3" :class="filtros.asignacion ? 'mb-2' : 'mb-3'">
         <div class="btn-group btn-group-sm" role="group" aria-label="Tipo de consulta">
           <button
             v-for="opcion in tipos"
@@ -58,6 +60,15 @@
           aria-label="Cargando consultas"
         />
       </div>
+
+      <!-- Con el filtro por asignación, los números de acá y los de la tabla de asignaciones no
+           coinciden por dos motivos legítimos, y se dicen: el registro se corta en el período
+           elegido (una asignación larga puede seguir antes o después) y trae también las consultas
+           que fallaron, que la asignación no cuenta. -->
+      <p v-if="filtros.asignacion" class="imagenes-tabla__nota mb-3">
+        Dentro del período elegido; incluye las consultas que fallaron (la tabla de asignaciones
+        cuenta solo las cobradas).
+      </p>
 
       <!-- Primera carga del registro -->
       <div v-if="estado === null" class="text-muted small py-2">
@@ -273,20 +284,18 @@ export default {
       return !!(this.filtros.tipo || this.filtros.solo_errores || this.filtros.asignacion)
     },
     /**
-     * Opciones del selector de asignación. Si el registro está filtrado por una asignación que no
-     * está en la lista del período (se creó antes y siguió consultando adentro del rango), se
-     * agrega igual: un selector que no muestra el filtro activo miente sobre lo que se ve.
+     * Opciones del selector de asignación: las asignaciones del período, y ninguna más.
+     *
+     * 🔴 Un solo criterio para una asignación que no está en la lista del período, y lo aplica el
+     * orquestador (`Index.vue`, `aplicar_datos()`): al cambiar el período, si la asignación filtrada
+     * ya no está en la lista, SACA el filtro. Por eso acá no hace falta contemplar una filtrada
+     * que no esté entre las opciones: no puede pasar.
      * @returns {Array<{id: number, label: string}>}
      */
     opciones_de_asignacion() {
       const opciones = []
-      const filtrada = this.filtros.asignacion ? Number(this.filtros.asignacion) : null
-      let esta = false
       this.asignaciones.forEach(function (asignacion) {
         const id = Number(asignacion.id)
-        if (id === filtrada) {
-          esta = true
-        }
         opciones.push({
           id: id,
           label:
@@ -294,9 +303,6 @@ export default {
             ' · ' + fecha_hora_corta(asignacion.created_at),
         })
       })
-      if (filtrada !== null && !esta) {
-        opciones.unshift({ id: filtrada, label: 'Asignación #' + filtrada })
-      }
       return opciones
     },
     /**

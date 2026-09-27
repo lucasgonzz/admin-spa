@@ -39,12 +39,15 @@
             <div>
               <label class="form-label small text-muted mb-1 d-block">Período</label>
               <div class="btn-group btn-group-sm" role="group">
+                <!-- Deshabilitados mientras hay un pedido en vuelo, igual que "Ver": cada toque es una
+                     consulta en vivo al sistema del cliente, y apilar tres no hace que llegue antes. -->
                 <button
                   v-for="opcion in atajos"
                   :key="opcion.dias"
                   type="button"
                   class="btn"
                   :class="dias_elegidos === opcion.dias ? 'btn-dark' : 'btn-outline-secondary'"
+                  :disabled="cargando"
                   @click="elegir_atajo(opcion.dias)"
                 >
                   {{ opcion.label }}
@@ -255,9 +258,20 @@ export default {
     },
   },
   watch: {
-    /** Si cambia el cliente abierto en el modal, arranca de cero con el mismo atajo. */
+    /**
+     * Si cambia el cliente abierto en el modal, arranca de cero con el mismo atajo.
+     *
+     * 🔴 Limpia TODO lo del cliente anterior antes de pedir: sin esto, mientras llega la respuesta
+     * del nuevo, la solapa seguiría mostrando las cifras, las asignaciones y el registro del cliente
+     * anterior bajo el nombre del nuevo (y `ya_respondio` en true saltearía el "Consultando…").
+     */
     'record.id': function (nuevo_id, viejo_id) {
       if (nuevo_id && nuevo_id !== viejo_id) {
+        this.datos = null
+        this.estado = null
+        this.mensaje = ''
+        this.ya_respondio = false
+        this.rango = { desde: '', hasta: '' }
         this.filtros = { tipo: '', solo_errores: false, asignacion: null }
         this.elegir_atajo(this.dias_elegidos || 30)
       }
@@ -361,6 +375,11 @@ export default {
      * Vuelca un resumen bueno: normaliza los bloques (un cliente con una versión intermedia podría
      * no mandar alguno), aplica el período y suelta el filtro de asignación si esa asignación ya no
      * es del período nuevo.
+     *
+     * 🔴 Ese es el ÚNICO criterio para una asignación que no está en la lista del período: se saca
+     * el filtro, acá. El registro (`RegistroConsultas.vue`) no contempla una filtrada fuera de la
+     * lista, justamente porque esto garantiza que no la va a recibir: con los dos criterios a la vez
+     * (uno la sacaba y el otro la mostraba) la pantalla dependía de cuál corría primero.
      * @param {Object} datos Bloque `datos` de la respuesta.
      * @param {string} desde Período pedido.
      * @param {string} hasta

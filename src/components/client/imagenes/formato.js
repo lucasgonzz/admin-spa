@@ -74,7 +74,9 @@ export function numero(valor) {
  * 🔴 `null` NO se muestra como cero: se muestra como un guion. Cero significa "no costó nada" y
  * null significa "no sé cuánto costó"; mostrarlos igual es exactamente lo que el admin-api se cuida
  * de no hacer. Los importes muy chicos van con cuatro decimales: una búsqueda de Serper cuesta
- * US$ 0,001, y con dos decimales se vería como US$ 0,00 y parecería que no costó nada.
+ * US$ 0,001, y con dos decimales se vería como US$ 0,00 y parecería que no costó nada. Y lo que no
+ * llega ni a cuatro decimales (una validación con pocos tokens) se muestra como "< US$ 0,0001": con
+ * cuatro decimales redondearía a US$ 0,0000, que otra vez se lee como gratis.
  *
  * @param {number|null} valor
  * @returns {string}
@@ -84,6 +86,9 @@ export function costo_visible(valor) {
     return '—'
   }
   const importe = Number(valor)
+  if (importe > 0 && importe < 0.0001) {
+    return '< US$ 0,0001'
+  }
   if (importe > 0 && importe < 0.01) {
     return 'US$ ' + importe.toLocaleString('es-AR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })
   }
