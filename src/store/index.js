@@ -35,6 +35,8 @@ import agente from './agente'
 import shared_database_group from './shared_database_group'
 // Multimedia editable de la demo: slots del catálogo (GitHub) + URLs cargadas (grupo 300, prompt 06).
 import demo_media from './demo_media'
+// Pipelines (CRM): enumeraciones del back, lista de pipelines y responsables (misión pipelines-crm).
+import pipeline from './pipeline'
 
 export default createStore({
   modules: {
@@ -76,5 +78,7 @@ export default createStore({
     shared_database_group,
     // Multimedia editable de la demo (pantalla admin de grupo 300, prompt 06).
     demo_media,
+    // Pipelines (CRM): lo compartido entre tablero, agenda, configuración y la pestaña del cliente/lead.
+    pipeline,
   },
 })
