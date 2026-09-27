@@ -16,6 +16,7 @@ import LicenciasTab from '@/components/client/LicenciasTab.vue'
 import ClientScheduleTab from '@/components/client/ScheduleTab.vue'
 import ClientTokensTab from '@/components/client/TokensTab.vue'
 import ClientCandadoSesionTab from '@/components/client/CandadoSesionTab.vue'
+import SubjectPipelinesTab from '@/components/pipeline/SubjectPipelinesTab.vue'
 
 /**
  * Vista principal de clientes.
@@ -81,6 +82,14 @@ export default {
           key: 'candado-sesion',
           label: 'Candado de sesión',
           component: markRaw(ClientCandadoSesionTab),
+        },
+        {
+          /* Oportunidades del cliente en los pipelines del CRM (misión pipelines-crm, 27/9/2026):
+             en qué etapa está de cada campaña, su historial y "Agregar a un pipeline". La pestaña
+             deduce que el sujeto es un cliente del `model_name` que le pasa el modal. */
+          key: 'pipelines',
+          label: 'Pipelines',
+          component: markRaw(SubjectPipelinesTab),
         },
       ],
     }

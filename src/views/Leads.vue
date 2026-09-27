@@ -554,6 +554,7 @@ import LeadResumenTab from '@/components/lead/resumen/Index.vue'
 import LeadContractTab from '@/components/lead/contract/Index.vue'
 import LeadConversationSidebar from '@/components/lead/LeadConversationSidebar.vue'
 import LeadStatusCards from '@/components/lead/LeadStatusCards.vue'
+import SubjectPipelinesTab from '@/components/pipeline/SubjectPipelinesTab.vue'
 
 /**
  * Definición de pestaña extra fuera de `data()` para no recrear el array por instancia.
@@ -576,10 +577,18 @@ const lead_model_extra_tabs = [
     label: 'Contrato',
     component: markRaw(LeadContractTab),
   },
+  {
+    /* Oportunidades del lead en los pipelines del CRM (misión pipelines-crm, 27/9/2026). La
+       pestaña deduce que el sujeto es un lead del `model_name` que le pasa el modal. */
+    key: 'pipelines',
+    label: 'Pipelines',
+    component: markRaw(SubjectPipelinesTab),
+  },
 ]
 
 /**
  * Orden de pestañas del modal de lead: extras intercalados con grupos del meta (Demo, Basico).
+ * Pipelines va al final: es la mirada comercial de campañas, no el día a día del lead.
  */
 const lead_model_properties_nav_order = [
   'extra:resumen',
@@ -587,6 +596,7 @@ const lead_model_properties_nav_order = [
   'group:Demo',
   'group:Basico',
   'extra:contract',
+  'extra:pipelines',
 ]
 
 /**
