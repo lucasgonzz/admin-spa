@@ -88,6 +88,19 @@
               <div v-if="add_error('note')" class="invalid-feedback d-block">{{ add_error('note') }}</div>
             </div>
           </div>
+          <!-- Lo que pide la etapa inicial elegida (se valida en el back igual que al mover) -->
+          <div v-if="add_stage_fields.length" class="pl-subject-add__fields">
+            <p class="pl-subject-add__fields-title">Lo que pide «{{ add_stage.name }}»</p>
+            <field-input
+              v-for="field in add_stage_fields"
+              :key="add_stage.id + '-' + field.key"
+              v-model="add.values[field.key]"
+              class="mb-2"
+              :field="field"
+              :input_id="uid + '-campo-' + field.key"
+              :error="add_error('fields.' + field.key)"
+            />
+          </div>
           <div class="d-flex justify-content-end gap-2 mt-2">
             <button type="button" class="btn btn-secondary btn-sm" :disabled="add.saving" @click="add.show = false">Cancelar</button>
             <button type="button" class="btn btn-primary btn-sm" :disabled="add.saving || !add.pipeline_id" @click="submit_add">
@@ -135,7 +148,7 @@
       :show="true"
       :opportunity_id="ficha.opportunity_id"
       :stack_level="1"
-      @close="ficha.show = false"
+      @close="on_ficha_closed"
       @changed="load(true)"
       @deleted="on_deleted"
     />
@@ -144,6 +157,7 @@
 
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
+import FieldInput from '@/components/pipeline/FieldInput.vue'
 import NextActionText from '@/components/pipeline/NextActionText.vue'
 import OpportunityModal from '@/components/pipeline/OpportunityModal.vue'
 import OwnerAvatar from '@/components/pipeline/OwnerAvatar.vue'
@@ -151,6 +165,7 @@ import StageTag from '@/components/pipeline/StageTag.vue'
 import {
   first_error,
   first_open_stage,
+  serialize_field_value,
   show_toast,
   sort_stages_for_board,
   validation_errors,
@@ -162,7 +177,7 @@ let instance_seq = 0
 
 export default {
   name: 'PipelineSubjectPipelinesTab',
-  components: { NextActionText, OpportunityModal, OwnerAvatar, StageTag },
+  components: { FieldInput, NextActionText, OpportunityModal, OwnerAvatar, StageTag },
   props: {
     /** Borrador del modal (no se usa: la pestaña no escribe en el formulario del cliente/lead). */
     draft: { type: Object, default: null },
@@ -233,8 +248,27 @@ export default {
         return s.type === 'open'
       })
     },
+    /** @returns {Object|null} Etapa inicial elegida en el alta. */
+    add_stage() {
+      const self = this
+      return this.add_open_stages.find(function (s) {
+        return String(s.id) === String(self.add.stage_id)
+      }) || null
+    },
+    /** @returns {Array<Object>} Campos que pide la etapa inicial elegida. */
+    add_stage_fields() {
+      const fields = this.add_stage && this.add_stage.fields
+      return Array.isArray(fields) ? fields : []
+    },
   },
   watch: {
+    /** Otra etapa inicial en el alta: lo cargado para la anterior no vale para esta. */
+    'add.stage_id': function (new_id, old_id) {
+      if (String(new_id) !== String(old_id)) {
+        this.add.values = {}
+        this.add.errors = {}
+      }
+    },
     /** Otro cliente/lead en el mismo modal: todo de cero. */
     'record.id': function (new_id, old_id) {
       if (new_id && new_id !== old_id) {
@@ -269,6 +303,8 @@ export default {
         stage_id: '',
         owner_value: me && me.id ? String(me.id) : '',
         note: '',
+        /** Valores de los campos de la etapa inicial, por `key`. */
+        values: {},
         errors: {},
         saving: false,
       }
@@ -393,6 +429,7 @@ export default {
       const pipeline = this.$store.getters['pipeline/pipeline_by_id'](this.add.pipeline_id)
       const stage = first_open_stage(pipeline)
       this.add.stage_id = stage ? String(stage.id) : ''
+      this.add.values = {}
       this.add.errors = {}
     },
     /**
@@ -414,6 +451,17 @@ export default {
       }
       if (this.add.note.trim() !== '') {
         payload.note = this.add.note.trim()
+      }
+      if (this.add_stage_fields.length) {
+        const values = this.add.values
+        const fields = {}
+        this.add_stage_fields.forEach(function (field) {
+          const value = serialize_field_value(field, values[field.key])
+          if (value !== undefined) {
+            fields[field.key] = value
+          }
+        })
+        payload.fields = fields
       }
       this.add.saving = true
       this.add.errors = {}
@@ -444,6 +492,14 @@ export default {
      */
     open_opportunity(opportunity) {
       this.ficha = { show: true, opportunity_id: opportunity.id, key: this.ficha.key + 1 }
+    },
+    /**
+     * Al cerrar la ficha se recarga la lista: si se cerró con un guardado todavía en vuelo, su
+     * `changed` no llega y la pestaña quedaría vieja.
+     */
+    on_ficha_closed() {
+      this.ficha = { show: false, opportunity_id: null, key: this.ficha.key }
+      this.load(true)
     },
     on_deleted() {
       this.ficha = { show: false, opportunity_id: null, key: this.ficha.key }
@@ -479,6 +535,18 @@ export default {
 
 .pl-subject-add__note {
   grid-column: 1 / -1;
+}
+
+.pl-subject-add__fields {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border-secondary);
+}
+
+.pl-subject-add__fields-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
 @media (max-width: 767.98px) {

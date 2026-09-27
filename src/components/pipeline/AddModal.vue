@@ -3,9 +3,13 @@
     Alta masiva de clientes y/o leads a un pipeline (POST pipelines/{id}/opportunities).
 
     Los candidatos salen de GET pipelines/{id}/candidates: clientes (con "solo activos", prendido de
-    entrada) o leads (filtrables por estado), con búsqueda y "cargar más". Los que ya tienen una
-    oportunidad abierta en este pipeline aparecen deshabilitados con "Ya está". La selección
-    sobrevive a cambiar de pestaña y de búsqueda, así que se pueden mandar clientes y leads juntos.
+    entrada, de a 300 que es el tope de la API) o leads (filtrables por estado, de a 100), con
+    búsqueda y "cargar más". Los que ya tienen una oportunidad abierta en este pipeline aparecen
+    deshabilitados con "Ya está". La selección sobrevive a cambiar de pestaña y de búsqueda, así que
+    se pueden mandar clientes y leads juntos, hasta 500 por vez (el tope del contrato).
+
+    Si la etapa inicial elegida pide campos, se cargan acá (ronda de arreglos R2): el mismo valor para
+    todos, validado por el back igual que al mover. Cambiar la etapa inicial los vacía.
   -->
   <base-modal
     :show="show"
@@ -36,8 +40,9 @@
             Leads
           </button>
         </div>
-        <span class="pl-add__selected">
+        <span class="pl-add__selected" :class="{ 'pl-add__selected--full': selected_count >= MAX_SUBJECTS }">
           {{ selected_count }} {{ selected_count === 1 ? 'seleccionado' : 'seleccionados' }}
+          <span class="pl-add__cap">· hasta {{ MAX_SUBJECTS }} por vez</span>
           <button
             v-if="selected_count > 0"
             type="button"
@@ -88,17 +93,19 @@
             :disabled="!selectable_visible.length"
             @change="toggle_all_visible($event.target.checked)"
           />
-          <label class="form-check-label small" for="pl-add-todos">
-            Seleccionar los visibles ({{ selectable_visible.length }})
-          </label>
+          <label class="form-check-label small" for="pl-add-todos">{{ select_all_label }}</label>
         </div>
-        <span class="text-muted small">{{ total }} en total</span>
+        <span v-if="!load_error || candidates.length" class="text-muted small">{{ total }} en total</span>
       </div>
 
       <div class="pl-add__list" :class="{ 'pl-add__list--loading': loading && candidates.length > 0 }">
         <p v-if="loading && !candidates.length" class="text-center text-muted small py-4 mb-0">
           <span class="spinner-border spinner-border-sm me-1" aria-hidden="true" />Buscando…
         </p>
+        <div v-else-if="load_error && !candidates.length" class="pl-add__error">
+          <p class="mb-2">{{ load_error }}</p>
+          <button type="button" class="btn btn-outline-secondary btn-sm" @click="load_candidates(false)">Reintentar</button>
+        </div>
         <p v-else-if="!candidates.length" class="text-center text-muted small py-4 mb-0">
           {{ type === 'client' ? 'No hay clientes' : 'No hay leads' }} con estos filtros.
         </p>
@@ -114,7 +121,7 @@
               class="form-check-input mt-0"
               :checked="is_selected(candidate)"
               :disabled="!is_selectable(candidate)"
-              @change="toggle(candidate, $event.target.checked)"
+              @change="on_row_change(candidate, $event)"
             />
             <span class="pl-add__row-text">
               <span class="pl-add__row-name">{{ candidate.name }}</span>
@@ -131,7 +138,11 @@
               <span v-if="candidate.type === 'lead' && candidate.status_label" class="pl-add__tag">{{ candidate.status_label }}</span>
             </span>
           </label>
-          <div v-if="has_more" class="text-center py-2">
+          <div v-if="load_error" class="pl-add__error pl-add__error--inline">
+            <span>{{ load_error }}</span>
+            <button type="button" class="btn btn-link btn-sm p-0" @click="load_candidates(true)">Reintentar</button>
+          </div>
+          <div v-else-if="has_more" class="text-center py-2">
             <button type="button" class="btn btn-link btn-sm" :disabled="loading" @click="load_candidates(true)">
               {{ loading ? 'Cargando…' : 'Cargar más' }}
             </button>
@@ -179,6 +190,21 @@
           <div v-if="error_for('note')" class="invalid-feedback d-block">{{ error_for('note') }}</div>
         </div>
       </div>
+
+      <!-- Lo que pide la etapa inicial (el mismo valor para todos los que se agregan) -->
+      <div v-if="initial_fields.length" class="pl-add__fields">
+        <p class="pl-add__fields-title">Lo que pide «{{ initial_stage.name }}»</p>
+        <p class="pl-add__fields-hint">Se carga lo mismo para todos los que agregues.</p>
+        <field-input
+          v-for="field in initial_fields"
+          :key="initial_stage.id + '-' + field.key"
+          v-model="stage_values[field.key]"
+          class="mb-2"
+          :field="field"
+          :input_id="'pl-add-field-' + field.key"
+          :error="error_for('fields.' + field.key)"
+        />
+      </div>
     </div>
 
     <template #footer>
@@ -197,17 +223,25 @@
 </template>
 
 <script>
-import api from '@/utils/axios'
+import api, { resolve_error_message } from '@/utils/axios'
 import BaseModal from '@/components/ui/BaseModal.vue'
+import FieldInput from '@/components/pipeline/FieldInput.vue'
 import {
   first_error,
+  serialize_field_value,
   show_toast,
   sort_stages_for_board,
   validation_errors,
 } from '@/components/pipeline/pipeline_helpers'
 
-/** Candidatos por página (el back acepta hasta 300). */
-const PAGE_SIZE = 100
+/**
+ * Candidatos por página: clientes de a 300 (el tope de la API: casi siempre entran todos los
+ * activos de una) y leads de a 100 (son muchos más y se buscan).
+ */
+const PAGE_SIZE_BY_TYPE = { client: 300, lead: 100 }
+
+/** Tope de sujetos por alta (el contrato acepta de 1 a 500). */
+const MAX_SUBJECTS = 500
 
 /** Espera antes de buscar mientras se tipea. */
 const SEARCH_DEBOUNCE_MS = 300
@@ -227,11 +261,11 @@ function selection_key(candidate) {
  */
 export default {
   name: 'PipelineAddModal',
-  components: { BaseModal },
+  components: { BaseModal, FieldInput },
   props: {
     /** Visibilidad del modal. */
     show: { type: Boolean, default: true },
-    /** Pipeline destino (con `stages`). */
+    /** Pipeline destino (con `stages` y sus `fields`). */
     pipeline: { type: Object, required: true },
     /** Nivel de apilamiento. */
     stack_level: { type: Number, default: 0 },
@@ -240,6 +274,7 @@ export default {
   data() {
     const me = this.$store.state.auth.admin
     return {
+      MAX_SUBJECTS: MAX_SUBJECTS,
       /** Pestaña activa: `client` | `lead`. */
       type: 'client',
       /** Lo que se tipea en el buscador (se aplica con debounce a `q`). */
@@ -257,10 +292,14 @@ export default {
       total: 0,
       has_more: false,
       loading: false,
+      /** Mensaje del último pedido de candidatos que falló (null = sin error). */
+      load_error: null,
       /** Seleccionados, por `tipo:id` → `{ type, id, name }`. */
       selected: {},
       /** Etapa inicial (string para el select). */
       stage_id: '',
+      /** Valores de los campos de la etapa inicial, por `key`. */
+      stage_values: {},
       /** Responsable: el operador logueado de entrada; "" = sin responsable. */
       owner_value: me && me.id ? String(me.id) : '',
       note: '',
@@ -283,6 +322,18 @@ export default {
         return s.type === 'open'
       })
     },
+    /** @returns {Object|null} La etapa inicial elegida. */
+    initial_stage() {
+      const self = this
+      return this.open_stages.find(function (s) {
+        return String(s.id) === String(self.stage_id)
+      }) || null
+    },
+    /** @returns {Array<Object>} Campos que pide la etapa inicial. */
+    initial_fields() {
+      const fields = this.initial_stage && this.initial_stage.fields
+      return Array.isArray(fields) ? fields : []
+    },
     /** @returns {Array<Object>} */
     admins() {
       return this.$store.state.pipeline.admins || []
@@ -297,6 +348,15 @@ export default {
       return this.candidates.filter(function (c) {
         return self.is_selectable(c)
       })
+    },
+    /**
+     * "Seleccionar los visibles (N)", o "(N de M)" cuando hay más resultados que los cargados.
+     * @returns {string}
+     */
+    select_all_label() {
+      const visible = this.selectable_visible.length
+      const hay_mas = this.has_more || this.total > this.candidates.length
+      return 'Seleccionar los visibles (' + visible + (hay_mas ? ' de ' + this.total : '') + ')'
     },
     /** @returns {boolean} */
     all_visible_selected() {
@@ -345,6 +405,13 @@ export default {
     lead_status: function () {
       this.load_candidates(false)
     },
+    /** Otra etapa inicial: lo cargado para la anterior no vale para esta. */
+    stage_id: function (new_id, old_id) {
+      if (String(new_id) !== String(old_id)) {
+        this.stage_values = {}
+        this.errors = {}
+      }
+    },
   },
   created() {
     const first = this.open_stages[0]
@@ -390,7 +457,7 @@ export default {
       const type = this.type
       const params = {
         type: type,
-        limit: PAGE_SIZE,
+        limit: PAGE_SIZE_BY_TYPE[type] || 100,
         offset: append ? this.candidates.length : 0,
       }
       if (this.q.trim() !== '') {
@@ -405,6 +472,7 @@ export default {
       this.request_seq = this.request_seq + 1
       const seq = this.request_seq
       this.loading = true
+      this.load_error = null
       api
         .get('/pipelines/' + this.pipeline.id + '/candidates', { params: params })
         .then(function (res) {
@@ -423,9 +491,19 @@ export default {
           }
           self.loading = false
         })
-        .catch(function () {
-          if (seq === self.request_seq) {
-            self.loading = false
+        .catch(function (error) {
+          if (seq !== self.request_seq) {
+            return
+          }
+          self.loading = false
+          self.load_error = resolve_error_message(error)
+          // Falló una búsqueda nueva: no se dejan a la vista los resultados de la anterior (el
+          // "Reintentar" del bloque de error la repite). Si falló "cargar más", lo cargado queda y
+          // su "Reintentar" pide la página que faltó.
+          if (!append) {
+            self.candidates = []
+            self.total = 0
+            self.has_more = false
           }
         })
     },
@@ -444,27 +522,59 @@ export default {
       return !!this.selected[selection_key(candidate)]
     },
     /**
+     * Marca o desmarca uno. No deja pasar de 500 (el tope del contrato): devuelve false si no entró.
+     *
      * @param {Object} candidate
      * @param {boolean} checked
+     * @returns {boolean}
      */
     toggle(candidate, checked) {
       const key = selection_key(candidate)
-      if (checked) {
-        this.selected[key] = { type: candidate.type, id: candidate.id, name: candidate.name }
-      } else {
+      if (!checked) {
         delete this.selected[key]
+        return true
+      }
+      if (this.selected[key]) {
+        return true
+      }
+      if (this.selected_count >= MAX_SUBJECTS) {
+        return false
+      }
+      this.selected[key] = { type: candidate.type, id: candidate.id, name: candidate.name }
+      return true
+    },
+    /**
+     * Tilde de una fila. Si ya hay 500, el tilde vuelve a quedar sin marcar y se avisa.
+     *
+     * @param {Object} candidate
+     * @param {Event} event
+     */
+    on_row_change(candidate, event) {
+      const entered = this.toggle(candidate, event.target.checked)
+      if (!entered) {
+        event.target.checked = false
+        show_toast('Hasta ' + MAX_SUBJECTS + ' por vez: agregá estos y seguí con el resto después.', 'warning')
       }
     },
     /**
-     * Marca o desmarca todos los visibles que se pueden elegir.
+     * Marca o desmarca todos los visibles que se pueden elegir (sin pasar de 500).
      *
      * @param {boolean} checked
      */
     toggle_all_visible(checked) {
       const self = this
+      let left_out = 0
       this.selectable_visible.forEach(function (candidate) {
-        self.toggle(candidate, checked)
+        if (!self.toggle(candidate, checked)) {
+          left_out = left_out + 1
+        }
       })
+      if (left_out > 0) {
+        show_toast(
+          'Hasta ' + MAX_SUBJECTS + ' por vez: quedaron ' + left_out + ' sin marcar. Agregá estos y seguí con el resto después.',
+          'warning'
+        )
+      }
     },
     clear_selection() {
       this.selected = {}
@@ -476,7 +586,9 @@ export default {
       this.$emit('close')
     },
     /**
-     * POST del alta. `owner_admin_id` viaja siempre: el id elegido o `null` (sin responsable).
+     * POST del alta. `owner_admin_id` viaja siempre: el id elegido o `null` (sin responsable). Si la
+     * etapa inicial pide campos, viajan en `fields` (los vacíos no se mandan; si eran obligatorios
+     * contesta el back).
      */
     submit() {
       const self = this
@@ -495,6 +607,16 @@ export default {
       }
       if (this.note.trim() !== '') {
         payload.note = this.note.trim()
+      }
+      if (this.initial_fields.length) {
+        const fields = {}
+        this.initial_fields.forEach(function (field) {
+          const value = serialize_field_value(field, self.stage_values[field.key])
+          if (value !== undefined) {
+            fields[field.key] = value
+          }
+        })
+        payload.fields = fields
       }
       this.saving = true
       this.errors = {}
@@ -550,6 +672,14 @@ export default {
   color: var(--color-text-secondary);
 }
 
+.pl-add__selected--full {
+  color: var(--bs-warning-text-emphasis);
+}
+
+.pl-add__cap {
+  font-size: 0.78rem;
+}
+
 .pl-add__filters {
   display: flex;
   align-items: center;
@@ -592,6 +722,23 @@ export default {
 
 .pl-add__list--loading {
   opacity: 0.6;
+}
+
+.pl-add__error {
+  padding: 1.25rem 1rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--bs-danger-text-emphasis);
+}
+
+.pl-add__error--inline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  border-top: 1px solid var(--color-border-secondary);
 }
 
 .pl-add__row {
@@ -682,5 +829,23 @@ export default {
   .pl-add__options {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+.pl-add__fields {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--color-border-secondary);
+}
+
+.pl-add__fields-title {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.pl-add__fields-hint {
+  margin: 0.1rem 0 0.6rem;
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
 }
 </style>
