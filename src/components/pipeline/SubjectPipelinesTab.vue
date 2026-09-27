@@ -144,17 +144,17 @@
 
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
-import NextActionText from './NextActionText.vue'
-import OpportunityModal from './OpportunityModal.vue'
-import OwnerAvatar from './OwnerAvatar.vue'
-import StageTag from './StageTag.vue'
+import NextActionText from '@/components/pipeline/NextActionText.vue'
+import OpportunityModal from '@/components/pipeline/OpportunityModal.vue'
+import OwnerAvatar from '@/components/pipeline/OwnerAvatar.vue'
+import StageTag from '@/components/pipeline/StageTag.vue'
 import {
   first_error,
   first_open_stage,
   show_toast,
   sort_stages_for_board,
   validation_errors,
-} from './pipeline_helpers'
+} from '@/components/pipeline/pipeline_helpers'
 import { format_relative } from '@/utils/pipeline_dates'
 
 /** Contador para ids únicos de los controles (puede haber dos modales con esta pestaña). */

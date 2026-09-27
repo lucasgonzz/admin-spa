@@ -59,11 +59,11 @@
 </template>
 
 <script>
-import NextActionText from './NextActionText.vue'
-import OwnerAvatar from './OwnerAvatar.vue'
-import StageTag from './StageTag.vue'
-import SubjectTypeBadge from './SubjectTypeBadge.vue'
-import { subject_name } from './pipeline_helpers'
+import NextActionText from '@/components/pipeline/NextActionText.vue'
+import OwnerAvatar from '@/components/pipeline/OwnerAvatar.vue'
+import StageTag from '@/components/pipeline/StageTag.vue'
+import SubjectTypeBadge from '@/components/pipeline/SubjectTypeBadge.vue'
+import { subject_name } from '@/components/pipeline/pipeline_helpers'
 import { format_datetime, format_relative } from '@/utils/pipeline_dates'
 
 /**

@@ -193,15 +193,15 @@
 <script>
 import api from '@/utils/axios'
 import BaseModal from '@/components/ui/BaseModal.vue'
-import FieldInput from './FieldInput.vue'
-import StageTag from './StageTag.vue'
+import FieldInput from '@/components/pipeline/FieldInput.vue'
+import StageTag from '@/components/pipeline/StageTag.vue'
 import {
   first_error,
   serialize_field_value,
   sort_stages_for_board,
   subject_name,
   validation_errors,
-} from './pipeline_helpers'
+} from '@/components/pipeline/pipeline_helpers'
 import { build_next_action_value, split_for_inputs } from '@/utils/pipeline_dates'
 
 /** Valor del `<option>` "Otro": habilita el texto libre del motivo. */

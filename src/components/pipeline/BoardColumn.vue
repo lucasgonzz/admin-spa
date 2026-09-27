@@ -39,7 +39,7 @@
 </template>
 
 <script>
-import OpportunityCard from './OpportunityCard.vue'
+import OpportunityCard from '@/components/pipeline/OpportunityCard.vue'
 
 /**
  * Columna (etapa) del tablero.

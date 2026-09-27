@@ -204,7 +204,7 @@ import {
   show_toast,
   sort_stages_for_board,
   validation_errors,
-} from './pipeline_helpers'
+} from '@/components/pipeline/pipeline_helpers'
 
 /** Candidatos por página (el back acepta hasta 300). */
 const PAGE_SIZE = 100

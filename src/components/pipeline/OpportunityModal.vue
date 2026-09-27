@@ -289,10 +289,10 @@
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
 import BaseModal from '@/components/ui/BaseModal.vue'
-import MoveModal from './MoveModal.vue'
-import NextActionText from './NextActionText.vue'
-import StageTag from './StageTag.vue'
-import SubjectTypeBadge from './SubjectTypeBadge.vue'
+import MoveModal from '@/components/pipeline/MoveModal.vue'
+import NextActionText from '@/components/pipeline/NextActionText.vue'
+import StageTag from '@/components/pipeline/StageTag.vue'
+import SubjectTypeBadge from '@/components/pipeline/SubjectTypeBadge.vue'
 import {
   first_error,
   format_field_value,
@@ -300,7 +300,7 @@ import {
   tel_url,
   validation_errors,
   whatsapp_url,
-} from './pipeline_helpers'
+} from '@/components/pipeline/pipeline_helpers'
 import {
   build_next_action_value,
   datetime_local_to_api,

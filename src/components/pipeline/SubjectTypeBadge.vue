@@ -7,7 +7,7 @@
 </template>
 
 <script>
-import { subject_type_label } from './pipeline_helpers'
+import { subject_type_label } from '@/components/pipeline/pipeline_helpers'
 
 /**
  * Badge del tipo de sujeto de una oportunidad.

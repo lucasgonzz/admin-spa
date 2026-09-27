@@ -32,7 +32,7 @@
 </template>
 
 <script>
-import BoardColumn from './BoardColumn.vue'
+import BoardColumn from '@/components/pipeline/BoardColumn.vue'
 
 /**
  * Tablero de un pipeline.

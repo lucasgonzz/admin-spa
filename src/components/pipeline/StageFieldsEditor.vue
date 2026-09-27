@@ -110,7 +110,7 @@
 </template>
 
 <script>
-import { DATE_FIELD_TYPES, new_field_row } from './pipeline_helpers'
+import { DATE_FIELD_TYPES, new_field_row } from '@/components/pipeline/pipeline_helpers'
 
 /**
  * Editor de campos. Trabaja sobre su propia copia de las filas (tomada al montarse) y avisa cada

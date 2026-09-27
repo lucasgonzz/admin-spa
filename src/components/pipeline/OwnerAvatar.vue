@@ -18,7 +18,7 @@
 </template>
 
 <script>
-import { initials } from './pipeline_helpers'
+import { initials } from '@/components/pipeline/pipeline_helpers'
 
 /**
  * Avatar del responsable (admin) de una oportunidad.
