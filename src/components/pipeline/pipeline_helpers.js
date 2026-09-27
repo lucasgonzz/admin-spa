@@ -179,6 +179,40 @@ export function validation_errors(error) {
 }
 
 /**
+ * true si el error es un 422 de REGLA de negocio (el back manda solo `{message}`, sin `errors`):
+ * "ya está en esa etapa", "ya tiene otra abierta", "el orden no coincide"… Casi siempre significa
+ * que lo que la pantalla tiene cargado quedó viejo, así que el que lo recibe vuelve a pedir.
+ *
+ * @param {Object} error Error de axios.
+ * @returns {boolean}
+ */
+export function is_rule_error(error) {
+  const response = error && error.response
+  if (!response || response.status !== 422) {
+    return false
+  }
+  return Object.keys(validation_errors(error)).length === 0
+}
+
+/** Motivo que se manda cuando se elige "Otro" y no se escribe nada. */
+export const OTHER_REASON_LABEL = 'Otro'
+
+/**
+ * El "Otro" de la lista de motivos de pérdida del pipeline, si lo tiene (sin importar mayúsculas ni
+ * espacios): ese es el que abre el texto libre, así el selector no muestra dos "Otro".
+ *
+ * @param {Array<string>} reasons
+ * @returns {string|null} El texto tal como está en la lista, o null.
+ */
+export function find_other_reason(reasons) {
+  const list = Array.isArray(reasons) ? reasons : []
+  const found = list.find(function (reason) {
+    return String(reason || '').trim().toLowerCase() === OTHER_REASON_LABEL.toLowerCase()
+  })
+  return found === undefined ? null : found
+}
+
+/**
  * Toast global del admin (lo pinta App.vue).
  *
  * @param {string} message
