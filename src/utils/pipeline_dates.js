@@ -194,14 +194,3 @@ export function split_for_inputs(value) {
   }
   return { date: parsed.format('YYYY-MM-DD'), time: format_time(value) }
 }
-
-/**
- * Texto de la API convertido al valor de un `<input type="datetime-local">`.
- *
- * @param {string|null|undefined} value
- * @returns {string} `YYYY-MM-DDTHH:mm`, o vacío.
- */
-export function api_to_datetime_local(value) {
-  const parsed = parse_api_date(value)
-  return parsed ? parsed.format('YYYY-MM-DD[T]HH:mm') : ''
-}

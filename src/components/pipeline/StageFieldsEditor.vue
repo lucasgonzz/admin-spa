@@ -4,9 +4,11 @@
 
     Cada campo: etiqueta, tipo (catálogo del back), obligatorio, "agenda" (solo en campos de fecha:
     completa la próxima acción) y, si es una lista, sus opciones una por línea. La clave interna la
-    genera el back a partir de la etiqueta; la de un campo existente se muestra y se conserva.
+    genera el back a partir de la etiqueta; la de un campo existente se conserva sin mostrarla (no le
+    dice nada al operador).
     Qué combinaciones valen (dos agenda, lista sin opciones, más de 20 campos…) lo valida el back:
-    los errores del 422 aparecen debajo de cada fila.
+    los errores del 422 aparecen debajo de cada fila, y se limpian apenas se sube, baja o quita una
+    fila (vienen por índice: después de reordenar quedarían pegados a otro campo).
   -->
   <div class="pl-fields">
     <div v-for="message in general_errors" :key="message" class="invalid-feedback d-block mb-2">{{ message }}</div>
@@ -54,8 +56,6 @@
             Agenda
           </label>
         </div>
-        <span v-if="row.key" class="pl-fields__key" title="Clave interna del campo (no cambia al renombrarlo)">{{ row.key }}</span>
-
         <div class="pl-fields__row-actions">
           <button
             type="button"
@@ -133,6 +133,11 @@ export default {
       rows: this.modelValue.map(function (row) {
         return Object.assign({}, row)
       }),
+      /**
+       * Errores que se muestran: los del último 422 hasta que se reordena o se quita una fila. Los
+       * del back vienen por índice (`fields.2.options`) y después de mover filas apuntarían a otra.
+       */
+      shown_errors: this.errors || {},
     }
   },
   computed: {
@@ -142,7 +147,7 @@ export default {
      * @returns {Array<string>}
      */
     general_errors() {
-      const errors = this.errors || {}
+      const errors = this.shown_errors || {}
       const messages = []
       Object.keys(errors).forEach(function (key) {
         const is_about_fields = key === 'fields' || key.indexOf('fields.') === 0
@@ -167,6 +172,10 @@ export default {
       handler(value) {
         this.$emit('update:modelValue', value.slice())
       },
+    },
+    /** Llegó otro 422 (u otro intento limpió los errores): se muestra lo nuevo. */
+    errors: function (value) {
+      this.shown_errors = value || {}
     },
   },
   methods: {
@@ -208,6 +217,7 @@ export default {
      */
     remove_row(index) {
       this.rows.splice(index, 1)
+      this.shown_errors = {}
     },
     /**
      * @param {number} index
@@ -220,6 +230,7 @@ export default {
       }
       const moved = this.rows.splice(index, 1)[0]
       this.rows.splice(target, 0, moved)
+      this.shown_errors = {}
     },
     /**
      * Mensajes del 422 de la fila `index` (`fields.3`, `fields.3.label`, `fields.3.options.0`…).
@@ -228,7 +239,7 @@ export default {
      * @returns {Array<string>}
      */
     row_errors(index) {
-      const errors = this.errors || {}
+      const errors = this.shown_errors || {}
       const prefix = 'fields.' + index
       const messages = []
       Object.keys(errors).forEach(function (key) {
@@ -251,7 +262,7 @@ export default {
      * @returns {boolean}
      */
     has_error(index, prop) {
-      const errors = this.errors || {}
+      const errors = this.shown_errors || {}
       const prefix = 'fields.' + index + '.' + prop
       return Object.keys(errors).some(function (key) {
         return key === prefix || key.indexOf(prefix + '.') === 0
@@ -298,16 +309,6 @@ export default {
   flex-wrap: wrap;
   gap: 0.35rem 1rem;
   margin-top: 0.5rem;
-}
-
-.pl-fields__key {
-  font-family: var(--bs-font-monospace);
-  font-size: 0.72rem;
-  color: var(--color-text-secondary);
-  background: var(--bg-card);
-  border: 1px solid var(--color-border-secondary);
-  border-radius: 6px;
-  padding: 0.05rem 0.35rem;
 }
 
 .pl-fields__row-actions {

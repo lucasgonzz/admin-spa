@@ -9,7 +9,7 @@
       <table class="table table-hover align-middle mb-0 pl-list">
         <thead>
           <tr>
-            <th>Sujeto</th>
+            <th>Cliente / lead</th>
             <th>Etapa</th>
             <th>Próxima acción</th>
             <th>Responsable</th>

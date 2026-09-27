@@ -19,7 +19,10 @@
       </button>
     </div>
 
-    <div v-if="load_error" class="alert alert-danger">{{ load_error }}</div>
+    <div v-if="load_error" class="alert alert-danger d-flex flex-wrap align-items-center gap-2">
+      <span>{{ load_error }}</span>
+      <button type="button" class="btn btn-outline-danger btn-sm ms-auto" @click="load_pipelines">Reintentar</button>
+    </div>
 
     <div v-else-if="!pipelines_loaded" class="text-center py-5" role="status" aria-live="polite">
       <span class="spinner-border text-primary" aria-hidden="true" />
@@ -366,6 +369,7 @@ import {
   field_definition_from_rows,
   field_rows_from_definition,
   first_error,
+  is_rule_error,
   show_toast,
   sort_stages_for_board,
   validation_errors,
@@ -531,18 +535,27 @@ export default {
     },
   },
   created() {
-    const self = this
     this.$store.dispatch('pipeline/fetch_meta')
-    this.$store
-      .dispatch('pipeline/fetch_pipelines')
-      .then(function () {
-        self.resolve_initial_selection()
-      })
-      .catch(function (error) {
-        self.load_error = resolve_error_message(error)
-      })
+    this.load_pipelines()
   },
   methods: {
+    /**
+     * Trae la lista de pipelines y elige el de entrada. También es el "Reintentar" cuando falla.
+     */
+    load_pipelines() {
+      const self = this
+      this.load_error = null
+      this.$store
+        .dispatch('pipeline/fetch_pipelines')
+        .then(function () {
+          if (!self.selected_id) {
+            self.resolve_initial_selection()
+          }
+        })
+        .catch(function (error) {
+          self.load_error = resolve_error_message(error)
+        })
+    },
     /**
      * Elige de entrada el de `?pipeline=` (el link "Configurar" del tablero) o el primero activo.
      */
@@ -674,6 +687,12 @@ export default {
         return
       }
       const archive = !this.selected.archived_at
+      if (archive && !window.confirm(
+        '¿Archivar «' + this.selected.name + '»? Deja de aparecer en el tablero y en la agenda; '
+        + 'sus oportunidades quedan guardadas y se puede desarchivar cuando quieras.'
+      )) {
+        return
+      }
       this.busy = true
       api
         .put('/pipelines/' + this.selected.id, { archived: archive })
@@ -756,8 +775,12 @@ export default {
           self.busy = false
           self.$store.commit('pipeline/upsert_pipeline', (res.data || {}).pipeline)
         })
-        .catch(function () {
+        .catch(function (error) {
           self.busy = false
+          // "El orden no coincide" y parecidos: la lista de etapas que tenemos quedó vieja.
+          if (is_rule_error(error)) {
+            self.refresh_pipelines()
+          }
         })
     },
     /**

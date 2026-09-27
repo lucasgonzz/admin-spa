@@ -256,6 +256,7 @@
       :stack_level="stack_level + 1"
       @close="move.show = false"
       @moved="on_moved"
+      @rule-error="load(true)"
     />
 
     <template #footer>
@@ -728,7 +729,7 @@ export default {
       }
       const pipeline = this.opportunity.pipeline ? ' en «' + this.opportunity.pipeline.name + '»' : ''
       const ok = window.confirm(
-        '¿Borrar la oportunidad de «' + (this.subject.name || 'este sujeto') + '»' + pipeline + '? '
+        '¿Borrar la oportunidad de «' + (this.subject.name || (this.opportunity.subject_type === 'lead' ? 'este lead' : 'este cliente')) + '»' + pipeline + '? '
         + 'Se borra también todo su historial.'
       )
       if (!ok) {

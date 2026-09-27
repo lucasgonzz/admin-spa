@@ -88,6 +88,7 @@
       :pipeline="move_pipeline"
       @close="move_modal.show = false"
       @moved="on_moved"
+      @rule-error="load(true)"
     />
 
     <opportunity-modal
@@ -95,7 +96,7 @@
       :key="'ficha-' + opportunity_modal.key"
       :show="true"
       :opportunity_id="opportunity_modal.opportunity_id"
-      @close="opportunity_modal.show = false"
+      @close="on_opportunity_closed"
       @changed="load(true)"
       @deleted="on_deleted"
     />
@@ -263,10 +264,45 @@ export default {
       }
     },
     /**
+     * Al cerrar la ficha se recarga la agenda: si se cerró con un guardado todavía en vuelo, su
+     * `changed` no llega y la agenda quedaría vieja.
+     */
+    on_opportunity_closed() {
+      this.opportunity_modal = { show: false, opportunity_id: null, key: this.opportunity_modal.key }
+      this.load(true)
+    },
+    /**
+     * Abre el modal de mover. Necesita el pipeline completo (etapas y campos), que sale de la lista
+     * del store: si todavía no está (o falló la carga), se pide acá y recién ahí se abre; si ni así
+     * aparece, se avisa en vez de no hacer nada.
+     *
      * @param {Object} opportunity
      */
     open_move_modal(opportunity) {
-      this.move_modal = { show: true, opportunity: opportunity, key: this.move_modal.key + 1 }
+      const self = this
+      const pipeline_id = opportunity.pipeline_id || (opportunity.pipeline && opportunity.pipeline.id)
+      const get = this.$store.getters['pipeline/pipeline_by_id']
+      const open = function () {
+        self.move_modal = { show: true, opportunity: opportunity, key: self.move_modal.key + 1 }
+      }
+      if (get(pipeline_id)) {
+        open()
+        return
+      }
+      show_toast('Cargando el pipeline…', 'info')
+      this.$store
+        .dispatch('pipeline/fetch_pipelines')
+        .then(function () {
+          if (get(pipeline_id)) {
+            open()
+          } else {
+            show_toast('No se encontró el pipeline de esta oportunidad: recargá la agenda.', 'warning')
+          }
+        })
+        .catch(function () {
+          // El toast del error ya lo mostró el cliente HTTP.
+          return null
+        })
     },
     /**
      * @param {{ opportunity: Object }} payload

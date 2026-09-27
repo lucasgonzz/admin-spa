@@ -21,7 +21,10 @@
       </router-link>
     </div>
 
-    <div v-if="pipelines_error" class="alert alert-danger">{{ pipelines_error }}</div>
+    <div v-if="pipelines_error" class="alert alert-danger d-flex flex-wrap align-items-center gap-2">
+      <span>{{ pipelines_error }}</span>
+      <button type="button" class="btn btn-outline-danger btn-sm ms-auto" @click="load_pipelines">Reintentar</button>
+    </div>
 
     <div v-else-if="!pipelines_loaded" class="text-center py-5" role="status" aria-live="polite">
       <span class="spinner-border text-primary" aria-hidden="true" />
@@ -101,7 +104,7 @@
           </option>
         </select>
 
-        <div class="btn-group btn-group-sm pl-filters__subject" role="group" aria-label="Tipo de sujeto">
+        <div class="btn-group btn-group-sm pl-filters__subject" role="group" aria-label="Clientes o leads">
           <button
             v-for="option in subject_type_options"
             :key="option.value"
@@ -167,7 +170,7 @@
           <span class="pl-summary__sep" aria-hidden="true">·</span>
           <span><strong>{{ summary.perdidas }}</strong> {{ summary.perdidas === 1 ? 'perdida' : 'perdidas' }}</span>
           <span class="pl-summary__sep" aria-hidden="true">·</span>
-          <span title="Ganadas sobre cerradas (ganadas + perdidas)">tasa <strong>{{ summary.tasa }}</strong></span>
+          <span title="Ganadas sobre cerradas (ganadas + perdidas)"><strong>{{ summary.tasa }}</strong> de éxito</span>
           <button
             type="button"
             class="btn btn-link btn-sm pl-summary__toggle"
@@ -195,6 +198,10 @@
               <span class="text-end">{{ row.ahora }}</span>
               <span class="text-end">{{ row.pasaron }}</span>
             </div>
+            <p class="pl-funnel__note">
+              «Ahora» son las que están hoy en la etapa. «Pasaron» son todas las que alguna vez entraron,
+              aunque después hayan seguido de largo o se hayan cerrado: cada una cuenta una sola vez.
+            </p>
           </div>
           <div class="pl-funnel__reasons">
             <p class="pl-funnel__title">Motivos de pérdida</p>
@@ -247,6 +254,7 @@
       :initial_stage_id="move_modal.stage_id"
       @close="move_modal.show = false"
       @moved="on_moved"
+      @rule-error="load_opportunities(true)"
     />
 
     <opportunity-modal
@@ -254,7 +262,7 @@
       :key="'ficha-' + opportunity_modal.key"
       :show="true"
       :opportunity_id="opportunity_modal.opportunity_id"
-      @close="opportunity_modal.show = false"
+      @close="on_opportunity_closed"
       @changed="on_opportunity_changed"
       @deleted="on_opportunity_deleted"
     />
@@ -555,17 +563,9 @@ export default {
     },
   },
   created() {
-    const self = this
     this.$store.dispatch('pipeline/fetch_meta')
     this.$store.dispatch('pipeline/fetch_admins')
-    this.$store
-      .dispatch('pipeline/fetch_pipelines')
-      .then(function () {
-        self.resolve_initial_pipeline()
-      })
-      .catch(function (error) {
-        self.pipelines_error = resolve_error_message(error)
-      })
+    this.load_pipelines()
   },
   beforeUnmount() {
     if (this.search_timer) {
@@ -573,6 +573,23 @@ export default {
     }
   },
   methods: {
+    /**
+     * Trae la lista de pipelines y elige el de entrada. También es el "Reintentar" cuando falla.
+     */
+    load_pipelines() {
+      const self = this
+      this.pipelines_error = null
+      this.$store
+        .dispatch('pipeline/fetch_pipelines')
+        .then(function () {
+          if (!self.pipeline_id) {
+            self.resolve_initial_pipeline()
+          }
+        })
+        .catch(function (error) {
+          self.pipelines_error = resolve_error_message(error)
+        })
+    },
     /**
      * Elige el pipeline de entrada: el de `?pipeline=`, si no el último usado (localStorage), si no
      * el primero activo (o el primero archivado, si no hay activos).
@@ -743,6 +760,14 @@ export default {
       const updated = payload && payload.opportunity
       this.replace_opportunity(updated)
       show_toast(updated && updated.stage ? 'Pasó a «' + updated.stage.name + '».' : 'Oportunidad movida.')
+      this.load_opportunities(true)
+    },
+    /**
+     * Al cerrar la ficha se recarga el tablero: si se cerró con un guardado todavía en vuelo, su
+     * `changed` no llega a nadie y la tarjeta quedaría vieja.
+     */
+    on_opportunity_closed() {
+      this.opportunity_modal = { show: false, opportunity_id: null, key: this.opportunity_modal.key }
       this.load_opportunities(true)
     },
     /**
@@ -1030,6 +1055,12 @@ export default {
   height: 100%;
   border-radius: 999px;
   opacity: 0.8;
+}
+
+.pl-funnel__note {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
 }
 
 .pl-funnel__title {
