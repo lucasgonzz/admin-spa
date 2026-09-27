@@ -26,6 +26,46 @@ const routes_def = [
     meta: { requiresAuth: true, nav: true, icon: 'person-lines-fill' },
   },
   {
+    /**
+     * Pipelines (CRM) — misión pipelines-crm, 27/9/2026. Campañas configurables (la primera:
+     * ofrecer los agentes a los clientes activos) con etapas, campos por etapa, historial y
+     * próxima acción, sobre clientes y leads. Va pegado a Leads porque es el mismo trabajo
+     * comercial. Cualquier admin entra. Redirige al Tablero, que es la pantalla de entrada.
+     * `meta.title` es lo que muestra la barra de arriba en el teléfono para los hijos.
+     */
+    path: '/pipelines',
+    name: 'pipelines',
+    text: 'Pipelines',
+    redirect: '/pipelines/tablero',
+    meta: { requiresAuth: true, nav: true, icon: 'kanban' },
+    children: [
+      {
+        /** Tablero kanban / listado del pipeline elegido, con filtros y embudo. */
+        path: '/pipelines/tablero',
+        name: 'pipelines_tablero',
+        text: 'Tablero',
+        component: () => import('@/views/pipelines/Tablero.vue'),
+        meta: { requiresAuth: true, nav: false, title: 'Pipelines · Tablero' },
+      },
+      {
+        /** Próximas acciones: vencidas, hoy, próximos 7 días, más adelante y sin próxima. */
+        path: '/pipelines/agenda',
+        name: 'pipelines_agenda',
+        text: 'Agenda',
+        component: () => import('@/views/pipelines/Agenda.vue'),
+        meta: { requiresAuth: true, nav: false, title: 'Pipelines · Agenda' },
+      },
+      {
+        /** ABM de pipelines, etapas, campos por etapa y motivos de pérdida. */
+        path: '/pipelines/configuracion',
+        name: 'pipelines_configuracion',
+        text: 'Configuración',
+        component: () => import('@/views/pipelines/Configuracion.vue'),
+        meta: { requiresAuth: true, nav: false, title: 'Pipelines · Configuración' },
+      },
+    ],
+  },
+  {
     /** Módulo Agente: variantes A/B de mensajes y análisis automático. */
     path: '/agente',
     name: 'agente',
