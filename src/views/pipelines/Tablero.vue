@@ -79,8 +79,8 @@
           <button
             type="button"
             class="btn btn-primary btn-sm"
-            :disabled="!pipeline || !!pipeline.archived_at"
-            :title="pipeline && pipeline.archived_at ? 'El pipeline está archivado' : 'Agregar clientes o leads'"
+            :disabled="!pipeline"
+            title="Agregar clientes o leads"
             @click="open_add_modal"
           >
             <i class="bi bi-plus-lg me-1" aria-hidden="true" />Agregar
@@ -198,7 +198,7 @@
           </div>
           <div class="pl-funnel__reasons">
             <p class="pl-funnel__title">Motivos de pérdida</p>
-            <p v-if="!lost_reasons_summary.length" class="text-muted small mb-0">Todavía no hay perdidas.</p>
+            <p v-if="!lost_reasons_summary.length" class="text-muted small mb-0">Todavía no hay oportunidades perdidas.</p>
             <ul v-else class="pl-funnel__reason-list">
               <li v-for="item in lost_reasons_summary" :key="item.motivo">
                 <span class="pl-funnel__reason">{{ item.motivo }}</span>

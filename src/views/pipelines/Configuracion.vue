@@ -778,15 +778,22 @@ export default {
       api
         .delete('/pipeline-stages/' + stage.id)
         .then(function () {
-          show_toast('Etapa «' + stage.name + '» borrada.')
-          return self.$store.dispatch('pipeline/fetch_pipelines')
-        })
-        .then(function () {
           self.busy = false
+          show_toast('Etapa «' + stage.name + '» borrada.')
+          self.refresh_pipelines()
         })
         .catch(function () {
           self.busy = false
         })
+    },
+    /**
+     * Vuelve a traer la lista (etapas, órdenes y conteos al día) después de una escritura. Si
+     * falla, el toast global ya avisó y la pantalla queda con lo que tenía.
+     */
+    refresh_pipelines() {
+      this.$store.dispatch('pipeline/fetch_pipelines').catch(function () {
+        return null
+      })
     },
     open_new_stage() {
       this.stage_modal = {
@@ -846,12 +853,12 @@ export default {
       this.stage_modal.errors = {}
       request
         .then(function () {
-          show_toast(form.id ? 'Etapa guardada.' : 'Etapa agregada.')
-          return self.$store.dispatch('pipeline/fetch_pipelines')
-        })
-        .then(function () {
+          // El modal se cierra apenas el back confirma: si después fallara el refresco de la
+          // lista, un segundo "Guardar" no puede terminar en una etapa duplicada.
           self.stage_modal.saving = false
           self.stage_modal.show = false
+          show_toast(form.id ? 'Etapa guardada.' : 'Etapa agregada.')
+          self.refresh_pipelines()
         })
         .catch(function (error) {
           self.stage_modal.saving = false

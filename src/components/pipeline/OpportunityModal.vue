@@ -26,13 +26,10 @@
     <div v-else-if="load_error" class="alert alert-danger mb-0">{{ load_error }}</div>
 
     <div v-else-if="opportunity" class="pl-ficha">
-      <!-- Sujeto y contacto -->
+      <!-- Sujeto y contacto (el nombre ya es el título del modal) -->
       <section class="pl-ficha__block">
         <div class="pl-ficha__subject">
-          <div class="pl-ficha__subject-names">
-            <p class="pl-ficha__name mb-0">{{ subject.name || '(sin nombre)' }}</p>
-            <p v-if="subject.secondary" class="pl-ficha__secondary mb-0">{{ subject.secondary }}</p>
-          </div>
+          <p v-if="subject.secondary" class="pl-ficha__secondary mb-0">{{ subject.secondary }}</p>
           <div class="pl-ficha__tags">
             <subject-type-badge :type="opportunity.subject_type" />
             <span v-if="opportunity.subject_type === 'client' && subject.is_active === false" class="pl-ficha__tag">Inactivo</span>
@@ -875,27 +872,16 @@ export default {
 
 .pl-ficha__subject {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
   flex-wrap: wrap;
 }
 
-.pl-ficha__subject-names {
-  min-width: 0;
-  flex: 1 1 12rem;
-}
-
-.pl-ficha__name {
-  font-size: 1.15rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  word-break: break-word;
-}
-
 .pl-ficha__secondary {
+  min-width: 0;
   color: var(--color-text-secondary);
   font-size: 0.9rem;
+  word-break: break-word;
 }
 
 .pl-ficha__tags {
