@@ -15,6 +15,7 @@ import ContratoTab from '@/components/client/ContratoTab.vue'
 import LicenciasTab from '@/components/client/LicenciasTab.vue'
 import ClientScheduleTab from '@/components/client/ScheduleTab.vue'
 import ClientTokensTab from '@/components/client/TokensTab.vue'
+import ClientImagenesTab from '@/components/client/imagenes/Index.vue'
 import ClientCandadoSesionTab from '@/components/client/CandadoSesionTab.vue'
 import SubjectPipelinesTab from '@/components/pipeline/SubjectPipelinesTab.vue'
 
@@ -74,6 +75,17 @@ export default {
           key: 'tokens',
           label: 'Tokens',
           component: markRaw(ClientTokensTab),
+        },
+        {
+          /* Registro de las consultas de imágenes de este cliente (misión
+             imagenes-catalogo-completo, 27/9/2026): cada búsqueda de imágenes (Serper / Google) y
+             cada validación con IA, con su costo. Va al lado de Tokens porque son las dos solapas
+             de plata de la IA. A diferencia de Tokens, le pregunta EN VIVO al sistema del cliente
+             al abrirse (no hay espejo local), y como el modal monta las solapas recién cuando se
+             abren, esa consulta no sale si nadie entra acá. */
+          key: 'imagenes',
+          label: 'Imágenes',
+          component: markRaw(ClientImagenesTab),
         },
         {
           /* Candado de sesión por pestaña (misión candado-sesion-por-pestana, 19/9/2026): mismo
