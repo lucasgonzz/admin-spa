@@ -180,6 +180,7 @@ import {
   ETIQUETAS_DE_TIPO,
   ETIQUETAS_DE_CRITERIO,
   ETIQUETAS_DE_ORIGEN_DE_ASIGNACION,
+  ETIQUETAS_DE_ORIGEN_DE_CONSULTA,
   NOMBRES_DE_PROVEEDOR_DE_BUSQUEDA,
 } from './formato'
 
@@ -465,21 +466,31 @@ export default {
       return '—'
     },
     /**
-     * La línea chica de abajo del artículo: con qué criterio se buscó y de dónde vino la consulta
-     * (una asignación, con su número, o una validación suelta del asistente).
+     * La línea chica de abajo del artículo: de dónde vino la consulta y con qué criterio se buscó.
+     * "Asignación #12 · por código de barras", "Validación suelta", "Asistente (por código de
+     * barras)", "Asistente (por código de barras) · por nombre".
      * @param {Object} fila
      * @returns {string}
      */
     detalle_del_articulo(fila) {
       const partes = []
-      if (fila.criterio) {
+
+      /* Primero de dónde salió: la asignación con su número, o la etiqueta del origen (un origen
+         que el mapa todavía no conoce se muestra tal cual llegó, que es más honesto que callarlo). */
+      if (fila.run_id) {
+        partes.push(etiqueta(ETIQUETAS_DE_ORIGEN_DE_CONSULTA, 'asignacion') + ' #' + fila.run_id)
+      } else if (fila.origen) {
+        partes.push(etiqueta(ETIQUETAS_DE_ORIGEN_DE_CONSULTA, fila.origen))
+      }
+
+      /* Después con qué se buscó, salvo cuando el origen ya lo dice: "Asistente (por código de
+         barras) · por código de barras" repetiría lo mismo. Si el asistente cayó a buscar por
+         nombre, eso sí se agrega, porque es justo lo que no se deduce del origen. */
+      const repetido = fila.origen === 'asistente_codigo_de_barras' && fila.criterio === 'codigo_de_barras'
+      if (fila.criterio && !repetido) {
         partes.push(etiqueta(ETIQUETAS_DE_CRITERIO, fila.criterio))
       }
-      if (fila.run_id) {
-        partes.push('asignación #' + fila.run_id)
-      } else if (fila.origen === 'validacion_individual') {
-        partes.push('validación suelta')
-      }
+
       return partes.join(' · ')
     },
     /**

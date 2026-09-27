@@ -29,6 +29,22 @@ export const ETIQUETAS_DE_CRITERIO = {
   nombre: 'por nombre',
 }
 
+/**
+ * De dónde salió cada consulta del registro: el `origen` que graba el sistema del cliente en
+ * `image_service_calls` (constantes `ORIGEN_*` de `ImageServiceCall` en empresa-api).
+ *
+ *   - `asignacion`: el motor de las asignaciones de imágenes (catálogo, selección o asistente).
+ *   - `validacion_individual`: una validación con IA suelta, fuera de una asignación (la que usan
+ *     el asistente por código de barras y el lote viejo).
+ *   - `asistente_codigo_de_barras`: las búsquedas de Google que hace el asistente cuando busca un
+ *     producto por su código de barras.
+ */
+export const ETIQUETAS_DE_ORIGEN_DE_CONSULTA = {
+  asignacion: 'Asignación',
+  validacion_individual: 'Validación suelta',
+  asistente_codigo_de_barras: 'Asistente (por código de barras)',
+}
+
 /** Quién lanzó la asignación. */
 export const ETIQUETAS_DE_ORIGEN_DE_ASIGNACION = {
   catalogo: 'Todo el catálogo',
