@@ -16,7 +16,7 @@
  *     key: string,
  *     label: string,
  *     hint?: string,
- *     type: 'opcion'|'texto'|'texto_largo'|'tabla_empleados'|'tabla_listas'|'tabla_sucursales'|'tabla_descuentos'|'select_empleado',
+ *     type: 'opcion'|'texto'|'texto_largo'|'imagen'|'tabla_empleados'|'tabla_listas'|'tabla_sucursales'|'tabla_descuentos'|'select_empleado',
  *     required: boolean,
  *     options?: Array<{value: string, label: string}>,
  *     show_if?: {key: string, value: string}
@@ -166,6 +166,15 @@ export const SECTIONS = [
         hint: 'Así va a aparecer en tus comprobantes y en el sistema.',
         type: 'texto',
         required: true,
+      },
+      {
+        // Logo del negocio: se usa en los comprobantes (PdfHelper::$user->image_url en empresa-api).
+        // Opcional: sin logo, empresa-api sigue usando su placeholder de siempre.
+        key: 'logo_url',
+        label: 'Logo de tu negocio',
+        hint: 'Se va a usar en tus comprobantes (facturas, remitos, etc). Si no lo tenés a mano ahora, lo podés cargar después.',
+        type: 'imagen',
+        required: false,
       },
       {
         // Número de documento o CUIT para login

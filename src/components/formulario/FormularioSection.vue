@@ -74,6 +74,14 @@
           :employees="form_data['employees'] || []"
           @update:value="on_update(question.key, $event)"
         />
+
+        <field-imagen
+          v-else-if="question.type === 'imagen'"
+          :question="question"
+          :value="form_data[question.key] || ''"
+          :token="token"
+          @update:value="on_update(question.key, $event)"
+        />
       </div>
   </div>
 </template>
@@ -87,6 +95,7 @@ import FieldTablaListas     from './fields/FieldTablaListas.vue'
 import FieldTablaSucursales from './fields/FieldTablaSucursales.vue'
 import FieldTablaDescuentos from './fields/FieldTablaDescuentos.vue'
 import FieldSelectEmpleado  from './fields/FieldSelectEmpleado.vue'
+import FieldImagen          from './fields/FieldImagen.vue'
 
 /**
  * Contenedor de una sección del formulario.
@@ -110,6 +119,7 @@ export default {
     FieldTablaSucursales,
     FieldTablaDescuentos,
     FieldSelectEmpleado,
+    FieldImagen,
   },
 
   emits: ['field_updated'],
@@ -147,6 +157,16 @@ export default {
     payment_method_options: {
       type: Array,
       default: function () { return [] },
+    },
+
+    /**
+     * Token del formulario (form_token), necesario para el endpoint de subida de FieldImagen.
+     * Con default vacío para no romper otros usos de este componente que todavía no lo pasan
+     * (p. ej. Implementations.vue, donde el admin edita un borrador sin subir archivos).
+     */
+    token: {
+      type: String,
+      default: '',
     },
   },
 

@@ -44,6 +44,7 @@
             :form_data="form_data"
             :on_field_change="on_field_change"
             :payment_method_options="payment_method_options"
+            :token="$route.params.token"
           />
         </div>
       </div>
