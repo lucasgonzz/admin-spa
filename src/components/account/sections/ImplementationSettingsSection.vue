@@ -446,6 +446,35 @@ const MENSAJE_FORMATO_SERPER =
   'La clave no tiene el formato de una clave de Serper (entre 32 y 64 letras y números, sin espacios ni símbolos). Fijate que no se haya cortado al copiarla.'
 
 /**
+ * Mensaje cuando en un campo de Serper se pega una API key de Google (empiezan con "AIza"). Es el
+ * mismo texto que devuelve admin-api (ImplementationSettingsController::MENSAJE_CLAVE_DE_GOOGLE_EN_SERPER).
+ *
+ * @type {string}
+ */
+const MENSAJE_CLAVE_DE_GOOGLE_EN_SERPER =
+  'Eso parece una clave de Google (empieza con AIza), no de Serper. Las de Google van en el bloque de Google.'
+
+/**
+ * Mensaje de error para mostrar cuando falla el PUT de una clave de Serper.
+ *
+ * Prioriza el error del campo (`errors.api_key[0]`): en un 422, Laravel 8 pone en `message` el
+ * genérico "The given data was invalid." y el motivo real —por ejemplo, que es una clave de
+ * Google— viaja en `errors`. Si no hay error de campo, cae a `message` y después a un texto fijo.
+ *
+ * @param {Object} err Error de axios.
+ * @returns {string} Mensaje para el operador.
+ */
+function mensaje_de_error_al_guardar(err) {
+  const data = err && err.response && err.response.data
+
+  if (data && data.errors && data.errors.api_key && data.errors.api_key.length) {
+    return data.errors.api_key[0]
+  }
+
+  return (data && data.message) || 'No se pudo guardar.'
+}
+
+/**
  * Sección en Cuenta: configuración global del flujo de implementaciones.
  *
  * Gestiona tres settings independientes:
@@ -1670,6 +1699,18 @@ export default {
     },
 
     /**
+     * Indica si un valor parece una API key de Google (empiezan con "AIza"): viven en el bloque de
+     * al lado y se pegan acá por error. Se chequea ANTES del formato porque una key de Google sin
+     * "-" ni "_" son 39 letras y números y pasaría el formato de Serper. Misma regla que admin-api.
+     *
+     * @param {string} value Valor a revisar, ya recortado.
+     * @returns {boolean} true si empieza con "AIza".
+     */
+    is_google_api_key(value) {
+      return /^AIza/.test(value || '')
+    },
+
+    /**
      * Carga la clave de Serper para clientes reales: del lote, o de
      * GET /settings/implementation-serper-api-key-default si no vino en el lote.
      *
@@ -1702,7 +1743,8 @@ export default {
 
     /**
      * Guarda la clave de Serper de clientes reales via PUT /settings/implementation-serper-api-key-default.
-     * Recorta los espacios de los costados y valida el formato localmente antes de enviar el request.
+     * Recorta los espacios de los costados y, antes de enviar el request, frena localmente una API
+     * key de Google y un formato inválido.
      *
      * @returns {void}
      */
@@ -1711,6 +1753,11 @@ export default {
 
       /** Clave sin espacios a los costados: al copiarla del panel de Serper suele venir con uno pegado. */
       const api_key = (self.local_serper_api_key_default || '').trim()
+
+      if (self.is_google_api_key(api_key)) {
+        self.error_serper_api_key_default_message = MENSAJE_CLAVE_DE_GOOGLE_EN_SERPER
+        return
+      }
 
       if (!self.is_valid_serper_api_key_format(api_key)) {
         self.error_serper_api_key_default_message = MENSAJE_FORMATO_SERPER
@@ -1731,10 +1778,7 @@ export default {
           self.saved_serper_api_key_default_message = 'Configuración guardada.'
         })
         .catch(function (err) {
-          const msg =
-            (err.response && err.response.data && err.response.data.message) ||
-            'No se pudo guardar.'
-          self.error_serper_api_key_default_message = msg
+          self.error_serper_api_key_default_message = mensaje_de_error_al_guardar(err)
         })
         .then(function () {
           self.saving_serper_api_key_default = false
@@ -1778,7 +1822,8 @@ export default {
 
     /**
      * Guarda la clave de Serper de demos via PUT /settings/implementation-serper-api-key-demo.
-     * Recorta los espacios de los costados y valida el formato localmente antes de enviar el request.
+     * Recorta los espacios de los costados y, antes de enviar el request, frena localmente una API
+     * key de Google y un formato inválido.
      *
      * @returns {void}
      */
@@ -1787,6 +1832,11 @@ export default {
 
       /** Clave sin espacios a los costados: al copiarla del panel de Serper suele venir con uno pegado. */
       const api_key = (self.local_serper_api_key_demo || '').trim()
+
+      if (self.is_google_api_key(api_key)) {
+        self.error_serper_api_key_demo_message = MENSAJE_CLAVE_DE_GOOGLE_EN_SERPER
+        return
+      }
 
       if (!self.is_valid_serper_api_key_format(api_key)) {
         self.error_serper_api_key_demo_message = MENSAJE_FORMATO_SERPER
@@ -1807,10 +1857,7 @@ export default {
           self.saved_serper_api_key_demo_message = 'Configuración guardada.'
         })
         .catch(function (err) {
-          const msg =
-            (err.response && err.response.data && err.response.data.message) ||
-            'No se pudo guardar.'
-          self.error_serper_api_key_demo_message = msg
+          self.error_serper_api_key_demo_message = mensaje_de_error_al_guardar(err)
         })
         .then(function () {
           self.saving_serper_api_key_demo = false
