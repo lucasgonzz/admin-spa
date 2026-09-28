@@ -325,6 +325,84 @@
       <!-- Mensajes de estado para la cuota de Google (demos) -->
       <p v-if="saved_google_cuota_demo_message" class="text-success small mt-2 mb-0">{{ saved_google_cuota_demo_message }}</p>
       <p v-else-if="error_google_cuota_demo_message" class="text-danger small mt-2 mb-0">{{ error_google_cuota_demo_message }}</p>
+
+      <!-- Serper (búsqueda de imágenes): clave de la cuenta de Serper, para clientes nuevos y para demos -->
+      <h6 class="mt-3 mb-2">Serper (búsqueda de imágenes)</h6>
+
+      <!-- Nota: qué hace la clave y cuál es su respaldo del lado de empresa-api -->
+      <small class="text-muted d-block mb-2">
+        Con una clave de Serper, la búsqueda de imágenes del sistema va por Serper; sin ninguna, va por Google. La clave viaja en el user-setup y en el demo-setup, y el sistema la usa antes que la SERPER_API_KEY de su .env.
+      </small>
+
+      <!-- Campo: clave de Serper para clientes nuevos (reales) -->
+      <div class="row g-2 align-items-end mb-1">
+        <div class="col-sm-8">
+          <label class="form-label small" for="impl_serper_api_key_default">
+            Clave de Serper para clientes nuevos
+          </label>
+          <!-- Input de texto (no password): panel interno, mismo criterio que las keys de Google -->
+          <input
+            id="impl_serper_api_key_default"
+            v-model="local_serper_api_key_default"
+            type="text"
+            class="form-control form-control-sm"
+            :disabled="loading_serper_api_key_default || saving_serper_api_key_default"
+          />
+          <small class="text-muted d-block">
+            Si queda vacía, cada sistema usa la SERPER_API_KEY de su .env. El valor se aplica solo a los setups nuevos: los clientes ya creados conservan la clave que recibieron.
+          </small>
+        </div>
+
+        <div class="col-auto">
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            :disabled="loading_serper_api_key_default || saving_serper_api_key_default || !can_save_serper_api_key_default"
+            @click="on_save_serper_api_key_default"
+          >
+            {{ saving_serper_api_key_default ? 'Guardando…' : 'Guardar' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Mensajes de estado para la clave de Serper de clientes -->
+      <p v-if="saved_serper_api_key_default_message" class="text-success small mt-2 mb-0">{{ saved_serper_api_key_default_message }}</p>
+      <p v-else-if="error_serper_api_key_default_message" class="text-danger small mt-2 mb-0">{{ error_serper_api_key_default_message }}</p>
+
+      <!-- Campo: clave de Serper para demos (vacía = las demos usan la de clientes) -->
+      <div class="row g-2 align-items-end mt-3 mb-1">
+        <div class="col-sm-8">
+          <label class="form-label small" for="impl_serper_api_key_demo">
+            Clave de Serper para demos (si queda vacía, las demos usan la de clientes)
+          </label>
+          <!-- Input de texto (no password): panel interno, mismo criterio que las keys de Google -->
+          <input
+            id="impl_serper_api_key_demo"
+            v-model="local_serper_api_key_demo"
+            type="text"
+            class="form-control form-control-sm"
+            :disabled="loading_serper_api_key_demo || saving_serper_api_key_demo"
+          />
+          <small class="text-muted d-block">
+            Si también queda vacía la de clientes, la demo usa la SERPER_API_KEY de su .env.
+          </small>
+        </div>
+
+        <div class="col-auto">
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            :disabled="loading_serper_api_key_demo || saving_serper_api_key_demo || !can_save_serper_api_key_demo"
+            @click="on_save_serper_api_key_demo"
+          >
+            {{ saving_serper_api_key_demo ? 'Guardando…' : 'Guardar' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Mensajes de estado para la clave de Serper de demos -->
+      <p v-if="saved_serper_api_key_demo_message" class="text-success small mt-2 mb-0">{{ saved_serper_api_key_demo_message }}</p>
+      <p v-else-if="error_serper_api_key_demo_message" class="text-danger small mt-2 mb-0">{{ error_serper_api_key_demo_message }}</p>
     </template>
   </div>
 </template>
@@ -359,6 +437,15 @@ function traer_setting(bundle, clave, ruta) {
 }
 
 /**
+ * Mensaje que se muestra cuando una clave de Serper no tiene el formato esperado. Lo comparten
+ * los dos campos de Serper (clientes y demos), así el texto no puede quedar distinto en uno y otro.
+ *
+ * @type {string}
+ */
+const MENSAJE_FORMATO_SERPER =
+  'La clave no tiene el formato de una clave de Serper (entre 32 y 64 letras y números, sin espacios ni símbolos). Fijate que no se haya cortado al copiarla.'
+
+/**
  * Sección en Cuenta: configuración global del flujo de implementaciones.
  *
  * Gestiona tres settings independientes:
@@ -369,8 +456,10 @@ function traer_setting(bundle, clave, ruta) {
  * - API key de Google para clientes nuevos: GET/PUT /settings/implementation-google-api-key-default
  * - API key de Google para demos: GET/PUT /settings/implementation-google-api-key-demo
  * - Cuota de Google por día para demos: GET/PUT /settings/implementation-google-cuota-demo
+ * - Clave de Serper para clientes nuevos: GET/PUT /settings/implementation-serper-api-key-default
+ * - Clave de Serper para demos: GET/PUT /settings/implementation-serper-api-key-demo
  *
- * Al montar, los nueve valores se leen con un solo `GET /settings/implementation`. Los GET de a
+ * Al montar, los once valores se leen con un solo `GET /settings/implementation`. Los GET de a
  * uno de la lista de arriba siguen existiendo y son el respaldo: ver `load_settings()`. Los PUT no
  * cambian — cada campo se guarda por su ruta.
  */
@@ -667,6 +756,69 @@ export default {
        * Mensaje de error para el campo de cuota de demos.
        */
       error_google_cuota_demo_message: '',
+
+      /**
+       * Clave de Serper configurada localmente para nuevos usuarios reales (valor editable).
+       * Si queda vacía, cada sistema usa la SERPER_API_KEY de su .env. Se aplica solo a setups nuevos.
+       */
+      local_serper_api_key_default: '',
+
+      /**
+       * Valor guardado en el servidor para detectar cambios sin guardar (clave de Serper de clientes).
+       */
+      stored_serper_api_key_default: '',
+
+      /**
+       * Indicador de carga del setting de clave de Serper de clientes.
+       */
+      loading_serper_api_key_default: true,
+
+      /**
+       * Indica que hay un PUT de la clave de Serper de clientes en curso.
+       */
+      saving_serper_api_key_default: false,
+
+      /**
+       * Mensaje de éxito tras guardar la clave de Serper de clientes.
+       */
+      saved_serper_api_key_default_message: '',
+
+      /**
+       * Mensaje de error para el campo de clave de Serper de clientes (incluye el error de formato local).
+       */
+      error_serper_api_key_default_message: '',
+
+      /**
+       * Clave de Serper configurada localmente para las demos (valor editable).
+       * Si queda vacía, admin-api les manda a las demos la de clientes: hay una sola cuenta de
+       * Serper, así que separarlas es opcional.
+       */
+      local_serper_api_key_demo: '',
+
+      /**
+       * Valor guardado en el servidor para detectar cambios sin guardar (clave de Serper de demos).
+       */
+      stored_serper_api_key_demo: '',
+
+      /**
+       * Indicador de carga del setting de clave de Serper de demos.
+       */
+      loading_serper_api_key_demo: true,
+
+      /**
+       * Indica que hay un PUT de la clave de Serper de demos en curso.
+       */
+      saving_serper_api_key_demo: false,
+
+      /**
+       * Mensaje de éxito tras guardar la clave de Serper de demos.
+       */
+      saved_serper_api_key_demo_message: '',
+
+      /**
+       * Mensaje de error para el campo de clave de Serper de demos (incluye el error de formato local).
+       */
+      error_serper_api_key_demo_message: '',
     }
   },
 
@@ -751,6 +903,24 @@ export default {
     can_save_google_cuota_demo() {
       return this.local_google_cuota_demo !== this.stored_google_cuota_demo
     },
+
+    /**
+     * Habilita el botón Guardar de la clave de Serper de clientes solo si el valor cambió.
+     *
+     * @returns {boolean}
+     */
+    can_save_serper_api_key_default() {
+      return this.local_serper_api_key_default !== this.stored_serper_api_key_default
+    },
+
+    /**
+     * Habilita el botón Guardar de la clave de Serper de demos solo si el valor cambió.
+     *
+     * @returns {boolean}
+     */
+    can_save_serper_api_key_demo() {
+      return this.local_serper_api_key_demo !== this.stored_serper_api_key_demo
+    },
   },
 
   mounted() {
@@ -761,8 +931,8 @@ export default {
 
   methods: {
     /**
-     * Trae los nueve settings de la pantalla con UN request, y si no puede, con los nueve de
-     * siempre.
+     * Trae los once settings de la pantalla con UN request, y si no puede, con los once GET de a
+     * uno.
      *
      * Antes salían nueve GET al montar, uno por setting, todos contra la misma tabla.
      * `GET /settings/implementation` los devuelve juntos.
@@ -793,11 +963,14 @@ export default {
     },
 
     /**
-     * Reparte el lote entre los nueve loaders. Con `bundle` en null, cada uno hace su propio GET.
+     * Reparte el lote entre los once loaders. Con `bundle` en null, cada uno hace su propio GET.
      *
-     * Son los mismos nueve métodos en los dos caminos a propósito: el valor por defecto de cada
+     * Son los mismos once métodos en los dos caminos a propósito: el valor por defecto de cada
      * campo, su indicador de carga y su mensaje de error viven en un solo lugar y no se pueden
      * desincronizar entre el lote y el respaldo.
+     *
+     * Contra un admin-api anterior a las claves de Serper, el lote no las trae: sus dos loaders caen
+     * al GET de a uno, que da 404, y cada campo muestra su propio error sin tocar a los demás.
      *
      * @param {Object|null} bundle Objeto `settings` de la respuesta en lote, o null.
      * @returns {void}
@@ -812,6 +985,8 @@ export default {
       this.load_google_api_key_default_setting(bundle)
       this.load_google_api_key_demo_setting(bundle)
       this.load_google_cuota_demo_setting(bundle)
+      this.load_serper_api_key_default_setting(bundle)
+      this.load_serper_api_key_demo_setting(bundle)
     },
 
     /**
@@ -1474,6 +1649,171 @@ export default {
         })
         .then(function () {
           self.saving_google_cuota_demo = false
+        })
+    },
+
+    /**
+     * Valida localmente que una clave de Serper tenga el formato esperado: entre 32 y 64 letras y
+     * números, sin espacios ni símbolos. Es la misma regla que aplica admin-api al guardar, así el
+     * error aparece acá y no como un 422. Un valor vacío es válido: borra la clave y el sistema cae
+     * a su respaldo.
+     *
+     * @param {string} value Valor a validar, ya recortado.
+     * @returns {boolean} true si el formato es válido o el valor está vacío.
+     */
+    is_valid_serper_api_key_format(value) {
+      if (!value) {
+        return true
+      }
+
+      return /^[A-Za-z0-9]{32,64}$/.test(value)
+    },
+
+    /**
+     * Carga la clave de Serper para clientes reales: del lote, o de
+     * GET /settings/implementation-serper-api-key-default si no vino en el lote.
+     *
+     * @param {Object|null} [bundle] Objeto `settings` del lote.
+     * @returns {void}
+     */
+    load_serper_api_key_default_setting(bundle) {
+      const self = this
+      self.loading_serper_api_key_default = true
+      self.error_serper_api_key_default_message = ''
+
+      traer_setting(
+        bundle,
+        'implementation-serper-api-key-default',
+        '/settings/implementation-serper-api-key-default'
+      )
+        .then(function (data) {
+          /** Clave retornada por el servidor; fallback a cadena vacía. */
+          const api_key = data && data.api_key != null ? data.api_key : ''
+          self.local_serper_api_key_default  = api_key
+          self.stored_serper_api_key_default = api_key
+        })
+        .catch(function () {
+          self.error_serper_api_key_default_message = 'No se pudo cargar la clave de Serper de clientes.'
+        })
+        .then(function () {
+          self.loading_serper_api_key_default = false
+        })
+    },
+
+    /**
+     * Guarda la clave de Serper de clientes reales via PUT /settings/implementation-serper-api-key-default.
+     * Recorta los espacios de los costados y valida el formato localmente antes de enviar el request.
+     *
+     * @returns {void}
+     */
+    on_save_serper_api_key_default() {
+      const self = this
+
+      /** Clave sin espacios a los costados: al copiarla del panel de Serper suele venir con uno pegado. */
+      const api_key = (self.local_serper_api_key_default || '').trim()
+
+      if (!self.is_valid_serper_api_key_format(api_key)) {
+        self.error_serper_api_key_default_message = MENSAJE_FORMATO_SERPER
+        return
+      }
+
+      self.saving_serper_api_key_default        = true
+      self.saved_serper_api_key_default_message = ''
+      self.error_serper_api_key_default_message = ''
+
+      api
+        .put('/settings/implementation-serper-api-key-default', { api_key: api_key })
+        .then(function (res) {
+          /** Clave confirmada por el servidor. */
+          const saved_api_key = res.data && res.data.api_key != null ? res.data.api_key : api_key
+          self.local_serper_api_key_default  = saved_api_key
+          self.stored_serper_api_key_default = saved_api_key
+          self.saved_serper_api_key_default_message = 'Configuración guardada.'
+        })
+        .catch(function (err) {
+          const msg =
+            (err.response && err.response.data && err.response.data.message) ||
+            'No se pudo guardar.'
+          self.error_serper_api_key_default_message = msg
+        })
+        .then(function () {
+          self.saving_serper_api_key_default = false
+        })
+    },
+
+    /**
+     * Carga la clave de Serper para demos: del lote, o de
+     * GET /settings/implementation-serper-api-key-demo si no vino en el lote.
+     *
+     * Muestra la clave GUARDADA para demos, no la efectiva: si está vacía, el campo queda vacío
+     * aunque las demos estén recibiendo la de clientes. Es a propósito, para que guardar el
+     * formulario sin tocar nada no copie la de clientes como clave propia de las demos.
+     *
+     * @param {Object|null} [bundle] Objeto `settings` del lote.
+     * @returns {void}
+     */
+    load_serper_api_key_demo_setting(bundle) {
+      const self = this
+      self.loading_serper_api_key_demo = true
+      self.error_serper_api_key_demo_message = ''
+
+      traer_setting(
+        bundle,
+        'implementation-serper-api-key-demo',
+        '/settings/implementation-serper-api-key-demo'
+      )
+        .then(function (data) {
+          /** Clave retornada por el servidor; fallback a cadena vacía. */
+          const api_key = data && data.api_key != null ? data.api_key : ''
+          self.local_serper_api_key_demo  = api_key
+          self.stored_serper_api_key_demo = api_key
+        })
+        .catch(function () {
+          self.error_serper_api_key_demo_message = 'No se pudo cargar la clave de Serper de demos.'
+        })
+        .then(function () {
+          self.loading_serper_api_key_demo = false
+        })
+    },
+
+    /**
+     * Guarda la clave de Serper de demos via PUT /settings/implementation-serper-api-key-demo.
+     * Recorta los espacios de los costados y valida el formato localmente antes de enviar el request.
+     *
+     * @returns {void}
+     */
+    on_save_serper_api_key_demo() {
+      const self = this
+
+      /** Clave sin espacios a los costados: al copiarla del panel de Serper suele venir con uno pegado. */
+      const api_key = (self.local_serper_api_key_demo || '').trim()
+
+      if (!self.is_valid_serper_api_key_format(api_key)) {
+        self.error_serper_api_key_demo_message = MENSAJE_FORMATO_SERPER
+        return
+      }
+
+      self.saving_serper_api_key_demo        = true
+      self.saved_serper_api_key_demo_message = ''
+      self.error_serper_api_key_demo_message = ''
+
+      api
+        .put('/settings/implementation-serper-api-key-demo', { api_key: api_key })
+        .then(function (res) {
+          /** Clave confirmada por el servidor. */
+          const saved_api_key = res.data && res.data.api_key != null ? res.data.api_key : api_key
+          self.local_serper_api_key_demo  = saved_api_key
+          self.stored_serper_api_key_demo = saved_api_key
+          self.saved_serper_api_key_demo_message = 'Configuración guardada.'
+        })
+        .catch(function (err) {
+          const msg =
+            (err.response && err.response.data && err.response.data.message) ||
+            'No se pudo guardar.'
+          self.error_serper_api_key_demo_message = msg
+        })
+        .then(function () {
+          self.saving_serper_api_key_demo = false
         })
     },
   },
