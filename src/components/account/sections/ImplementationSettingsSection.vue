@@ -425,16 +425,30 @@ import api from '@/utils/axios'
  * @param {Object|null} bundle Objeto `settings` de GET /settings/implementation, o null.
  * @param {string} clave Clave de este setting dentro del lote.
  * @param {string} ruta Ruta del GET de a uno, para cuando no hay lote.
+ * @param {Object} [opciones] Config de axios para el GET de a uno (p. ej. `silent_error_statuses`).
  * @returns {Promise<Object>} Cuerpo del setting.
  */
-function traer_setting(bundle, clave, ruta) {
+function traer_setting(bundle, clave, ruta, opciones) {
   if (bundle && bundle[clave]) {
     return Promise.resolve(bundle[clave])
   }
-  return api.get(ruta).then(function (res) {
+  return api.get(ruta, opciones).then(function (res) {
     return res.data
   })
 }
+
+/**
+ * Config del GET de a uno de las dos claves de Serper.
+ *
+ * Contra un admin-api anterior a las claves de Serper, sus rutas no existen: el lote no las trae,
+ * el GET de respaldo da 404 y cada campo ya muestra su propio error en línea. El toast global
+ * sumaba un segundo aviso del mismo hecho —dos, uno por campo—, así que el 404/405 va callado.
+ * Cualquier otro error (un 500) sigue avisando, como en el resto de los campos. Es el criterio que
+ * `utils/axios.js` documenta para un endpoint que puede no existir todavía.
+ *
+ * @type {Object}
+ */
+const OPCIONES_DEL_GET_DE_SERPER = { silent_error_statuses: [404, 405] }
 
 /**
  * Mensaje que se muestra cuando una clave de Serper no tiene el formato esperado. Lo comparten
@@ -999,7 +1013,8 @@ export default {
      * desincronizar entre el lote y el respaldo.
      *
      * Contra un admin-api anterior a las claves de Serper, el lote no las trae: sus dos loaders caen
-     * al GET de a uno, que da 404, y cada campo muestra su propio error sin tocar a los demás.
+     * al GET de a uno, que da 404, y cada campo muestra su propio error en línea, sin toast y sin
+     * tocar a los demás (ver OPCIONES_DEL_GET_DE_SERPER).
      *
      * @param {Object|null} bundle Objeto `settings` de la respuesta en lote, o null.
      * @returns {void}
@@ -1106,14 +1121,17 @@ export default {
     on_save() {
       const self = this
 
+      // Antes de validar: un "Configuración guardada." de un guardado anterior no puede tapar el
+      // error de validación de abajo (el template muestra primero el mensaje de éxito).
+      self.saved_message = ''
+      self.error_message = ''
+
       if (self.local_admin_id == null) {
         self.error_message = 'Seleccioná un admin antes de guardar.'
         return
       }
 
-      self.saving        = true
-      self.saved_message = ''
-      self.error_message = ''
+      self.saving = true
 
       api
         .put('/settings/implementation-assigned-admin', { admin_id: self.local_admin_id })
@@ -1145,6 +1163,11 @@ export default {
     on_save_file_wait() {
       const self = this
 
+      // Antes de validar: un "Configuración guardada." de un guardado anterior no puede tapar el
+      // error de validación de abajo (el template muestra primero el mensaje de éxito).
+      self.saved_file_wait_message = ''
+      self.error_file_wait_message = ''
+
       /** Validación local del rango permitido. */
       const seconds = parseInt(self.local_file_wait_seconds, 10)
 
@@ -1153,9 +1176,7 @@ export default {
         return
       }
 
-      self.saving_file_wait        = true
-      self.saved_file_wait_message = ''
-      self.error_file_wait_message = ''
+      self.saving_file_wait = true
 
       api
         .put('/settings/implementation-file-wait', { seconds: seconds })
@@ -1214,6 +1235,11 @@ export default {
     on_save_employees_wait() {
       const self = this
 
+      // Antes de validar: un "Configuración guardada." de un guardado anterior no puede tapar el
+      // error de validación de abajo (el template muestra primero el mensaje de éxito).
+      self.saved_employees_wait_message = ''
+      self.error_employees_wait_message = ''
+
       /** Validación local del rango permitido. */
       const seconds = parseInt(self.local_employees_wait_seconds, 10)
 
@@ -1222,9 +1248,7 @@ export default {
         return
       }
 
-      self.saving_employees_wait        = true
-      self.saved_employees_wait_message = ''
-      self.error_employees_wait_message = ''
+      self.saving_employees_wait = true
 
       api
         .put('/settings/implementation-employees-wait', { seconds: seconds })
@@ -1347,6 +1371,11 @@ export default {
     on_save_form_contact_delay() {
       const self = this
 
+      // Antes de validar: un "Configuración guardada." de un guardado anterior no puede tapar el
+      // error de validación de abajo (el template muestra primero el mensaje de éxito).
+      self.saved_form_contact_delay_message = ''
+      self.error_form_contact_delay_message = ''
+
       /** Validación: el valor debe ser un número no negativo. */
       const minutes = parseInt(self.local_form_contact_delay_minutes, 10)
 
@@ -1355,9 +1384,7 @@ export default {
         return
       }
 
-      self.saving_form_contact_delay        = true
-      self.saved_form_contact_delay_message = ''
-      self.error_form_contact_delay_message = ''
+      self.saving_form_contact_delay = true
 
       /* Convertir minutos a segundos para la API */
       const seconds = minutes * 60
@@ -1424,6 +1451,11 @@ export default {
     on_save_google_cuota_default() {
       const self = this
 
+      // Antes de validar: un "Configuración guardada." de un guardado anterior no puede tapar el
+      // error de validación de abajo (el template muestra primero el mensaje de éxito).
+      self.saved_google_cuota_default_message = ''
+      self.error_google_cuota_default_message = ''
+
       const cuota = parseInt(self.local_google_cuota_default, 10)
 
       if (isNaN(cuota) || cuota < 0) {
@@ -1431,9 +1463,7 @@ export default {
         return
       }
 
-      self.saving_google_cuota_default        = true
-      self.saved_google_cuota_default_message = ''
-      self.error_google_cuota_default_message = ''
+      self.saving_google_cuota_default = true
 
       api
         .put('/settings/implementation-google-cuota-default', { cuota: cuota })
@@ -1510,15 +1540,18 @@ export default {
     on_save_google_api_key_default() {
       const self = this
 
+      // Antes de validar: un "Configuración guardada." de un guardado anterior no puede tapar el
+      // error de validación de abajo (el template muestra primero el mensaje de éxito).
+      self.saved_google_api_key_default_message = ''
+      self.error_google_api_key_default_message = ''
+
       if (!self.is_valid_google_api_key_format(self.local_google_api_key_default)) {
         self.error_google_api_key_default_message =
           'La key no tiene el formato de una API key de Google (empieza con AIza y tiene 39 caracteres). Fijate que no se haya cortado al copiarla.'
         return
       }
 
-      self.saving_google_api_key_default        = true
-      self.saved_google_api_key_default_message = ''
-      self.error_google_api_key_default_message = ''
+      self.saving_google_api_key_default = true
 
       api
         .put('/settings/implementation-google-api-key-default', { api_key: self.local_google_api_key_default })
@@ -1580,15 +1613,18 @@ export default {
     on_save_google_api_key_demo() {
       const self = this
 
+      // Antes de validar: un "Configuración guardada." de un guardado anterior no puede tapar el
+      // error de validación de abajo (el template muestra primero el mensaje de éxito).
+      self.saved_google_api_key_demo_message = ''
+      self.error_google_api_key_demo_message = ''
+
       if (!self.is_valid_google_api_key_format(self.local_google_api_key_demo)) {
         self.error_google_api_key_demo_message =
           'La key no tiene el formato de una API key de Google (empieza con AIza y tiene 39 caracteres). Fijate que no se haya cortado al copiarla.'
         return
       }
 
-      self.saving_google_api_key_demo        = true
-      self.saved_google_api_key_demo_message = ''
-      self.error_google_api_key_demo_message = ''
+      self.saving_google_api_key_demo = true
 
       api
         .put('/settings/implementation-google-api-key-demo', { api_key: self.local_google_api_key_demo })
@@ -1651,6 +1687,11 @@ export default {
     on_save_google_cuota_demo() {
       const self = this
 
+      // Antes de validar: un "Configuración guardada." de un guardado anterior no puede tapar el
+      // error de validación de abajo (el template muestra primero el mensaje de éxito).
+      self.saved_google_cuota_demo_message = ''
+      self.error_google_cuota_demo_message = ''
+
       const cuota = parseInt(self.local_google_cuota_demo, 10)
 
       if (isNaN(cuota) || cuota < 0) {
@@ -1658,9 +1699,7 @@ export default {
         return
       }
 
-      self.saving_google_cuota_demo        = true
-      self.saved_google_cuota_demo_message = ''
-      self.error_google_cuota_demo_message = ''
+      self.saving_google_cuota_demo = true
 
       api
         .put('/settings/implementation-google-cuota-demo', { cuota: cuota })
@@ -1725,7 +1764,8 @@ export default {
       traer_setting(
         bundle,
         'implementation-serper-api-key-default',
-        '/settings/implementation-serper-api-key-default'
+        '/settings/implementation-serper-api-key-default',
+        OPCIONES_DEL_GET_DE_SERPER
       )
         .then(function (data) {
           /** Clave retornada por el servidor; fallback a cadena vacía. */
@@ -1751,6 +1791,11 @@ export default {
     on_save_serper_api_key_default() {
       const self = this
 
+      // Antes de validar: un "Configuración guardada." de un guardado anterior no puede tapar el
+      // error de validación de abajo (el template muestra primero el mensaje de éxito).
+      self.saved_serper_api_key_default_message = ''
+      self.error_serper_api_key_default_message = ''
+
       /** Clave sin espacios a los costados: al copiarla del panel de Serper suele venir con uno pegado. */
       const api_key = (self.local_serper_api_key_default || '').trim()
 
@@ -1764,9 +1809,7 @@ export default {
         return
       }
 
-      self.saving_serper_api_key_default        = true
-      self.saved_serper_api_key_default_message = ''
-      self.error_serper_api_key_default_message = ''
+      self.saving_serper_api_key_default = true
 
       api
         .put('/settings/implementation-serper-api-key-default', { api_key: api_key })
@@ -1804,7 +1847,8 @@ export default {
       traer_setting(
         bundle,
         'implementation-serper-api-key-demo',
-        '/settings/implementation-serper-api-key-demo'
+        '/settings/implementation-serper-api-key-demo',
+        OPCIONES_DEL_GET_DE_SERPER
       )
         .then(function (data) {
           /** Clave retornada por el servidor; fallback a cadena vacía. */
@@ -1830,6 +1874,11 @@ export default {
     on_save_serper_api_key_demo() {
       const self = this
 
+      // Antes de validar: un "Configuración guardada." de un guardado anterior no puede tapar el
+      // error de validación de abajo (el template muestra primero el mensaje de éxito).
+      self.saved_serper_api_key_demo_message = ''
+      self.error_serper_api_key_demo_message = ''
+
       /** Clave sin espacios a los costados: al copiarla del panel de Serper suele venir con uno pegado. */
       const api_key = (self.local_serper_api_key_demo || '').trim()
 
@@ -1843,9 +1892,7 @@ export default {
         return
       }
 
-      self.saving_serper_api_key_demo        = true
-      self.saved_serper_api_key_demo_message = ''
-      self.error_serper_api_key_demo_message = ''
+      self.saving_serper_api_key_demo = true
 
       api
         .put('/settings/implementation-serper-api-key-demo', { api_key: api_key })
