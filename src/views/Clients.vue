@@ -93,9 +93,12 @@ export default {
              cliente para el asistente, el WhatsApp, la verificación de imágenes y la importación de
              Excel. Como Imágenes, le pregunta EN VIVO al sistema del cliente al abrirse y no guarda
              nada en el admin (decisión de Lucas: gana el último entre el admin y el modal del
-             dueño). Va al lado de Tokens e Imágenes: las tres son de IA. */
+             dueño). Va al lado de Tokens e Imágenes: las tres son de IA.
+             Rótulo corto "IA" (Lucas eligió "Solapa IA del cliente"): con "Inteligencia
+             artificial" la barra de solapas desbordaba en escritorio y escondía las últimas. El
+             título completo queda adentro de la solapa. */
           key: 'ia',
-          label: 'Inteligencia artificial',
+          label: 'IA',
           component: markRaw(ClientModelosIaTab),
         },
         {
