@@ -13,12 +13,19 @@
 
     <!-- El pedido al admin falló (red, sesión): no hay estado del cliente que mostrar -->
     <div v-else-if="load_error" class="alert alert-danger py-2 small mb-0">
-      {{ load_error }}
+      <div>{{ load_error }}</div>
+      <button type="button" class="btn btn-outline-danger btn-sm mt-2" @click="cargar">
+        Volver a intentar
+      </button>
     </div>
 
-    <!-- Cliente con una versión anterior del sistema (404 del lado del cliente) -->
+    <!-- Cliente con una versión anterior del sistema (404 del lado del cliente). "Volver a
+         intentar" sirve después de actualizarlo, sin cerrar el modal. -->
     <div v-else-if="estado === 'no_soportado'" class="alert alert-warning py-2 small mb-0">
-      Este cliente tiene una versión anterior del sistema: se puede elegir después de actualizarlo.
+      <div>Este cliente tiene una versión anterior del sistema: se puede elegir después de actualizarlo.</div>
+      <button type="button" class="btn btn-outline-secondary btn-sm mt-2" @click="cargar">
+        Volver a intentar
+      </button>
     </div>
 
     <!-- El sistema del cliente no contestó bien (clave, USER_ID, caído, página del hosting) -->
@@ -30,6 +37,8 @@
     </div>
 
     <div v-else-if="cargado">
+      <!-- El rótulo de la solapa es "IA" (para que la barra entre en escritorio); acá va completo. -->
+      <h6 class="fw-semibold mb-1">Inteligencia artificial</h6>
       <p class="text-muted small mb-3">
         Qué modelo de IA usa este cliente para cada tarea. Se lee y se guarda en vivo en su sistema:
         el admin no guarda copia. Si el modelo elegido es de un proveedor sin clave cargada en el
@@ -93,6 +102,11 @@
                 <!-- Cambio sin guardar -->
                 <div v-if="cambio_pendiente(tarea.key)" class="small text-primary mt-1">
                   Sin guardar: se va a elegir {{ nombre_de_id(seleccion[tarea.key]) }}.
+                  <!-- El detalle de "(sin clave)" del selector va acá, que tiene lugar en 375 px. -->
+                  <template v-if="falta_clave_de(seleccion[tarea.key])">
+                    No tiene clave en este cliente (falta {{ falta_clave_de(seleccion[tarea.key]) }}): queda
+                    elegido, pero corre otro hasta que se cargue.
+                  </template>
                 </div>
               </template>
 
@@ -325,7 +339,9 @@ export default {
         const opcion = self.opcion_por_id(id)
         let etiqueta = nombre_opcion(id, opcion ? opcion.nombre : null)
         if (opcion && opcion.disponible === false) {
-          etiqueta += ' — sin clave en este cliente'
+          /* Sufijo corto: en 375 px "— sin clave en este cliente" se cortaba dentro del select. La
+             variable que falta se nombra abajo (aviso de la fila y línea de "Sin guardar"). */
+          etiqueta += ' (sin clave)'
         }
         return { id: id, etiqueta: etiqueta }
       })
@@ -343,6 +359,19 @@ export default {
         }
       })
       return encontrada
+    },
+    /**
+     * La variable del `.env` del cliente que falta para una opción sin clave, o null si la opción
+     * tiene clave (o no se sabe de qué proveedor es).
+     * @param {string} id
+     * @returns {string|null}
+     */
+    falta_clave_de(id) {
+      const opcion = this.opcion_por_id(id)
+      if (!opcion || opcion.disponible !== false) {
+        return null
+      }
+      return VARIABLE_DE_CLAVE[opcion.proveedor] || null
     },
     /**
      * Nombre humano de una opción por id, con el nombre del cliente como respaldo.
