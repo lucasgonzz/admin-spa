@@ -17,6 +17,7 @@ import ClientScheduleTab from '@/components/client/ScheduleTab.vue'
 import ClientTokensTab from '@/components/client/TokensTab.vue'
 import ClientImagenesTab from '@/components/client/imagenes/Index.vue'
 import ClientCandadoSesionTab from '@/components/client/CandadoSesionTab.vue'
+import ClientModelosIaTab from '@/components/client/ModelosIaTab.vue'
 import SubjectPipelinesTab from '@/components/pipeline/SubjectPipelinesTab.vue'
 
 /**
@@ -86,6 +87,16 @@ export default {
           key: 'imagenes',
           label: 'Imágenes',
           component: markRaw(ClientImagenesTab),
+        },
+        {
+          /* Modelos de IA por tarea (misión modelos-ia-por-cliente, 30/9/2026): qué modelo usa el
+             cliente para el asistente, el WhatsApp, la verificación de imágenes y la importación de
+             Excel. Como Imágenes, le pregunta EN VIVO al sistema del cliente al abrirse y no guarda
+             nada en el admin (decisión de Lucas: gana el último entre el admin y el modal del
+             dueño). Va al lado de Tokens e Imágenes: las tres son de IA. */
+          key: 'ia',
+          label: 'Inteligencia artificial',
+          component: markRaw(ClientModelosIaTab),
         },
         {
           /* Candado de sesión por pestaña (misión candado-sesion-por-pestana, 19/9/2026): mismo
