@@ -1,6 +1,24 @@
 import api from '@/utils/axios'
 
 /**
+ * Normaliza el argumento de las acciones de arranque, que acepta la forma vieja (un id pelado) o
+ * la nueva (`{ id, ecommerce_version_id }`, misión versiones-tienda, 1/10/2026).
+ *
+ * @param {number|Object} arg Id, u objeto con `id` y `ecommerce_version_id` opcional.
+ * @returns {{ id: number, body: Object }} El id y el cuerpo extra a mandar (con la versión si vino).
+ */
+function start_args(arg) {
+  if (arg !== null && typeof arg === 'object') {
+    const body = {}
+    if (arg.ecommerce_version_id != null) {
+      body.ecommerce_version_id = arg.ecommerce_version_id
+    }
+    return { id: arg.id, body: body }
+  }
+  return { id: arg, body: {} }
+}
+
+/**
  * Acciones del pipeline técnico de instalación/actualización del ecommerce
  * (ClientEcommerceInstallation + EcommerceDeploymentLog, prompts 584/585/586).
  *
@@ -37,22 +55,28 @@ export default {
      * Dispara una instalación desde cero de la tienda de un cliente.
      *
      * @param {object} context Contexto Vuex (no usa commit: sin estado propio).
-     * @param {number} client_ecommerce_id Id del ClientEcommerce a instalar.
+     * @param {number|{id: number, ecommerce_version_id: (number|null)}} arg Id del ClientEcommerce a
+     *   instalar, o `{ id, ecommerce_version_id }` para elegir la versión de ecommerce (sin ella, el
+     *   backend usa la última publicada).
      * @returns {Promise} Resuelve con la ClientEcommerceInstallation creada (res.data.model).
      */
-    start_install(context, client_ecommerce_id) {
-      return api.post('/client-ecommerce/' + client_ecommerce_id + '/installations/start-install')
+    start_install(context, arg) {
+      const parsed = start_args(arg)
+      return api.post('/client-ecommerce/' + parsed.id + '/installations/start-install', parsed.body)
     },
 
     /**
-     * Dispara una actualización (siempre última de master) del ecommerce ya instalado de un cliente.
+     * Dispara una actualización del ecommerce ya instalado de un cliente, a la versión de ecommerce
+     * elegida (sin elegir, la última publicada).
      *
      * @param {object} context Contexto Vuex (no usa commit: sin estado propio).
-     * @param {number} client_id Id del cliente (no del client_ecommerce: el backend lo resuelve).
+     * @param {number|{id: number, ecommerce_version_id: (number|null)}} arg Id del cliente (no del
+     *   client_ecommerce: el backend lo resuelve), o `{ id, ecommerce_version_id }`.
      * @returns {Promise} Resuelve con la ClientEcommerceInstallation creada (res.data.model).
      */
-    start_update(context, client_id) {
-      return api.post('/ecommerce-installations/start-update', { client_id: client_id })
+    start_update(context, arg) {
+      const parsed = start_args(arg)
+      return api.post('/ecommerce-installations/start-update', Object.assign({ client_id: parsed.id }, parsed.body))
     },
 
     /**
@@ -60,11 +84,13 @@ export default {
      * `ClientEcommerce`), para el submódulo global "Instalaciones > Ecommerce".
      *
      * @param {object} context Contexto Vuex (no usa commit: sin estado propio).
-     * @param {number} client_id Id del cliente (no del client_ecommerce: el backend lo resuelve).
+     * @param {number|{id: number, ecommerce_version_id: (number|null)}} arg Id del cliente, o
+     *   `{ id, ecommerce_version_id }`.
      * @returns {Promise} Resuelve con la ClientEcommerceInstallation creada (res.data.model).
      */
-    start_install_for_client(context, client_id) {
-      return api.post('/ecommerce-installations/start-install', { client_id: client_id })
+    start_install_for_client(context, arg) {
+      const parsed = start_args(arg)
+      return api.post('/ecommerce-installations/start-install', Object.assign({ client_id: parsed.id }, parsed.body))
     },
 
     /**

@@ -38,7 +38,21 @@
             <code v-if="client_ecommerce.api_url">{{ client_ecommerce.api_url }}</code>
             <span v-else class="text-muted fst-italic">Sin configurar</span>
           </dd>
+          <!-- Versión de ecommerce instalada hoy (null = instalada por la vía vieja, master en el VPS). -->
+          <dt class="col-sm-3 text-muted">Versión</dt>
+          <dd class="col-sm-9">
+            <code v-if="client_ecommerce.ecommerce_version">{{ client_ecommerce.ecommerce_version.version }}</code>
+            <span v-else class="text-muted fst-italic">Sin versión registrada</span>
+          </dd>
         </dl>
+
+        <!-- Versión a desplegar con los botones de abajo (default, la última publicada). -->
+        <div class="mb-3 ecommerce-installation-version">
+          <ecommerce-version-select
+            v-model="selected_version_id"
+            :disabled="!can_run || starting_install || starting_update"
+          />
+        </div>
 
         <!-- Aviso de campos faltantes antes de poder instalar/actualizar -->
         <div v-if="missing_fields.length" class="alert alert-warning py-2 small mb-3">
@@ -71,7 +85,7 @@
             :title="action_disabled_title"
             @click="start_update"
           >
-            {{ starting_update ? 'Iniciando...' : '⭯ Actualizar (última de master)' }}
+            {{ starting_update ? 'Iniciando...' : '⭯ Actualizar a la versión elegida' }}
           </button>
         </div>
 
@@ -91,6 +105,7 @@
 <script>
 import api from '@/utils/axios'
 import EcommerceOperationsPanel from '@/components/ecommerce-installation/extra-props/EcommerceOperationsPanel.vue'
+import EcommerceVersionSelect from '@/components/ecommerce-installation/EcommerceVersionSelect.vue'
 
 /**
  * Detalle y disparador del pipeline técnico de instalación/actualización del ecommerce
@@ -101,11 +116,15 @@ import EcommerceOperationsPanel from '@/components/ecommerce-installation/extra-
  * dispara instalación/actualización, y pollea la corrida en curso cada 2s mientras esté
  * 'instalando' contra el endpoint logs_json (prompt 585), reemplazando `latest_installation`
  * en cada tick para que EcommerceOperationsPanel reciba las líneas nuevas.
+ *
+ * Desde la misión `versiones-tienda` (1/10/2026) muestra la versión de ecommerce instalada hoy y
+ * deja elegir cuál desplegar (EcommerceVersionSelect, default la última publicada); los dos
+ * botones mandan `ecommerce_version_id`.
  */
 export default {
   name: 'EcommerceInstallationDetail',
 
-  components: { EcommerceOperationsPanel },
+  components: { EcommerceOperationsPanel, EcommerceVersionSelect },
 
   props: {
     /** Id del ClientEcommerce cuyo pipeline se gestiona. */
@@ -139,6 +158,9 @@ export default {
 
       /** Timer de polling de la corrida en curso. */
       polling_timer: null,
+
+      /** Versión de ecommerce a desplegar con los botones (la elige por defecto el selector). */
+      selected_version_id: null,
     }
   },
 
@@ -242,7 +264,10 @@ export default {
     start_install() {
       var self = this
       self.starting_install = true
-      self.$store.dispatch('ecommerce_installation/start_install', self.client_ecommerce_id)
+      self.$store.dispatch('ecommerce_installation/start_install', {
+        id: self.client_ecommerce_id,
+        ecommerce_version_id: self.selected_version_id,
+      })
         .then(function (res) {
           self.latest_installation = res.data.model
           self.start_polling()
@@ -256,14 +281,18 @@ export default {
     },
 
     /**
-     * Dispara una actualización (siempre última de master) de la tienda.
+     * Dispara una actualización de la tienda a la versión de ecommerce elegida (sin versión, el
+     * backend usa la última publicada).
      *
      * @returns {void}
      */
     start_update() {
       var self = this
       self.starting_update = true
-      self.$store.dispatch('ecommerce_installation/start_update', self.client_id)
+      self.$store.dispatch('ecommerce_installation/start_update', {
+        id: self.client_id,
+        ecommerce_version_id: self.selected_version_id,
+      })
         .then(function (res) {
           self.latest_installation = res.data.model
           self.start_polling()

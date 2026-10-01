@@ -7,10 +7,11 @@
         <h4 class="mb-0">Instalaciones del ecommerce</h4>
         <p class="text-muted small mb-0 mt-1">
           Instala desde cero la tienda (tienda-spa + tienda-api) de un cliente con el ecommerce ya
-          configurado, usando siempre la última versión de <code>master</code>.
+          configurado, con una <router-link to="/versiones/ecommerce">versión de ecommerce</router-link>
+          publicada (por defecto, la última), bajando el release de GitHub: no se compila en el VPS.
         </p>
       </div>
-      <!-- Botón que abre el modal de creación: elegís el cliente y listo, sin versión. -->
+      <!-- Botón que abre el modal de creación: elegís el cliente y la versión (default la última). -->
       <button
         type="button"
         class="btn btn-primary ms-auto"
@@ -39,6 +40,8 @@
           <tr>
             <th>#</th>
             <th>Cliente</th>
+            <th>Versión</th>
+            <th>Tienda hoy</th>
             <th>Estado</th>
             <th>Inicio</th>
             <th>Fin</th>
@@ -54,6 +57,16 @@
           >
             <td>{{ installation.id }}</td>
             <td>{{ client_display_name(installation) }}</td>
+            <!-- Versión que desplegó esta corrida; "—" = vía vieja (master en el VPS) o anterior a las versiones. -->
+            <td class="small">
+              <code v-if="installation.ecommerce_version">{{ installation.ecommerce_version.version }}</code>
+              <span v-else class="text-muted">—</span>
+            </td>
+            <!-- Versión instalada HOY en la tienda de esa corrida. -->
+            <td class="small">
+              <code v-if="store_version(installation)">{{ store_version(installation) }}</code>
+              <span v-else class="text-muted">—</span>
+            </td>
             <td>
               <span
                 class="badge"
@@ -86,7 +99,7 @@
       </table>
     </div>
 
-    <!-- Modal de creación: solo pide el cliente, sin selector de versión (siempre master) -->
+    <!-- Modal de creación: pide el cliente y la versión de ecommerce (default, la última publicada) -->
     <base-modal
       :show="show_create_modal"
       title="Nueva instalación del ecommerce"
@@ -99,11 +112,19 @@
 
       <form v-else @submit.prevent>
         <p class="text-muted small">
-          Se va a disparar una instalación desde cero de la tienda del cliente elegido, usando
-          siempre la última versión publicada en <code>master</code> de tienda-spa y tienda-api.
-          El cliente ya tiene que tener el ecommerce configurado (con su <code>ClientEcommerce</code>
-          creado) — no hace falta elegir versión.
+          Se va a disparar una instalación desde cero de la tienda del cliente elegido, con la
+          versión de ecommerce elegida (por defecto, la última publicada). El cliente ya tiene que
+          tener el ecommerce configurado (con su <code>ClientEcommerce</code> creado).
         </p>
+
+        <!-- Versión de ecommerce a desplegar: el v-if la vuelve a pedir en cada apertura del modal. -->
+        <div class="mb-3">
+          <ecommerce-version-select
+            v-if="show_create_modal"
+            v-model="new_install.ecommerce_version_id"
+            :disabled="creating"
+          />
+        </div>
 
         <!-- Filtro de texto sobre la razón social, para no scrollear un select largo -->
         <div class="mb-2">
@@ -169,6 +190,9 @@
           <span v-if="selected_installation.client_ecommerce && selected_installation.client_ecommerce.domain">
             — <code>{{ selected_installation.client_ecommerce.domain }}</code>
           </span>
+          <span v-if="selected_installation.ecommerce_version">
+            — versión <code>{{ selected_installation.ecommerce_version.version }}</code>
+          </span>
         </p>
         <ecommerce-operations-panel :installation="selected_installation" />
       </template>
@@ -201,6 +225,7 @@
 import api from '@/utils/axios'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import EcommerceOperationsPanel from '@/components/ecommerce-installation/extra-props/EcommerceOperationsPanel.vue'
+import EcommerceVersionSelect from '@/components/ecommerce-installation/EcommerceVersionSelect.vue'
 
 /**
  * Submódulo "Instalaciones del ecommerce", dentro del módulo de Instalaciones (junto a la de
@@ -220,6 +245,10 @@ import EcommerceOperationsPanel from '@/components/ecommerce-installation/extra-
  * no el `client` dueño de la tienda: para mostrar la razón social se carga por separado
  * GET /client (igual que Installations.vue / EcommerceUpdates.vue) y se cruza por
  * client_ecommerce.client_id.
+ *
+ * Desde la misión `versiones-tienda` (1/10/2026) se elige la VERSIÓN de ecommerce a instalar
+ * (EcommerceVersionSelect, default la última publicada) y la tabla muestra la versión de cada
+ * corrida y la instalada hoy en la tienda.
  */
 export default {
   name: 'ViewEcommerceInstallations',
@@ -227,6 +256,7 @@ export default {
   components: {
     BaseModal,
     EcommerceOperationsPanel,
+    EcommerceVersionSelect,
   },
 
   data() {
@@ -252,9 +282,13 @@ export default {
       /** Texto de filtro por razón social sobre el selector de clientes del modal de creación. */
       client_filter_text: '',
 
-      /** Formulario del modal de creación: único campo que pide este submódulo. */
+      /**
+       * Formulario del modal de creación: el cliente y la versión de ecommerce (la elige por
+       * defecto EcommerceVersionSelect: la última publicada).
+       */
       new_install: {
         client_id: null,
+        ecommerce_version_id: null,
       },
 
       /** true mientras se dispara la instalación (POST start-install). */
@@ -372,7 +406,7 @@ export default {
      * @returns {void}
      */
     open_create_modal() {
-      this.new_install = { client_id: null }
+      this.new_install = { client_id: null, ecommerce_version_id: null }
       this.client_filter_text = ''
       this.show_create_modal = true
       if (!this.clients_loaded) {
@@ -388,10 +422,10 @@ export default {
     on_create_modal_closed() {},
 
     /**
-     * Dispara la instalación desde cero del ecommerce del cliente elegido (siempre última de
-     * master, sin versión) reutilizando `start_install_for_client` del store
-     * `ecommerce_installation`. Si el cliente elegido no tiene ecommerce configurado, el backend
-     * responde 422 y el interceptor de axios ya muestra el mensaje de error correspondiente.
+     * Dispara la instalación desde cero del ecommerce del cliente elegido, con la versión elegida
+     * (sin versión, el backend usa la última publicada), reutilizando `start_install_for_client`
+     * del store `ecommerce_installation`. Si el cliente no tiene ecommerce configurado o la versión
+     * no está publicada, el backend responde 422 y el interceptor de axios ya muestra el mensaje.
      *
      * @returns {void}
      */
@@ -401,7 +435,10 @@ export default {
         return
       }
       self.creating = true
-      self.$store.dispatch('ecommerce_installation/start_install_for_client', self.new_install.client_id)
+      self.$store.dispatch('ecommerce_installation/start_install_for_client', {
+        id: self.new_install.client_id,
+        ecommerce_version_id: self.new_install.ecommerce_version_id,
+      })
         .then(function (res) {
           const created = res.data.model
           self.installations.unshift(created)
@@ -559,6 +596,21 @@ export default {
         return 'Cliente #' + client_ecommerce.client_id
       }
       return this.client_label(client)
+    },
+
+    /**
+     * Código de la versión de ecommerce instalada HOY en la tienda de una corrida, o '' si no se
+     * sabe (tienda instalada por la vía vieja, o anterior a las versiones).
+     *
+     * @param {Object} installation
+     * @returns {string}
+     */
+    store_version(installation) {
+      const ecommerce = installation && installation.client_ecommerce
+      if (!ecommerce || !ecommerce.ecommerce_version) {
+        return ''
+      }
+      return ecommerce.ecommerce_version.version
     },
 
     /**

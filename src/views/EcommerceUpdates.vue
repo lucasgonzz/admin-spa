@@ -6,11 +6,12 @@
       <div>
         <h4 class="mb-0">Actualizaciones del ecommerce</h4>
         <p class="text-muted small mb-0 mt-1">
-          Actualiza la tienda (tienda-spa + tienda-api) de un cliente ya configurado, usando
-          siempre la última versión de <code>master</code>.
+          Actualiza la tienda (tienda-spa + tienda-api) de un cliente ya configurado a una
+          <router-link to="/versiones/ecommerce">versión de ecommerce</router-link> publicada
+          (por defecto, la última), bajando el release de GitHub: no se compila en el VPS.
         </p>
       </div>
-      <!-- Botón que abre el modal de creación: elegís el cliente y listo, sin versión. -->
+      <!-- Botón que abre el modal de creación: elegís el cliente y la versión (default la última). -->
       <button
         type="button"
         class="btn btn-primary ms-auto"
@@ -39,6 +40,8 @@
           <tr>
             <th>#</th>
             <th>Cliente</th>
+            <th>Versión</th>
+            <th>Tienda hoy</th>
             <th>Estado</th>
             <th>Inicio</th>
             <th>Fin</th>
@@ -54,6 +57,16 @@
           >
             <td>{{ installation.id }}</td>
             <td>{{ client_display_name(installation) }}</td>
+            <!-- Versión que desplegó esta corrida; "—" = vía vieja (master en el VPS) o anterior a las versiones. -->
+            <td class="small">
+              <code v-if="installation.ecommerce_version">{{ installation.ecommerce_version.version }}</code>
+              <span v-else class="text-muted">—</span>
+            </td>
+            <!-- Versión instalada HOY en la tienda de esa corrida. -->
+            <td class="small">
+              <code v-if="store_version(installation)">{{ store_version(installation) }}</code>
+              <span v-else class="text-muted">—</span>
+            </td>
             <td>
               <span
                 class="badge"
@@ -86,7 +99,7 @@
       </table>
     </div>
 
-    <!-- Modal de creación: solo pide el cliente, sin selector de versión (siempre master) -->
+    <!-- Modal de creación: pide el cliente y la versión de ecommerce (default, la última publicada) -->
     <base-modal
       :show="show_create_modal"
       title="Nueva actualización del ecommerce"
@@ -99,10 +112,18 @@
 
       <form v-else @submit.prevent>
         <p class="text-muted small">
-          Se va a disparar una actualización de la tienda del cliente elegido, usando siempre la
-          última versión publicada en <code>master</code> de tienda-spa y tienda-api. No hace
-          falta elegir versión.
+          Se va a disparar una actualización de la tienda del cliente elegido a la versión de
+          ecommerce elegida (por defecto, la última publicada).
         </p>
+
+        <!-- Versión de ecommerce a desplegar: el v-if la vuelve a pedir en cada apertura del modal. -->
+        <div class="mb-3">
+          <ecommerce-version-select
+            v-if="show_create_modal"
+            v-model="new_update.ecommerce_version_id"
+            :disabled="creating"
+          />
+        </div>
 
         <!-- Filtro de texto sobre la razón social, para no scrollear un select largo -->
         <div class="mb-2">
@@ -129,7 +150,7 @@
               :key="client.id"
               :value="client.id"
             >
-              {{ client_label(client) }}
+              {{ client_option_label(client) }}
             </option>
           </select>
           <p v-if="filtered_clients.length === 0" class="text-muted small mt-1 mb-0">
@@ -168,6 +189,9 @@
           <span v-if="selected_installation.client_ecommerce && selected_installation.client_ecommerce.domain">
             — <code>{{ selected_installation.client_ecommerce.domain }}</code>
           </span>
+          <span v-if="selected_installation.ecommerce_version">
+            — versión <code>{{ selected_installation.ecommerce_version.version }}</code>
+          </span>
         </p>
         <ecommerce-operations-panel :installation="selected_installation" />
       </template>
@@ -200,13 +224,17 @@
 import api from '@/utils/axios'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import EcommerceOperationsPanel from '@/components/ecommerce-installation/extra-props/EcommerceOperationsPanel.vue'
+import EcommerceVersionSelect from '@/components/ecommerce-installation/EcommerceVersionSelect.vue'
 
 /**
  * Submódulo "Actualizaciones del ecommerce" (prompt 587), dentro del módulo de Actualizaciones
- * (junto a la de empresa, ver routes.js). A diferencia de la actualización de empresa, acá NO se
- * elige versión: siempre se dispara la última de `master` (mode 'update'), reutilizando la acción
- * `start_update` del store `ecommerce_installation` (prompt 586) y el mismo panel de log en
- * vivo + checklist (EcommerceOperationsPanel) que ya usa el detalle embebido en el cliente.
+ * (junto a la de empresa, ver routes.js). Dispara `start_update` del store `ecommerce_installation`
+ * (prompt 586) y reutiliza el mismo panel de log en vivo + checklist (EcommerceOperationsPanel) que
+ * ya usa el detalle embebido en el cliente.
+ *
+ * Desde la misión `versiones-tienda` (1/10/2026) se elige la VERSIÓN de ecommerce a desplegar
+ * (EcommerceVersionSelect, default la última publicada) y la tabla muestra la versión de cada
+ * corrida y la que la tienda tiene instalada hoy. Antes se disparaba siempre la última de `master`.
  *
  * Listado (index_json, prompt 585) trae cada corrida con su `client_ecommerce` y `logs`
  * eager-cargados, pero no el `client` dueño de la tienda: para mostrar la razón social se
@@ -225,6 +253,7 @@ export default {
   components: {
     BaseModal,
     EcommerceOperationsPanel,
+    EcommerceVersionSelect,
   },
 
   data() {
@@ -250,9 +279,13 @@ export default {
       /** Texto de filtro por razón social sobre el selector de clientes del modal de creación. */
       client_filter_text: '',
 
-      /** Formulario del modal de creación: único campo que pide este submódulo. */
+      /**
+       * Formulario del modal de creación: el cliente y la versión de ecommerce (la elige por
+       * defecto EcommerceVersionSelect: la última publicada).
+       */
       new_update: {
         client_id: null,
+        ecommerce_version_id: null,
       },
 
       /** true mientras se dispara la actualización (POST start-update). */
@@ -269,6 +302,13 @@ export default {
 
       /** true mientras se dispara el borrado de la corrida seleccionada (DELETE). */
       deleting_installation: false,
+
+      /**
+       * client_id -> código de la versión de ecommerce instalada hoy en su tienda, armado con las
+       * corridas del listado (cada una trae `client_ecommerce.ecommerce_version`). Sólo conoce las
+       * tiendas que tienen alguna corrida; para el resto, el selector no muestra versión.
+       */
+      installed_versions_by_client: {},
     }
   },
 
@@ -331,6 +371,15 @@ export default {
           self.installations = models.filter(function (installation) {
             return installation.mode === 'update'
           })
+          // Versión instalada hoy en cada tienda, de TODAS las corridas (también las de instalación).
+          const map = {}
+          models.forEach(function (installation) {
+            const ecommerce = installation.client_ecommerce
+            if (ecommerce && ecommerce.client_id != null && ecommerce.ecommerce_version) {
+              map[ecommerce.client_id] = ecommerce.ecommerce_version.version
+            }
+          })
+          self.installed_versions_by_client = map
         })
         .catch(function () {
           /* El interceptor de axios ya muestra el toast de error. */
@@ -371,7 +420,7 @@ export default {
      * @returns {void}
      */
     open_create_modal() {
-      this.new_update = { client_id: null }
+      this.new_update = { client_id: null, ecommerce_version_id: null }
       this.client_filter_text = ''
       this.show_create_modal = true
       if (!this.clients_loaded) {
@@ -387,10 +436,11 @@ export default {
     on_create_modal_closed() {},
 
     /**
-     * Dispara la actualización del ecommerce del cliente elegido (siempre última de master, sin
-     * versión) reutilizando `start_update` del store `ecommerce_installation` (prompt 586). Si
-     * el cliente elegido no tiene ecommerce configurado, el backend responde 422 y el interceptor
-     * de axios ya muestra el mensaje de error correspondiente.
+     * Dispara la actualización del ecommerce del cliente elegido a la versión elegida (sin versión,
+     * el backend usa la última publicada) reutilizando `start_update` del store
+     * `ecommerce_installation` (prompt 586). Si el cliente no tiene ecommerce configurado o la
+     * versión no está publicada, el backend responde 422 y el interceptor de axios ya muestra el
+     * mensaje de error correspondiente.
      *
      * @returns {void}
      */
@@ -400,7 +450,10 @@ export default {
         return
       }
       self.creating = true
-      self.$store.dispatch('ecommerce_installation/start_update', self.new_update.client_id)
+      self.$store.dispatch('ecommerce_installation/start_update', {
+        id: self.new_update.client_id,
+        ecommerce_version_id: self.new_update.ecommerce_version_id,
+      })
         .then(function (res) {
           const created = res.data.model
           self.installations.unshift(created)
@@ -558,6 +611,34 @@ export default {
         return 'Cliente #' + client_ecommerce.client_id
       }
       return this.client_label(client)
+    },
+
+    /**
+     * Código de la versión de ecommerce instalada HOY en la tienda de una corrida, o '' si no se
+     * sabe (tienda instalada por la vía vieja, o anterior a las versiones).
+     *
+     * @param {Object} installation
+     * @returns {string}
+     */
+    store_version(installation) {
+      const ecommerce = installation && installation.client_ecommerce
+      if (!ecommerce || !ecommerce.ecommerce_version) {
+        return ''
+      }
+      return ecommerce.ecommerce_version.version
+    },
+
+    /**
+     * Texto de cada cliente del selector del modal: la razón social y, si se conoce, la versión de
+     * ecommerce que su tienda tiene instalada hoy.
+     *
+     * @param {Object} client
+     * @returns {string}
+     */
+    client_option_label(client) {
+      const label = this.client_label(client)
+      const version = client ? this.installed_versions_by_client[client.id] : null
+      return version ? label + ' — instalada: ' + version : label
     },
 
     /**

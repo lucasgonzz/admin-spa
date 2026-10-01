@@ -101,6 +101,19 @@ const routes_def = [
     meta: { requiresAuth: true, nav: true, icon: 'box-seam' },
   },
   {
+    /**
+     * Versiones del ecommerce (misión versiones-tienda, 1/10/2026): los releases de tienda-spa +
+     * tienda-api que instalar/actualizar una tienda despliega. Va pegada a Versiones (empresa) y como
+     * ítem propio —no como hijo de /versiones— para no cambiarle la URL ni el nombre a esa pantalla.
+     */
+    path: '/versiones/ecommerce',
+    name: 'ecommerce_versions',
+    text: 'Versiones ecommerce',
+    model_name: 'ecommerce_version',
+    component: () => import('@/views/EcommerceVersions.vue'),
+    meta: { requiresAuth: true, nav: true, icon: 'bag-check' },
+  },
+  {
     path: '/clientes',
     name: 'clients',
     text: 'Clientes',
