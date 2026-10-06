@@ -150,7 +150,7 @@
         </div>
 
         <!-- Motivo del error 422 (ej: ventana cerrada sin plantilla): visible dentro del modal -->
-        <div v-if="error_message" class="alert alert-danger py-2 small mt-3 mb-0">
+        <div v-if="error_message" ref="error_alert" class="alert alert-danger py-2 small mt-3 mb-0">
           {{ error_message }}
         </div>
       </template>
@@ -759,7 +759,25 @@ export default {
           if (self.is_reapply && codigo !== 'confirmacion_requerida' && codigo !== 'falta_confirmar_sistema_en_uso') {
             self.confirm_name_typed = ''
             self.confirm_live_checked = false
+
+            /* Se dice por qué: sin esto se ve el error y un campo vacío, y parece que se perdió lo escrito por un defecto. */
+            self.error_message = self.error_message + ' Por seguridad, la confirmación se borró: para volver a intentarlo hay que confirmar de nuevo.'
           }
+
+          /*
+           * Que el error SE VEA. El mensaje va al final del cuerpo del modal y, si la confirmación lo hizo crecer (por ejemplo, el 422 de
+           * "sistema en uso" suma el recuadro con el checkbox), queda debajo del pliegue junto con el botón: en un notebook de 768 px de alto o
+           * en un teléfono la persona veía aparecer el checkbox sin ver por qué ni dónde apretar. Se lo lleva al centro del área visible; el
+           * scroll del modal alcanza para dejar a la vista el mensaje y el botón. Va en $nextTick porque el aviso recién existe después de
+           * que Vue vuelve a pintar.
+           */
+          self.$nextTick(function () {
+            const alerta = self.$refs.error_alert
+
+            if (alerta && typeof alerta.scrollIntoView === 'function') {
+              alerta.scrollIntoView({ block: 'center' })
+            }
+          })
         })
         .then(function () {
           self.sending = false
