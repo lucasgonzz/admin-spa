@@ -68,7 +68,11 @@
             <input v-model="form.inicio_actividades" type="date" class="form-control" />
           </div>
 
-          <!-- Toggle de entorno AFIP: producción (on) vs homologación (off, para pruebas) -->
+          <!-- Toggle de entorno AFIP: producción (on) vs homologación (off, para pruebas).
+               La etiqueta del interruptor es FIJA y el modo activo se muestra aparte: antes la
+               etiqueta cambiaba con el estado y un interruptor apagado que decía "Homologación"
+               se leía como "homologación apagada" (= producción), cuando en realidad era el
+               modo activo y las facturas salían de prueba (7/10/2026). -->
           <div class="col-12">
             <div class="form-check form-switch">
               <input
@@ -78,12 +82,26 @@
                 type="checkbox"
               />
               <label class="form-check-label fw-semibold" for="afip-produccion">
-                {{ form.afip_produccion ? 'Producción' : 'Homologación' }}
+                Facturar en producción (facturas reales)
               </label>
+            </div>
+            <!-- Modo activo, en palabras y con color: no depende de leer la posición del interruptor -->
+            <div
+              class="alert mt-2 mb-1 py-2 small"
+              :class="form.afip_produccion ? 'alert-success' : 'alert-warning'"
+              role="status"
+            >
+              <template v-if="form.afip_produccion">
+                <strong>Modo activo: PRODUCCIÓN.</strong> Las facturas se emiten contra ARCA de verdad y tienen validez fiscal.
+              </template>
+              <template v-else>
+                <strong>Modo activo: HOMOLOGACIÓN (pruebas).</strong> Las facturas que se emiten ahora <strong>no tienen validez fiscal</strong>
+                y ARCA solo reconoce unos pocos CUIT de prueba: a los demás clientes les da el error 10015. Activá el interruptor para facturar de verdad.
+              </template>
             </div>
             <div class="form-text">
               Homologación es el ambiente de pruebas de AFIP: las facturas emitidas ahí no tienen validez fiscal.
-              Activar "Producción" solo cuando los datos estén confirmados.
+              Activar "Producción" solo cuando los datos estén confirmados. El cambio se aplica al apretar "Guardar".
             </div>
           </div>
 
