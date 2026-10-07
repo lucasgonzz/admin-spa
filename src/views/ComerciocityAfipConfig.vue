@@ -88,16 +88,20 @@
             <!-- Modo activo, en palabras y con color: no depende de leer la posición del interruptor -->
             <div
               class="alert mt-2 mb-1 py-2 small"
-              :class="form.afip_produccion ? 'alert-success' : 'alert-warning'"
+              :class="produccion_guardada ? 'alert-success' : 'alert-warning'"
               role="status"
             >
-              <template v-if="form.afip_produccion">
+              <template v-if="produccion_guardada">
                 <strong>Modo activo: PRODUCCIÓN.</strong> Las facturas se emiten contra ARCA de verdad y tienen validez fiscal.
               </template>
               <template v-else>
                 <strong>Modo activo: HOMOLOGACIÓN (pruebas).</strong> Las facturas que se emiten ahora <strong>no tienen validez fiscal</strong>
-                y ARCA solo reconoce unos pocos CUIT de prueba: a los demás clientes les da el error 10015. Activá el interruptor para facturar de verdad.
+                y ARCA solo reconoce unos pocos CUIT de prueba: a los demás clientes les da el error 10015. Activá el interruptor y guardá para facturar de verdad.
               </template>
+              <!-- El cartel muestra lo GUARDADO; si el interruptor se movió y no se guardó, se avisa -->
+              <div v-if="form.afip_produccion !== produccion_guardada" class="mt-1 fw-semibold">
+                Cambio sin guardar: apretá "Guardar" para pasar a {{ form.afip_produccion ? 'PRODUCCIÓN' : 'HOMOLOGACIÓN' }}.
+              </div>
             </div>
             <div class="form-text">
               Homologación es el ambiente de pruebas de AFIP: las facturas emitidas ahí no tienen validez fiscal.
@@ -252,6 +256,9 @@ export default {
         logo_path: '',
       },
 
+      /** Ambiente que está GUARDADO en el backend (true = producción). El formulario puede diferir hasta que se aprieta Guardar. */
+      produccion_guardada: false,
+
       /** true mientras se carga la configuración inicial desde el backend. */
       loading: false,
 
@@ -365,6 +372,7 @@ export default {
           afip_produccion: !!config.afip_produccion,
           logo_path: config.logo_path || '',
         }
+        self.produccion_guardada = !!config.afip_produccion
         /* Nueva carga de config: reseteamos el flag de error de imagen para reintentar el preview. */
         self.logo_load_error = false
         self.loading = false
@@ -397,6 +405,7 @@ export default {
           afip_produccion: !!config.afip_produccion,
           logo_path: config.logo_path || '',
         }
+        self.produccion_guardada = !!config.afip_produccion
         self.saving = false
 
         /* Notifica al usuario con toast de éxito, siguiendo el patrón usado en EnvTemplate. */
