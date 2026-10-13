@@ -54,6 +54,50 @@ import EscenaMarca from './EscenaMarca.vue'
 import { RETRASO_INVITACION_MS } from './tiempos-confirmacion'
 
 /**
+ * Las horas escritas en LETRAS, de una a doce (13/10/2026, misión
+ * demo-dos-horas-y-experiencia).
+ *
+ * 🔴 Por qué en letras y no en dígitos. El párrafo de la reserva es lo que el lead lee
+ * justo después de confirmar el formulario, y con la ventana en dos horas la versión en
+ * dígitos salía como «Durante 2 horas va a estar reservada». Lucas pidió la forma escrita,
+ * y del lado del agente el mismo número en dígitos («2 hs») es lo que dispara el patrón de
+ * `LeadMessage` que retiene un `agendar_demo` para revisión humana: la página y el agente
+ * cuentan lo mismo, así que lo cuentan igual.
+ *
+ * Uno a doce y nada más porque ése es el rango real: la reserva la acota
+ * `LeadDemoSettings::clamp_horas_ventana()` a [1, 12]. Fuera de ese rango se cae a los
+ * dígitos — es una frase menos linda, nunca una frase equivocada.
+ */
+const HORAS_EN_LETRAS = [
+	'una',
+	'dos',
+	'tres',
+	'cuatro',
+	'cinco',
+	'seis',
+	'siete',
+	'ocho',
+	'nueve',
+	'diez',
+	'once',
+	'doce',
+]
+
+/**
+ * `horas` en letras, o en dígitos si queda fuera de [1, 12].
+ *
+ * @param {number} horas
+ * @returns {string}
+ */
+function horas_en_letras(horas) {
+	const palabra = HORAS_EN_LETRAS[horas - 1]
+	if (!palabra) {
+		return String(horas)
+	}
+	return palabra
+}
+
+/**
  * Pantalla de confirmación "armando tu demo" (grupo 322, prompt 03), copy de
  * contexto/demo_pagina.md §3-bis -- se transcribe, no se reescribe.
  *
@@ -209,9 +253,22 @@ export default {
 		},
 
 		/**
-		 * Duración del turno en texto ("1 hora", "1 h 30 min", "45 minutos"),
-		 * calculada de turno.hora_inicio/hora_fin -- NUNCA hardcodeada. Cadena
-		 * vacía si faltan datos o el cálculo no da positivo.
+		 * Duración del turno en texto ("una hora", "dos horas", "dos horas y 20 minutos",
+		 * "45 minutos"), calculada de turno.hora_inicio/hora_fin -- NUNCA hardcodeada.
+		 * Cadena vacía si faltan datos o el cálculo no da positivo.
+		 *
+		 * 🔴 LAS HORAS VAN EN LETRAS (13/10/2026, misión demo-dos-horas-y-experiencia).
+		 * Hasta esta misión salían en dígitos -- "1 hora", "2 horas", "1 h 30 min" -- y con
+		 * la reserva en dos horas el párrafo decía «Durante 2 horas va a estar reservada».
+		 * Ver el comentario de HORAS_EN_LETRAS arriba: es la misma forma con la que el
+		 * agente lo dice por WhatsApp, y los dígitos ahí son lo que manda el mensaje a
+		 * revisión humana. El número sigue saliendo del backend (`turno.hora_fin`): lo
+		 * único que cambia es cómo se escribe.
+		 *
+		 * Los MINUTOS sí quedan en dígitos, y es a propósito: pueden ser cualquiera de 1 a
+		 * 59 (la ventana se recorta a las 23:59 del día), así que escribirlos en letras
+		 * pedía una tabla de sesenta entradas para un caso de borde. Lo que estaba prohibido
+		 * era la hora en dígitos, no el minuto.
 		 *
 		 * @returns {string}
 		 */
@@ -231,10 +288,10 @@ export default {
 			const minutos = total % 60
 
 			if (horas > 0 && minutos > 0) {
-				return horas + ' h ' + minutos + ' min'
+				return horas_en_letras(horas) + (horas === 1 ? ' hora y ' : ' horas y ') + minutos + ' minutos'
 			}
 			if (horas > 0) {
-				return horas === 1 ? '1 hora' : horas + ' horas'
+				return horas === 1 ? 'una hora' : horas_en_letras(horas) + ' horas'
 			}
 			return minutos + ' minutos'
 		},
