@@ -24,8 +24,12 @@ import { normalizar } from './utiles'
 /** Fracción vista a partir de la cual un video cuenta como terminado (la misma regla del servidor). */
 export const HECHO = 0.9
 
-/** Largo máximo de un tramo que acepta `POST recursos/progreso` (§3.4: tramos de hasta 30 s). */
-const MAX_SEGUNDOS_POR_TRAMO = 30
+/**
+ * Largo de los pedazos en que se parte un tramo largo. El servidor acepta hasta 30 s (§3.4),
+ * pero se corta en 29,9: con 30 justos el redondeo de punto flotante (`32.2 - 2.2` da
+ * `30.000000000000004`) hacía que el servidor rechazara el lote entero.
+ */
+const MAX_SEGUNDOS_POR_TRAMO = 29.9
 
 /** Cantidad máxima de tramos por pedido (§3.4). */
 const MAX_TRAMOS_POR_PEDIDO = 50
@@ -855,7 +859,8 @@ function decima(x) {
 
 /**
  * Deja los tramos como los valida el servidor (§3.4): dentro de `[0, duración]`, `desde <=
- * hasta`, ninguno de más de 30 s (los largos se parten) y redondeados a la décima.
+ * hasta`, ninguno de más de 30 s (los largos se parten en pedazos de 29,9) y redondeados a la
+ * décima.
  *
  * @param {Array<Array<number>>} tramos
  * @param {number} duracion
