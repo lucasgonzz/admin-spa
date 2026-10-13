@@ -279,7 +279,11 @@ import CtaDemo from './CtaDemo.vue'
  */
 const ENTREGA = {
   titulo: 'Nos encargamos de todo: vos no cargás nada',
-  subtitulo: 'Te lo entregamos andando.',
+  /* 🔴 Textual de contexto/demo_pagina.md §0 del repo de conocimiento, que es la FUENTE del
+     copy de esta página. El mensaje «te lo entregamos andando» es el nombre interno del
+     mensaje único, no la línea que se le muestra al lead: la segunda línea de la apertura es
+     la que abre el resto, y dice algo concreto en vez de repetir el titular. */
+  subtitulo: 'Tu sistema no arranca vacío. Arranca con tu negocio adentro.',
   /**
    * Las cuatro cosas que migramos. Es lo que hacen las etapas 3 y 4 de la implementación,
    * dicho en cuatro renglones -- no una promesa nueva: los artículos, las imágenes por IA,
