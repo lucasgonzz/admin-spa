@@ -70,15 +70,30 @@
            Sigue siendo el TIEMPO el que decide cuándo TERMINA (el animationend del
            subtítulo); lo único que cambió es cuándo EMPIEZA. Una condición de scroll
            sobre el final es la que revivía el bug viejo, y esa no está. -->
+      <!-- 🔴 LA APERTURA YA NO ES POR PERFIL (13/10/2026, misión
+           demo-dos-horas-y-experiencia). Hasta este día decía "Tu negocio funciona porque
+           vos te acordás. / Y eso tiene un límite." (dueño) o "Vos ya sabés que así no se
+           puede seguir. / Lo difícil es demostrarlo." (campeón): dos aperturas que abrían
+           con el PROBLEMA del lead. La página pasó a tener un solo mensaje y es el de la
+           entrega -- "nos encargamos de todo, te lo entregamos andando" --, que es el mismo
+           para los dos perfiles y para las dos caras (con turno y sin turno). El copy por
+           perfil que queda vivo es el del puente, más abajo.
+
+           La estructura de la sección NO cambia: el mismo <header>, las mismas dos clases
+           de entrada, el mismo ref en el subtítulo y el mismo @animationend. Lo que se
+           agrega -- las cuatro cosas que migramos y la línea de tiempo de las ocho etapas --
+           son dos bloques hermanos que entran con la misma coreografía y terminan ANTES que
+           el subtítulo (ver los retrasos en el <style>: el animationend que libera --carga
+           sigue colgando del subtítulo y por eso tiene que seguir siendo el último). -->
       <header
-        class="demo-scroll-dolor__apertura"
+        class="demo-scroll-dolor__apertura demo-scroll-dolor__apertura--entrega"
         :class="{
           'demo-scroll-dolor__apertura--espera': !apertura_vista,
           'demo-scroll-dolor__apertura--carga': apertura_vista && !apertura_entrada_terminada,
         }"
       >
         <h1 class="demo-scroll-dolor__apertura-titulo" :style="estilo_apertura(progreso)">
-          {{ contenido.apertura.titulo }}
+          {{ entrega.titulo }}
         </h1>
         <!-- El animationend va en el SUBTÍTULO porque es el último en terminar (entra
              con retraso): cuando este termina, la entrada completa terminó.
@@ -91,8 +106,39 @@
           :style="estilo_apertura(progreso, true)"
           @animationend="on_entrada_apertura_terminada"
         >
-          {{ contenido.apertura.subtitulo }}
+          {{ entrega.subtitulo }}
         </p>
+
+        <!-- Las cuatro cosas que migramos. No es una promesa nueva: es exactamente lo que
+             hacen las etapas 3 y 4 de la implementación, dicho en cuatro renglones. -->
+        <ul class="demo-entrega__migramos" :style="estilo_apertura(progreso, true)">
+          <li
+            v-for="(cosa, indice) in entrega.migramos"
+            :key="indice"
+            class="demo-entrega__cosa"
+          >
+            <i class="bi demo-entrega__cosa-icono" :class="cosa.icono" aria-hidden="true"></i>
+            <span class="demo-entrega__cosa-texto">{{ cosa.texto }}</span>
+          </li>
+        </ul>
+
+        <!-- La línea de tiempo de las ocho etapas. <ol> y no <ul>: el orden ES el dato, y
+             el número de cada etapa se dibuja aparte (el círculo) en vez de escribirlo
+             dentro del texto -- los nombres de abajo son los de las etapas del admin,
+             textuales, sin el "N." adelante. -->
+        <div class="demo-entrega__etapas" :style="estilo_apertura(progreso, true)">
+          <p class="demo-entrega__etapas-rotulo">{{ entrega.etapas_rotulo }}</p>
+          <ol class="demo-entrega__linea">
+            <li
+              v-for="(etapa, indice) in entrega.etapas"
+              :key="indice"
+              class="demo-entrega__etapa"
+            >
+              <span class="demo-entrega__etapa-numero">{{ indice + 1 }}</span>
+              <span class="demo-entrega__etapa-texto">{{ etapa }}</span>
+            </li>
+          </ol>
+        </div>
       </header>
     </fondo-seccion-sticky>
 
@@ -103,55 +149,46 @@
          tenemos".
 
          🔴 Va SUELTA en el scroll, NO dentro de un <fondo-seccion-sticky>: trae su
-         propio pin. Dos sticky anidados es el bug de los grupos 322/325. -->
-    <seccion-clientes />
+         propio pin. Dos sticky anidados es el bug de los grupos 322/325.
 
-    <!-- EL CUBO (misión experiencia-nueva, 10/9/2026). Portado del export de Claude
-         Design que hizo Lucas; la fuente desempaquetada y el análisis están en
-         marca/animacion-cubo/ del repo de conocimiento.
+         LA PISTA SE ACORTÓ a 260vh el 13/10/2026 (misión demo-dos-horas-y-experiencia).
+         Eran 380 -- el default del componente --, o sea 280vh pinneables repartidos en los
+         tres momentos (~93vh cada uno). Con la página contando UN solo mensaje, tres
+         pantallas de scroll antes de llegar a él es demasiado camino: 260 deja 160vh
+         pinneables, ~53vh por momento. Los tres momentos siguen estando -- el número, la
+         pared de logos y las tiendas --: las ventanas de MOMENTOS son fracciones del
+         progreso, así que se comprimen todas en la misma proporción y no se pierde ninguna.
+         El valor se pasa por prop y no se toca el default del componente, que es para lo
+         que la prop existe (ver su docblock en SeccionClientes.vue). -->
+    <seccion-clientes :recorrido_vh="260" />
 
-         Trae adentro su propia portada con "Nada de esto es sobre el sistema. Es sobre
-         dejar de ser el único que sabe." -- el mensaje que Lucas pidió conservar. Por
-         eso ese titular ya NO vive acá: si se repone en esta plantilla, se dice dos
-         veces seguidas.
+    <!-- ⛔ SALIERON DEL RECORRIDO el 13/10/2026 (misión demo-dos-horas-y-experiencia), y
+         los archivos NO se borraron: el cubo (<cubo-procesador>), la sección .demo-hitos
+         --que vivía acá, en esta plantilla-- y "Bienvenido a la nueva era"
+         (<seccion-nueva-era>). La página pasó a contar UN solo mensaje ("nos encargamos de
+         todo, te lo entregamos andando") y estas tres contaban otro: que el negocio depende
+         de que el dueño se acuerde. Entre la apertura y el formulario quedaban seis
+         pantallas antes del único pedido real de la página.
 
-         🔴 Igual que la sección de clientes: trae su propio pin, no lo envuelvas. -->
-    <cubo-procesador :titulos="contenido.hitos.titulo_portada" :tema="tema" />
+         CuboProcesador.vue y SeccionNuevaEra.vue siguen en src/components/demo/ sin que
+         nadie los monte -- son copy y animación caros de recuperar, y volverlos a montar es
+         reponer dos líneas acá. El copy de los hitos sigue en CONTENIDO_POR_PERFIL (ver el
+         <script>) y su CSS, en el <style> de este mismo archivo, los dos marcados como sin
+         uso. Y si se repone cualquiera de las tres, hay que devolver su selector a
+         SELECTOR_DESTINOS de avance-guiado.js en la misma pasada: sin eso el gesto guiado
+         las saltea sin que nada falle. -->
 
-    <!-- LOS HITOS. Vivían dentro del cierre, debajo del titular que ahora abre el cubo.
-         Lucas pidió sacar los DOLORES, no estos: son copy validado (marca/cliente_ideal.md)
-         y siguen siendo por perfil. Quedan acá, como línea de tiempo del valor y entrada
-         a "Bienvenido a la nueva era".
+    <!-- LA FRANJA DE TESTIMONIOS (13/10/2026). Reemplaza a <seccion-resenas> -- cuatro
+         reseñas enteras, el promedio de la ficha de Google y tres testimonios en video --
+         por dos frases con nombre y negocio, acá, a un gesto del formulario, que es donde
+         la prueba social sirve. SeccionResenas.vue tampoco se borró: sigue siendo la FUENTE
+         de esos dos textos (ver el comentario de cabecera de FranjaTestimonios.vue).
 
-         En flujo normal y sin techo de alto, igual que estaba el cierre: no vive dentro
-         de un FondoSeccionSticky, así que no hay progreso de sección del que colgarse. -->
-    <section class="demo-hitos">
-      <div class="demo-hitos__tarjeta">
-        <ul class="demo-scroll-dolor__hitos">
-          <li v-for="(hito, indice) in contenido.hitos.lista" :key="indice">
-            <strong>{{ hito.momento }}</strong> {{ hito.texto }}
-          </li>
-        </ul>
-
-        <!-- Versión dueño: frase corta de cierre -->
-        <p v-if="contenido.hitos.frase_final" class="demo-scroll-dolor__frase-final">
-          {{ contenido.hitos.frase_final }}
-        </p>
-        <!-- Versión campeón: párrafo largo ya validado por Lucas (marca/cliente_ideal.md) -->
-        <p v-if="contenido.hitos.parrafo_final" class="demo-scroll-dolor__parrafo-final">
-          {{ contenido.hitos.parrafo_final }}
-        </p>
-      </div>
-    </section>
-
-    <!-- "Bienvenido a la nueva era" + los tres pilares de la implementación. -->
-    <seccion-nueva-era />
-
-    <!-- Las reseñas de Google y los testimonios en video. Hasta el 11/9/2026 (misión
-         experiencia-landing) el array de reseñas estaba vacío a propósito y la sección no
-         renderizaba nada: no había fuente y no se inventan reseñas ni promedio. Ese día
-         llegó el perfil de Google de Lucas y SeccionResenas.vue las carga. -->
-    <seccion-resenas />
+         🔴 Igual que .demo-hitos antes: va en flujo, no dentro de un FondoSeccionSticky, así
+         que su punto de enganche es ella misma -- `.demo-testimonios` está en
+         SELECTOR_DESTINOS de avance-guiado.js y recibe scroll-snap-align de
+         demo-experiencia.scss. Las dos cosas, o el gesto la pasa de largo. -->
+    <franja-testimonios />
 
 
     <!-- El cierre del recorrido, y tiene DOS caras según si el lead tiene demo asignada
@@ -208,9 +245,11 @@
 import FondoSeccionSticky from './FondoSeccionSticky.vue'
 import AnimacionProcesador from './animacion/AnimacionProcesador.vue'
 import SeccionClientes from './SeccionClientes.vue'
-import CuboProcesador from './CuboProcesador.vue'
-import SeccionNuevaEra from './SeccionNuevaEra.vue'
-import SeccionResenas from './SeccionResenas.vue'
+/* ⛔ CuboProcesador, SeccionNuevaEra y SeccionResenas ya NO se importan (13/10/2026, misión
+   demo-dos-horas-y-experiencia): salieron del recorrido. Los tres archivos siguen en
+   src/components/demo/ a propósito -- ver el comentario del template. Dejarlos importados
+   sin montar metía su CSS y su JS en el bundle de la página para nada. */
+import FranjaTestimonios from './FranjaTestimonios.vue'
 import CtaDemo from './CtaDemo.vue'
 
 /**
@@ -237,6 +276,55 @@ import CtaDemo from './CtaDemo.vue'
  * se pinta en columna simple (.demo-scroll-dolor__hitos, flex-direction: column), así
  * que dos líneas en vez de tres no dejan hueco ni descuadre, solo una tarjeta un poco
  * más baja.
+ */
+const ENTREGA = {
+  titulo: 'Nos encargamos de todo: vos no cargás nada',
+  subtitulo: 'Te lo entregamos andando.',
+  /**
+   * Las cuatro cosas que migramos. Es lo que hacen las etapas 3 y 4 de la implementación,
+   * dicho en cuatro renglones -- no una promesa nueva: los artículos, las imágenes por IA,
+   * los clientes y proveedores con saldo y la vinculación con ARCA son las cuatro cargas que
+   * el cliente NO hace, y las cuatro están construidas.
+   */
+  migramos: [
+    { icono: 'bi-tags', texto: 'Artículos con sus precios' },
+    { icono: 'bi-images', texto: 'Imágenes del catálogo con IA' },
+    { icono: 'bi-people', texto: 'Clientes y proveedores con sus saldos' },
+    { icono: 'bi-file-earmark-text', texto: 'ARCA configurado' },
+  ],
+  etapas_rotulo: 'Las ocho etapas de tu implementación',
+  /**
+   * 🔴 LAS OCHO ETAPAS, TEXTUALES. Son los nombres de las etapas de implementación del
+   * admin (prompts_agentes/implementacion_protocolo.md del repo de conocimiento): se
+   * transcriben, no se reescriben ni se "mejoran para la página". Si el admin renombra una
+   * etapa, esta lista se actualiza mirando ese archivo -- el lead que después abre su
+   * implementación tiene que leer los mismos ocho nombres.
+   *
+   * El número va aparte, en el círculo de la línea de tiempo, así que acá no lleva el
+   * "N." adelante.
+   */
+  etapas: [
+    'Información de la empresa',
+    'Instalación del sistema',
+    'Recolección de archivos',
+    'Migración de datos',
+    'Entrega del sistema',
+    'Capacitación',
+    'Vinculación con ARCA/AFIP',
+    'Videollamada de capacitación',
+  ],
+}
+
+/**
+ * 🔴 DE ACÁ SÓLO SE CONSUME `puente` desde el 13/10/2026 (misión
+ * demo-dos-horas-y-experiencia). La `apertura` por perfil la reemplazó el mensaje único de
+ * ENTREGA (arriba) y los `hitos` salieron del recorrido con la sección .demo-hitos y la
+ * portada del cubo.
+ *
+ * Los dos bloques quedan escritos y NO se borran: son copy validado por Lucas
+ * (marca/cliente_ideal.md para los hitos, contexto/demo_pagina.md §1 y §2 para la apertura),
+ * y reponer la sección es volver a montarla en el template -- el texto ya está acá. Lo que
+ * no hay que hacer es "limpiarlos" pensando que son restos de un copiar y pegar.
  */
 const CONTENIDO_POR_PERFIL = {
   dueno: {
@@ -378,17 +466,23 @@ function ease_out(t) {
 }
 
 /**
- * El recorrido de la página inmersiva de demo, rehecho el 10/9/2026 (misión
- * experiencia-nueva): la animación del procesador, la apertura, los clientes, el
- * cubo, los hitos, "Bienvenido a la nueva era", las reseñas y el cierre -- el puente al
- * formulario cuando el lead tiene demo asignada, o el CTA a WhatsApp cuando no la tiene
- * (`sin_turno`, misión experiencia-landing, 11/9/2026). Renderiza la versión dueño o
- * campeón según `perfil` (contexto/demo_experiencia.md §3.17).
+ * El recorrido de la página inmersiva de demo. Hoy son CINCO tramos y nada más
+ * (13/10/2026, misión demo-dos-horas-y-experiencia): la animación del procesador, la
+ * apertura de la entrega, los clientes, la franja de testimonios y el cierre -- el puente
+ * al formulario cuando el lead tiene demo asignada, o el CTA a WhatsApp cuando no la tiene
+ * (`sin_turno`, misión experiencia-landing, 11/9/2026).
+ *
+ * 🔴 UN SOLO MENSAJE: "nos encargamos de todo, te lo entregamos andando". Eso es lo que
+ * cambió el 13/10/2026 y por qué el recorrido se acortó: salieron el cubo, los hitos y
+ * "Bienvenido a la nueva era" (que contaban el otro mensaje, el del dueño que se acuerda de
+ * todo), y la sección de reseñas se reemplazó por una franja de dos testimonios al lado del
+ * formulario. La apertura dejó de ser por perfil. Lo único que sigue siendo por `perfil`
+ * (contexto/demo_experiencia.md §3.17) es el puente.
  *
  * ⚠️ El nombre del componente quedó viejo: ya no hay ningún "scroll de dolor". Se
  * conserva porque renombrarlo toca la ruta, el SCSS compartido y una docena de
  * selectores `demo-scroll-dolor__*` que siguen siendo los correctos para lo que sí
- * sobrevivió (apertura, hitos y puente).
+ * sobrevivió (apertura y puente).
  *
  * Instrumentación mínima (§6 del prompt): al terminar de entrar, una sección
  * dispara `emitir_evento` -- método centralizado en el contenedor
@@ -412,9 +506,7 @@ export default {
     FondoSeccionSticky,
     AnimacionProcesador,
     SeccionClientes,
-    CuboProcesador,
-    SeccionNuevaEra,
-    SeccionResenas,
+    FranjaTestimonios,
     CtaDemo,
   },
 
@@ -525,6 +617,19 @@ export default {
       }
       return CONTENIDO_POR_PERFIL.dueno
     },
+
+    /**
+     * El mensaje único de la apertura (13/10/2026). No depende del perfil: es el mismo para
+     * el dueño y para el campeón, y el mismo con turno y sin turno.
+     *
+     * Por `computed` y no por `data`, mismo criterio que SeccionClientes.vue: lo que entra a
+     * data() lo vuelve Vue un proxy reactivo, y esto es una constante de módulo.
+     *
+     * @returns {object}
+     */
+    entrega() {
+      return ENTREGA
+    },
   },
 
   mounted() {
@@ -610,10 +715,12 @@ export default {
            de su pista, al 94%, y esa pista ya no existe). */
         ['.demo-animacion-seccion', 'animacion.procesador'],
         ['.demo-clientes', 'clientes'],
-        ['.demo-cubo', 'cubo'],
-        ['.demo-hitos', 'hitos'],
-        ['.demo-nueva-era', 'nueva_era'],
-        ['.demo-resenas', 'resenas'],
+        /* 13/10/2026: salieron '.demo-cubo', '.demo-hitos', '.demo-nueva-era' y
+           '.demo-resenas' con las secciones que las traían, y entró la franja de
+           testimonios. Dejarlas en esta lista no rompía nada (lo que no está en el DOM no
+           se observa, ver más abajo), pero tampoco medía nada: lo que hacía era hacerle
+           creer al que lee el brief que esos tramos del recorrido todavía existen. */
+        ['.demo-testimonios', 'testimonios'],
         /* El cierre del recorrido, en cualquiera de sus dos caras (11/9/2026, misión
            experiencia-landing). Solo una de las dos existe en el DOM. El 'cta' no es un
            dato más para el brief: ExperienciaDemo lo traduce a `pagina_final_sin_turno`,
@@ -939,9 +1046,179 @@ export default {
   animation: demo-apertura-bounce 0.9s cubic-bezier(0.16, 1, 0.3, 1) 1.5s both;
 }
 
+/* Los dos bloques de la entrega (13/10/2026): misma entrada que el subtítulo, apenas
+   escalonada, para que la pantalla se arme de arriba hacia abajo y no de golpe.
+
+   🔴 LOS DOS TERMINAN ANTES QUE EL SUBTÍTULO, y eso NO es estético: el @animationend que
+   retira la clase --carga cuelga del subtítulo porque es el último en terminar (ver el
+   comentario largo de su regla, arriba). Las cuentas, que son la restricción real:
+   subtítulo 1,5s + 0,9s = 2,4s; estos dos, 1,5s + 0,6s = 2,1s y 1,65s + 0,6s = 2,25s. Si
+   alguien sube estos retrasos por encima de ese 2,4s, --carga se retira con su animación a
+   mitad de camino y el bloque pega un salto -- y la solución NO es subirle el retraso al
+   subtítulo (es el 1,5s que pidió Lucas, grupo 374), es mudar el animationend al elemento
+   que de verdad termine último. */
+.demo-scroll-dolor__apertura--carga .demo-entrega__migramos {
+  animation: demo-apertura-bounce 0.6s cubic-bezier(0.16, 1, 0.3, 1) 1.5s both;
+}
+
+.demo-scroll-dolor__apertura--carga .demo-entrega__etapas {
+  animation: demo-apertura-bounce 0.6s cubic-bezier(0.16, 1, 0.3, 1) 1.65s both;
+}
+
+/* ── La apertura de la entrega (13/10/2026, misión demo-dos-horas-y-experiencia) ──────
+   Cuatro bloques en una sola pantalla pinneada (el .demo-fondo-seccion__pin mide 100vh y
+   tiene overflow:hidden, así que lo que no entra se recorta: esta variante existe para que
+   entre). Respecto de la apertura vieja -- titular y subtítulo solos -- cambian dos cosas:
+   el titular baja un escalón de tamaño y el aire entre bloques se acorta. */
+.demo-scroll-dolor__apertura--entrega {
+  gap: clamp(18px, 3vh, 34px);
+}
+
+/* Un escalón menos que la apertura vieja (clamp(2rem, 5vw, 3.25rem)): el titular ya no está
+   solo en la pantalla. Le gana por especificidad a la regla base (0,2,0 contra 0,1,0), así
+   que no depende del orden -- y por eso la versión de teléfono también necesita el prefijo
+   --entrega, allá abajo en la media query. */
+.demo-scroll-dolor__apertura--entrega .demo-scroll-dolor__apertura-titulo {
+  font-size: clamp(1.7rem, 3.8vw, 2.6rem);
+}
+
+.demo-scroll-dolor__apertura--entrega .demo-scroll-dolor__apertura-subtitulo {
+  font-size: clamp(1.05rem, 2.1vw, 1.3rem);
+}
+
+/* Las cuatro cosas que migramos. Dos columnas en teléfono y cuatro desde tablet: en una
+   sola fila de cuatro, en un teléfono de 360 cada celda queda en 80px y el texto más largo
+   ("Clientes y proveedores con sus saldos") cae en cinco renglones. */
+.demo-entrega__migramos {
+  list-style: none;
+  margin: 0;
+  padding: 0 20px;
+  width: 100%;
+  max-width: 880px;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+  will-change: opacity, transform;
+}
+
+@media (min-width: 768px) {
+  .demo-entrega__migramos {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.demo-entrega__cosa {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: clamp(0.82rem, 1.5vw, 0.95rem);
+  line-height: 1.35;
+  color: var(--demo-color-texto);
+  text-align: left;
+}
+
+.demo-entrega__cosa-icono {
+  flex: 0 0 auto;
+  /* Alineado con la primera línea del texto y no centrado en la celda: con dos renglones,
+     un ícono centrado en vertical queda flotando entre los dos. */
+  margin-top: 1px;
+  font-size: 1rem;
+  color: var(--demo-color-texto-suave);
+}
+
+/* La línea de tiempo de las ocho etapas. UNA columna en los tres anchos, a propósito: el
+   hilo que une los ocho círculos es un pseudo-elemento de la lista (un 1px vertical), y con
+   dos o cuatro columnas ese hilo pasa a ser uno por columna -- no se puede dibujar con un
+   solo ::before y termina en un hilo que cruza celdas vacías. Ocho renglones de ~26px miden
+   208px: entran de sobra en la pantalla, que es lo que decide acá. */
+.demo-entrega__etapas {
+  width: 100%;
+  max-width: 460px;
+  padding: 0 20px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  will-change: opacity, transform;
+}
+
+.demo-entrega__etapas-rotulo {
+  margin: 0;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--demo-color-texto-suave);
+  text-align: center;
+}
+
+.demo-entrega__linea {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+
+/* El hilo de la línea de tiempo: del centro del primer círculo al del último, por detrás de
+   todos. `left` es el radio del círculo (22px / 2 = 11px) y los `top`/`bottom` son ese mismo
+   radio, así que el hilo arranca y termina en el centro de los círculos de los extremos en
+   vez de asomar por arriba del primero y por debajo del último. */
+.demo-entrega__linea::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 11px;
+  bottom: 11px;
+  width: 1px;
+  background: var(--demo-color-borde-superficie);
+  pointer-events: none;
+}
+
+.demo-entrega__etapa {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* El círculo con el número. Fondo sólido de la paleta (no transparente) para tapar el hilo
+   que le pasa por detrás. */
+.demo-entrega__etapa-numero {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--demo-color-borde-superficie);
+  background: var(--demo-color-superficie);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--demo-color-texto-suave);
+}
+
+.demo-entrega__etapa-texto {
+  font-size: clamp(0.8rem, 1.4vw, 0.92rem);
+  line-height: 1.3;
+  color: var(--demo-color-texto);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .demo-scroll-dolor__apertura-titulo,
-  .demo-scroll-dolor__apertura-subtitulo {
+  .demo-scroll-dolor__apertura-subtitulo,
+  /* Los dos bloques de la entrega (13/10/2026): llevan la misma animación de carga, así que
+     van en la misma lista. Ojo con lo que ya documenta el <script> de este archivo: la regla
+     que de verdad apaga estas animaciones es la de demo-experiencia.scss, que lleva
+     `animation: none !important` -- esta media query scoped pierde en especificidad contra
+     `.demo-scroll-dolor__apertura--carga .X[data-v-*]`. Las dos se mantienen al día. */
+  .demo-entrega__migramos,
+  .demo-entrega__etapas {
     animation: none;
     opacity: 1;
     transform: none;
@@ -949,7 +1226,14 @@ export default {
   }
 }
 
-/* La tarjeta de los hitos. Antes esto era el CIERRE: mismo lugar en la página, pero
+/* ⛔ SIN USO desde el 13/10/2026 (misión demo-dos-horas-y-experiencia): las cinco reglas
+   que siguen -- hasta .demo-scroll-dolor__parrafo-final -- visten la sección .demo-hitos,
+   que salió del recorrido y ya no se renderiza (ver el comentario del template). NO se
+   borran por lo mismo que no se borró el copy: reponer la sección es volver a montar su
+   markup, y con el CSS acá eso es un solo cambio. La piel de la tarjeta (fondo, borde,
+   sombra, radio, padding) sigue en demo-experiencia.scss, igual marcada.
+
+   La tarjeta de los hitos. Antes esto era el CIERRE: mismo lugar en la página, pero
    con el titular arriba ("Nada de esto es sobre el sistema...") y una pieza multimedia
    al lado, en una grilla de dos columnas. Desde el 10/9/2026 el titular abre el cubo y
    la pieza se descartó, así que queda una sola columna centrada -- no una grilla de dos
@@ -1072,6 +1356,33 @@ export default {
     font-size: clamp(1.2rem, 5vw, 1.4rem);
   }
 
+  /* La variante de la entrega, en teléfono (13/10/2026). Necesita sus propias reglas y no
+     hereda las tres de arriba: su selector lleva el prefijo --entrega, o sea (0,2,0) contra
+     (0,1,0), y le gana siempre -- también acá adentro.
+
+     Los números salen de la cuenta del alto, que es la restricción de esta pantalla: en el
+     teléfono más chico que hay que bancar (360×640) el pin mide 640 y adentro van el
+     titular (3 renglones a 24,5px ≈ 112px), el subtítulo (~25px), las cuatro cosas en dos
+     filas (~86px) y las ocho etapas (rótulo + 8 × 24px ≈ 208px), más tres huecos de ~20px.
+     Da ~490px contra 640 menos el padding vertical del contenedor (4vh × 2 = 51px). Si
+     alguien sube cualquiera de estos tamaños, el overflow:hidden del pin RECORTA en
+     silencio: lo que se pierde es el final de la línea de tiempo, abajo. */
+  .demo-scroll-dolor__apertura--entrega {
+    gap: clamp(14px, 2.4vh, 26px);
+  }
+
+  .demo-scroll-dolor__apertura--entrega .demo-scroll-dolor__apertura-titulo {
+    font-size: clamp(1.4rem, 6.8vw, 1.9rem);
+  }
+
+  .demo-scroll-dolor__apertura--entrega .demo-scroll-dolor__apertura-subtitulo {
+    font-size: clamp(1rem, 4.2vw, 1.15rem);
+  }
+
+  .demo-entrega__linea {
+    gap: 4px;
+  }
+
   /* RETIRADO (grupo 355, prompt 08): acá el puente bajaba a 70vh en teléfono, para
      que una pantalla entera de puente más el aire del formulario no fueran dos
      gestos largos hasta la primera pregunta. Desde que vive dentro de un
@@ -1094,7 +1405,13 @@ export default {
    parpadeo justo cuando el lead llega. Es el mismo motivo por el que el bloque de
    reduced-motion de demo-experiencia.scss usa !important, y ahí está documentado igual. */
 .demo-scroll-dolor__apertura--espera .demo-scroll-dolor__apertura-titulo,
-.demo-scroll-dolor__apertura--espera .demo-scroll-dolor__apertura-subtitulo {
+.demo-scroll-dolor__apertura--espera .demo-scroll-dolor__apertura-subtitulo,
+/* Los dos bloques de la entrega entran en la misma retención (13/10/2026): si no están acá,
+   se ven desde el primer frame mientras el titular espera, que es justo lo que esta clase
+   vino a evitar. El `!important` corre por la misma razón que arriba: los tres llevan
+   `:style="estilo_apertura(...)"` y un inline le gana a cualquier selector. */
+.demo-scroll-dolor__apertura--espera .demo-entrega__migramos,
+.demo-scroll-dolor__apertura--espera .demo-entrega__etapas {
   opacity: 0 !important;
 }
 

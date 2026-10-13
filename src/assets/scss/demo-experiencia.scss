@@ -68,7 +68,8 @@
 //
 // 🔴 El scope es `.demo-scroll-dolor`, y NO es arbitrario: es literalmente el límite
 // del pedido. Todo lo que se construyó en la misión experiencia-nueva -animación,
-// apertura, clientes, cubo, hitos, nueva era, reseñas, puente- vive DENTRO de
+// apertura, clientes y puente, y desde el 13/10/2026 la franja de testimonios; hasta ese
+// día también el cubo, los hitos, la nueva era y las reseñas- vive DENTRO de
 // <section class="demo-scroll-dolor"> (la raíz de ScrollDolor.vue). El formulario de
 // configuración, la confirmación "armando tu demo" y el video de intro son HERMANOS
 // de esa sección en ExperienciaDemo.vue, no hijos -- Lucas pidió explícitamente que
@@ -464,6 +465,13 @@
 // 100dvh preferido con 100vh de fallback, mismo orden que
 // .demo-experiencia-page__video-intro y el resto de la página: un navegador sin
 // soporte de dvh ignora esa declaración entera y se queda con la de arriba.
+// ⛔ SIN USO desde el 13/10/2026 (misión demo-dos-horas-y-experiencia): esta regla y la de
+// `.demo-hitos__tarjeta` visten una sección que salió del recorrido y ya no se renderiza
+// (ScrollDolor.vue dejó de montarla). Se dejan escritas, igual que el copy y que el CSS del
+// `<style scoped>` de ese archivo: reponer la sección es volver a montar su markup.
+// `.demo-testimonios`, la franja que ocupó ese lugar en el recorrido, es el mismo patrón
+// -- sección en flujo, min-height de una pantalla -- y trae sus propias reglas en su
+// `<style scoped>`.
 .demo-hitos {
 	display: flex;
 	align-items: center;
@@ -565,9 +573,19 @@
 // de este grupo; ahora que está adentro de un FondoSeccionSticky recibe el punto de
 // la sección como todos los demás, y dejarle este además sería un segundo punto de
 // snap a media pantalla del primero.
+// 13/10/2026 (misión demo-dos-horas-y-experiencia): de las tres secciones en flujo que
+// tenían este punto no queda ninguna en el recorrido -- `.demo-hitos`, `.demo-nueva-era` y
+// `.demo-resenas` dejaron de montarse -- y la reemplaza `.demo-testimonios`
+// (FranjaTestimonios.vue). Los tres selectores viejos se dejan: no matchean nada mientras esas
+// secciones no se monten, y están acá para que reponer una sea volver a montarla y nada más.
+//
+// 🔴 Esta regla es la MITAD del contrato de una sección en flujo: la otra mitad es estar en
+// `SELECTOR_DESTINOS` de avance-guiado.js. Las dos, o el gesto guiado la saltea sin que nada
+// falle -- no hay error y no hay log.
 .demo-scroll-guiado .demo-hitos,
 .demo-scroll-guiado .demo-nueva-era,
-.demo-scroll-guiado .demo-resenas {
+.demo-scroll-guiado .demo-resenas,
+.demo-scroll-guiado .demo-testimonios {
 	scroll-snap-align: center;
 }
 
@@ -634,6 +652,16 @@
 	// autor, esta regla gana igual.
 	.demo-scroll-dolor__apertura-titulo,
 	.demo-scroll-dolor__apertura-subtitulo,
+	// Los dos bloques de la apertura de la entrega (13/10/2026, misión
+	// demo-dos-horas-y-experiencia): llevan la misma animación de carga que el subtítulo y el
+	// mismo `:style` por progreso, así que van en la misma lista. Y es ESTA regla la que de
+	// verdad las apaga, no la media query del `<style scoped>` de ScrollDolor.vue: la de allá
+	// pierde por especificidad contra `.demo-scroll-dolor__apertura--carga .X[data-v-*]`, que
+	// es la que declara la animación (está medido y documentado en el mounted() de ese
+	// archivo). Si alguien saca el `!important` de acá abajo, reduced-motion se come la
+	// entrada entera igual que antes del arreglo del 10/9.
+	.demo-entrega__migramos,
+	.demo-entrega__etapas,
 	.demo-scroll-dolor__puente,
 	// El renglón, no solo el contenedor: desde el grupo 355 (prompt 08) el `:style`
 	// por progreso lo lleva cada línea. Hoy es defensa en profundidad -- estilo_puente

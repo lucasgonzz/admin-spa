@@ -46,18 +46,25 @@ const PX_POR_LINEA = 16
    esta lista no es destino del avance por gesto, y el lead la pasa de largo sin que nada
    falle -- no hay error, no hay log, simplemente el gesto salta por encima.
    `.demo-cierre` se renombró a `.demo-hitos` el 10/9/2026, y en la misma misión entraron
-   las cuatro secciones nuevas, que traen su propio pin. */
+   las cuatro secciones nuevas, que traen su propio pin.
+
+   13/10/2026 (misión demo-dos-horas-y-experiencia), y esto es la mitad de un cambio que va
+   junto o no va: la página pasó a contar UN solo mensaje y tres secciones salieron del
+   recorrido de ScrollDolor.vue, así que salen también de esta lista -- `.demo-cubo`,
+   `.demo-nueva-era` y `.demo-hitos`, más `.demo-resenas`, que la reemplazó la franja nueva.
+   Entra `.demo-testimonios` (FranjaTestimonios.vue), que vive en flujo y NO dentro de un
+   FondoSeccionSticky: por eso necesita estar nombrada acá y no la cubre la primera línea.
+   Dejar un selector de una sección que ya no se monta no rompe nada (no matchea nada), pero
+   el día que alguien reponga el cubo va a creer que con montarlo alcanza. */
 const SELECTOR_DESTINOS = [
   '.demo-fondo-seccion__snap',
-  '.demo-hitos',
   /* 🔴 `.demo-clientes` NO va acá, y sacarla fue un arreglo medido el 10/9/2026: el borde
      de esa sección es una pantalla EN BLANCO (su primer momento entra entre progreso 0,0
      y 0,07), así que tenerla como destino depositaba al lead mirando la nada. Su destino
      real es el `.demo-fondo-seccion__snap` que lleva adentro, que ya entra por la primera
-     línea de esta lista. Lo mismo vale para el cubo, que trae el suyo en la portada. */
-  '.demo-cubo',
-  '.demo-nueva-era',
-  '.demo-resenas',
+     línea de esta lista. Lo mismo valía para el cubo, que traía el suyo en la portada
+     (salió del recorrido el 13/10/2026). */
+  '.demo-testimonios',
   '.demo-formulario',
 ].join(', ')
 
@@ -80,10 +87,13 @@ const SELECTOR_DESTINOS = [
    mano dentro de la sección (que es lo que hizo que este bug pasara desapercibido: probar
    arrastrando la rueda sin pasar por el aterrizaje real no lo reproduce).
 
-   La misma fusión de listas beneficia a `.demo-hitos`, `.demo-nueva-era`, `.demo-resenas` y
-   `.demo-formulario` sin generar este problema: esas CUATRO están en SELECTOR_DESTINOS con
-   su nodo REAL (no un marcador chico), así que `hay_contenido_sin_ver()` ya las protege
-   sola. `.demo-clientes` es la única que necesita aparecer con dos identidades distintas:
+   La misma fusión de listas beneficia a las secciones en flujo sin generar este problema
+   -- hoy son DOS, `.demo-testimonios` y `.demo-formulario` (hasta el 13/10/2026 eran cuatro:
+   también `.demo-hitos`, `.demo-nueva-era` y `.demo-resenas`, que salieron del recorrido con
+   la misión demo-dos-horas-y-experiencia) --: están en SELECTOR_DESTINOS con su nodo REAL
+   (no un marcador chico), así que `hay_contenido_sin_ver()` ya las protege sola. Y por eso
+   esta constante NO cambió con esa misión: lo único que agrega sobre la lista de destinos es
+   `.demo-clientes`, que sigue siendo la única que necesita dos identidades distintas:
    el marcador chico para el aterrizaje, la sección real para "cuánto falta por ver" -- de
    ahí que haga falta una segunda lista en vez de arreglar esto adentro de SELECTOR_DESTINOS
    mismo. */
@@ -206,17 +216,18 @@ export default function crear_avance_guiado(scroller) {
    *     comentario en ese archivo: el punto NO está en el borde de la sección, está
    *     donde la entrada ya terminó). Toda sección que viva dentro de un pin queda
    *     cubierta por esta línea sin tocar nada.
-   *   - Las que NO viven dentro de un pin —hoy `.demo-hitos`, `.demo-cubo`,
-   *     `.demo-nueva-era`, `.demo-resenas` y `.demo-formulario`— se nombran DE A UNA en
-   *     SELECTOR_DESTINOS. Reciben su `scroll-snap-align` en demo-experiencia.scss (o,
-   *     como el cubo, en su propio `<style>`), pero eso no las mete acá: son dos listas
-   *     distintas y hay que moverlas juntas. Una sección nueva que no se agregue arriba
-   *     no es destino del avance por gesto y el lead la pasa de largo sin que nada falle.
+   *   - Las que NO viven dentro de un pin —hoy `.demo-testimonios` y `.demo-formulario`;
+   *     hasta el 13/10/2026 también `.demo-hitos`, `.demo-cubo`, `.demo-nueva-era` y
+   *     `.demo-resenas`— se nombran DE A UNA en SELECTOR_DESTINOS. Reciben su
+   *     `scroll-snap-align` en demo-experiencia.scss, pero eso no las mete acá: son dos
+   *     listas distintas y hay que moverlas juntas. Una sección nueva que no se agregue
+   *     arriba no es destino del avance por gesto y el lead la pasa de largo sin que nada
+   *     falle.
    *
    * Y el modo de alineación se LEE del CSS (`scroll-snap-align` + `scroll-margin-top`)
-   * en vez de replicarse acá: los hitos alinean centrado y el formulario alinea al
-   * comienzo con un margen. Duplicar esos valores en JS los desincroniza en el primer
-   * ajuste de estilos que alguien haga.
+   * en vez de replicarse acá: la franja de testimonios alinea centrada y el formulario
+   * alinea al comienzo con un margen. Duplicar esos valores en JS los desincroniza en el
+   * primer ajuste de estilos que alguien haga.
    *
    * @returns {Array<number>} Posiciones de scroll, ordenadas.
    */
