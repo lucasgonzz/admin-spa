@@ -4,7 +4,7 @@
   <div class="encuesta-fondo" @keydown.esc.stop="$emit('cerrar')">
     <div ref="dialogo" class="encuesta" role="dialog" aria-modal="true" :aria-labelledby="id + '-titulo'" tabindex="-1">
       <template v-if="!enviada">
-        <h3 :id="id + '-titulo'">{{ por_voto ? '¿Qué no te gustó?' : '¡Terminaste el video!' }}</h3>
+        <h3 :id="id + '-titulo'">{{ titulo }}</h3>
         <div class="sub">Tres preguntas rápidas para mejorar "{{ video.titulo }}".</div>
 
         <div :id="id + '-util'" class="preg">¿Te resultó útil?</div>
@@ -94,6 +94,11 @@ export default {
     siguiente: { type: Object, default: null },
     /** true si la abrió un 👎 (cambia el título). */
     por_voto: { type: Boolean, default: false },
+    /**
+     * true si el video quedó terminado (≥ 90 %, por el servidor o por lo visto en esta visita).
+     * Si se saltó al final no lo está, y el título no felicita.
+     */
+    terminado: { type: Boolean, default: false },
   },
   emits: ['cerrar', 'ver-siguiente'],
   data() {
@@ -123,6 +128,19 @@ export default {
         { valor: 'no', texto: 'No' },
       ],
     }
+  },
+  computed: {
+    /**
+     * Título del diálogo: "¿Qué no te gustó?" con 👎; "¡Terminaste el video!" solo si de verdad
+     * quedó terminado; si no, "¿Qué te pareció este video?".
+     * @returns {string}
+     */
+    titulo() {
+      if (this.por_voto) {
+        return '¿Qué no te gustó?'
+      }
+      return this.terminado ? '¡Terminaste el video!' : '¿Qué te pareció este video?'
+    },
   },
   mounted() {
     /* El foco entra al diálogo: la primera opción. */

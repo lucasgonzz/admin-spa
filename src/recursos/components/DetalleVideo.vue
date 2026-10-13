@@ -25,6 +25,7 @@
         :video="video"
         :siguiente="siguiente"
         :por_voto="encuesta.por_voto"
+        :terminado="hecho"
         @cerrar="encuesta = null"
         @ver-siguiente="abrir(siguiente.codigo)"
       />
