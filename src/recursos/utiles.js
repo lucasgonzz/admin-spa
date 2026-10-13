@@ -4,10 +4,12 @@
  */
 
 /**
- * Línea que reemplaza al avance, los votos, la caja de preguntas y la encuesta cuando no hay
- * sesión (texto del plan, §5.1).
+ * Línea que reemplaza al avance, los votos y la caja de preguntas cuando no hay sesión (§5.1).
+ * El ítem del menú del sistema (empresa-spa) se llama "Tutoriales": "Centro de recursos" se
+ * cortaba en el menú y quedaba al lado de "Recursos", que es otra cosa. La página sigue
+ * llamándose "Centro de recursos".
  */
-export const LINEA_INVITADO = 'Entrá desde tu sistema (menú → Centro de recursos) para guardar tu avance y hacer preguntas.'
+export const LINEA_INVITADO = 'Entrá desde tu sistema (menú → Tutoriales) para guardar tu avance y hacer preguntas.'
 
 /**
  * Segundos a `m:ss` (ej. 75 → "1:15").

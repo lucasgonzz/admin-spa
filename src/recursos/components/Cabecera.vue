@@ -33,10 +33,8 @@
         <i :style="{ width: (total.pct * 100).toFixed(1) + '%' }" />
       </div>
     </div>
-    <!-- Sin sesión: donde iría el avance va la línea que explica cómo guardarlo (§5.1). -->
-    <div v-else class="total invitado">
-      <p class="linea-invitado">{{ LINEA_INVITADO }}</p>
-    </div>
+    <!-- Sin sesión la cabecera no repite la línea de invitado: ya va debajo del título del video
+         y en Preguntas. Queda el botón "Entrar" con la explicación. -->
 
     <!-- Con sesión: avatar, nombre y negocio (el negocio solo se lo ve el propio usuario). -->
     <div v-if="estado.usuario" ref="zona" class="usuario">
@@ -66,7 +64,7 @@
     </div>
 
     <!-- Sin sesión: botón "Entrar" con la explicación (no hay formulario: se entra desde el sistema). -->
-    <div v-else ref="zona" class="usuario">
+    <div v-else ref="zona" class="usuario solo">
       <button
         type="button"
         class="verde"
@@ -79,7 +77,7 @@
         <h2 id="titulo-entrar">Cómo entrar con tu usuario</h2>
         <ol>
           <li>Abrí tu sistema de ComercioCity e iniciá sesión como siempre.</li>
-          <li>En el menú, tocá <b>Centro de recursos</b>.</li>
+          <li>En el menú, tocá <b>Tutoriales</b>.</li>
         </ol>
         <p>Se abre esta misma página con tu nombre, y desde ahí se guarda tu avance, tus votos y tus preguntas.</p>
         <p class="suave">Si sos el dueño, también podés entrar con el link personal que te mandamos por mail.</p>
@@ -93,10 +91,10 @@
 
 <script>
 import { estado, avance, salir } from '../estado'
-import { inicial, LINEA_INVITADO } from '../utiles'
+import { inicial } from '../utiles'
 
 /**
- * Cabecera del centro: marca, avance total (o la línea de invitado) y el usuario (o "Entrar").
+ * Cabecera del centro: marca, avance total y el usuario; sin sesión, solo la marca y "Entrar".
  */
 export default {
   name: 'CabeceraCentro',
@@ -104,8 +102,6 @@ export default {
     return {
       /** Estado compartido de la página. */
       estado: estado,
-      /** Texto para invitados. */
-      LINEA_INVITADO: LINEA_INVITADO,
       /** true con el desplegable del usuario (o la explicación de "Entrar") abierto. */
       menu_abierto: false,
     }

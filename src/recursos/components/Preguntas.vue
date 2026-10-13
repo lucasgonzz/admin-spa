@@ -208,7 +208,7 @@ export default {
         .then(() => {
           this.texto = ''
           this.orden = 'nuevos'
-          mostrar_toast('Publicado. Te avisamos cuando te respondan.')
+          mostrar_toast('Publicado. Cuando te respondamos lo vas a ver acá, y te avisamos al volver a entrar.')
         })
         .catch((error) => {
           if (error && error.status === 401) {

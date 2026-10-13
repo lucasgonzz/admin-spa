@@ -322,7 +322,7 @@ function texto_de_entrada_fallida(error) {
   /** Código del backend (§2, C2). */
   const codigo = error && error.codigo
   if (codigo === 'pase_invalido') {
-    return 'El acceso desde tu sistema venció o ya se usó. Volvé a tocar «Centro de recursos» en el menú de tu sistema para entrar con tu usuario. Mientras tanto podés ver todos los videos.'
+    return 'El acceso desde tu sistema venció o ya se usó. Volvé a tocar «Tutoriales» en el menú de tu sistema para entrar con tu usuario. Mientras tanto podés ver todos los videos.'
   }
   if (codigo === 'cliente_no_encontrado') {
     return 'No pudimos reconocer tu sistema para iniciar tu sesión. Podés ver todos los videos igual; si querés guardar tu avance, avisanos por WhatsApp y lo revisamos.'
@@ -331,7 +331,7 @@ function texto_de_entrada_fallida(error) {
     return 'Tu sistema no respondió a tiempo para iniciar tu sesión. Probá de nuevo en un rato desde el menú de tu sistema; mientras tanto podés ver los videos.'
   }
   if (codigo === 'link_invalido') {
-    return 'Ese link venció o no es válido. Entrá desde tu sistema (menú → Centro de recursos) o pedinos uno nuevo por WhatsApp. Mientras tanto podés ver todos los videos.'
+    return 'Ese link venció o no es válido. Entrá desde tu sistema (menú → Tutoriales) o pedinos uno nuevo por WhatsApp. Mientras tanto podés ver todos los videos.'
   }
   if (error && error.status === 429) {
     return 'Hubo demasiados intentos seguidos. Esperá un minuto y volvé a entrar desde tu sistema.'
@@ -390,7 +390,7 @@ function pasar_a_invitado() {
   const habia_usuario = !!estado.usuario
   limpiar_sesion()
   if (habia_usuario) {
-    mostrar_aviso('info', 'Tu sesión del centro se cerró. Podés seguir viendo los videos; para guardar tu avance, volvé a entrar desde tu sistema (menú → Centro de recursos).')
+    mostrar_aviso('info', 'Tu sesión del centro se cerró. Podés seguir viendo los videos; para guardar tu avance, volvé a entrar desde tu sistema (menú → Tutoriales).')
   }
 }
 
