@@ -160,6 +160,32 @@
         </div>
       </div>
 
+      <!-- Campo: reserva de la instancia, en horas (13/10/2026, misión
+           demo-dos-horas-y-experiencia). Tercero de la terna y va acá, al lado de los otros dos,
+           porque los tres contestan la misma pregunta con tres números distintos: cuánto le
+           DECIMOS que dura, cuánto le bloqueamos la instancia desde el inicio, y cuánto se la
+           RESERVAMOS en la grilla. -->
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-sm-5">
+          <label class="form-label small" for="demo_ventana_extendida_max_horas">Reserva de la instancia (horas)</label>
+          <!-- Cuánta ventana se le aparta al lead en la grilla desde la hora de inicio de su demo -->
+          <input
+            id="demo_ventana_extendida_max_horas"
+            v-model.number="local.ventana_extendida_max_horas"
+            type="number"
+            class="form-control form-control-sm"
+            min="1"
+            max="12"
+            :disabled="saving"
+          />
+          <p class="text-muted small mb-0 mt-1">
+            Lo que se le RESERVA al lead: desde la hora de inicio, la instancia queda apartada para
+            él esta cantidad de horas (recortada al fin del día) y nadie más puede tomarla. Lo que
+            se le COMUNICA es la duración de la demo, el primer campo de arriba.
+          </p>
+        </div>
+      </div>
+
       <!-- Campo: minutos antes para demo setup automático -->
       <div class="row g-2 align-items-end mb-3">
         <div class="col-sm-5">
@@ -786,8 +812,14 @@ export default {
             Martín. 120 es el default del backend. */
         pagina_seguimiento_minutos: 120,
         duracion_minutos: 60,
-        /** Minutos reales de bloqueo desde el inicio (11/9/2026); separado de duracion_minutos a propósito. */
-        bloqueo_real_minutos: 180,
+        /** Minutos reales de bloqueo desde el inicio (11/9/2026); separado de duracion_minutos a
+            propósito. 120 desde el 13/10/2026 (antes 180): es el default nuevo del backend
+            (LeadDemoSettings::DEFAULT_BLOQUEO_REAL_MINUTOS), y un default local distinto del de
+            allá es lo que se guardaría si alguien apretara Guardar antes de la respuesta del GET. */
+        bloqueo_real_minutos: 120,
+        /** Horas que la instancia queda RESERVADA desde el inicio (13/10/2026). Se lee y se manda
+            como `demo_ventana_extendida_max_horas`: ver apply_ventana_extendida_from_api(). */
+        ventana_extendida_max_horas: 2,
         setup_minutos_antes: 15,
         gracia_minutos_post: 10,
         recordatorio_minutos_antes: 15,
@@ -862,8 +894,10 @@ export default {
         cta_whatsapp_texto: '',
         pagina_seguimiento_minutos: 120,
         duracion_minutos: 60,
-        /** Espejo del servidor: bloqueo real de la instancia (11/9/2026). */
-        bloqueo_real_minutos: 180,
+        /** Espejo del servidor: bloqueo real de la instancia (11/9/2026). 120 desde el 13/10/2026. */
+        bloqueo_real_minutos: 120,
+        /** Espejo del servidor: reserva de la instancia en horas (13/10/2026). */
+        ventana_extendida_max_horas: 2,
         setup_minutos_antes: 15,
         gracia_minutos_post: 10,
         recordatorio_minutos_antes: 15,
@@ -1047,6 +1081,41 @@ export default {
       }
     },
     /**
+     * Pobla la reserva de la instancia desde la respuesta de la API (13/10/2026, misión
+     * demo-dos-horas-y-experiencia).
+     *
+     * 🔴 Va aparte del forEach general por una sola razón, y es la que hace falta saber para no
+     * repetir el bug: la clave de la API NO coincide con el nombre del campo local. El campo se
+     * llama `ventana_extendida_max_horas` y la API lo expone y lo valida como
+     * `demo_ventana_extendida_max_horas` — con prefijo, a diferencia de `duracion_minutos` y
+     * `bloqueo_real_minutos`, que viajan sin él (LeadDemoSettings::to_array() y
+     * LeadDemoSettingsController). El forEach de load_settings()/on_save() recorre
+     * `Object.keys(this.local)`, así que con la clave prefijada nunca encuentra nada: sin esto el
+     * campo mostraría para siempre el default local, incluso después de guardar otro valor.
+     *
+     * Y el espejo de la misma moneda está en el PUT: ahí la clave tiene que ir CON prefijo, porque
+     * `Request::validate()` descarta en silencio lo que no esté en las reglas — el panel diría
+     * "guardado" sin persistir nada.
+     *
+     * @param {Object} data Respuesta del GET o del PUT.
+     * @param {boolean} sync_stored true para mover también el espejo (y apagar can_save).
+     * @returns {void}
+     */
+    apply_ventana_extendida_from_api(data, sync_stored) {
+      var valor = data && data.demo_ventana_extendida_max_horas
+      if (valor === undefined || valor === null || valor === '') {
+        return
+      }
+      var entero = parseInt(valor, 10)
+      if (isNaN(entero)) {
+        return
+      }
+      this.local.ventana_extendida_max_horas = entero
+      if (sync_stored) {
+        this.stored.ventana_extendida_max_horas = entero
+      }
+    },
+    /**
      * GET /settings/lead-demo — carga la configuración actual de demos.
      *
      * @returns {void}
@@ -1110,6 +1179,8 @@ export default {
           /* Horarios del closer: el API devuelve strings H:i-H:i; mapear a inicio/fin separados. */
           self.apply_closer_horario_from_api(data, true)
           self.apply_demo_horario_from_api(data, true)
+          /* La reserva de la instancia viaja con prefijo `demo_`: ver el método. */
+          self.apply_ventana_extendida_from_api(data, true)
         })
         .catch(function () {
           self.error_message = 'No se pudo cargar la configuración de demos.'
@@ -1149,6 +1220,10 @@ export default {
         pagina_seguimiento_minutos:          self.local.pagina_seguimiento_minutos,
         duracion_minutos:                    self.local.duracion_minutos,
         bloqueo_real_minutos:                self.local.bloqueo_real_minutos,
+        /* 🔴 CON prefijo `demo_`, a diferencia de las dos de arriba: es la clave exacta que valida
+           LeadDemoSettingsController. Mandarla sin prefijo no da error — `Request::validate()` la
+           descarta en silencio y el panel muestra "guardado" sin haber persistido nada. */
+        demo_ventana_extendida_max_horas:    self.local.ventana_extendida_max_horas,
         setup_minutos_antes:                 self.local.setup_minutos_antes,
         gracia_minutos_post:                 self.local.gracia_minutos_post,
         recordatorio_minutos_antes:          self.local.recordatorio_minutos_antes,
@@ -1241,6 +1316,7 @@ export default {
           /* Sincronizar horarios parseados desde la respuesta del PUT. */
           self.apply_closer_horario_from_api(data, true)
           self.apply_demo_horario_from_api(data, true)
+          self.apply_ventana_extendida_from_api(data, true)
           self.saved_message = 'Configuración de demos guardada.'
         })
         .catch(function (err) {
