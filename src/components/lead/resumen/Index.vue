@@ -178,17 +178,17 @@
     -->
 
     <!-- Divisor entre resumen de demo y resumen de llamada (solo si ambos existen) -->
-    <hr v-if="record && record.demo_summary && record.call_summary" class="my-4">
+    <hr v-if="record && record.demo_summary && call_summary_vigente" class="my-4">
 
     <!-- Subtítulo de la sección de llamada del closer -->
-    <div v-if="record && record.call_summary" class="d-flex align-items-center justify-content-between mb-3">
+    <div v-if="call_summary_vigente" class="d-flex align-items-center justify-content-between mb-3">
       <span class="small fw-semibold text-secondary">
         <i class="bi bi-telephone-fill me-2"></i> Llamada del closer
       </span>
     </div>
 
     <!-- Panel de resumen de la llamada del closer (generado por Recall.ai + Claude) -->
-    <call-summary-panel v-if="record && record.call_summary" :call_summary="record.call_summary" />
+    <call-summary-panel v-if="call_summary_vigente" :call_summary="call_summary_vigente" />
 
     <!-- Estado vacío de llamada: el lead tiene demo_summary pero el closer todavía no llamó -->
     <div
@@ -256,6 +256,30 @@ export default {
         return false
       }
       return true
+    },
+
+    /**
+     * Resumen de la llamada del closer que muestra la pestaña.
+     *
+     * 🔴 `leads.call_summary` es una columna LEGADA: nadie la escribe más. Desde el refactor de
+     * múltiples llamadas por lead el resumen real vive en `lead_calls.call_summary` (lo escribe
+     * CallSummaryService) y la API lo publica en `record.last_call`. Mientras esta pestaña leía
+     * solo la columna vieja, mostraba el estado vacío para TODA llamada posterior a ese refactor,
+     * aunque el resumen estuviera generado.
+     *
+     * El orden de preferencia es intencional: primero la fuente viva, después la columna legada
+     * (los leads históricos solo la tienen ahí). Así la pantalla anda igual contra una API que
+     * todavía no manda `last_call`, que es la que puede estar desplegada cuando llegue este SPA.
+     * @returns {Object|string|null} El JSON del resumen (objeto o string, lo resuelve el panel).
+     */
+    call_summary_vigente() {
+      if (this.record && this.record.last_call && this.record.last_call.call_summary) {
+        return this.record.last_call.call_summary
+      }
+      if (this.record && this.record.call_summary) {
+        return this.record.call_summary
+      }
+      return null
     },
 
     /**
