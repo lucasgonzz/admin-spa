@@ -71,7 +71,9 @@
                 {{ modalidad.label }}
               </option>
             </select>
-            <div v-if="!form.contract_modalidad" class="form-text text-warning">
+            <!-- Aviso compacto con el contraste de un alert: `text-warning` sobre este fondo da
+                 ~1,6:1 y no se lee. -->
+            <div v-if="!form.contract_modalidad" class="alert alert-warning py-1 px-2 small mb-0 mt-1" role="note">
               {{ aviso_sin_modalidad }}
             </div>
             <div v-else class="form-text">
@@ -80,10 +82,11 @@
           </div>
           <div class="col-md-5">
             <span class="form-label d-block">Sistemas contratados</span>
+            <!-- v-model sobre `sistemas_elegidos` y no sobre el form: ver esa computada. -->
             <div v-for="sistema in sistemas" :key="sistema.key" class="form-check form-check-inline">
               <input
                 :id="'contract_sistema_cliente_' + sistema.key + '_' + record.id"
-                v-model="form.contract_sistemas"
+                v-model="sistemas_elegidos"
                 :value="sistema.key"
                 class="form-check-input"
                 type="checkbox"
@@ -312,6 +315,8 @@ import {
   AVISO_SIN_MODALIDAD,
   aplicar_defaults_de_modalidad,
   normalizar_modalidad,
+  normalizar_sistemas,
+  normalizar_permanencia,
 } from '@/utils/contract_modalidades'
 import { formatear_fecha } from '@/components/cobranzas/meses'
 
@@ -430,6 +435,21 @@ export default {
         form: this.form,
         modalidad: this.form.contract_modalidad || '',
       }
+    },
+    /**
+     * Los sistemas tildados, para el v-model de los checkboxes. Mismo patrón que en el contrato
+     * del lead: el getter devuelve siempre un array (un checkbox con v-model sobre algo que no es
+     * array lo trata como booleano y tilda los tres) y el setter guarda lo tildado normalizado.
+     * Acá el form lo arma siempre `aplicar_contrato()` con un array, así que es una red y no un
+     * arreglo: nadie de afuera le pisa la clave como al borrador del lead.
+     */
+    sistemas_elegidos: {
+      get() {
+        return Array.isArray(this.form.contract_sistemas) ? this.form.contract_sistemas : []
+      },
+      set(valor) {
+        this.form.contract_sistemas = normalizar_sistemas(valor)
+      },
     },
   },
   watch: {
@@ -558,9 +578,12 @@ export default {
         contract_meses_actualizacion: c.contract_meses_actualizacion == null || c.contract_meses_actualizacion === '' ? 6 : Number(c.contract_meses_actualizacion),
         /* Modalidad: una API vieja no manda estas claves y quedan como en el form vacío (sin
            modalidad). Los sistemas se copian por valor, igual que las cuotas. */
+        /* Sistemas y plazo pasan por los mismos normalizadores que el payload: una key que el PUT
+           no acepta (heredada de un lead, cuyo PUT no valida) se descarta al cargar. Si no, el
+           guardado daría 422 y no habría ningún checkbox para sacarla. */
         contract_modalidad: normalizar_modalidad(c.contract_modalidad),
-        contract_sistemas: Array.isArray(c.contract_sistemas) ? c.contract_sistemas.slice() : [],
-        contract_permanencia_meses: c.contract_permanencia_meses == null || c.contract_permanencia_meses === '' ? null : Number(c.contract_permanencia_meses),
+        contract_sistemas: normalizar_sistemas(c.contract_sistemas),
+        contract_permanencia_meses: normalizar_permanencia(c.contract_permanencia_meses),
         contract_copiado_desde_lead_at: c.contract_copiado_desde_lead_at || null,
       }
     },
@@ -682,12 +705,11 @@ export default {
           ? null
           : Number(f.contract_meses_actualizacion),
         /* Modalidad del contrato (misión precios-dos-modalidades, 13/10/2026). El PUT las valida
-           (licencia|suscripcion, gestion|ecommerce|agentes, 1 a 60); una API vieja las ignora. */
+           (licencia|suscripcion, gestion|ecommerce|agentes, 1 a 60) y una API vieja las ignora;
+           se normalizan antes para no mandar nada que dé 422 (un plazo de 0 o 61 sale null). */
         contract_modalidad: f.contract_modalidad || null,
-        contract_sistemas: f.contract_sistemas || [],
-        contract_permanencia_meses: f.contract_permanencia_meses === '' || f.contract_permanencia_meses === null || f.contract_permanencia_meses === undefined
-          ? null
-          : Number(f.contract_permanencia_meses),
+        contract_sistemas: normalizar_sistemas(f.contract_sistemas),
+        contract_permanencia_meses: normalizar_permanencia(f.contract_permanencia_meses),
       }
     },
     /**
