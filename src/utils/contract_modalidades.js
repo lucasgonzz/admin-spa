@@ -41,6 +41,10 @@ export const AVISO_SIN_MODALIDAD = 'Sin modalidad el contrato sale con el texto 
 /** Plazo mínimo de la Suscripción por defecto, en meses (el mismo default que usa el PDF). */
 export const PERMANENCIA_MESES_DEFAULT = 12
 
+/** Rango válido del plazo mínimo, en meses: el mismo que valida el PUT del contrato del cliente. */
+export const PERMANENCIA_MESES_MIN = 1
+export const PERMANENCIA_MESES_MAX = 60
+
 /**
  * ¿El valor está vacío para un input del formulario? (null, undefined o string vacío).
  * @param {any} valor
@@ -106,13 +110,56 @@ export function sistemas_desde_cotizacion(items) {
     .map(function (item) {
       return item.key
     })
+  return normalizar_sistemas(keys_cotizadas)
+}
+
+/**
+ * Los sistemas contratados tal como se guardan: solo keys de SISTEMAS, sin repetidos y en el
+ * orden del catálogo (gestión → e-commerce → agentes). Cualquier otra cosa (null, un string, una
+ * key que no existe) se descarta.
+ *
+ * Las dos pestañas lo usan antes de mandar el PUT, y la del cliente también al cargar: el PUT del
+ * lead no valida nada (una key inválida quedaría guardada) y el del cliente da 422 con una key
+ * que no conoce, así que un cliente que la heredara del lead no podría guardar su contrato ni
+ * tendría un checkbox para sacarla.
+ *
+ * @param {any} valor
+ * @returns {Array<string>}
+ */
+export function normalizar_sistemas(valor) {
+  if (!Array.isArray(valor)) {
+    return []
+  }
   return SISTEMAS
     .map(function (sistema) {
       return sistema.key
     })
     .filter(function (key) {
-      return keys_cotizadas.indexOf(key) !== -1
+      return valor.indexOf(key) !== -1
     })
+}
+
+/**
+ * El plazo mínimo tal como se guarda: un entero entre PERMANENCIA_MESES_MIN y
+ * PERMANENCIA_MESES_MAX, o null (el PDF usa entonces 12). Un decimal, un 0, un 61, un texto o un
+ * campo vacío dan null. Lo usan las dos pestañas antes de mandar el PUT: el del lead no valida, y
+ * el del cliente rechazaría el valor con 422.
+ *
+ * @param {any} valor
+ * @returns {number|null}
+ */
+export function normalizar_permanencia(valor) {
+  if (typeof valor !== 'number' && typeof valor !== 'string') {
+    return null
+  }
+  if (String(valor).trim() === '') {
+    return null
+  }
+  const numero = Number(valor)
+  if (!Number.isInteger(numero) || numero < PERMANENCIA_MESES_MIN || numero > PERMANENCIA_MESES_MAX) {
+    return null
+  }
+  return numero
 }
 
 /**
