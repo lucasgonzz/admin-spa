@@ -45,7 +45,9 @@
               {{ modalidad.label }}
             </option>
           </select>
-          <div v-if="!record.contract_modalidad" class="form-text text-warning">
+          <!-- Aviso compacto con el contraste de un alert: `text-warning` sobre este fondo da
+               ~1,6:1 y no se lee. -->
+          <div v-if="!record.contract_modalidad" class="alert alert-warning py-1 px-2 small mb-0 mt-1" role="note">
             {{ aviso_sin_modalidad }}
           </div>
           <div v-else class="form-text">
@@ -54,10 +56,11 @@
         </div>
         <div class="col-md-5">
           <span class="form-label d-block">Sistemas contratados</span>
+          <!-- v-model sobre `sistemas_elegidos` y no sobre la columna: ver esa computada. -->
           <div v-for="sistema in sistemas" :key="sistema.key" class="form-check form-check-inline">
             <input
               :id="'contract_sistema_' + sistema.key + '_' + record.id"
-              v-model="record.contract_sistemas"
+              v-model="sistemas_elegidos"
               :value="sistema.key"
               class="form-check-input"
               type="checkbox"
@@ -319,6 +322,8 @@ import {
   aplicar_defaults_de_modalidad,
   sistemas_desde_cotizacion,
   normalizar_modalidad,
+  normalizar_sistemas,
+  normalizar_permanencia,
 } from '@/utils/contract_modalidades'
 import CotizadorModal from './CotizadorModal.vue'
 
@@ -424,6 +429,38 @@ export default {
         modalidad: this.record ? (this.record.contract_modalidad || '') : '',
       }
     },
+    /**
+     * Los sistemas tildados, para el v-model de los checkboxes.
+     *
+     * 🔴 El v-model NO va directo sobre `record.contract_sistemas`. Un checkbox con v-model sobre
+     * algo que no es un array lo trata como booleano: tildar uno asigna `true` y se ven los tres
+     * tildados. Y la columna puede volver a `null` sin que nadie abra otro lead: después de cotizar
+     * (o de guardar), el modal hace `Object.assign(draft, model)` sobre este mismo objeto, y un
+     * lead que nunca guardó sus sistemas trae `null`. El getter devuelve siempre un array (sin
+     * escribir nada) y el setter guarda lo tildado normalizado (keys conocidas, orden del
+     * catálogo). El watch de `sistemas_vigilados` repone el array en el record.
+     */
+    sistemas_elegidos: {
+      get() {
+        return this.record && Array.isArray(this.record.contract_sistemas) ? this.record.contract_sistemas : []
+      },
+      set(valor) {
+        if (this.record) {
+          this.record.contract_sistemas = normalizar_sistemas(valor)
+        }
+      },
+    },
+    /**
+     * El lead abierto y sus sistemas, juntos, para el watch de abajo (mismo motivo que
+     * `modalidad_vigilada`: distinguir un cambio en este lead de abrir otro).
+     * @returns {{record: Object|null, sistemas: any}}
+     */
+    sistemas_vigilados() {
+      return {
+        record: this.record,
+        sistemas: this.record ? this.record.contract_sistemas : null,
+      }
+    },
   },
   watch: {
     /**
@@ -448,6 +485,24 @@ export default {
         return
       }
       aplicar_defaults_de_modalidad(this.record, nuevo.modalidad || null)
+    },
+    /**
+     * Si en el MISMO lead los sistemas dejan de ser un array (el `Object.assign` del modal después
+     * de cotizar o de guardar trae `null` cuando nunca se guardaron), se repone lo que había en el
+     * borrador: es lo que quien vende tildó, o lo que se precargó al abrir, y lo que va a ver en
+     * los checkboxes es lo que se guarda. Si tampoco había un array, la misma regla de apertura
+     * (los sistemas de la cotización, o ninguno). Abrir otro lead lo resuelve el watch de `record`.
+     */
+    sistemas_vigilados(nuevo, viejo) {
+      if (!viejo || nuevo.record !== viejo.record || !this.record) {
+        return
+      }
+      if (Array.isArray(nuevo.sistemas)) {
+        return
+      }
+      this.record.contract_sistemas = Array.isArray(viejo.sistemas)
+        ? normalizar_sistemas(viejo.sistemas)
+        : sistemas_desde_cotizacion(this.record.contract_cotizacion_items)
     },
   },
   methods: {
@@ -655,12 +710,12 @@ export default {
         contract_fecha_primer_pago_mensual: this.to_date_only_for_payload(this.record.contract_fecha_primer_pago_mensual),
         contract_meses_actualizacion: this.record.contract_meses_actualizacion,
         /* Modalidad del contrato (misión precios-dos-modalidades, 13/10/2026). Una API vieja
-           ignora estas claves (ModelPropertiesHelper solo escribe las declaradas en LeadProperties). */
+           ignora estas claves (ModelPropertiesHelper solo escribe las declaradas en LeadProperties).
+           🔴 El PUT del lead no valida nada, así que se normaliza acá: sistemas solo con keys
+           conocidas (orden del catálogo, sin repetidos) y plazo mínimo entero de 1 a 60 o null. */
         contract_modalidad: this.record.contract_modalidad || null,
-        contract_sistemas: this.record.contract_sistemas || [],
-        contract_permanencia_meses: this.record.contract_permanencia_meses === '' || this.record.contract_permanencia_meses == null
-          ? null
-          : Number(this.record.contract_permanencia_meses),
+        contract_sistemas: normalizar_sistemas(this.record.contract_sistemas),
+        contract_permanencia_meses: normalizar_permanencia(this.record.contract_permanencia_meses),
       }
     },
     /**
