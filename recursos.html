@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Centro de recursos · ComercioCity</title>
+    <meta name="description" content="Videos cortos para aprender a usar ComercioCity a tu ritmo: artículos, ventas, caja, facturación y todo lo demás." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1b1e24" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+
+    <!-- Centro de recursos (misión centro-de-recursos-clientes, 13/10/2026). Es la segunda
+         entrada de Vite de admin-spa y se sirve en recursos.comerciocity.com. Lleva sus propias
+         meta OG —y no las de la demo que trae index.html— porque el link de un video se manda
+         por WhatsApp (`?v=T1.29`) y WhatsApp arma la vista previa leyendo ESTE HTML sin
+         ejecutar JS. Sin og:image a propósito: la del admin es de la demo y no corresponde. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ComercioCity" />
+    <meta property="og:title" content="Centro de recursos · ComercioCity" />
+    <meta property="og:description" content="Videos cortos para aprender a usar ComercioCity a tu ritmo." />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Centro de recursos · ComercioCity" />
+    <meta name="twitter:description" content="Videos cortos para aprender a usar ComercioCity a tu ritmo." />
+  </head>
+  <body>
+    <div id="app"></div>
+    <noscript>Para ver el centro de recursos tenés que tener JavaScript activado en el navegador.</noscript>
+    <script type="module" src="/src/recursos/main.js"></script>
+  </body>
+</html>
