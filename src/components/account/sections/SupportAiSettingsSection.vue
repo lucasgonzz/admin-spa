@@ -1,5 +1,66 @@
 <template>
   <div class="support-ai-settings-section">
+    <!--
+      Va arriba de todo y no al final a propósito: este interruptor decide si el canal de soporte por
+      WhatsApp EXISTE. Con esto apagado, nada de lo que viene abajo (sugerencias, demoras, régimen de
+      verificación) llega a correr nunca, porque no hay ticket donde correr.
+    -->
+    <div class="support-ai-settings-section__canal mb-4">
+      <h3 class="h6 mb-2">Canal de soporte por WhatsApp</h3>
+
+      <div class="form-check mb-2">
+        <input
+          id="support_whatsapp_tickets_enabled"
+          v-model="local_tickets_habilitados"
+          class="form-check-input"
+          type="checkbox"
+          :disabled="loading || saving || load_failed" />
+        <label class="form-check-label small" for="support_whatsapp_tickets_enabled">
+          Abrir tickets de soporte por WhatsApp
+        </label>
+      </div>
+      <p class="text-muted small mb-3">
+        Prendido, el cliente que escribe al número principal abre un ticket (o sigue el que ya tenía) y una
+        persona lo lee. <strong>Apagado, su mensaje no abre ningún ticket</strong>: nadie se entera de que
+        escribió, y lo único que recibe es el texto de abajo. Si ese texto está vacío, no recibe nada —
+        queda esperando una respuesta que no va a llegar.
+      </p>
+
+      <div class="mb-2">
+        <label class="form-label small fw-semibold" for="support_whatsapp_texto_desconectado">
+          Qué se le contesta si está desconectado
+        </label>
+        <textarea
+          id="support_whatsapp_texto_desconectado"
+          v-model="local_texto_desconectado"
+          class="form-control form-control-sm"
+          rows="3"
+          maxlength="1000"
+          :disabled="loading || saving || load_failed"></textarea>
+        <p class="form-text small text-muted mb-0">
+          Es la única respuesta que recibe el cliente mientras el interruptor esté apagado.
+          <strong>Vacío significa no contestar nada.</strong> Dejalo vacío solo si querés silencio total;
+          si no, poné acá dónde escribir o a partir de cuándo se atiende.
+        </p>
+      </div>
+
+      <p v-if="!loading && !load_failed && !canal_soportado" class="text-warning small mb-2">
+        Esta versión de la API todavía no maneja el interruptor ni el texto: lo que ves son los valores por
+        defecto, y guardarlos no va a tener efecto hasta que se despliegue la versión nueva del admin.
+      </p>
+
+      <div class="mb-2">
+        <button type="button" class="btn btn-primary btn-sm" :disabled="loading || saving || !can_save" @click="on_save">
+          {{ saving ? 'Guardando…' : 'Guardar' }}
+        </button>
+        <p class="form-text small text-muted mb-0">
+          Es el mismo Guardar que el de abajo: la sección se guarda entera de una vez.
+        </p>
+      </div>
+    </div>
+
+    <h3 class="h6 mb-2">Respuestas automáticas de IA</h3>
+
     <div class="form-check mb-3">
       <input
         id="support_ai_suggestions_enabled"
@@ -107,8 +168,9 @@
 import api from '@/utils/axios'
 
 /**
- * Sección en Cuenta: sugerencias IA automáticas, debounce previo a Claude, demora de envío y régimen con el que nacen
- * los tickets nuevos en soporte WhatsApp.
+ * Sección en Cuenta: el interruptor del canal de soporte por WhatsApp (si un mensaje abre ticket y qué se contesta
+ * mientras esté apagado) y, debajo, las sugerencias IA automáticas, el debounce previo a Claude, la demora de envío
+ * y el régimen con el que nacen los tickets nuevos.
  */
 export default {
   name: 'SupportAiSettingsSection',
@@ -127,11 +189,31 @@ export default {
        * operador ve el estado seguro (todo espera aprobación) y no el que le manda respuestas al cliente sin leerlas.
        */
       local_require_verification: true,
+      /**
+       * Interruptor maestro del canal: si un cliente que escribe por WhatsApp abre ticket de soporte.
+       *
+       * Arranca en false, al revés de `local_require_verification`, porque acá el estado seguro es el
+       * apagado: si la carga falla o la API no manda la clave, mostrarlo prendido haría creer que los
+       * mensajes de los clientes se están leyendo cuando puede que caigan en silencio.
+       */
+      local_tickets_habilitados: false,
+      /** Texto único que recibe el cliente mientras el canal esté apagado. Vacío = no contestar nada. */
+      local_texto_desconectado: '',
+      /**
+       * La API que contestó el GET maneja las dos claves del canal.
+       *
+       * `admin-api` y `admin-spa` no llegan a producción al mismo tiempo, así que esta pantalla puede
+       * estrenarse contra la API vieja, que no tiene estos dos campos. Con esto en false la pantalla lo
+       * dice en lugar de mostrar un interruptor que no gobierna nada.
+       */
+      canal_soportado: false,
       /** Valores persistidos en servidor. */
       stored_suggestions_enabled: false,
       stored_suggestion_delay: 0,
       stored_auto_send_delay: 0,
       stored_require_verification: true,
+      stored_tickets_habilitados: false,
+      stored_texto_desconectado: '',
       /** Carga inicial GET settings. */
       loading: true,
       /**
@@ -162,6 +244,17 @@ export default {
       // servidor, así que cualquier guardado sería a ciegas sobre valores que el operador nunca llegó a ver.
       if (this.load_failed) {
         return false
+      }
+      // Las dos claves del canal se chequean primero y no se condicionan por `local_suggestions_enabled`:
+      // gobiernan si el ticket existe, así que se tienen que poder cambiar con las sugerencias apagadas.
+      if (
+        this.local_tickets_habilitados !== this.stored_tickets_habilitados ||
+        this.local_texto_desconectado !== this.stored_texto_desconectado
+      ) {
+        if (!this.local_suggestions_enabled) {
+          return true
+        }
+        return this.is_suggestion_delay_valid() && this.is_auto_send_delay_valid()
       }
       if (this.local_suggestions_enabled !== this.stored_suggestions_enabled) {
         if (!this.local_suggestions_enabled) {
@@ -230,11 +323,25 @@ export default {
           // Si la API todavía no manda el campo, se asume prendido: mostrarlo apagado y que el operador guarde sin
           // querer daría vuelta el régimen de todos los tickets nuevos.
           const require_verification = data.require_verification === undefined ? true : !!data.require_verification
+          // Si la API todavía no manda las claves del canal se asume apagado y sin texto, que es el estado
+          // real desde el 16/9 y además el que no miente: con esto apagado los mensajes de los clientes no
+          // abren ticket, y mostrarlo prendido haría creer que alguien los está leyendo.
+          const canal_soportado = data.tickets_habilitados !== undefined
+          const tickets_habilitados = !!data.tickets_habilitados
+          const texto_desconectado =
+            data.texto_desconectado === undefined || data.texto_desconectado === null
+              ? ''
+              : String(data.texto_desconectado)
           self.load_failed = false
+          self.canal_soportado = canal_soportado
           self.local_suggestions_enabled = enabled
           self.stored_suggestions_enabled = enabled
           self.local_require_verification = require_verification
           self.stored_require_verification = require_verification
+          self.local_tickets_habilitados = tickets_habilitados
+          self.stored_tickets_habilitados = tickets_habilitados
+          self.local_texto_desconectado = texto_desconectado
+          self.stored_texto_desconectado = texto_desconectado
           if (!isNaN(suggestion_delay)) {
             self.local_suggestion_delay = suggestion_delay
             self.stored_suggestion_delay = suggestion_delay
@@ -285,6 +392,16 @@ export default {
       if (self.local_require_verification !== self.stored_require_verification) {
         payload.require_verification = self.local_require_verification
       }
+      // Tampoco se condicionan por `local_suggestions_enabled`: el canal es anterior a la IA.
+      if (self.local_tickets_habilitados !== self.stored_tickets_habilitados) {
+        payload.tickets_habilitados = self.local_tickets_habilitados
+      }
+      if (self.local_texto_desconectado !== self.stored_texto_desconectado) {
+        payload.texto_desconectado = self.local_texto_desconectado
+      }
+      /** El PUT llevaba alguna de las dos claves del canal, para poder denunciar si la API las ignoró. */
+      const pidio_canal =
+        payload.tickets_habilitados !== undefined || payload.texto_desconectado !== undefined
       if (self.local_suggestions_enabled && suggestion_delay !== self.stored_suggestion_delay) {
         payload.suggestion_delay = suggestion_delay
       }
@@ -310,7 +427,31 @@ export default {
             self.local_auto_send_delay = saved_auto_send_delay
             self.stored_auto_send_delay = saved_auto_send_delay
           }
-          self.saved_message = 'Configuración guardada.'
+          // Mismo criterio que el GET: sin la clave en la respuesta, la pantalla vuelve a lo que el
+          // servidor sí tiene. Dejar el interruptor como lo dejó el operador lo haría irse creyendo que
+          // los clientes ya abren ticket cuando siguen cayendo en silencio.
+          if (data.tickets_habilitados === undefined) {
+            self.canal_soportado = false
+            self.local_tickets_habilitados = self.stored_tickets_habilitados
+            self.local_texto_desconectado = self.stored_texto_desconectado
+          } else {
+            self.canal_soportado = true
+            self.local_tickets_habilitados = !!data.tickets_habilitados
+            self.stored_tickets_habilitados = self.local_tickets_habilitados
+            const saved_texto =
+              data.texto_desconectado === undefined || data.texto_desconectado === null
+                ? ''
+                : String(data.texto_desconectado)
+            self.local_texto_desconectado = saved_texto
+            self.stored_texto_desconectado = saved_texto
+          }
+          if (pidio_canal && data.tickets_habilitados === undefined) {
+            self.error_message =
+              'Se guardó el resto, pero esta versión de la API todavía no maneja el interruptor de tickets ' +
+              'de soporte ni su texto: esos dos quedaron como estaban.'
+          } else {
+            self.saved_message = 'Configuración guardada.'
+          }
         })
         .catch(function (err) {
           const msg =
@@ -321,6 +462,10 @@ export default {
           // irse creyendo que los tickets nuevos ya esperan su aprobación cuando en el servidor siguen contestando
           // solos: de todas las formas de fallar, esa es la única que miente hacia el lado peligroso.
           self.local_require_verification = self.stored_require_verification
+          // Y por el mismo motivo, el interruptor del canal: la mentira peligrosa es mostrarlo prendido
+          // cuando en el servidor los mensajes de los clientes no abren ticket.
+          self.local_tickets_habilitados = self.stored_tickets_habilitados
+          self.local_texto_desconectado = self.stored_texto_desconectado
         })
         .then(function () {
           self.saving = false
