@@ -20,6 +20,14 @@
         Seguís desde {{ mmss(retomar_desde) }}
         <button type="button" @click="empezar_de_cero">Empezar de cero</button>
       </div>
+      <encuesta
+        v-if="encuesta"
+        :video="video"
+        :siguiente="siguiente"
+        :por_voto="encuesta.por_voto"
+        @cerrar="encuesta = null"
+        @ver-siguiente="abrir(siguiente.codigo)"
+      />
     </div>
 
     <div class="controles">
@@ -47,7 +55,7 @@
     <h1>{{ video.titulo }}</h1>
 
     <div class="fila-acciones">
-      <!-- Con sesión: avance del video. -->
+      <!-- Con sesión: avance del video y 👍/👎. -->
       <template v-if="estado.usuario">
         <div class="progreso-video">
           <span v-if="hecho" class="visto">✓ Visto</span>
@@ -56,6 +64,27 @@
             <span>{{ Math.round(fraccion_actual * 100) }} % visto · {{ mmss(video.duracion) }}</span>
           </template>
         </div>
+        <button
+          type="button"
+          class="voto"
+          :class="{ si: voto === 1 }"
+          :aria-pressed="voto === 1 ? 'true' : 'false'"
+          title="Me gustó"
+          @click="votar_video(1)"
+        >
+          👍 <span>Me gustó</span>
+        </button>
+        <button
+          type="button"
+          class="voto"
+          :class="{ no: voto === -1 }"
+          :aria-pressed="voto === -1 ? 'true' : 'false'"
+          title="No me gustó"
+          aria-label="No me gustó"
+          @click="votar_video(-1)"
+        >
+          👎
+        </button>
       </template>
       <!-- Sin sesión: la línea de invitado (§5.1). -->
       <p v-else class="linea-invitado">{{ LINEA_INVITADO }}</p>
@@ -94,11 +123,14 @@
       </details>
     </div>
 
+    <preguntas :video="video" />
   </div>
 </template>
 
 <script>
 import IconoEstado from './IconoEstado.vue'
+import Encuesta from './Encuesta.vue'
+import Preguntas from './Preguntas.vue'
 import {
   estado,
   VELOCIDADES,
@@ -111,15 +143,17 @@ import {
   registrar_tramo,
   anotar_posicion,
   enviar_progreso,
+  votar,
 } from '../estado'
 import { mmss, numero_de, recortar, LINEA_INVITADO } from '../utiles'
 
 /**
  * El video abierto: reproductor con velocidades y "Seguís desde…", migas, título, avance,
- * "Siguiente", las tarjetas de descripción y la transcripción plegable.
+ * 👍/👎, "Siguiente", las tarjetas de descripción, la transcripción plegable, las preguntas y
+ * la encuesta al terminar.
  *
  * Se monta de nuevo con cada video (App.vue le pone `:key` = código), así que todo su estado
- * (último segundo visto, "Seguís desde") arranca limpio y al desmontarse manda lo
+ * (último segundo visto, encuesta, "Seguís desde") arranca limpio y al desmontarse manda lo
  * pendiente del video que se deja.
  *
  * La cuenta de lo visto es la de `registrar()` del prototipo: solo suma si el video avanzó
@@ -128,7 +162,7 @@ import { mmss, numero_de, recortar, LINEA_INVITADO } from '../utiles'
  */
 export default {
   name: 'DetalleVideo',
-  components: { IconoEstado },
+  components: { IconoEstado, Encuesta, Preguntas },
   props: {
     /** Video del catálogo. */
     video: { type: Object, required: true },
@@ -143,6 +177,10 @@ export default {
       LINEA_INVITADO: LINEA_INVITADO,
       /** Último `currentTime` registrado (null después de un salto). */
       ultimo: null,
+      /** true si ya se mostró la encuesta en esta apertura (o ya estaba respondida). */
+      preguntado: !!estado.encuestas[this.video.codigo],
+      /** Encuesta abierta: { por_voto } o null. */
+      encuesta: null,
       /** Posición desde la que se retomó (muestra el cartel), o null. */
       retomar_desde: null,
       /** Timer que esconde el cartel de "Seguís desde". */
@@ -199,6 +237,13 @@ export default {
       return d ? d.transcripcion : ''
     },
     /**
+     * Voto actual: 1, -1 o 0.
+     * @returns {number}
+     */
+    voto() {
+      return this.estado.votos[this.video.codigo] || 0
+    },
+    /**
      * Fracción vista de este video.
      * @returns {number}
      */
@@ -232,6 +277,16 @@ export default {
   methods: {
     mmss: mmss,
     recortar: recortar,
+    /**
+     * Duración a usar para "llegó al final": la del catálogo y, si no vino, la del archivo.
+     * Es método y no computed porque `$refs` no es reactivo.
+     * @returns {number}
+     */
+    duracion_total() {
+      /** Elemento <video>. */
+      const el = this.$refs.video
+      return this.video.duracion || (el && el.duration) || 0
+    },
     /**
      * @param {Object} v
      * @returns {number}
@@ -283,7 +338,8 @@ export default {
       }
     },
     /**
-     * Registra lo reproducido desde el último `timeupdate` (la regla del prototipo).
+     * Registra lo reproducido desde el último `timeupdate` (la regla del prototipo) y abre la
+     * encuesta a 3 s del final.
      * @returns {void}
      */
     registrar() {
@@ -299,6 +355,11 @@ export default {
       }
       this.ultimo = t
       anotar_posicion(this.video, t)
+      /** Duración del video. */
+      const duracion = this.duracion_total()
+      if (duracion && t >= duracion - 3 && !this.preguntado) {
+        this.preguntar(false)
+      }
     },
     /**
      * Al pausar: registra y manda lo pendiente.
@@ -309,12 +370,27 @@ export default {
       enviar_progreso()
     },
     /**
-     * Al terminar: registra y manda.
+     * Al terminar: registra, manda y, si todavía no se preguntó, abre la encuesta.
      * @returns {void}
      */
     al_terminar() {
       this.registrar()
       enviar_progreso()
+      if (!this.preguntado) {
+        this.preguntar(false)
+      }
+    },
+    /**
+     * Abre la encuesta (solo con sesión: sin sesión no se guarda nada).
+     * @param {boolean} por_voto true si la abrió un 👎.
+     * @returns {void}
+     */
+    preguntar(por_voto) {
+      if (!this.estado.usuario || this.encuesta) {
+        return
+      }
+      this.preguntado = true
+      this.encuesta = { por_voto: por_voto }
     },
     /**
      * Cambia la velocidad del reproductor.
@@ -325,6 +401,18 @@ export default {
       elegir_velocidad(x)
       if (this.$refs.video) {
         this.$refs.video.playbackRate = x
+      }
+    },
+    /**
+     * 👍 / 👎. Un 👎 abre la encuesta si todavía no se respondió (como el prototipo).
+     * @param {1|-1} valor
+     * @returns {void}
+     */
+    votar_video(valor) {
+      /** Voto que quedó. */
+      const nuevo = votar(this.video.codigo, valor)
+      if (nuevo === -1 && !this.estado.encuestas[this.video.codigo]) {
+        this.preguntar(true)
       }
     },
     /**
@@ -346,7 +434,7 @@ export default {
       }
       /** Elemento con el foco. */
       const destino = ev.target
-      if (destino && destino.closest && destino.closest('input, textarea, button, select, summary, video, a, [contenteditable]')) {
+      if (destino && destino.closest && destino.closest('input, textarea, button, select, summary, video, a, [contenteditable], .encuesta')) {
         return
       }
       ev.preventDefault()
