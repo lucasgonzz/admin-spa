@@ -573,6 +573,25 @@
         </div>
         <div class="card-body">
           <div class="row g-3">
+            <!-- Tilde de consumidor final: la factura sale sin CUIT. Se guarda en el cliente y
+                 vale para todos los botones de emitir. Los datos fiscales de abajo NO se
+                 bloquean ni se borran: quedan cargados por si se destilda. -->
+            <div class="col-12">
+              <div class="form-check form-switch">
+                <input
+                  id="mensualidad-consumidor-final"
+                  v-model="form.facturar_consumidor_final"
+                  class="form-check-input"
+                  type="checkbox"
+                />
+                <label class="form-check-label small fw-semibold" for="mensualidad-consumidor-final">
+                  Facturar a consumidor final (sin CUIT)
+                </label>
+              </div>
+              <div class="form-text small">
+                La factura sale como Consumidor Final y no se usa el CUIT. Después hay que apretar Guardar.
+              </div>
+            </div>
             <!-- Datos fiscales del receptor -->
             <!-- CUIT + botón que trae de ARCA el resto de los datos fiscales.
                  El botón solo se habilita con 11 dígitos cargados, para no gastar
@@ -898,7 +917,13 @@ export default {
         afip_razon_social: '',
         afip_condicion_iva: '',
         afip_domicilio: '',
+        // true = la factura de mensualidad sale a Consumidor final, sin CUIT.
+        facturar_consumidor_final: false,
       },
+      // Valor de `facturar_consumidor_final` que el backend tiene GUARDADO (el último snapshot). El
+      // backend factura lo guardado, no lo que está sin guardar en el form: el confirm() de
+      // emitir_factura() se arma con este valor.
+      consumidor_final_guardado: false,
     }
   },
   computed: {
@@ -1512,7 +1537,11 @@ export default {
         afip_razon_social: snapshot.afip_razon_social || '',
         afip_condicion_iva: snapshot.afip_condicion_iva || '',
         afip_domicilio: snapshot.afip_domicilio || '',
+        // Una API vieja no manda la clave: se lee como false.
+        facturar_consumidor_final: !!snapshot.facturar_consumidor_final,
       }
+      // Lo que quedó guardado en el backend (ver `consumidor_final_guardado` en data()).
+      this.consumidor_final_guardado = !!snapshot.facturar_consumidor_final
       this.record_total_mensualidad = Number(snapshot.total_mensualidad || 0)
       /* El snapshot trae el resumen de actualización desde la misión modulo-cobranzas; un backend
          viejo no lo manda y en ese caso se conserva lo que ya hubiera. */
@@ -1733,10 +1762,20 @@ export default {
         return
       }
 
+      // El backend factura lo GUARDADO. Si el tilde de consumidor final cambió y no se guardó, el
+      // confirm() prometería algo que el backend no va a hacer: se frena y se pide guardar primero.
+      if (!!this.form.facturar_consumidor_final !== this.consumidor_final_guardado) {
+        window.alert(
+          'Tenés cambios sin guardar en el tilde de consumidor final. Guardá primero y después emití la factura.'
+        )
+        return
+      }
+
       const confirmado = window.confirm(
         '¿Emitir la factura de la mensualidad de ' +
           (this.record.company_name || this.record.name || 'este cliente') +
           ' (' + etiqueta_larga(this.periodo_factura) + ')' +
+          (this.consumidor_final_guardado ? ' a Consumidor final (sin CUIT)' : '') +
           '? El total se recalcula con los empleados actualizados del cliente antes de facturar. ' +
           'Genera un comprobante fiscal real e irreversible.'
       )
