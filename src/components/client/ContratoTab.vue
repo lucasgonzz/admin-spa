@@ -53,7 +53,63 @@
         </div>
       </div>
 
-      <h6 class="text-primary mb-2">Pago único</h6>
+      <!-- Modalidad del contrato (misión precios-dos-modalidades, 13/10/2026): mismos campos y
+           mismo comportamiento que en el contrato del lead. Sin modalidad el PDF sale con el
+           texto de siempre. Los ids van atados a record.id por lo mismo que el de la firma. -->
+      <h6 class="text-primary mb-2">Modalidad y sistemas</h6>
+      <div class="alert alert-light border mb-3">
+        <div class="row g-2">
+          <div class="col-md-4">
+            <label class="form-label" :for="'contract_modalidad_cliente_' + record.id">Modalidad</label>
+            <select
+              :id="'contract_modalidad_cliente_' + record.id"
+              v-model="form.contract_modalidad"
+              class="form-select"
+            >
+              <option :value="null">Elegí la modalidad</option>
+              <option v-for="modalidad in modalidades" :key="modalidad.key" :value="modalidad.key">
+                {{ modalidad.label }}
+              </option>
+            </select>
+            <div v-if="!form.contract_modalidad" class="form-text text-warning">
+              {{ aviso_sin_modalidad }}
+            </div>
+            <div v-else class="form-text">
+              {{ ayuda_modalidad }}
+            </div>
+          </div>
+          <div class="col-md-5">
+            <span class="form-label d-block">Sistemas contratados</span>
+            <div v-for="sistema in sistemas" :key="sistema.key" class="form-check form-check-inline">
+              <input
+                :id="'contract_sistema_cliente_' + sistema.key + '_' + record.id"
+                v-model="form.contract_sistemas"
+                :value="sistema.key"
+                class="form-check-input"
+                type="checkbox"
+              />
+              <label class="form-check-label" :for="'contract_sistema_cliente_' + sistema.key + '_' + record.id">
+                {{ sistema.label }}
+              </label>
+            </div>
+          </div>
+          <div v-if="es_suscripcion" class="col-md-3">
+            <label class="form-label" :for="'contract_permanencia_cliente_' + record.id">Plazo mínimo (meses)</label>
+            <input
+              :id="'contract_permanencia_cliente_' + record.id"
+              v-model.number="form.contract_permanencia_meses"
+              type="number"
+              min="1"
+              max="60"
+              step="1"
+              class="form-control"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- En Suscripción no hay licencia que pagar: el pago inicial es la puesta en marcha. -->
+      <h6 class="text-primary mb-2">{{ es_suscripcion ? 'Pago inicial' : 'Pago único' }}</h6>
       <div class="alert alert-light border mb-3">
         <div class="row g-2">
           <div class="col-md-3">
@@ -64,7 +120,7 @@
             </select>
           </div>
           <div class="col-md-3">
-            <label class="form-label">Precio total (licencia + implementación)</label>
+            <label class="form-label">{{ es_suscripcion ? 'Pago inicial (puesta en marcha)' : 'Precio total (licencia + implementación)' }}</label>
             <input v-model="form.contract_precio_licencia" type="text" class="form-control" />
           </div>
           <div class="col-md-3">
@@ -249,6 +305,14 @@
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
 import clause_templates from '@/utils/contract_clause_templates'
+import {
+  MODALIDADES,
+  SISTEMAS,
+  AYUDA_MODALIDAD,
+  AVISO_SIN_MODALIDAD,
+  aplicar_defaults_de_modalidad,
+  normalizar_modalidad,
+} from '@/utils/contract_modalidades'
 import { formatear_fecha } from '@/components/cobranzas/meses'
 
 /**
@@ -318,6 +382,55 @@ export default {
         (Array.isArray(f.contract_financiacion) && f.contract_financiacion.length > 0)
       )
     },
+    /**
+     * Las dos modalidades del contrato (misión precios-dos-modalidades, 13/10/2026).
+     * @returns {Array<{key: string, label: string}>}
+     */
+    modalidades() {
+      return MODALIDADES
+    },
+    /**
+     * Los sistemas contratables, con las keys y etiquetas de `CotizadorSettings::SISTEMAS`.
+     * @returns {Array<{key: string, label: string}>}
+     */
+    sistemas() {
+      return SISTEMAS
+    },
+    /**
+     * true si el contrato es de Suscripción: muestra el plazo mínimo y cambia los rótulos del pago.
+     * @returns {boolean}
+     */
+    es_suscripcion() {
+      return this.form.contract_modalidad === 'suscripcion'
+    },
+    /**
+     * Línea de ayuda de la modalidad elegida.
+     * @returns {string}
+     */
+    ayuda_modalidad() {
+      return AYUDA_MODALIDAD[this.form.contract_modalidad] || ''
+    },
+    /**
+     * Aviso cuando no hay modalidad elegida.
+     * @returns {string}
+     */
+    aviso_sin_modalidad() {
+      return AVISO_SIN_MODALIDAD
+    },
+    /**
+     * El form y su modalidad, juntos, para el watch de abajo.
+     *
+     * Va el form también porque `aplicar_contrato()` lo REEMPLAZA entero al cargar y al guardar:
+     * un watch sobre `form.contract_modalidad` solo dispararía al abrir un cliente con modalidad y
+     * le cambiaría los meses de IPC a un contrato ya guardado.
+     * @returns {{form: Object, modalidad: string}}
+     */
+    modalidad_vigilada() {
+      return {
+        form: this.form,
+        modalidad: this.form.contract_modalidad || '',
+      }
+    },
   },
   watch: {
     /** Si cambia el cliente abierto, se recarga el contrato de ese. */
@@ -325,6 +438,21 @@ export default {
       if (new_id && new_id !== old_id) {
         this.cargar()
       }
+    },
+    /**
+     * Cambio de modalidad hecho en el formulario: ajusta los meses de IPC y el plazo mínimo
+     * (ver `aplicar_defaults_de_modalidad()`). 🔴 NO es `immediate` y no hace nada si lo que
+     * cambió es el form entero (carga o respuesta del guardado): abrir un contrato no puede
+     * tocarle ningún valor.
+     */
+    modalidad_vigilada(nuevo, viejo) {
+      if (!viejo || nuevo.form !== viejo.form) {
+        return
+      }
+      if (nuevo.modalidad === viejo.modalidad) {
+        return
+      }
+      aplicar_defaults_de_modalidad(this.form, nuevo.modalidad || null)
     },
   },
   mounted() {
@@ -367,6 +495,11 @@ export default {
         contract_fecha_primer_pago_mensual: '',
         contract_clausulas_particulares: [],
         contract_meses_actualizacion: 6,
+        /* Modalidad del contrato (misión precios-dos-modalidades, 13/10/2026). Sin modalidad por
+           defecto: null es el contrato de siempre. */
+        contract_modalidad: null,
+        contract_sistemas: [],
+        contract_permanencia_meses: null,
         contract_copiado_desde_lead_at: null,
       }
     },
@@ -423,6 +556,11 @@ export default {
         contract_clausulas_particulares: clausulas,
         /* Default 6: es lo que el PDF decía fijo hasta ahora. */
         contract_meses_actualizacion: c.contract_meses_actualizacion == null || c.contract_meses_actualizacion === '' ? 6 : Number(c.contract_meses_actualizacion),
+        /* Modalidad: una API vieja no manda estas claves y quedan como en el form vacío (sin
+           modalidad). Los sistemas se copian por valor, igual que las cuotas. */
+        contract_modalidad: normalizar_modalidad(c.contract_modalidad),
+        contract_sistemas: Array.isArray(c.contract_sistemas) ? c.contract_sistemas.slice() : [],
+        contract_permanencia_meses: c.contract_permanencia_meses == null || c.contract_permanencia_meses === '' ? null : Number(c.contract_permanencia_meses),
         contract_copiado_desde_lead_at: c.contract_copiado_desde_lead_at || null,
       }
     },
@@ -543,6 +681,13 @@ export default {
         contract_meses_actualizacion: f.contract_meses_actualizacion === '' || f.contract_meses_actualizacion === null || f.contract_meses_actualizacion === undefined
           ? null
           : Number(f.contract_meses_actualizacion),
+        /* Modalidad del contrato (misión precios-dos-modalidades, 13/10/2026). El PUT las valida
+           (licencia|suscripcion, gestion|ecommerce|agentes, 1 a 60); una API vieja las ignora. */
+        contract_modalidad: f.contract_modalidad || null,
+        contract_sistemas: f.contract_sistemas || [],
+        contract_permanencia_meses: f.contract_permanencia_meses === '' || f.contract_permanencia_meses === null || f.contract_permanencia_meses === undefined
+          ? null
+          : Number(f.contract_permanencia_meses),
       }
     },
     /**
