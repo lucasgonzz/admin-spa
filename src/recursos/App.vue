@@ -37,7 +37,7 @@
         <div v-else-if="!estado.videos.length" class="vacio">
           Todavía no hay videos publicados. Volvé a mirar en unos días.
         </div>
-        <div v-else-if="video_actual" class="vacio">{{ video_actual.titulo }}</div>
+        <detalle-video v-else-if="video_actual" :key="video_actual.codigo" :video="video_actual" />
         <div v-else class="vacio">Elegí un video de la izquierda.</div>
       </section>
     </main>
@@ -49,6 +49,7 @@
 <script>
 import Cabecera from './components/Cabecera.vue'
 import BarraCarpetas from './components/BarraCarpetas.vue'
+import DetalleVideo from './components/DetalleVideo.vue'
 import {
   estado,
   iniciar,
@@ -69,7 +70,7 @@ const CONSULTA_ANGOSTO = '(max-width: 860px)'
  */
 export default {
   name: 'CentroRecursos',
-  components: { Cabecera, BarraCarpetas },
+  components: { Cabecera, BarraCarpetas, DetalleVideo },
   data() {
     return {
       /** Estado compartido de la página. */
