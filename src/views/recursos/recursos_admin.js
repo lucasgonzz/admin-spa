@@ -64,6 +64,19 @@ export function lista_de(datos, claves) {
 }
 
 /**
+ * Texto en minúsculas y sin acentos, para buscar ("Ferreteria" encuentra "Ferretería").
+ *
+ * @param {*} texto
+ * @returns {string}
+ */
+export function normalizar_texto(texto) {
+  return String(texto == null ? '' : texto)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+/**
  * Número de un dato que puede venir como string (los `decimal` de Laravel).
  *
  * @param {*} valor

@@ -2,10 +2,19 @@
   <div class="recursos-clientes">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
       <p class="text-muted small mb-0">Cuánto avanzó cada cliente en el centro. Tocá un cliente para ver a cada usuario.</p>
-      <button type="button" class="btn btn-outline-primary btn-sm" :disabled="cargando" @click="cargar">
-        <span v-if="cargando" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" />
-        Actualizar
-      </button>
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <input
+          v-model="busqueda"
+          type="search"
+          class="form-control form-control-sm recursos-clientes__buscar"
+          placeholder="Buscar cliente por nombre"
+          aria-label="Buscar cliente por nombre"
+        />
+        <button type="button" class="btn btn-outline-primary btn-sm" :disabled="cargando" @click="cargar">
+          <span v-if="cargando" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" />
+          Actualizar
+        </button>
+      </div>
     </div>
 
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
@@ -15,10 +24,17 @@
       Cargando clientes...
     </div>
 
-    <p v-else-if="!clientes.length" class="text-muted fst-italic">Todavía ningún cliente entró al centro.</p>
+    <p v-else-if="!clientes.length" class="text-muted fst-italic">No hay clientes para mostrar.</p>
+
+    <p v-else-if="!clientes_filtrados.length" class="text-muted fst-italic">
+      Ningún cliente coincide con "{{ busqueda.trim() }}".
+    </p>
 
     <div v-else class="card border-0 recursos-panel">
       <div class="card-body">
+        <p v-if="busqueda.trim()" class="small text-muted mb-2">
+          {{ clientes_filtrados.length }} de {{ clientes.length }} clientes
+        </p>
         <div class="table-responsive">
           <table class="table table-sm align-middle mb-0 recursos-tabla">
             <thead>
@@ -32,7 +48,7 @@
               </tr>
             </thead>
             <tbody>
-              <template v-for="c in clientes" :key="c.client_id">
+              <template v-for="c in clientes_filtrados" :key="c.client_id">
                 <tr>
                   <td>
                     <button
@@ -44,7 +60,7 @@
                       {{ abierto === c.client_id ? '▾' : '▸' }} {{ c.nombre }}
                     </button>
                   </td>
-                  <td class="text-end">{{ c.usuarios }}</td>
+                  <td class="text-end" :class="{ 'text-muted': !c.usuarios }">{{ c.usuarios }}</td>
                   <td class="recursos-tabla__avance">
                     <div class="recursos-barra" :title="porcentaje_texto(c.avance)">
                       <div class="recursos-barra__relleno" :style="{ width: Math.min(100, c.avance) + '%' }" />
@@ -120,19 +136,23 @@
 
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
-import { campo, lista_de, numero, porcentaje_texto, fecha_corta, copiar_link_dueno } from './recursos_admin'
+import { campo, lista_de, numero, porcentaje_texto, fecha_corta, copiar_link_dueno, normalizar_texto } from './recursos_admin'
 
 /**
- * Solapa "Clientes" del Centro de recursos: avance por cliente (`GET admin/recursos/clientes`)
- * con el detalle por usuario y por carpeta (`GET admin/recursos/clientes/{client_id}`) y el
- * botón "Copiar link del dueño" (`POST admin/recursos/clientes/{client_id}/link-dueno`).
+ * Solapa "Clientes" del Centro de recursos: TODOS los clientes, también los que nunca entraron
+ * (avance 0, sin usuarios), con su avance (`GET admin/recursos/clientes`), un buscador por
+ * nombre (son decenas), el detalle por usuario y por carpeta
+ * (`GET admin/recursos/clientes/{client_id}`) y, en cada fila, "Copiar link del dueño"
+ * (`POST admin/recursos/clientes/{client_id}/link-dueno`).
  */
 export default {
   name: 'PanelClientesRecursos',
   data() {
     return {
-      /** Clientes normalizados. */
+      /** Clientes normalizados (todos: también los que nunca entraron, con avance 0). */
       clientes: [],
+      /** Texto del buscador por nombre. */
+      busqueda: '',
       /** client_id con el detalle desplegado, o null. */
       abierto: null,
       /** Usuarios del cliente desplegado. */
@@ -149,6 +169,22 @@ export default {
       error: null,
     }
   },
+  computed: {
+    /**
+     * Clientes que coinciden con el buscador (por nombre o slug, sin acentos).
+     * @returns {Array<Object>}
+     */
+    clientes_filtrados() {
+      /** Búsqueda normalizada. */
+      const q = normalizar_texto(this.busqueda.trim())
+      if (!q) {
+        return this.clientes
+      }
+      return this.clientes.filter(function (c) {
+        return normalizar_texto(c.nombre + ' ' + (c.slug || '')).indexOf(q) !== -1
+      })
+    },
+  },
   created() {
     this.cargar()
   },
@@ -163,7 +199,8 @@ export default {
     normalizar_cliente(c) {
       return {
         client_id: campo(c, ['client_id', 'cliente.id', 'id']),
-        nombre: campo(c, ['nombre', 'cliente', 'cliente.nombre', 'company_name', 'name'], 'Cliente sin nombre'),
+        nombre: campo(c, ['nombre', 'cliente', 'cliente.nombre', 'company_name', 'name'], '') || 'Cliente sin nombre',
+        slug: campo(c, ['slug', 'cliente.slug'], ''),
         usuarios: numero(campo(c, ['usuarios', 'usuarios_count', 'cantidad_usuarios'], 0)),
         avance: numero(campo(c, ['avance_promedio', 'avance', 'porcentaje'], 0)),
         terminados: numero(campo(c, ['videos_terminados', 'terminados'], 0)),
@@ -287,6 +324,10 @@ export default {
   color: #6c757d;
   font-weight: 600;
   white-space: nowrap;
+}
+.recursos-clientes__buscar {
+  width: 240px;
+  max-width: 100%;
 }
 .recursos-tabla__avance {
   min-width: 160px;

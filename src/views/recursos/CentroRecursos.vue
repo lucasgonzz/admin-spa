@@ -10,14 +10,17 @@
     </div>
 
     <!-- Pestañas. flex-wrap: en teléfono no entran las tres en una línea. -->
-    <ul class="nav nav-tabs flex-wrap mb-3" role="tablist">
+    <ul class="nav nav-tabs flex-wrap mb-3" role="tablist" aria-label="Centro de recursos">
       <li v-for="tab in tabs" :key="tab.key" class="nav-item" role="presentation">
         <button
+          :id="'recursos-solapa-' + tab.key"
           type="button"
           class="nav-link py-2"
           :class="{ active: active_tab === tab.key }"
           role="tab"
           :aria-selected="active_tab === tab.key ? 'true' : 'false'"
+          :aria-controls="'recursos-panel-' + tab.key"
+          :data-solapa="tab.key"
           @click="active_tab = tab.key"
         >
           {{ tab.label }}
@@ -25,10 +28,18 @@
       </li>
     </ul>
 
-    <!-- v-if y no v-show: cada solapa pide lo suyo recién cuando se la mira. -->
-    <panel-preguntas v-if="active_tab === 'preguntas'" />
-    <panel-videos v-else-if="active_tab === 'videos'" />
-    <panel-clientes v-else />
+    <!-- v-if y no v-show: cada solapa pide lo suyo recién cuando se la mira. El contenedor es el
+         tabpanel de la solapa activa (role + aria-labelledby): además de la accesibilidad, deja
+         buscar la solapa sin chocar con el ítem "Clientes" del menú del admin. -->
+    <div
+      :id="'recursos-panel-' + active_tab"
+      role="tabpanel"
+      :aria-labelledby="'recursos-solapa-' + active_tab"
+    >
+      <panel-preguntas v-if="active_tab === 'preguntas'" />
+      <panel-videos v-else-if="active_tab === 'videos'" />
+      <panel-clientes v-else />
+    </div>
   </div>
 </template>
 
