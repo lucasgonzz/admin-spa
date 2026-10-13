@@ -5,7 +5,8 @@
     Arriba el sujeto con su contacto: teléfono, mail y un link a WhatsApp que SOLO abre la app
     (https://wa.me/<dígitos>): el sistema no manda ningún mensaje. Después dónde está (pipeline,
     etapa, días), responsable y próxima acción editables, una nota nueva (con canal y fecha
-    opcional) y el historial completo, de lo más nuevo a lo más viejo.
+    opcional), la videollamada del closer si el sujeto es un lead y la tiene, y el historial
+    completo, de lo más nuevo a lo más viejo.
 
     Se abre desde el tablero, el listado, la agenda y la pestaña "Pipelines" del cliente/lead (en
     ese caso encima del modal del cliente, con `stack_level` 1). Cada vez que cambia la
@@ -204,6 +205,37 @@
         <div v-if="note_error('occurred_at')" class="invalid-feedback d-block">{{ note_error('occurred_at') }}</div>
       </section>
 
+      <!--
+        Videollamada (misión embudo-lead-pipelines, 13/10/2026).
+
+        🔴 `call` viene SOLO en la ficha y SOLO para sujetos lead: es la llamada del closer
+        (`lead_calls`) de ese lead. En el tablero, los listados y la agenda la clave no existe, y
+        una API vieja no la manda nunca — por eso todo el bloque cuelga de `v-if="call"` y no de
+        `subject_type`.
+      -->
+      <section v-if="call" class="pl-ficha__block">
+        <h6 class="pl-ficha__heading">Videollamada</h6>
+        <div class="pl-ficha__call-meta">
+          <span class="pl-ficha__call-when">{{ call_when }}</span>
+          <span v-if="call_estado_label" class="pl-ficha__tag">{{ call_estado_label }}</span>
+          <a
+            v-if="call.meet_url"
+            :href="call.meet_url"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="pl-ficha__call-link"
+          >
+            <i class="bi bi-camera-video" aria-hidden="true" />Abrir Meet
+          </a>
+        </div>
+        <call-summary-panel v-if="call.call_summary" :call_summary="call.call_summary" />
+        <p v-else class="text-muted small mb-0">El resumen de la llamada todavía no está disponible.</p>
+        <!-- La ficha de la oportunidad no tiene la conversación ni el resumen de la demo: eso está en el lead. -->
+        <router-link v-if="lead_link" :to="lead_link" class="pl-ficha__call-link mt-2">
+          <i class="bi bi-person-lines-fill" aria-hidden="true" />Ver el lead
+        </router-link>
+      </section>
+
       <!-- Historial -->
       <section class="pl-ficha__block pl-ficha__block--last">
         <h6 class="pl-ficha__heading">Historial</h6>
@@ -290,6 +322,8 @@
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
 import BaseModal from '@/components/ui/BaseModal.vue'
+// 🔴 Compartido con la pestaña Resumen del lead, que es su primer uso: acá se consume tal cual.
+import CallSummaryPanel from '@/components/lead/resumen/CallSummaryPanel.vue'
 import MoveModal from '@/components/pipeline/MoveModal.vue'
 import NextActionText from '@/components/pipeline/NextActionText.vue'
 import StageTag from '@/components/pipeline/StageTag.vue'
@@ -344,7 +378,7 @@ function sort_activities(list) {
  */
 export default {
   name: 'PipelineOpportunityModal',
-  components: { BaseModal, MoveModal, NextActionText, StageTag, SubjectTypeBadge },
+  components: { BaseModal, CallSummaryPanel, MoveModal, NextActionText, StageTag, SubjectTypeBadge },
   props: {
     /** Visibilidad del modal. */
     show: { type: Boolean, default: true },
@@ -423,6 +457,53 @@ export default {
     owner_value() {
       const id = this.opportunity && this.opportunity.owner_admin_id
       return id === null || id === undefined ? '' : String(id)
+    },
+    /**
+     * La videollamada del closer, o null. Solo la ficha la trae, y solo para sujetos lead: con una
+     * API vieja la clave no existe (`undefined`) y el bloque entero no se muestra.
+     * @returns {Object|null}
+     */
+    call() {
+      return (this.opportunity && this.opportunity.call) || null
+    },
+    /**
+     * Cuándo fue (o va a ser) la llamada: lo agendado, y si no hay, cuándo arrancó de verdad.
+     * Un guión antes que un hueco, igual que el resto de la ficha.
+     * @returns {string}
+     */
+    call_when() {
+      if (!this.call) {
+        return '—'
+      }
+      return format_datetime(this.call.scheduled_at) || format_datetime(this.call.started_at) || '—'
+    },
+    /**
+     * Estado de la llamada en castellano. Un valor que no conozcamos se muestra crudo: si el back
+     * suma un estado, es mejor que se vea a que desaparezca.
+     * @returns {string}
+     */
+    call_estado_label() {
+      const estado = this.call && this.call.estado
+      if (estado === 'completada') {
+        return 'Hecha'
+      }
+      if (estado === 'pendiente') {
+        return 'Pendiente'
+      }
+      return estado === null || estado === undefined ? '' : String(estado)
+    },
+    /**
+     * Destino del link "Ver el lead", o null si no hay a dónde ir (sin `lead_id`, o el lead ya se
+     * borró y la oportunidad quedó como historia: mandar a `?lead_id=` de algo inexistente abriría
+     * un modal vacío).
+     * @returns {Object|null}
+     */
+    lead_link() {
+      const lead_id = this.opportunity && this.opportunity.lead_id
+      if (!lead_id || this.subject.missing) {
+        return null
+      }
+      return { name: 'leads', query: { lead_id: String(lead_id) } }
     },
   },
   watch: {
@@ -999,6 +1080,35 @@ export default {
 
 .pl-ficha__note-options > button {
   flex: 0 0 auto;
+}
+
+/*
+  Videollamada: fecha, estado y el link a Meet en una línea que envuelve sola. En 360px los tres
+  caen uno abajo del otro y nada empuja el ancho del modal.
+*/
+.pl-ficha__call-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+  min-width: 0;
+}
+
+.pl-ficha__call-when {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.pl-ficha__call-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  text-decoration: none;
+  /* El meet_url es largo y sin espacios: sin esto estira el modal en el teléfono. */
+  word-break: break-word;
 }
 
 .pl-ficha__heading {
