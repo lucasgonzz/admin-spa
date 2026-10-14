@@ -1,5 +1,15 @@
 <template>
   <header class="cabecera">
+    <!-- Marca: el logotipo de ComercioCity, siempre lo primero de la izquierda (misión
+         centro-recursos-soporte-y-tema, 14/10/2026; antes era un cuadrado azul con "CC"). Va importado
+         desde src/assets para que Vite lo compile con hash a `assets/`: en producción el sitio solo
+         enlaza `index.html`, `assets/`, `favicon.svg` y `recursos-estado.json`, y un archivo suelto
+         en `public/` no se serviría. -->
+    <div class="marca">
+      <img class="logo" :src="logo" alt="ComercioCity" width="121" height="28" />
+      <b>Centro de recursos</b>
+    </div>
+
     <!-- Solo en ≤ 860 px: abre el cajón de carpetas. -->
     <button
       type="button"
@@ -10,11 +20,6 @@
     >
       ☰ Carpetas
     </button>
-
-    <div class="marca">
-      <div class="logo" aria-hidden="true">CC</div>
-      <div><b>Centro de recursos</b> <span>· ComercioCity</span></div>
-    </div>
 
     <!-- Con sesión: el avance total, en verde. -->
     <div v-if="estado.usuario" class="total">
@@ -117,10 +122,14 @@
 import { estado, avance, salir } from '../estado'
 import { estado_tema, alternar_tema } from '../tema'
 import { inicial } from '../utiles'
+/** Logotipo con la palabra en BLANCO: va sobre el panel oscuro. */
+import LOGO_PARA_OSCURO from '../../assets/logotipo-comerciocity.png'
+/** Logotipo con la palabra en azul oscuro: va sobre el panel claro (el nombre del archivo habla del texto, no del fondo). */
+import LOGO_PARA_CLARO from '../../assets/logotipo-comerciocity-oscuro.png'
 
 /**
- * Cabecera del centro: marca, avance total, interruptor de tema y el usuario; sin sesión, la marca,
- * el interruptor y "Entrar".
+ * Cabecera del centro: logotipo, avance total, interruptor de tema y el usuario; sin sesión, el
+ * logotipo, el interruptor y "Entrar".
  */
 export default {
   name: 'CabeceraCentro',
@@ -169,6 +178,13 @@ export default {
      */
     oscuro() {
       return estado_tema.tema === 'dark'
+    },
+    /**
+     * Logotipo del tema vigente.
+     * @returns {string}
+     */
+    logo() {
+      return this.oscuro ? LOGO_PARA_OSCURO : LOGO_PARA_CLARO
     },
   },
   watch: {
