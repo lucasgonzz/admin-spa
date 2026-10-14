@@ -68,11 +68,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
 
 /* Interruptor de tema claro / oscuro (role="switch"): el texto es el nombre accesible y se oculta, sin
    dejar de leerse, cuando la cabecera se angosta. La perilla blanca y sus íconos son fijos a propósito:
-   es un control de marca, igual de legible sobre la pista gris (claro) y la azul (oscuro). */
+   es un control de marca, igual de legible sobre la pista gris (claro) y la azul (oscuro). La pista
+   apagada es un gris medio a propósito: contra el panel blanco de la cabecera tiene que dar al menos 3:1
+   (WCAG 1.4.11, contraste de componentes), y la perilla blanca contra la pista también. */
 .cabecera .tema { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; padding: 3px 4px 3px 12px; border-radius: 99px; border-color: transparent; background: transparent; color: var(--suave); font-size: 12.5px; white-space: nowrap; flex: none; }
 .cabecera > .total ~ .tema { margin-left: 0; }
 .cabecera .tema:hover { border-color: var(--borde); color: var(--texto); }
-.tema .pista { position: relative; display: block; width: 40px; height: 24px; border-radius: 99px; background: #cfd4dc; border: 1px solid #bcc3cd; flex: none; transition: background .2s, border-color .2s; }
+.tema .pista { position: relative; display: block; width: 40px; height: 24px; border-radius: 99px; background: #8b93a0; border: 1px solid #858d99; flex: none; transition: background .2s, border-color .2s; }
 .tema[aria-checked="true"] .pista { background: var(--azul); border-color: var(--azul); }
 .tema .perilla { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; color: #c2410c; display: grid; place-items: center; box-shadow: 0 1px 3px rgba(0,0,0,.35); transition: transform .2s; }
 .tema[aria-checked="true"] .perilla { transform: translateX(16px); color: #1b2a4a; }
