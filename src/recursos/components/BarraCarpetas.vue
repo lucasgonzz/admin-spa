@@ -27,11 +27,13 @@
           <span class="nro" aria-hidden="true">{{ c.completa ? '✓' : c.nro }}</span>
           <span class="nombre">{{ c.nombre }}</span>
           <span class="cuenta">
-            <template v-if="consulta_normalizada">{{ c.coinciden }} de </template>
             <template v-if="con_sesion">{{ c.av.hechos }}/{{ c.av.n }}</template>
-            <template v-else>{{ c.av.n }} videos</template>
             <span class="flecha" aria-hidden="true">▶</span>
           </span>
+          <!-- Cuántos videos y cuántos minutos de material hay en la carpeta (siempre de TODA la
+               carpeta; con búsqueda activa, además, cuántos coinciden). Va en un renglón propio debajo
+               del nombre: así no le saca ancho al nombre en el cajón del teléfono. -->
+          <span class="meta">{{ texto_meta(c) }}</span>
           <span v-if="con_sesion" class="mini">
             <span class="barra"><i :style="{ width: (c.av.pct * 100).toFixed(1) + '%' }" /></span>
             <span class="pct">{{ Math.round(c.av.pct * 100) }} %</span>
@@ -79,7 +81,7 @@ import {
   alternar_carpeta,
   cargar_indice,
 } from '../estado'
-import { mmss, normalizar, numero_de } from '../utiles'
+import { mmss, minutos_texto, normalizar, numero_de } from '../utiles'
 
 /**
  * Barra de carpetas: el buscador y la lista de carpetas desplegables con sus videos, como la
@@ -191,6 +193,9 @@ export default {
           nro: c.nro,
           nombre: c.nombre,
           av: av,
+          segundos: todos.reduce(function (suma, v) {
+            return suma + (Number(v.duracion) || 0)
+          }, 0),
           completa: this.con_sesion && av.n > 0 && av.hechos === av.n,
           abierta: q ? true : !!this.estado.abiertas[c.nro],
           coinciden: vs.length,
@@ -214,6 +219,22 @@ export default {
   },
   methods: {
     mmss: mmss,
+    /**
+     * Renglón de datos de una carpeta: "12 videos · 18 min" ("1 video" en singular; con búsqueda,
+     * "2 de 12 videos · 18 min"). Los minutos suman TODOS los videos de la carpeta, no solo los que
+     * coinciden con lo que se busca.
+     * @param {Object} c Carpeta de `carpetas_visibles`.
+     * @returns {string}
+     */
+    texto_meta(c) {
+      /** Cantidad de videos de la carpeta. */
+      const n = c.av.n
+      /** "12 videos" / "2 de 12 videos". */
+      const videos = (this.consulta_normalizada ? c.coinciden + ' de ' : '') + n + (n === 1 ? ' video' : ' videos')
+      /** Minutos de material. */
+      const minutos = minutos_texto(c.segundos)
+      return minutos ? videos + ' · ' + minutos : videos
+    },
     /**
      * @param {Object} v
      * @returns {number}

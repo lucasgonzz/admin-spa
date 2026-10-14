@@ -104,17 +104,21 @@ main.principal { flex: 1; display: flex; min-height: 0; position: relative; }
 .carpeta.completa .nro { background: var(--verde-osc); border-color: var(--verde-osc); color: var(--sobre-verde); }
 .carpeta .nombre { font-weight: 600; font-size: 13.5px; min-width: 0; }
 .carpeta .cuenta { font-size: 12px; color: var(--suave); text-align: right; white-space: nowrap; }
+.carpeta .meta { grid-column: 2 / 4; font-size: 12px; color: var(--suave); }
 .carpeta .mini { grid-column: 2 / 4; display: flex; align-items: center; gap: 8px; }
 .carpeta .mini .barra { flex: 1; height: 6px; }
 .carpeta .mini .pct { font-size: 11px; color: var(--suave); min-width: 32px; text-align: right; }
 .carpeta .flecha { display: inline-block; transition: transform .2s; color: var(--suave); font-size: 11px; margin-left: 6px; }
 .carpeta.abierta .flecha { transform: rotate(90deg); }
-.carpeta .videos { padding-bottom: 6px; }
-.seccion { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--suave); padding: 10px 14px 4px 48px; }
-.vid { width: 100%; border: 0; border-radius: 0; background: transparent; color: inherit; text-align: left; display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: start; padding: 6px 12px 6px 22px; cursor: pointer; font-size: 13px; }
+.carpeta .videos { padding: 2px 0 10px; }
+.seccion { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--suave); padding: 18px 14px 6px 48px; }
+.vid { width: 100%; border: 0; border-radius: 0; background: transparent; color: inherit; text-align: left; display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: start; padding: 9px 12px 9px 22px; cursor: pointer; font-size: 13px; position: relative; }
 .vid:hover { background: var(--sel); }
 .vid:focus-visible { outline-offset: -2px; }
 .vid.sel { background: var(--sel); box-shadow: inset 3px 0 0 var(--azul); }
+/* Una línea fina entre un video y el siguiente (no antes del primero ni pegada a la selección) */
+.vid + .vid::before { content: ""; position: absolute; top: 0; left: 22px; right: 12px; height: 1px; background: var(--borde); }
+.vid.sel::before, .vid.sel + .vid::before { display: none; }
 .vid .dur { color: var(--suave); font-size: 12px; white-space: nowrap; }
 .vid .t { min-width: 0; }
 .vid .t small { display: block; color: var(--suave); font-size: 11px; }
@@ -192,6 +196,13 @@ details p { color: var(--suave); margin-top: 10px; white-space: pre-line; }
 /* Teléfono: en el renglón de arriba, con el logotipo y "Carpetas", ya no entra el nombre de la página */
 @media (max-width: 600px) {
 	.marca b { display: none; }
+}
+/* Teléfonos chicos (360 px): logo, "Carpetas", interruptor y "Entrar" tienen que entrar en un solo renglón */
+@media (max-width: 420px) {
+	.cabecera { gap: 8px; padding: 8px 10px; }
+	.marca .logo { height: 24px; }
+	.abrir-carpetas { padding: 7px 9px; }
+	.usuario.solo button { padding: 7px 10px; }
 }
 /* Tablet: barra más angosta */
 @media (max-width: 1100px) {

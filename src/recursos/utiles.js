@@ -24,6 +24,34 @@ export function mmss(segundos) {
 }
 
 /**
+ * Segundos de material a texto corto para la barra de carpetas: "menos de 1 min", "18 min",
+ * "1 h 5 min", "2 h". Redondea al minuto más cercano y, si hay material, nunca dice menos de uno
+ * (de 60 s para arriba); por debajo del minuto dice "menos de 1 min". Sin material devuelve ''.
+ *
+ * @param {number} segundos Suma de las duraciones.
+ * @returns {string}
+ */
+export function minutos_texto(segundos) {
+  /** Segundos como número válido. */
+  const s = Number(segundos) || 0
+  if (s <= 0) {
+    return ''
+  }
+  if (s < 60) {
+    return 'menos de 1 min'
+  }
+  /** Minutos redondeados (mínimo 1 porque s ≥ 60). */
+  const minutos = Math.round(s / 60)
+  if (minutos < 60) {
+    return minutos + ' min'
+  }
+  /** Horas enteras y minutos que sobran. */
+  const horas = Math.floor(minutos / 60)
+  const resto = minutos % 60
+  return resto ? horas + ' h ' + resto + ' min' : horas + ' h'
+}
+
+/**
  * Número visible de un video a partir de su código (ej. "T1.29" → "1.29"), como en las migas
  * del prototipo.
  *
