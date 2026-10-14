@@ -89,7 +89,7 @@
         <span class="avatar" aria-hidden="true">{{ inicial_usuario }}</span>
         <span class="quien">
           <span>{{ nombre_visible }}</span>
-          <small v-if="estado.usuario.negocio">{{ estado.usuario.negocio }}</small>
+          <small v-if="estado.usuario.negocio" :title="estado.usuario.negocio">{{ estado.usuario.negocio }}</small>
         </span>
       </button>
       <div v-if="menu_abierto" class="desplegable" role="dialog" aria-label="Tu cuenta">

@@ -60,8 +60,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
 .barra i { display: block; height: 100%; background: var(--verde); border-radius: 99px; transition: width .4s; }
 .usuario { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--verde-fondo); color: var(--verde-osc); display: grid; place-items: center; font-weight: 700; flex: none; }
-.usuario .quien { font-size: 13px; line-height: 1.2; text-align: left; }
-.usuario .quien small { color: var(--suave); display: block; }
+/* El nombre y sobre todo el negocio pueden ser larguísimos ("Distribuidora Mayorista de Ferretería y Pinturas
+   El Tornillo S.R.L."): se cortan con puntos suspensivos en vez de empujar al avance total fuera de la cabecera */
+.usuario .quien { font-size: 13px; line-height: 1.2; text-align: left; min-width: 0; max-width: 190px; }
+.usuario .quien > span, .usuario .quien small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.usuario .quien small { color: var(--suave); }
 .usuario .boton-usuario { display: flex; align-items: center; gap: 8px; padding: 2px 6px 2px 2px; border-color: transparent; background: transparent; border-radius: 99px; }
 .usuario .boton-usuario:hover { border-color: var(--borde); }
 .abrir-carpetas { display: none; }
@@ -211,15 +214,22 @@ details p { color: var(--suave); margin-top: 10px; white-space: pre-line; }
 	.abrir-carpetas { padding: 7px 9px; }
 	.usuario.solo button { padding: 7px 10px; }
 }
-/* Con la insignia de modo soporte, entre 861 y 1040 px el avance total quedaba apretado y se le cortaban
+/* Con la insignia de modo soporte, entre 861 y 1140 px el avance total quedaba apretado y se le cortaban
    los textos: ahí la insignia y el avance bajan juntos a un segundo renglón (≤ 860 px los maneja el bloque
    de teléfono, de abajo). El ::after es el corte de renglón: un ítem vacío que ocupa todo el ancho. */
-@media (min-width: 861px) and (max-width: 1040px) {
+@media (min-width: 861px) and (max-width: 1140px) {
 	.cabecera.con-soporte { flex-wrap: wrap; row-gap: 0; }
 	.cabecera.con-soporte::after { content: ""; order: 3; flex: 0 0 100%; height: 0; }
 	.cabecera.con-soporte .modo-soporte { order: 4; flex: none; margin-top: 10px; }
 	.cabecera.con-soporte .total { order: 5; flex: 1 1 0; min-width: 240px; max-width: none; margin: 10px 0 0; }
 	.cabecera.con-soporte .tema, .cabecera.con-soporte > .total ~ .tema { margin-left: auto; }
+}
+/* Con la insignia de modo soporte a la vista, el texto "Tema oscuro" se esconde hasta 1250 px: sumado a la
+   insignia y al nombre del negocio dejaba al avance total sin lugar (en el resto de las sesiones sigue
+   escondiéndose recién a 1100 px) */
+@media (min-width: 1101px) and (max-width: 1250px) {
+	.cabecera.con-soporte .tema { padding-left: 4px; }
+	.cabecera.con-soporte .tema .tema-texto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
 /* Tablet: barra más angosta */
 @media (max-width: 1100px) {
