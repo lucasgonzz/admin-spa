@@ -16,7 +16,7 @@
 :root {
 	--fondo: #f4f5f7; --panel: #ffffff; --borde: #e3e5ea; --texto: #16181d; --suave: #5f6673; --azul: #2979ff;
 	--verde: #16a34a; --verde-osc: #13834a; --verde-fondo: #e3f5ea; --sel: #eaf1ff; --pista: #e6e8ec;
-	--naranja: #b45309; --naranja-fondo: #fdf0dc; --sombra: 0 10px 30px rgba(0,0,0,.18);
+	--naranja: #a84d08; --naranja-fondo: #fdf0dc; --sombra: 0 10px 30px rgba(0,0,0,.18);
 	/* Texto sobre un fondo verde / azul lleno (botón "Publicar", check, insignia "Equipo"): blanco en el
 	   claro; en el oscuro esos fondos se aclaran y el blanco no se lee, así que pasa a casi negro. */
 	--sobre-verde: #fff; --sobre-azul: #fff; --velo: rgba(0,0,0,.4);
