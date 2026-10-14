@@ -70,7 +70,8 @@
           class="voto"
           :class="{ si: voto === 1 }"
           :aria-pressed="voto === 1 ? 'true' : 'false'"
-          title="Me gustó"
+          :disabled="solo_lectura"
+          :title="solo_lectura ? 'Modo soporte: solo lectura, no se guarda' : 'Me gustó'"
           @click="votar_video(1)"
         >
           👍 <span>Me gustó</span>
@@ -80,12 +81,15 @@
           class="voto"
           :class="{ no: voto === -1 }"
           :aria-pressed="voto === -1 ? 'true' : 'false'"
-          title="No me gustó"
+          :disabled="solo_lectura"
+          :title="solo_lectura ? 'Modo soporte: solo lectura, no se guarda' : 'No me gustó'"
           aria-label="No me gustó"
           @click="votar_video(-1)"
         >
           👎
         </button>
+        <!-- Modo soporte: los votos del dueño se ven, pero no se tocan. -->
+        <span v-if="solo_lectura" class="nota-lectura">Modo soporte: solo lectura, los votos no se guardan.</span>
       </template>
       <!-- Sin sesión: la línea de invitado (§5.1). -->
       <p v-else class="linea-invitado">{{ LINEA_INVITADO }}</p>
@@ -137,6 +141,7 @@ import {
   VELOCIDADES,
   fraccion,
   terminado,
+  es_solo_lectura,
   video_por_codigo,
   carpeta_por_nro,
   abrir_video,
@@ -191,6 +196,13 @@ export default {
     }
   },
   computed: {
+    /**
+     * true si la sesión es de soporte (solo lectura): se ve el avance, no se guarda nada.
+     * @returns {boolean}
+     */
+    solo_lectura() {
+      return es_solo_lectura()
+    },
     /**
      * Carpeta del video.
      * @returns {Object|null}
@@ -382,12 +394,12 @@ export default {
       }
     },
     /**
-     * Abre la encuesta (solo con sesión: sin sesión no se guarda nada).
+     * Abre la encuesta (solo con sesión y no en modo soporte: ahí no se guarda nada).
      * @param {boolean} por_voto true si la abrió un 👎.
      * @returns {void}
      */
     preguntar(por_voto) {
-      if (!this.estado.usuario || this.encuesta) {
+      if (!this.estado.usuario || this.solo_lectura || this.encuesta) {
         return
       }
       this.preguntado = true
@@ -410,6 +422,9 @@ export default {
      * @returns {void}
      */
     votar_video(valor) {
+      if (this.solo_lectura) {
+        return
+      }
       /** Voto que quedó. */
       const nuevo = votar(this.video.codigo, valor)
       if (nuevo === -1 && !this.estado.encuestas[this.video.codigo]) {

@@ -5,8 +5,12 @@
       ¿Algo no quedó claro? Preguntá acá: te responde el equipo de ComercioCity y la respuesta les sirve a todos.
     </p>
 
+    <!-- Modo soporte (login maestro, solo lectura): no se publica nada, la caja se reemplaza por un aviso. -->
+    <p v-if="solo_lectura" class="nota-lectura caja" role="note">
+      Modo soporte · solo lectura: desde acá no se pueden publicar preguntas ni comentarios.
+    </p>
     <!-- Con sesión: la caja para preguntar. -->
-    <div v-if="estado.usuario" class="comentar">
+    <div v-else-if="estado.usuario" class="comentar">
       <div class="avatar" aria-hidden="true">{{ inicial(nombre_pila) }}</div>
       <div class="lado">
         <textarea
@@ -58,10 +62,10 @@
           <button
             type="button"
             :class="{ dado: !!c.me_gusta_mio }"
-            :disabled="!estado.usuario"
+            :disabled="!estado.usuario || solo_lectura"
             :aria-pressed="c.me_gusta_mio ? 'true' : 'false'"
             :aria-label="'A mí también me sirve (' + (Number(c.me_gusta) || 0) + ')'"
-            :title="estado.usuario ? 'A mí también me sirve' : 'Entrá desde tu sistema para marcarla'"
+            :title="titulo_me_gusta"
             @click="me_gusta(c)"
           >
             👍 {{ Number(c.me_gusta) || 0 }}
@@ -86,7 +90,7 @@
 </template>
 
 <script>
-import { estado, publicar_pregunta, alternar_me_gusta, cargar_detalle, mostrar_toast } from '../estado'
+import { estado, es_solo_lectura, es_error_solo_lectura, publicar_pregunta, alternar_me_gusta, cargar_detalle, mostrar_toast } from '../estado'
 import { cuando, inicial, a_milisegundos, LINEA_INVITADO } from '../utiles'
 
 /**
@@ -117,6 +121,23 @@ export default {
     }
   },
   computed: {
+    /**
+     * true si la sesión es de soporte (solo lectura): no se publica ni se da me gusta.
+     * @returns {boolean}
+     */
+    solo_lectura() {
+      return es_solo_lectura()
+    },
+    /**
+     * Texto del botón de me gusta según la sesión.
+     * @returns {string}
+     */
+    titulo_me_gusta() {
+      if (this.solo_lectura) {
+        return 'Modo soporte: solo lectura, no se guarda'
+      }
+      return this.estado.usuario ? 'A mí también me sirve' : 'Entrá desde tu sistema para marcarla'
+    },
     /**
      * Detalle del video (transcripción y preguntas), o uno vacío mientras no llegó.
      * @returns {Object}
@@ -195,6 +216,9 @@ export default {
      * @returns {void}
      */
     publicar() {
+      if (this.solo_lectura) {
+        return
+      }
       /** Texto sin espacios de más. */
       const t = this.texto.trim()
       if (!t) {
@@ -211,7 +235,9 @@ export default {
           mostrar_toast('Publicado. Cuando te respondamos lo vas a ver acá, y te avisamos al volver a entrar.')
         })
         .catch((error) => {
-          if (error && error.status === 401) {
+          if (es_error_solo_lectura(error)) {
+            /* Modo soporte: el formulario no se muestra; si el servidor lo avisara, sin cartel. */
+          } else if (error && error.status === 401) {
             mostrar_toast('Tu sesión se cerró: la pregunta no se publicó.')
           } else if (error && error.status === 422) {
             mostrar_toast('Revisá el texto: tiene que tener entre 1 y 2000 caracteres.')
@@ -231,7 +257,7 @@ export default {
      * @returns {void}
      */
     me_gusta(c) {
-      if (!this.estado.usuario) {
+      if (!this.estado.usuario || this.solo_lectura) {
         return
       }
       alternar_me_gusta(c)

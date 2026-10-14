@@ -16,6 +16,12 @@
  * El progreso sigue la regla del prototipo (`registrar()`): solo cuentan los segundos
  * reproducidos de verdad; saltar con la barra no suma. Acá se juntan los TRAMOS reproducidos
  * y se mandan al servidor cada ~10 s, al pausar, al cambiar de video y al cerrar (§5.1).
+ *
+ * Modo soporte (misión centro-recursos-soporte-y-tema, 14/10/2026): cuando soporte entra con un
+ * login maestro, `usuario.solo_lectura` viene en `true`. Se VE el avance del dueño, pero la página
+ * no escribe nada: todas las acciones que mandan algo al servidor (progreso, votos, encuesta,
+ * preguntas, me gusta) quedan como no-op. El campo es opcional: ausente = sesión normal, así la
+ * página anda igual contra un admin-api que todavía no lo manda.
  */
 import { reactive, markRaw } from 'vue'
 import { pedir, hay_sesion, guardar_token, borrar_token, cuando_se_pierda_la_sesion } from './api'
@@ -82,6 +88,27 @@ export const estado = reactive({
   /** Texto del toast visible ('' = oculto). */
   toast: '',
 })
+
+/**
+ * Indica si la sesión actual es de solo lectura (soporte con login maestro). Lee estado reactivo,
+ * así sirve también dentro de `computed`.
+ *
+ * @returns {boolean}
+ */
+export function es_solo_lectura() {
+  return !!(estado.usuario && estado.usuario.solo_lectura === true)
+}
+
+/**
+ * Indica si un error de la API es el `403 {error: 'solo_lectura'}` que el servidor da a una
+ * escritura de una sesión de soporte. Si llega sin que la página lo esperara, se ignora sin cartel.
+ *
+ * @param {import('./api').ErrorApi} error
+ * @returns {boolean}
+ */
+export function es_error_solo_lectura(error) {
+  return !!error && error.status === 403 && error.codigo === 'solo_lectura'
+}
 
 /** Videos por código (no reactivo: el catálogo no cambia mientras la página está abierta). */
 let por_codigo = {}
@@ -765,7 +792,7 @@ function pendientes_de(codigo) {
  * @returns {void}
  */
 function revisar_terminado(video) {
-  if (ya_terminados[video.codigo] || !terminado(video)) {
+  if (es_solo_lectura() || ya_terminados[video.codigo] || !terminado(video)) {
     return
   }
   ya_terminados[video.codigo] = true
@@ -783,7 +810,8 @@ function revisar_terminado(video) {
  * el reproductor solo cuando el video avanzó sin saltos (la regla de `registrar()` del
  * prototipo). Marca los segundos de esta visita y estira el tramo pendiente.
  *
- * Sin sesión no hace nada: el avance pide sesión (decisión 2 de Lucas).
+ * Sin sesión no hace nada: el avance pide sesión (decisión 2 de Lucas). En modo soporte tampoco:
+ * mirar un video no suma ni al avance local ni al del dueño.
  *
  * @param {Object} video
  * @param {number} desde
@@ -791,7 +819,7 @@ function revisar_terminado(video) {
  * @returns {void}
  */
 export function registrar_tramo(video, desde, hasta) {
-  if (!estado.usuario || !(hasta >= desde)) {
+  if (!estado.usuario || es_solo_lectura() || !(hasta >= desde)) {
     return
   }
   /** Segundos del video. */
@@ -839,7 +867,7 @@ export function registrar_tramo(video, desde, hasta) {
  * @returns {void}
  */
 export function anotar_posicion(video, posicion) {
-  if (!estado.usuario) {
+  if (!estado.usuario || es_solo_lectura()) {
     return
   }
   pendientes_de(video.codigo).posicion = posicion
@@ -940,7 +968,7 @@ function enviar_progreso_de(codigo, keepalive) {
       revisar_terminado(video)
     })
     .catch(function (error) {
-      if (error && error.status !== 401 && error.status !== 422 && pendientes[codigo]) {
+      if (error && error.status !== 401 && error.status !== 422 && !es_error_solo_lectura(error) && pendientes[codigo]) {
         pendientes[codigo].tramos = lote.concat(pendientes[codigo].tramos)
       }
     })
@@ -957,7 +985,7 @@ function enviar_progreso_de(codigo, keepalive) {
  * @returns {void}
  */
 export function enviar_progreso(opciones) {
-  if (!estado.usuario || !hay_sesion()) {
+  if (!estado.usuario || es_solo_lectura() || !hay_sesion()) {
     return
   }
   /** Si el pedido tiene que sobrevivir al cierre de la pestaña. */
@@ -981,6 +1009,9 @@ export function enviar_progreso(opciones) {
 export function votar(codigo, valor) {
   /** Voto anterior (para volver atrás si falla). */
   const anterior = estado.votos[codigo] || 0
+  if (es_solo_lectura()) {
+    return anterior
+  }
   /** Voto nuevo. */
   const nuevo = anterior === valor ? 0 : valor
   if (nuevo) {
@@ -997,6 +1028,9 @@ export function votar(codigo, valor) {
     } else {
       delete estado.votos[codigo]
     }
+    if (es_error_solo_lectura(error)) {
+      return
+    }
     mostrar_toast('No se pudo guardar tu voto. Probá de nuevo.')
   })
   return nuevo
@@ -1010,6 +1044,9 @@ export function votar(codigo, valor) {
  * @returns {Promise<void>}
  */
 export function enviar_encuesta(codigo, respuestas) {
+  if (es_solo_lectura()) {
+    return Promise.resolve()
+  }
   return pedir('POST', 'recursos/encuestas', {
     codigo: codigo,
     util: respuestas.util || null,
@@ -1028,6 +1065,9 @@ export function enviar_encuesta(codigo, respuestas) {
  * @returns {Promise<Object>} La pregunta creada.
  */
 export function publicar_pregunta(codigo, texto) {
+  if (es_solo_lectura()) {
+    return Promise.resolve(null)
+  }
   return pedir('POST', 'recursos/preguntas', { codigo: codigo, texto: texto }).then(function (r) {
     /** La pregunta creada (el contrato no fija si viene envuelta). */
     const pregunta = (r && r.pregunta) || r
@@ -1046,6 +1086,9 @@ export function publicar_pregunta(codigo, texto) {
  * @returns {void}
  */
 export function alternar_me_gusta(pregunta) {
+  if (es_solo_lectura()) {
+    return
+  }
   /** Estado anterior, para volver atrás si falla. */
   const antes = { mio: !!pregunta.me_gusta_mio, total: Number(pregunta.me_gusta) || 0 }
   pregunta.me_gusta_mio = !antes.mio
@@ -1062,7 +1105,7 @@ export function alternar_me_gusta(pregunta) {
     .catch(function (error) {
       pregunta.me_gusta_mio = antes.mio
       pregunta.me_gusta = antes.total
-      if (!error || error.status !== 401) {
+      if (!error || (error.status !== 401 && !es_error_solo_lectura(error))) {
         mostrar_toast('No se pudo guardar tu me gusta. Probá de nuevo.')
       }
     })

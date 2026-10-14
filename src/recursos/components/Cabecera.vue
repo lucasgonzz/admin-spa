@@ -1,5 +1,5 @@
 <template>
-  <header class="cabecera">
+  <header class="cabecera" :class="{ 'con-soporte': solo_lectura }">
     <!-- Marca: el logotipo de ComercioCity, siempre lo primero de la izquierda (misión
          centro-recursos-soporte-y-tema, 14/10/2026; antes era un cuadrado azul con "CC"). Va importado
          desde src/assets para que Vite lo compile con hash a `assets/`: en producción el sitio solo
@@ -20,6 +20,17 @@
     >
       ☰ Carpetas
     </button>
+
+    <!-- Modo soporte (login maestro, solo lectura): se ve el avance del dueño pero la página no guarda
+         nada. La insignia lo deja a la vista todo el tiempo; la explicación completa va en el
+         desplegable del usuario. -->
+    <span v-if="solo_lectura" class="modo-soporte" role="status">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+      Modo soporte · solo lectura
+    </span>
 
     <!-- Con sesión: el avance total, en verde. -->
     <div v-if="estado.usuario" class="total">
@@ -48,6 +59,7 @@
       type="button"
       class="tema"
       role="switch"
+      title="Tema oscuro"
       :aria-checked="oscuro ? 'true' : 'false'"
       @click="alternar_tema"
     >
@@ -85,7 +97,11 @@
           <b>{{ estado.usuario.nombre || nombre_visible }}</b>
           <template v-if="estado.usuario.negocio"><br /><span class="suave">{{ estado.usuario.negocio }}</span></template>
         </p>
-        <p class="suave">Tu avance, tus votos y tus preguntas se guardan con tu usuario de ComercioCity.</p>
+        <p v-if="solo_lectura" class="suave">
+          <b>Modo soporte · solo lectura.</b> Estás viendo el avance de {{ estado.usuario.nombre || nombre_visible }}
+          tal como está. No se guarda nada de lo que hagas acá: ni el avance, ni los votos, ni las preguntas, ni la encuesta.
+        </p>
+        <p v-else class="suave">Tu avance, tus votos y tus preguntas se guardan con tu usuario de ComercioCity.</p>
         <div class="pie">
           <button type="button" @click="cerrar_sesion">Salir</button>
         </div>
@@ -119,7 +135,7 @@
 </template>
 
 <script>
-import { estado, avance, salir } from '../estado'
+import { estado, avance, salir, es_solo_lectura } from '../estado'
 import { estado_tema, alternar_tema } from '../tema'
 import { inicial } from '../utiles'
 /** Logotipo con la palabra en BLANCO: va sobre el panel oscuro. */
@@ -171,6 +187,13 @@ export default {
      */
     inicial_usuario() {
       return inicial(this.nombre_visible)
+    },
+    /**
+     * true si la sesión es de soporte (login maestro): solo lectura.
+     * @returns {boolean}
+     */
+    solo_lectura() {
+      return es_solo_lectura()
     },
     /**
      * true con el tema oscuro puesto.

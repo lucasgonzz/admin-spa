@@ -74,7 +74,7 @@
 </template>
 
 <script>
-import { enviar_encuesta, mostrar_toast } from '../estado'
+import { enviar_encuesta, es_error_solo_lectura, mostrar_toast } from '../estado'
 import { recortar } from '../utiles'
 
 /** Contador para ids únicos de los rótulos (aria-labelledby). */
@@ -181,6 +181,11 @@ export default {
         .catch((error) => {
           if (error && error.status === 401) {
             mostrar_toast('Tu sesión se cerró: la encuesta no se pudo guardar.')
+            this.$emit('cerrar')
+            return
+          }
+          if (es_error_solo_lectura(error)) {
+            /* Modo soporte: la encuesta ni se abre, pero si el servidor lo avisara, se cierra sin cartel. */
             this.$emit('cerrar')
             return
           }

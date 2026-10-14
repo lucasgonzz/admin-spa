@@ -42,12 +42,17 @@ button.activo { background: var(--sel); border-color: var(--azul); }
 button.verde { background: var(--verde-osc); border-color: var(--verde-osc); color: var(--sobre-verde); font-weight: 600; }
 button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--azul); outline-offset: 2px; }
 .linea-invitado { color: var(--suave); font-size: 13px; margin: 0; }
+/* Modo soporte: aviso donde en una sesión normal se puede escribir o votar */
+.nota-lectura { color: var(--naranja); font-size: 12.5px; }
+.nota-lectura.caja { margin: 0; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--naranja); background: var(--naranja-fondo); }
 
 /* Cabecera */
 .cabecera { display: flex; align-items: center; gap: 16px; padding: 10px 18px; background: var(--panel); border-bottom: 1px solid var(--borde); position: relative; z-index: 12; }
 .marca { display: flex; align-items: center; gap: 12px; white-space: nowrap; flex: none; }
 .marca .logo { display: block; height: 28px; width: auto; flex: none; }
 .marca b { font-size: 15px; padding-left: 12px; border-left: 1px solid var(--borde); line-height: 24px; }
+.modo-soporte { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 99px; border: 1px solid var(--naranja); background: var(--naranja-fondo); color: var(--naranja); font-size: 12px; font-weight: 700; white-space: nowrap; flex: none; }
+.modo-soporte svg { width: 14px; height: 14px; flex: none; }
 .total { flex: 1; min-width: 0; max-width: 520px; margin-left: auto; }
 .total .rotulo { display: flex; justify-content: space-between; font-size: 12px; color: var(--suave); margin-bottom: 4px; gap: 8px; }
 .total .rotulo b { color: var(--texto); }
@@ -204,8 +209,22 @@ details p { color: var(--suave); margin-top: 10px; white-space: pre-line; }
 	.abrir-carpetas { padding: 7px 9px; }
 	.usuario.solo button { padding: 7px 10px; }
 }
+/* Con la insignia de modo soporte, entre 861 y 1040 px el avance total quedaba apretado y se le cortaban
+   los textos: ahí la insignia y el avance bajan juntos a un segundo renglón (≤ 860 px los maneja el bloque
+   de teléfono, de abajo). El ::after es el corte de renglón: un ítem vacío que ocupa todo el ancho. */
+@media (min-width: 861px) and (max-width: 1040px) {
+	.cabecera.con-soporte { flex-wrap: wrap; row-gap: 0; }
+	.cabecera.con-soporte::after { content: ""; order: 3; flex: 0 0 100%; height: 0; }
+	.cabecera.con-soporte .modo-soporte { order: 4; flex: none; margin-top: 10px; }
+	.cabecera.con-soporte .total { order: 5; flex: 1 1 0; min-width: 240px; max-width: none; margin: 10px 0 0; }
+	.cabecera.con-soporte .tema, .cabecera.con-soporte > .total ~ .tema { margin-left: auto; }
+}
 /* Tablet: barra más angosta */
 @media (max-width: 1100px) {
+	/* Al interruptor de tema se le esconde el texto (sigue siendo su nombre accesible): la cabecera,
+	   sobre todo con la insignia de modo soporte, no da para más */
+	.cabecera .tema { padding-left: 4px; }
+	.tema .tema-texto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 	.barra-lateral { width: 310px; }
 	.ancho { padding: 16px 18px 50px; }
 }
@@ -214,9 +233,9 @@ details p { color: var(--suave); margin-top: 10px; white-space: pre-line; }
 	.abrir-carpetas { display: inline-flex; }
 	.usuario .quien { display: none; }
 	.cabecera { gap: 10px; padding: 8px 12px; flex-wrap: wrap; }
+	.modo-soporte { order: 4; flex: 1 1 100%; justify-content: center; }
 	.total { order: 5; flex-basis: 100%; max-width: none; margin: 0; }
-	.cabecera .tema, .cabecera > .total ~ .tema { margin-left: auto; padding-left: 4px; }
-	.tema .tema-texto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+	.cabecera .tema, .cabecera > .total ~ .tema { margin-left: auto; }
 	.aviso { padding: 7px 12px; }
 	.barra-lateral { position: absolute; inset: 0 auto 0 0; width: min(380px, 88vw); z-index: 10; transform: translateX(-100%); transition: transform .25s; box-shadow: var(--sombra); }
 	.centro.cajon .barra-lateral { transform: none; }
