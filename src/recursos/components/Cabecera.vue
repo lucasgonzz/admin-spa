@@ -144,6 +144,13 @@ import LOGO_PARA_OSCURO from '../../assets/logotipo-comerciocity.png'
 import LOGO_PARA_CLARO from '../../assets/logotipo-comerciocity-oscuro.png'
 
 /**
+ * Imágenes de los dos logos ya pedidas al navegador. Se guardan acá para que no se pierdan antes de
+ * terminar de bajar: así, con conexión lenta, el primer cambio de tema no deja el logo en blanco un
+ * instante mientras se baja el del otro tema.
+ */
+let logos_precargados = []
+
+/**
  * Cabecera del centro: logotipo, avance total, interruptor de tema y el usuario; sin sesión, el
  * logotipo, el interruptor y "Entrar".
  */
@@ -217,6 +224,14 @@ export default {
     },
   },
   mounted() {
+    /* Precarga del logo del OTRO tema (el actual ya está en pantalla). Siguen saliendo con hash desde
+       src/assets: la URL es la que compiló Vite, no una ruta a mano. */
+    logos_precargados = [LOGO_PARA_CLARO, LOGO_PARA_OSCURO].map(function (url) {
+      /** Imagen que pide el archivo. */
+      const imagen = new Image()
+      imagen.src = url
+      return imagen
+    })
     document.addEventListener('click', this.al_clic_afuera)
     document.addEventListener('keydown', this.al_tocar_tecla)
   },
