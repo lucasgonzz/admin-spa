@@ -24,7 +24,7 @@
  * página anda igual contra un admin-api que todavía no lo manda.
  */
 import { reactive, markRaw } from 'vue'
-import { pedir, hay_sesion, guardar_token, borrar_token, cuando_se_pierda_la_sesion } from './api'
+import { pedir, hay_sesion, guardar_token, borrar_token, sesion_guardada_es_soporte, cuando_se_pierda_la_sesion } from './api'
 import { normalizar } from './utiles'
 
 /** Fracción vista a partir de la cual un video cuenta como terminado (la misma regla del servidor). */
@@ -375,7 +375,11 @@ function texto_de_entrada_fallida(error) {
 
 /**
  * Canjea un pase (`sesion/pase`) o un link personal (`sesion/link`) por una sesión del centro.
- * Si falla, la página sigue como estaba (invitada, o con la sesión que ya tenía guardada).
+ * Si falla, la página sigue como estaba (invitada, o con la sesión que ya tenía guardada), con una
+ * excepción: si la sesión guardada era de SOPORTE (solo lectura) se descarta y la página queda
+ * invitada con el aviso de error. Soporte abre un cliente tras otro; si el pase del segundo falla y
+ * quedara la sesión del primero, la pantalla mostraría el error y a la vez el nombre, el negocio y
+ * la insignia del cliente de antes: confunde sobre a quién se está mirando.
  *
  * @param {string} ruta 'recursos/sesion/pase' | 'recursos/sesion/link'
  * @param {Object} cuerpo
@@ -387,10 +391,14 @@ function entrar(ruta, cuerpo) {
       if (!r || !r.token) {
         throw new Error('respuesta sin token')
       }
-      guardar_token(r.token)
+      guardar_token(r.token, !!(r.usuario && r.usuario.solo_lectura === true))
       estado.usuario = r.usuario || null
     })
     .catch(function (error) {
+      if (sesion_guardada_es_soporte()) {
+        borrar_token()
+        limpiar_sesion()
+      }
       mostrar_aviso('error', texto_de_entrada_fallida(error))
     })
 }

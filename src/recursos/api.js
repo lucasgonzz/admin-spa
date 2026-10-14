@@ -18,6 +18,14 @@
 /** Clave de `localStorage` donde vive el token de la sesión del centro (§5.1 del plan). */
 const CLAVE_SESION = 'cc-recursos-sesion'
 
+/**
+ * Clave de `localStorage` que recuerda que la sesión guardada es de SOPORTE (solo lectura, login
+ * maestro). Se guarda aparte del token para saberlo antes de que `recursos/yo` conteste: si soporte
+ * abre otro cliente y el pase falla, la página tiene que soltar la sesión de soporte anterior y no
+ * seguir mostrando al dueño del cliente de antes (misión centro-recursos-soporte-y-tema).
+ */
+const CLAVE_SESION_SOPORTE = 'cc-recursos-sesion-soporte'
+
 /** Base de la API pública del admin, sin barra final (ej. `https://api-admin.../public/api`). */
 export const BASE_API = (import.meta.env.VITE_API_URL || '/api/admin').replace(/\/admin\/?$/, '')
 
@@ -35,8 +43,24 @@ function leer_token_guardado() {
   }
 }
 
+/**
+ * Lee si la sesión guardada es de soporte. Cualquier falla de `localStorage` = "no es de soporte".
+ *
+ * @returns {boolean}
+ */
+function leer_sesion_soporte_guardada() {
+  try {
+    return window.localStorage.getItem(CLAVE_SESION_SOPORTE) === '1'
+  } catch (e) {
+    return false
+  }
+}
+
 /** Token de la sesión del centro en memoria (null = invitado). */
 let token = leer_token_guardado()
+
+/** true si la sesión en memoria es de soporte (solo lectura). Sin token no hay sesión de soporte. */
+let sesion_de_soporte = !!token && leer_sesion_soporte_guardada()
 
 /** Función que se llama cuando el servidor rechaza el token (401): la página pasa a invitado. */
 let al_perder_la_sesion = null
@@ -68,18 +92,35 @@ export function hay_sesion() {
 }
 
 /**
- * Guarda el token de una sesión recién creada (por pase o por link personal).
+ * Indica si la sesión guardada es de soporte (solo lectura). Responde sin pedirle nada al servidor:
+ * sirve para decidir qué hacer ANTES de que `recursos/yo` conteste.
  *
- * @param {string} nuevo_token
+ * @returns {boolean}
+ */
+export function sesion_guardada_es_soporte() {
+  return !!token && sesion_de_soporte
+}
+
+/**
+ * Guarda el token de una sesión recién creada (por pase o por link personal) y si es de soporte.
+ *
+ * @param {string|null} nuevo_token
+ * @param {boolean} [es_soporte] true si el usuario de la sesión viene con `solo_lectura`.
  * @returns {void}
  */
-export function guardar_token(nuevo_token) {
+export function guardar_token(nuevo_token, es_soporte) {
   token = nuevo_token || null
+  sesion_de_soporte = !!token && es_soporte === true
   try {
     if (token) {
       window.localStorage.setItem(CLAVE_SESION, token)
     } else {
       window.localStorage.removeItem(CLAVE_SESION)
+    }
+    if (sesion_de_soporte) {
+      window.localStorage.setItem(CLAVE_SESION_SOPORTE, '1')
+    } else {
+      window.localStorage.removeItem(CLAVE_SESION_SOPORTE)
     }
   } catch (e) {
     /* Sin localStorage la sesión dura lo que dure la pestaña: no es un error para el usuario. */
@@ -87,7 +128,7 @@ export function guardar_token(nuevo_token) {
 }
 
 /**
- * Borra el token (salir, o el servidor lo rechazó).
+ * Borra el token y la marca de soporte (salir, o el servidor lo rechazó).
  *
  * @returns {void}
  */
