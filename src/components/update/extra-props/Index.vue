@@ -309,10 +309,14 @@ export default {
     /**
      * Dispara el pipeline de deployment (SPA build en VPS + subida API/SPA al hosting).
      *
-     * Misión un-solo-frente (14/10/2026): si la API destino es la API ACTIVA del cliente, el
-     * despliegue va EN EL LUGAR (respalda y deja el sistema en mantenimiento unos minutos), y eso se
-     * confirma explícitamente. Para decir si además es el frente principal se pide el cliente (el
-     * mismo GET que usa el formulario de actualizaciones); si falla, se confirma igual sin ese dato.
+     * Misión un-solo-frente (14/10/2026): antes de confirmar se pide el cliente (el mismo GET que usa
+     * el formulario de actualizaciones) para saber cuál es su frente principal, y la confirmación avisa
+     * en dos casos:
+     *  - la API destino es la ACTIVA: el despliegue va EN EL LUGAR (respalda y deja el sistema en
+     *    mantenimiento unos minutos); si además no es el frente principal, lo dice;
+     *  - la API destino no es la activa NI el frente principal: es una rotación hacia el frente
+     *    secundario, contra la decisión de actualizar siempre sobre el principal.
+     * Si el GET falla, se confirma igual sin el dato del principal.
      *
      * @returns {void}
      */
@@ -323,46 +327,48 @@ export default {
       const active_id = client ? client.active_client_api_id : null
       const en_el_lugar = target_id != null && active_id != null && String(target_id) === String(active_id)
 
-      if (!en_el_lugar) {
-        self.confirm_and_start_deploy(null)
-        return
-      }
-
       api
         .get('/client/' + self.local_update.client_id)
         .then(function (res) {
           const parent_model = res.data && res.data.model ? res.data.model : null
           const principal_id = parent_model ? parent_model.frente_principal_client_api_id : null
           self.confirm_and_start_deploy({
-            es_principal: principal_id == null ? null : String(principal_id) === String(target_id),
+            en_el_lugar: en_el_lugar,
+            es_principal:
+              principal_id == null || target_id == null ? null : String(principal_id) === String(target_id),
           })
         })
         .catch(function () {
-          self.confirm_and_start_deploy({ es_principal: null })
+          self.confirm_and_start_deploy({ en_el_lugar: en_el_lugar, es_principal: null })
         })
     },
     /**
-     * Confirma y dispara el deployment. Con `en_el_lugar` (no null), antepone el aviso EN EL LUGAR y,
-     * si se sabe que la API destino NO es el frente principal, lo dice.
+     * Confirma y dispara el deployment. Antepone el aviso EN EL LUGAR si la destino es la activa, y
+     * avisa si se sabe que la destino NO es el frente principal (en el lugar o rotando hacia ella).
      *
-     * @param {Object|null} en_el_lugar null en una rotación; si no, { es_principal: true|false|null }
+     * @param {Object} destino { en_el_lugar: boolean, es_principal: true|false|null }
      * @returns {void}
      */
-    confirm_and_start_deploy(en_el_lugar) {
+    confirm_and_start_deploy(destino) {
       const self = this
       const version_label = self.local_update.to_version
         ? self.local_update.to_version.version
         : ''
       let aviso = ''
-      if (en_el_lugar) {
+      if (destino && destino.en_el_lugar) {
         aviso =
           'EN EL LUGAR: la API destino es la que está atendiendo. El despliegue respalda código, SPA y base, ' +
           'y deja el sistema en mantenimiento unos minutos; hacelo con el negocio cerrado.\n\n'
-        if (en_el_lugar.es_principal === false) {
+        if (destino.es_principal === false) {
           aviso +=
             'Además, esta API NO es el frente principal del cliente: lo que corresponde es la última rotación ' +
             'hacia el frente principal, no actualizar este frente en el lugar.\n\n'
         }
+      } else if (destino && destino.es_principal === false) {
+        aviso =
+          'ATENCIÓN: la API destino NO es el frente principal del cliente ni la que está atendiendo. Es una ' +
+          'rotación hacia el frente secundario, contra la decisión de actualizar siempre sobre el frente ' +
+          'principal: lo que corresponde es elegir el frente principal como destino.\n\n'
       }
       const message =
         aviso +
