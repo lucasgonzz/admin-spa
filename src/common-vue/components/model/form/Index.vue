@@ -766,8 +766,17 @@ export default {
           }
 
           const is_create = !self.form.id
-          if (is_create && config.default_other_than_active) {
-            const default_id = self.pick_default_target_api_id(collection, active_api_id)
+          /*
+           * Misión `un-solo-frente` (14/10/2026): si el meta pide `default_principal` y el cliente
+           * trae `frente_principal_client_api_id`, se preselecciona el FRENTE PRINCIPAL (el mismo
+           * default que usa la creación del lado del servidor). Si no viene —un admin-api viejo, o un
+           * cliente sin ClientApi—, el comportamiento de siempre: la que no es la activa.
+           */
+          const principal_id = self.pick_principal_target_api_id(collection, parent_model, config)
+          if (is_create && (principal_id != null || config.default_other_than_active)) {
+            const default_id = principal_id != null
+              ? principal_id
+              : self.pick_default_target_api_id(collection, active_api_id)
             if (default_id != null) {
               self.form[property.key] = default_id
               if (property.relation && Array.isArray(collection)) {
@@ -828,6 +837,32 @@ export default {
         }
       }
       return fallback_id
+    },
+    /**
+     * Frente principal del cliente para preseleccionar como API destino (misión `un-solo-frente`,
+     * 14/10/2026), o null si no corresponde.
+     *
+     * Devuelve null —y el formulario cae a pick_default_target_api_id()— cuando el meta no trae
+     * `default_principal`, cuando el cliente no trae `frente_principal_client_api_id` (admin-api
+     * viejo) o cuando ese id no está entre las opciones del select.
+     *
+     * @param {Array<Object>} apis colección client_apis
+     * @param {Object|null} parent_model cliente devuelto por GET /client/{id}
+     * @param {Object} config bloque from_parent_field del meta
+     * @returns {number|string|null}
+     */
+    pick_principal_target_api_id(apis, parent_model, config) {
+      if (!config || !config.default_principal || !parent_model || !Array.isArray(apis)) {
+        return null
+      }
+      const principal_id = parent_model.frente_principal_client_api_id
+      if (principal_id == null) {
+        return null
+      }
+      const esta_entre_las_opciones = apis.some(function (api) {
+        return api && api.id != null && String(api.id) === String(principal_id)
+      })
+      return esta_entre_las_opciones ? principal_id : null
     },
     /**
      * Recalcula opciones de todos los selects `from_has_many` del meta actual.
