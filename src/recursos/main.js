@@ -9,6 +9,10 @@
  */
 import { createApp } from 'vue'
 import App from './App.vue'
+import { iniciar_tema } from './tema'
 import './estilos.css'
 
+/* El tema ya está puesto en <html> por el script inline de recursos.html; esto lo toma y escucha al
+   navegador (misión centro-recursos-soporte-y-tema, 14/10/2026). */
+iniciar_tema()
 createApp(App).mount('#app')

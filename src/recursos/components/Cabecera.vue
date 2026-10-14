@@ -36,6 +36,30 @@
     <!-- Sin sesión la cabecera no repite la línea de invitado: ya va debajo del título del video
          y en Preguntas. Queda el botón "Entrar" con la explicación. -->
 
+    <!-- Interruptor de tema claro / oscuro (misión centro-recursos-soporte-y-tema, 14/10/2026). Con y sin
+         sesión, y también en el teléfono (ahí se esconde el texto, no el control). El texto es su
+         nombre accesible; `aria-checked` es "oscuro". -->
+    <button
+      type="button"
+      class="tema"
+      role="switch"
+      :aria-checked="oscuro ? 'true' : 'false'"
+      @click="alternar_tema"
+    >
+      <span class="tema-texto">Tema oscuro</span>
+      <span class="pista" aria-hidden="true">
+        <span class="perilla">
+          <svg v-if="oscuro" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7z" />
+          </svg>
+          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+            <circle cx="12" cy="12" r="4.2" />
+            <path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.3 5.3L7 7M17 17l1.7 1.7M18.7 5.3L17 7M7 17l-1.7 1.7" />
+          </svg>
+        </span>
+      </span>
+    </button>
+
     <!-- Con sesión: avatar, nombre y negocio (el negocio solo se lo ve el propio usuario). -->
     <div v-if="estado.usuario" ref="zona" class="usuario">
       <button
@@ -91,10 +115,12 @@
 
 <script>
 import { estado, avance, salir } from '../estado'
+import { estado_tema, alternar_tema } from '../tema'
 import { inicial } from '../utiles'
 
 /**
- * Cabecera del centro: marca, avance total y el usuario; sin sesión, solo la marca y "Entrar".
+ * Cabecera del centro: marca, avance total, interruptor de tema y el usuario; sin sesión, la marca,
+ * el interruptor y "Entrar".
  */
 export default {
   name: 'CabeceraCentro',
@@ -137,6 +163,13 @@ export default {
     inicial_usuario() {
       return inicial(this.nombre_visible)
     },
+    /**
+     * true con el tema oscuro puesto.
+     * @returns {boolean}
+     */
+    oscuro() {
+      return estado_tema.tema === 'dark'
+    },
   },
   watch: {
     /** Al entrar o salir se cierra el desplegable que estuviera abierto. */
@@ -153,6 +186,7 @@ export default {
     document.removeEventListener('keydown', this.al_tocar_tecla)
   },
   methods: {
+    alternar_tema: alternar_tema,
     /**
      * Cierra el desplegable con un clic fuera de él.
      * @param {MouseEvent} ev

@@ -289,7 +289,9 @@ export function cerrar_aviso() {
 /**
  * Deja la URL con `?v=<codigo>` (o sin `v` si no hay video) y SIN el pase ni el token: un pase
  * o un link personal en la barra de direcciones terminan en el historial, en una captura o
- * reenviados por WhatsApp. El resto de los parámetros (utm, etc.) se respeta.
+ * reenviados por WhatsApp. Tampoco queda `tema`: ya se aplicó y se guardó (el script de
+ * `recursos.html`), y un link copiado con `?tema=dark` le impondría el tema a quien lo abra. El
+ * resto de los parámetros (utm, etc.) se respeta.
  *
  * @param {string|null} codigo
  * @returns {void}
@@ -301,6 +303,7 @@ function poner_en_url(codigo) {
     url.searchParams.delete('pase')
     url.searchParams.delete('api')
     url.searchParams.delete('t')
+    url.searchParams.delete('tema')
     if (codigo) {
       url.searchParams.set('v', codigo)
     } else {

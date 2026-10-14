@@ -6,9 +6,44 @@
     <title>Centro de recursos · ComercioCity</title>
     <meta name="description" content="Videos cortos para aprender a usar ComercioCity a tu ritmo: artículos, ventas, caja, facturación y todo lo demás." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#1b1e24" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#ffffff" />
     <meta name="color-scheme" content="light dark" />
+
+    <!-- Tema claro / oscuro (misión centro-recursos-soporte-y-tema, 14/10/2026). Se resuelve ACÁ,
+         antes del primer pintado, para que la página no aparezca un instante en el tema equivocado.
+         Prioridad: 1) `?tema=dark|light` de la URL (lo manda el sistema del cliente al abrir
+         «Tutoriales», con el tema que el usuario tiene en su gestión) y se GUARDA; 2) lo guardado
+         en `localStorage` (`cc-recursos-tema`: la última elección, hecha acá o en el sistema);
+         3) el tema del navegador. Todo va en try/catch: sin `localStorage` la página anda igual.
+         La misma regla vive en `src/recursos/tema.js`, que además mueve el interruptor y sigue
+         al navegador mientras no haya nada guardado. Cualquier otro valor de `tema` se ignora. -->
+    <script>
+      (function () {
+        var tema = null
+        var clave = 'cc-recursos-tema'
+        try {
+          var pedido = new URLSearchParams(window.location.search).get('tema')
+          if (pedido === 'dark' || pedido === 'light') {
+            tema = pedido
+            try { window.localStorage.setItem(clave, pedido) } catch (e) {}
+          }
+        } catch (e) {}
+        if (!tema) {
+          try {
+            var guardado = window.localStorage.getItem(clave)
+            if (guardado === 'dark' || guardado === 'light') { tema = guardado }
+          } catch (e) {}
+        }
+        if (!tema) {
+          tema = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        }
+        var raiz = document.documentElement
+        raiz.setAttribute('data-tema', tema)
+        raiz.style.colorScheme = tema
+        var meta = document.querySelector('meta[name="theme-color"]')
+        if (meta) { meta.setAttribute('content', tema === 'dark' ? '#1b1e24' : '#ffffff') }
+      })()
+    </script>
 
     <!-- Centro de recursos (misión centro-de-recursos-clientes, 13/10/2026). Es la segunda
          entrada de Vite de admin-spa y se sirve en recursos.comerciocity.com. Lleva sus propias

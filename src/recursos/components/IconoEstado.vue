@@ -5,7 +5,7 @@
     <path
       d="M5.8 10.4l2.7 2.7 5.7-6"
       fill="none"
-      stroke="#fff"
+      stroke="var(--sobre-verde)"
       stroke-width="2.2"
       stroke-linecap="round"
       stroke-linejoin="round"
