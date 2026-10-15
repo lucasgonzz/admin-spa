@@ -198,6 +198,8 @@
 <script>
 import api from '@/utils/axios'
 import BaseModal from '@/components/ui/BaseModal.vue'
+/* Las siete etapas del flujo y el tratamiento de la 8 heredada de las implementaciones viejas */
+import { etapas_visibles, nombre_de_la_etapa } from '@/utils/implementation_stages'
 
 /**
  * Deja una lista de textos de la API lista para pintar: solo strings, sin espacios en las
@@ -302,13 +304,15 @@ export default {
 
   computed: {
     /**
-     * Opciones del selector de etapa para la acción 'progreso': una por cada
-     * stage cargado en la implementación, con su nombre desde stages.config.
+     * Opciones del selector de etapa para la acción 'progreso': una por cada etapa del flujo
+     * cargada en la implementación, con su nombre desde stages.config. La fila 8 de las
+     * implementaciones anteriores al flujo de siete etapas solo aparece si llegó a arrancar
+     * (etapas_visibles): una 8 pendiente no es una etapa que se pueda mostrar como avance.
      *
      * @returns {Array<{value: number, label: string}>}
      */
     progreso_stage_options() {
-      const stages = (this.implementation && this.implementation.stages) || []
+      const stages = etapas_visibles(this.implementation && this.implementation.stages)
 
       /** Copia ordenada por número de etapa para el selector. */
       const sorted = stages.slice().sort(function (a, b) {
@@ -316,7 +320,7 @@ export default {
       })
 
       return sorted.map(function (stage) {
-        const name = stage.config && stage.config.name ? stage.config.name : ''
+        const name = nombre_de_la_etapa(stage)
         return {
           value: stage.stage_number,
           label: 'Etapa ' + stage.stage_number + (name ? ' — ' + name : ''),

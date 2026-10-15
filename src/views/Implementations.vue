@@ -136,10 +136,13 @@
 
               <!--
                 Botón avanzar etapa: solo visible si la implementación está activa
-                y la etapa actual es menor a 8 (la última etapa cierra automáticamente).
+                y la etapa actual es menor a la última (ULTIMA_ETAPA = 7, la vinculación con ARCA:
+                la última etapa cierra la implementación y eso se hace por la API de Claude).
+                Una implementación anterior al flujo de siete etapas que quedó en la 8 tampoco
+                muestra el botón.
               -->
               <button
-                v-if="selected_implementation.status === 'in_progress' && selected_implementation.current_stage < 8"
+                v-if="selected_implementation.status === 'in_progress' && selected_implementation.current_stage < ultima_etapa"
                 class="btn btn-primary btn-sm flex-shrink-0"
                 :disabled="advancing_stage"
                 @click="on_advance_stage"
@@ -189,11 +192,16 @@
             </span>
           </div>
 
-          <!-- Sección: progreso visual de las 8 etapas, como stepper vertical -->
+          <!--
+            Sección: progreso visual de las 7 etapas, como stepper vertical.
+            Una implementación anterior al flujo de siete etapas puede traer además una fila 8
+            («Seguimiento», lo que fue la videollamada): solo se muestra si esa fila llegó a
+            arrancar (ver visible_stages), y sin acciones.
+          -->
           <h6 class="impl-section-title">Etapas</h6>
           <div class="impl-card impl-card--stages mb-4">
             <div
-              v-for="stage in selected_implementation.stages"
+              v-for="stage in visible_stages"
               :key="stage.id"
               class="impl-stage-row d-flex align-items-start gap-3"
               :class="'impl-stage-row--' + stage.status"
@@ -208,10 +216,10 @@
               </div>
 
               <div class="impl-stage-content flex-grow-1">
-                <!-- Número y nombre de la etapa desde config -->
+                <!-- Número y nombre de la etapa desde config (la 8 heredada se llama «Seguimiento») -->
                 <span class="impl-stage-name">
                   Etapa {{ stage.stage_number }}
-                  <span v-if="stage.config" class="impl-stage-name__label">— {{ stage.config.name }}</span>
+                  <span v-if="stage_label(stage)" class="impl-stage-name__label">— {{ stage_label(stage) }}</span>
                 </span>
 
                 <!--
@@ -231,8 +239,8 @@
                 </div>
 
                 <!--
-                  Subetapas de la etapa activa: se muestran para todas las etapas (1 a 8)
-                  cuando están en progreso o completadas.
+                  Subetapas de la etapa activa: se muestran para todas las etapas (1 a 7)
+                  cuando están en progreso o completadas. La 8 heredada («Seguimiento») no trae.
                   Cada subetapa indica con ✅/⬜ si su campo fue completado.
                   La nota opcional se muestra entre paréntesis si está presente.
                 -->
@@ -566,6 +574,8 @@ import ImplementationConversationSidebar from '@/components/implementation/Imple
 /* Modal de alta de una nueva implementación con selector de cliente (Prompt 178-05) */
 import CreateImplementationModal from '@/components/implementation/CreateImplementationModal.vue'
 import { copiar_link_dueno, resumen_de_cliente } from '@/views/recursos/recursos_admin'
+/* Las siete etapas del flujo (ULTIMA_ETAPA) y el tratamiento de la 8 heredada de las implementaciones viejas */
+import { ULTIMA_ETAPA, etapas_visibles, nombre_de_la_etapa } from '@/utils/implementation_stages'
 
 /**
  * Etiquetas en español de propiedades de sistema (mismo mapa que ImplementationImportService).
@@ -614,6 +624,11 @@ export default {
        * Indicador de carga mientras se obtiene el detalle de una implementación.
        */
       detail_loading: false,
+
+      /**
+       * Última etapa del flujo (ULTIMA_ETAPA): el template la usa para decidir si ofrece «Avanzar etapa».
+       */
+      ultima_etapa: ULTIMA_ETAPA,
 
       /**
        * Indicador de operación en curso al avanzar manualmente de etapa.
@@ -699,6 +714,20 @@ export default {
   },
 
   computed: {
+    /**
+     * Las etapas que se dibujan en el stepper del detalle abierto: las siete del flujo (1 a
+     * ULTIMA_ETAPA) y, si la implementación es anterior al flujo de siete etapas, la fila 8
+     * («Seguimiento») SOLO cuando llegó a arrancar o a cerrarse (status distinto de pending y de
+     * skipped). Una fila 8 pendiente o salteada no es una etapa por hacer —la 8 ya no existe—, y
+     * mostrarla dejaría un «Etapa 8» fantasma al final de todas las implementaciones viejas.
+     * Es la misma regla del bloque `etapas` de GET claude/implementations/{id}.
+     *
+     * @returns {Array<Object>}
+     */
+    visible_stages() {
+      return etapas_visibles(this.selected_implementation && this.selected_implementation.stages)
+    },
+
     /**
      * Resumen del formulario de la etapa 1, agrupado por sección para el render.
      *
@@ -1196,14 +1225,15 @@ export default {
      * sin depender del campo virtual `ready_to_advance` del backend (que puede llegar
      * con race condition cuando el listado se recarga justo al recibir el evento Pusher).
      *
-     * Criterio: current_stage < 8 Y la etapa cuyo stage_number === current_stage
+     * Criterio: current_stage < ULTIMA_ETAPA Y la etapa cuyo stage_number === current_stage
      * tiene status === 'completed' (la conversación automática terminó, falta el avance manual).
+     * La última etapa (7) no ofrece avance: la implementación se cierra por la API de Claude.
      *
      * @param {Object} impl Implementación con relación stages cargada.
      * @returns {boolean}
      */
     check_ready_to_advance(impl) {
-      if (!impl || !impl.stages || impl.current_stage >= 8) {
+      if (!impl || !impl.stages || impl.current_stage >= ULTIMA_ETAPA) {
         return false
       }
 
@@ -1237,7 +1267,8 @@ export default {
     /**
      * Retorna el nombre de la etapa actual de una implementación.
      *
-     * Busca dentro de stages la que coincide con current_stage y lee config.name.
+     * Busca dentro de stages la que coincide con current_stage y lee su nombre con stage_label()
+     * (la config para las etapas 1 a 7; «Seguimiento» para la 8 de las implementaciones anteriores).
      *
      * @param {Object} impl Implementación con relación stages y stages.config cargadas.
      * @returns {string}
@@ -1249,14 +1280,27 @@ export default {
 
       /** Nombre encontrado en la etapa activa. */
       let name = ''
+      const self = this
 
       impl.stages.forEach(function (stage) {
-        if (stage.stage_number == impl.current_stage && stage.config) {
-          name = stage.config.name || ''
+        if (stage.stage_number == impl.current_stage) {
+          name = self.stage_label(stage)
         }
       })
 
       return name
+    },
+
+    /**
+     * Nombre a mostrar de una etapa: el de la configuración para las etapas 1 a ULTIMA_ETAPA, y
+     * «Seguimiento» para una posterior (la 8 de las implementaciones anteriores al flujo de siete
+     * etapas, cuya config puede seguir llamándose «Videollamada de capacitación» o no existir).
+     *
+     * @param {Object} stage Etapa con stage_number y, si viene cargada, config.
+     * @returns {string}
+     */
+    stage_label(stage) {
+      return nombre_de_la_etapa(stage)
     },
 
     /**
@@ -1654,8 +1698,9 @@ export default {
     // -------------------------------------------------------------------------
 
     /**
-     * Construye el listado de subetapas de cualquier etapa (1 a 8)
-     * a partir del objeto `stage` y la implementación asociada.
+     * Construye el listado de subetapas de cualquier etapa (1 a 7)
+     * a partir del objeto `stage` y la implementación asociada. La 8 de las implementaciones
+     * anteriores al flujo de siete etapas («Seguimiento») no trae subetapas.
      *
      * Recibe el stage completo (no solo `data`) para acceder a `stage.status`
      * y `stage.stage_number`. La Etapa 1 deriva sus subetapas del objeto
@@ -1695,6 +1740,27 @@ export default {
       const action_done = function (key) {
         return actions.some(function (a) {
           return a.action === key
+        })
+      }
+
+      /**
+       * Indica si una acción manual ya fue registrada en CUALQUIER etapa de la implementación.
+       * Los hitos del catálogo (categorías, fotos, descripciones) se registran en la etapa en la que
+       * estaba la implementación cuando pasaron —a menudo la 4 o la 5, mientras se carga el catálogo—,
+       * y no necesariamente en la 6.
+       *
+       * @param {string} key Clave de la acción (ej: 'imagenes').
+       * @returns {boolean}
+       */
+      const action_done_en_alguna_etapa = function (key) {
+        const etapas = (implementation && implementation.stages) || []
+
+        return etapas.some(function (etapa) {
+          const acciones = etapa.data && Array.isArray(etapa.data.actions) ? etapa.data.actions : []
+
+          return acciones.some(function (a) {
+            return a.action === key
+          })
         })
       }
 
@@ -1753,21 +1819,10 @@ export default {
       /* Etapa 5 — Entrega del sistema                                       */
       /* ------------------------------------------------------------------ */
       if (num === 5) {
+        /* El centro de recursos (los tutoriales) sale con la entrega: desde el 15/10/2026 ya no hay
+           una etapa de «Capacitación» aparte, y el hito con el link del dueño vive acá. */
         return [
           { key: 'access_sent', label: 'Acceso enviado al cliente', done: action_done('entrega') || stage.status === 'completed' },
-        ]
-      }
-
-      /* ------------------------------------------------------------------ */
-      /* Etapa 6 — Capacitación                                              */
-      /* ------------------------------------------------------------------ */
-      if (num === 6) {
-        return [
-          {
-            key: 'employees_notified',
-            label: 'Credenciales enviadas a empleados',
-            done: Array.isArray(data.employees_notified) && data.employees_notified.length > 0,
-          },
           {
             key: 'resources_sent',
             label: 'Centro de recursos enviado',
@@ -1775,6 +1830,30 @@ export default {
             note: this.nota_avance_recursos(),
           },
         ]
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* Etapa 6 — Catálogo: categorías, imágenes y descripciones            */
+      /* (hasta el 15/10/2026 era «Capacitación»)                            */
+      /* ------------------------------------------------------------------ */
+      if (num === 6) {
+        const catalogo = [
+          { key: 'categorias',    label: 'Categorías definidas',      done: action_done_en_alguna_etapa('categorias') },
+          { key: 'imagenes',      label: 'Fotos completadas',         done: action_done_en_alguna_etapa('imagenes') },
+          { key: 'descripciones', label: 'Descripciones completadas', done: action_done_en_alguna_etapa('descripciones') },
+        ]
+
+        /* Una implementación en modo automático que pasó por la etapa 6 cuando era «Capacitación»
+           dejó acá la lista de empleados avisados: se sigue mostrando, pero solo si existe. */
+        if (Array.isArray(data.employees_notified)) {
+          catalogo.push({
+            key: 'employees_notified',
+            label: 'Credenciales enviadas a empleados',
+            done: data.employees_notified.length > 0,
+          })
+        }
+
+        return catalogo
       }
 
       /* ------------------------------------------------------------------ */
@@ -1787,25 +1866,9 @@ export default {
         ]
       }
 
-      /* ------------------------------------------------------------------ */
-      /* Etapa 8 — Videollamada de capacitación                               */
-      /* ------------------------------------------------------------------ */
-      if (num === 8) {
-        return [
-          {
-            key: 'availability',
-            label: 'Disponibilidad confirmada',
-            done: 'availability' in data || data.skip_videocall === true,
-          },
-          {
-            key: 'videocall_done',
-            label: 'Videollamada realizada',
-            done: stage.status === 'completed',
-          },
-        ]
-      }
-
-      /* Etapa fuera del rango conocido: sin subetapas */
+      /* La etapa 8 («Videollamada de capacitación») salió del flujo el 15/10/2026. Una implementación
+         anterior que quedó en la 8 se muestra como «Seguimiento» (ver stage_label) y, como cualquier
+         etapa fuera del rango conocido, sin subetapas. */
       return []
     },
 
