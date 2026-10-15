@@ -81,7 +81,7 @@
 
            La estructura de la sección NO cambia: el mismo <header>, las mismas dos clases
            de entrada, el mismo ref en el subtítulo y el mismo @animationend. Lo que se
-           agrega -- las cuatro cosas que migramos y la línea de tiempo de las ocho etapas --
+           agrega -- las cuatro cosas que migramos y la línea de tiempo de las siete etapas --
            son dos bloques hermanos que entran con la misma coreografía y terminan ANTES que
            el subtítulo (ver los retrasos en el <style>: el animationend que libera --carga
            sigue colgando del subtítulo y por eso tiene que seguir siendo el último). -->
@@ -122,7 +122,7 @@
           </li>
         </ul>
 
-        <!-- La línea de tiempo de las ocho etapas. <ol> y no <ul>: el orden ES el dato, y
+        <!-- La línea de tiempo de las siete etapas. <ol> y no <ul>: el orden ES el dato, y
              el número de cada etapa se dibuja aparte (el círculo) en vez de escribirlo
              dentro del texto -- los nombres de abajo son los de las etapas del admin,
              textuales, sin el "N." adelante. -->
@@ -296,17 +296,19 @@ const ENTREGA = {
     { icono: 'bi-people', texto: 'Clientes y proveedores con sus saldos' },
     { icono: 'bi-file-earmark-text', texto: 'ARCA configurado' },
   ],
-  etapas_rotulo: 'Las ocho etapas de tu implementación',
+  etapas_rotulo: 'Las siete etapas de tu implementación',
   /**
-   * 🔴 LAS OCHO ETAPAS, TEXTUALES. Son los nombres que el cliente ve en la lista de progreso
+   * 🔴 LAS SIETE ETAPAS, TEXTUALES. Son los nombres que el cliente ve en la lista de progreso
    * de su implementación por WhatsApp (`ImplementationConversationService::ETAPAS_DEL_PROGRESO`
    * de admin-api): se transcriben, no se reescriben ni se "mejoran para la página". Si el
    * admin renombra una etapa, esta lista se actualiza mirando esa constante -- el lead que
-   * después arranca su implementación tiene que leer los mismos ocho nombres.
+   * después arranca su implementación tiene que leer los mismos siete nombres.
    *
-   * La 8 es «Seguimos con soporte» y NO «Videollamada de capacitación» (el nombre interno del
-   * panel): desde el 14/10/2026 la videollamada no se le nombra al cliente salvo que la pida
-   * (regla de Lucas, la misma que siguen los mails de hito).
+   * Desde el 15/10/2026 son siete (decisión de Lucas): la 6 pasó de «Capacitación» a
+   * «Catálogo: categorías, imágenes y descripciones» (la capacitación es el centro de recursos
+   * que se entrega con el sistema, en la 5) y la «Videollamada» (la 8, que desde el 14/10 se
+   * mostraba como «Seguimos con soporte») salió del flujo: el soporte es por WhatsApp y la
+   * videollamada solo existe si el cliente la pide. La última etapa es la 7, ARCA, y cierra.
    *
    * El número va aparte, en el círculo de la línea de tiempo, así que acá no lleva el
    * "N." adelante.
@@ -317,9 +319,8 @@ const ENTREGA = {
     'Recolección de archivos',
     'Migración de datos',
     'Entrega del sistema',
-    'Capacitación',
+    'Catálogo: categorías, imágenes y descripciones',
     'Vinculación con ARCA/AFIP',
-    'Seguimos con soporte',
   ],
 }
 
@@ -1135,11 +1136,11 @@ export default {
   color: var(--demo-color-texto-suave);
 }
 
-/* La línea de tiempo de las ocho etapas. UNA columna en los tres anchos, a propósito: el
-   hilo que une los ocho círculos es un pseudo-elemento de la lista (un 1px vertical), y con
+/* La línea de tiempo de las siete etapas. UNA columna en los tres anchos, a propósito: el
+   hilo que une los siete círculos es un pseudo-elemento de la lista (un 1px vertical), y con
    dos o cuatro columnas ese hilo pasa a ser uno por columna -- no se puede dibujar con un
-   solo ::before y termina en un hilo que cruza celdas vacías. Ocho renglones de ~26px miden
-   208px: entran de sobra en la pantalla, que es lo que decide acá. */
+   solo ::before y termina en un hilo que cruza celdas vacías. Siete renglones de ~26px miden
+   182px: entran de sobra en la pantalla, que es lo que decide acá. */
 .demo-entrega__etapas {
   width: 100%;
   max-width: 460px;
@@ -1371,8 +1372,9 @@ export default {
      Los números salen de la cuenta del alto, que es la restricción de esta pantalla: en el
      teléfono más chico que hay que bancar (360×640) el pin mide 640 y adentro van el
      titular (3 renglones a 24,5px ≈ 112px), el subtítulo (~25px), las cuatro cosas en dos
-     filas (~86px) y las ocho etapas (rótulo + 8 × 24px ≈ 208px), más tres huecos de ~20px.
-     Da ~490px contra 640 menos el padding vertical del contenedor (4vh × 2 = 51px). Si
+     filas (~86px) y las siete etapas (rótulo + 7 × 24px ≈ 184px; el nombre de la 6 es largo y
+     puede ocupar dos renglones, ~16px más), más tres huecos de ~20px. Da ~480px contra 640
+     menos el padding vertical del contenedor (4vh × 2 = 51px). Si
      alguien sube cualquiera de estos tamaños, el overflow:hidden del pin RECORTA en
      silencio: lo que se pierde es el final de la línea de tiempo, abajo. */
   .demo-scroll-dolor__apertura--entrega {
