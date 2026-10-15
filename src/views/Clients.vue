@@ -17,6 +17,7 @@ import ClientScheduleTab from '@/components/client/ScheduleTab.vue'
 import ClientTokensTab from '@/components/client/TokensTab.vue'
 import ClientImagenesTab from '@/components/client/imagenes/Index.vue'
 import ClientCandadoSesionTab from '@/components/client/CandadoSesionTab.vue'
+import ClientExtensionesTab from '@/components/client/ExtensionesTab.vue'
 import ClientModelosIaTab from '@/components/client/ModelosIaTab.vue'
 import SubjectPipelinesTab from '@/components/pipeline/SubjectPipelinesTab.vue'
 
@@ -108,6 +109,13 @@ export default {
           key: 'candado-sesion',
           label: 'Candado de sesión',
           component: markRaw(ClientCandadoSesionTab),
+        },
+        {
+          /* Extensiones (misión extensiones-desde-el-admin, 15/10/2026): botón que abre el configurador
+             de extensiones del sistema del cliente con un acceso de un solo uso, sin la clave maestra. */
+          key: 'extensiones',
+          label: 'Extensiones',
+          component: markRaw(ClientExtensionesTab),
         },
         {
           /* Oportunidades del cliente en los pipelines del CRM (misión pipelines-crm, 27/9/2026):
