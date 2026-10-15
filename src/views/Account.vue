@@ -101,6 +101,26 @@
           </div>
         </section>
 
+        <!-- WhatsApp: los dos números que escucha el admin -->
+        <!--
+          Va con v-if a secas, como las otras 12: son dos tarjetas de siete campos con un botón Guardar
+          cada una, y lo que se pierde al cambiar de sección son datos que se copian de Kapso, no prosa
+          escrita a mano (mismo criterio que support-ai-settings; ver el comentario largo de
+          ai-system-prompt).
+        -->
+        <section
+          v-if="active_section === 'whatsapp-numeros'"
+          id="whatsapp-numeros"
+          class="account-section"
+        >
+          <div class="card account-config-card">
+            <div class="card-body">
+              <h2 class="h6 card-title">Números de WhatsApp</h2>
+              <whatsapp-numeros-section />
+            </div>
+          </div>
+        </section>
+
         <!-- Configuración de soporte: alertas -->
         <section
           v-if="active_section === 'support-alert-settings'"
@@ -414,6 +434,7 @@ import FollowupRulesSection from '@/components/account/sections/FollowupRulesSec
 import FollowupTemplatesSection from '@/components/account/sections/FollowupTemplatesSection.vue'
 import SupportAlertSettingsSection from '@/components/account/sections/SupportAlertSettingsSection.vue'
 import SupportAiSettingsSection from '@/components/account/sections/SupportAiSettingsSection.vue'
+import WhatsappNumerosSection from '@/components/account/sections/WhatsappNumerosSection.vue'
 import ProtocolEntriesSection from '@/components/account/sections/ProtocolEntriesSection.vue'
 import AiSystemPromptSection from '@/components/account/sections/AiSystemPromptSection.vue'
 import TaskTemplatesSection from '@/components/account/sections/TaskTemplatesSection.vue'
@@ -438,6 +459,7 @@ export default {
     FollowupTemplatesSection,
     SupportAlertSettingsSection,
     SupportAiSettingsSection,
+    WhatsappNumerosSection,
     ProtocolEntriesSection,
     AiSystemPromptSection,
     TaskTemplatesSection,

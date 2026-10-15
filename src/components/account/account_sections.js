@@ -18,6 +18,17 @@ export const ACCOUNT_SECTIONS = [
     label: 'Notificaciones push',
     group: null,
   },
+  /*
+   * Va en su propio grupo y no dentro de «Soporte» porque gobierna los DOS números: el principal, del
+   * que dependen tanto los leads como el soporte, y el del asistente de los dueños. Queda pegada a
+   * Soporte a propósito: el interruptor que decide si un WhatsApp abre ticket vive en «IA de soporte»,
+   * dos ítems más abajo.
+   */
+  {
+    id: 'whatsapp-numeros',
+    label: 'Números de WhatsApp',
+    group: 'WhatsApp',
+  },
   {
     id: 'support-alert-settings',
     label: 'Alertas de soporte',
