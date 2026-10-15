@@ -83,6 +83,11 @@
               />
 
               <p v-if="campo.ayuda" class="form-text small text-muted mb-0">{{ campo.ayuda }}</p>
+              <p v-if="avisa_secreto_pendiente(tarjeta, campo)" class="form-text small text-warning mb-0">
+                Sin secreto, este número todavía no recibe nada: lo que entre por él se rechaza. Lo genera el
+                comando que da de alta el webhook en Kapso y lo guarda acá solo. Guardar la tarjeta así es
+                parte del alta, no un error.
+              </p>
             </div>
           </div>
 
@@ -135,9 +140,13 @@ const PROPOSITO_ASISTENTE = 'asistente'
 /**
  * Campos de texto de cada número, en el orden en que se muestran.
  *
- * Los tres que la API pide obligatorios van marcados: son los que hacen que el número sirva para algo
- * (sin `phone_number_id` no se puede enrutar el webhook, y sin las dos credenciales no se puede ni
- * recibir ni enviar).
+ * `obligatorio_en` es una lista de propósitos y no un booleano porque la API no pide lo mismo en los dos
+ * números. `phone_number_id` y `kapso_api_key` son `required` en los dos. `webhook_secret` es `required`
+ * solo en la principal: 🔴 el secreto del asistente NO lo elige una persona — lo genera
+ * `whatsapp:registrar-webhook` cuando da de alta el webhook en Kapso y lo guarda en la fila recién
+ * después. Si acá lo pidiéramos obligatorio, para crear la fila del asistente habría que inventar un
+ * secreto de descarte, y un secreto inventado que queda puesto **parece configurado** mientras el webhook
+ * rechaza todo con 401 sin que nada lo explique. Por eso la asimetría, y por eso no se "empareja".
  */
 const CAMPOS_DE_TEXTO = [
   {
@@ -146,7 +155,7 @@ const CAMPOS_DE_TEXTO = [
     placeholder: 'Ej.: +54 9 3444 54-4199',
     ayuda: 'Solo para que se lea en el panel y en los mensajes; no se usa para enrutar.',
     es_secreto: false,
-    obligatorio: false,
+    obligatorio_en: [],
   },
   {
     key: 'nombre',
@@ -154,7 +163,7 @@ const CAMPOS_DE_TEXTO = [
     placeholder: 'Ej.: ComercioCity',
     ayuda: 'Cómo se llama este número acá adentro.',
     es_secreto: false,
-    obligatorio: false,
+    obligatorio_en: [],
   },
   {
     key: 'phone_number_id',
@@ -162,7 +171,7 @@ const CAMPOS_DE_TEXTO = [
     placeholder: '',
     ayuda: 'Es el dato con el que se enruta cada mensaje entrante. Se copia tal cual de Kapso.',
     es_secreto: false,
-    obligatorio: true,
+    obligatorio_en: [PROPOSITO_PRINCIPAL, PROPOSITO_ASISTENTE],
   },
   {
     key: 'waba_id',
@@ -170,7 +179,7 @@ const CAMPOS_DE_TEXTO = [
     placeholder: '',
     ayuda: 'La cuenta de WhatsApp Business a la que pertenece el número.',
     es_secreto: false,
-    obligatorio: false,
+    obligatorio_en: [],
   },
   {
     key: 'kapso_api_key',
@@ -178,7 +187,7 @@ const CAMPOS_DE_TEXTO = [
     placeholder: '',
     ayuda: 'Con esta credencial salen los mensajes de este número.',
     es_secreto: true,
-    obligatorio: true,
+    obligatorio_en: [PROPOSITO_PRINCIPAL, PROPOSITO_ASISTENTE],
   },
   {
     key: 'webhook_secret',
@@ -186,7 +195,7 @@ const CAMPOS_DE_TEXTO = [
     placeholder: '',
     ayuda: 'Con este secreto se valida la firma de lo que entra por este número.',
     es_secreto: true,
-    obligatorio: true,
+    obligatorio_en: [PROPOSITO_PRINCIPAL],
   },
 ]
 
@@ -325,7 +334,8 @@ export default {
             'Todavía no hay número cargado para el asistente. Mientras esta tarjeta esté vacía el asistente no ' +
             'tiene número propio, y el dueño que le escriba al número principal va a abrir un ticket de soporte ' +
             'en lugar de hablar con su asistente. Para prenderlo, cargá acá el phone number ID del número del ' +
-            'asistente tal como figura en Kapso, junto con su API key y su secreto de webhook, y guardá.',
+            'asistente tal como figura en Kapso y su API key, y guardá. El secreto del webhook no se completa ' +
+            'a mano: lo genera el comando que da de alta el webhook en Kapso.',
           form: form_desde_fila(null),
           stored: form_desde_fila(null),
           existe: false,
@@ -351,6 +361,27 @@ export default {
      */
     id_de_campo(tarjeta, campo) {
       return 'whatsapp_numero_' + tarjeta.proposito + '_' + campo.key
+    },
+
+    /**
+     * Indica si hay que avisar que este número se guarda sin secreto de webhook.
+     *
+     * Es el estado normal del alta del asistente, no un error: la fila se crea, el webhook de ese número
+     * falla cerrado hasta que `whatsapp:registrar-webhook` escriba el secreto, y ese es el lado correcto
+     * para fallar. Por eso se avisa en vez de bloquear el Guardar.
+     *
+     * @param {object} tarjeta Tarjeta del propósito.
+     * @param {object} campo Metadato del campo.
+     * @returns {boolean}
+     */
+    avisa_secreto_pendiente(tarjeta, campo) {
+      if (campo.key !== 'webhook_secret') {
+        return false
+      }
+      if (campo.obligatorio_en.indexOf(tarjeta.proposito) !== -1) {
+        return false
+      }
+      return String(tarjeta.form[campo.key] || '').trim() === ''
     },
 
     /**
@@ -469,7 +500,7 @@ export default {
     primer_obligatorio_vacio(tarjeta) {
       let faltante = ''
       CAMPOS_DE_TEXTO.forEach(function (campo) {
-        if (faltante !== '' || !campo.obligatorio) {
+        if (faltante !== '' || campo.obligatorio_en.indexOf(tarjeta.proposito) === -1) {
           return
         }
         if (String(tarjeta.form[campo.key] || '').trim() === '') {
