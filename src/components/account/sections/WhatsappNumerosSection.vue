@@ -122,13 +122,37 @@
                 <p v-if="texto_de_campo(tarjeta, campo, 'ayuda')" class="form-text small text-muted mb-0">
                   {{ texto_de_campo(tarjeta, campo, 'ayuda') }}
                 </p>
-                <p v-if="avisa_secreto_pendiente(tarjeta, campo)" class="form-text small text-warning mb-0">
-                  Sin secreto, este número todavía no recibe nada: lo que entre por él se rechaza. Lo genera el
-                  comando que da de alta el webhook en Kapso y lo guarda acá solo. Guardar la tarjeta así es
-                  parte del alta, no un error.
-                </p>
               </div>
             </template>
+          </div>
+
+          <p v-if="tarjeta.proposito === 'asistente'" class="small mt-3 mb-0">
+            <strong>Secreto del webhook:</strong>
+            <span :class="tarjeta.stored.webhook_secret ? 'text-success' : 'text-warning'">
+              {{ tarjeta.stored.webhook_secret ? 'cargado' : 'todavía no' }}
+            </span>
+            <span class="text-muted">
+              · No se carga a mano: lo escribe el comando que da de alta el webhook de este número en Kapso, y
+              recién con él el número queda listo.
+            </span>
+          </p>
+
+          <div v-if="tarjeta.proposito === 'asistente' && tarjeta.existe" class="form-check mt-3">
+            <input
+              :id="'whatsapp_numero_' + tarjeta.proposito + '_is_active'"
+              v-model="tarjeta.form.is_active"
+              class="form-check-input"
+              type="checkbox"
+              :disabled="tarjeta.saving || !tarjeta.editable"
+              @change="on_input_change(tarjeta)"
+            />
+            <label class="form-check-label small" :for="'whatsapp_numero_' + tarjeta.proposito + '_is_active'">
+              Número activo
+            </label>
+            <p class="form-text small text-muted mb-0">
+              Destildado y guardado, el agente personal se apaga: todo vuelve a salir y a entrar por el número de
+              leads y clientes, como antes de cargar este número. Es la marcha atrás sin tocar la base.
+            </p>
           </div>
 
           <div class="form-check mt-3">
@@ -392,7 +416,7 @@ function normalizar_respuesta(data) {
  * @returns {object} Valores del formulario, con strings vacíos en lugar de null.
  */
 function form_desde_fila(fila, usar_clave_del_principal) {
-  const form = { test_mode: !!(fila && fila.test_mode) }
+  const form = { test_mode: !!(fila && fila.test_mode), is_active: fila ? !!fila.is_active : true }
   CAMPOS_DE_TEXTO.forEach(function (campo) {
     const valor = fila ? fila[campo.key] : ''
     form[campo.key] = valor === undefined || valor === null ? '' : String(valor)
@@ -487,6 +511,17 @@ function describir_estado(proposito, listo, faltan, modo_de_prueba) {
     return { etiqueta: 'Listo', clase: 'text-bg-success', tono: 'ok', detalle: detalle }
   }
   const que_faltan = Array.isArray(faltan) ? faltan : []
+  if (que_faltan.indexOf('activo') !== -1) {
+    // La fila existe pero está apagada: no es que falte un dato, es que se la apagó a propósito.
+    return {
+      etiqueta: 'Apagado',
+      clase: 'text-bg-secondary',
+      tono: 'neutro',
+      detalle: es_asistente
+        ? 'El agente personal está apagado: todo sale y entra por el número de leads y clientes, como antes.'
+        : '',
+    }
+  }
   const todo_falta =
     que_faltan.indexOf('fila') !== -1 ||
     DATOS_PARA_ESTAR_LISTO[proposito].every(function (nombre) {
@@ -661,27 +696,6 @@ export default {
     },
 
     /**
-     * Indica si hay que avisar que este número se guarda sin secreto de webhook.
-     *
-     * Es el estado normal del alta del asistente, no un error: la fila se crea, el webhook de ese número
-     * falla cerrado hasta que `whatsapp:registrar-webhook` escriba el secreto, y ese es el lado correcto
-     * para fallar. Por eso se avisa en vez de bloquear el Guardar.
-     *
-     * @param {object} tarjeta Tarjeta del propósito.
-     * @param {object} campo Metadato del campo.
-     * @returns {boolean}
-     */
-    avisa_secreto_pendiente(tarjeta, campo) {
-      if (campo.key !== 'webhook_secret') {
-        return false
-      }
-      if (campo.obligatorio_en.indexOf(tarjeta.proposito) !== -1) {
-        return false
-      }
-      return String(tarjeta.form[campo.key] || '').trim() === ''
-    },
-
-    /**
      * Busca la tarjeta de un propósito.
      *
      * @param {string} proposito 'principal' o 'asistente'.
@@ -760,6 +774,11 @@ export default {
      * @returns {boolean}
      */
     oculta_campo(tarjeta, campo) {
+      // El secreto del webhook del asistente no se carga a mano (lo escribe el comando de alta): no se
+      // muestra, para que nadie pegue ahí el del otro número y lo dé por «listo» sin webhook registrado.
+      if (campo.key === 'webhook_secret' && tarjeta.proposito === PROPOSITO_ASISTENTE) {
+        return true
+      }
       return campo.key === 'kapso_api_key' && this.usa_clave_del_principal(tarjeta)
     },
 
@@ -952,11 +971,12 @@ export default {
       if (usa_clave_del_principal) {
         payload.usar_clave_del_principal = true
       }
-      // El secreto del asistente lo escribe el comando de alta del webhook, no esta pantalla. Si el
-      // formulario lo tiene vacío es porque se cargó antes de que el comando corriera: mandarlo vacío lo
-      // pisaría. Omitido, el servidor deja el que ya tiene.
-      if (tarjeta.proposito === PROPOSITO_ASISTENTE && payload.webhook_secret === '') {
+      // El secreto del asistente lo escribe el comando de alta del webhook, no esta pantalla: nunca viaja.
+      // Un panel abierto antes de que el comando corriera tiene el secreto viejo (o vacío) y mandarlo
+      // pisaría el nuevo. El servidor igual lo ignora para el asistente.
+      if (tarjeta.proposito === PROPOSITO_ASISTENTE) {
         delete payload.webhook_secret
+        payload.is_active = !!tarjeta.form.is_active
       }
       api
         .put('/whatsapp-config', payload)
@@ -989,9 +1009,16 @@ export default {
           tarjeta.saved_message = 'Número guardado.'
         })
         .catch(function (err) {
-          const msg =
-            (err.response && err.response.data && (err.response.data.message || err.response.data.error)) ||
-            'No se pudo guardar.'
+          const datos = err.response && err.response.data ? err.response.data : null
+          // Un 422 de validación trae `message` genérico y el detalle en `errors`: se muestra el primero.
+          let primer_error = ''
+          if (datos && datos.errors && typeof datos.errors === 'object') {
+            const grupos = Object.keys(datos.errors)
+            if (grupos.length > 0 && Array.isArray(datos.errors[grupos[0]]) && datos.errors[grupos[0]].length > 0) {
+              primer_error = String(datos.errors[grupos[0]][0])
+            }
+          }
+          const msg = primer_error || (datos && (datos.message || datos.error)) || 'No se pudo guardar.'
           tarjeta.error_message = typeof msg === 'string' ? msg : 'No se pudo guardar.'
         })
         .then(function () {
