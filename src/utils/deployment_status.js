@@ -25,6 +25,9 @@ export const DEPLOYMENT_ACTIVE_STATUSES = ['running', 'paused', 'paused_post_tas
  */
 export const DEPLOYMENT_STEP_ORDER = [
   'compile_spa',
+  /* Misión un-solo-frente (14/10/2026): respaldo antes de un despliegue en el lugar. Sin esta
+     entrada, una falla del respaldo se mostraba como falla de "Compilar SPA". */
+  'backup_in_place',
   'upload_spa',
   'upload_api',
   'run_migrations',

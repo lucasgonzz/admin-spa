@@ -403,12 +403,19 @@
       <!-- Mensajes de estado para la clave de Serper de demos -->
       <p v-if="saved_serper_api_key_demo_message" class="text-success small mt-2 mb-0">{{ saved_serper_api_key_demo_message }}</p>
       <p v-else-if="error_serper_api_key_demo_message" class="text-danger small mt-2 mb-0">{{ error_serper_api_key_demo_message }}</p>
+
+      <!-- Credenciales de prueba de Zipnova y de Mercado Pago de las demos (cifradas, nunca se muestran) -->
+      <DemoCredentialsSettings
+        :initial_zipnova="credenciales_demo_lote.zipnova"
+        :initial_mercadopago="credenciales_demo_lote.mercadopago"
+      />
     </template>
   </div>
 </template>
 
 <script>
 import api from '@/utils/axios'
+import DemoCredentialsSettings from './DemoCredentialsSettings.vue'
 
 /**
  * Devuelve el cuerpo de un setting: del lote si vino en el lote, o del GET de a uno si no.
@@ -501,6 +508,9 @@ function mensaje_de_error_al_guardar(err) {
  * - Cuota de Google por día para demos: GET/PUT /settings/implementation-google-cuota-demo
  * - Clave de Serper para clientes nuevos: GET/PUT /settings/implementation-serper-api-key-default
  * - Clave de Serper para demos: GET/PUT /settings/implementation-serper-api-key-demo
+ * - Credenciales de prueba de Zipnova y de Mercado Pago de las demos: las maneja el subcomponente
+ *   DemoCredentialsSettings (GET/PUT/POST probar de /settings/implementation-zipnova-demo y
+ *   /settings/implementation-mercadopago-demo).
  *
  * Al montar, los once valores se leen con un solo `GET /settings/implementation`. Los GET de a
  * uno de la lista de arriba siguen existiendo y son el respaldo: ver `load_settings()`. Los PUT no
@@ -509,8 +519,18 @@ function mensaje_de_error_al_guardar(err) {
 export default {
   name: 'ImplementationSettingsSection',
 
+  components: {
+    DemoCredentialsSettings,
+  },
+
   data() {
     return {
+      /**
+       * Entradas del lote que le tocan al bloque de credenciales de prueba de las demos
+       * (Zipnova y Mercado Pago). Solo traen estado y colas, nunca los valores. Con null el bloque
+       * hace su propio GET: es el respaldo contra un admin-api sin el lote o sin esta función.
+       */
+      credenciales_demo_lote: { zipnova: null, mercadopago: null },
       /**
        * ID del admin seleccionado en el select (valor local editable).
        * null = sin asignar.
@@ -1020,6 +1040,13 @@ export default {
      * @returns {void}
      */
     apply_settings(bundle) {
+      // El bloque de credenciales de las demos se arma solo (ver DemoCredentialsSettings): acá solo
+      // se le pasan las dos entradas del lote, o null para que haga su propio GET de respaldo.
+      this.credenciales_demo_lote = {
+        zipnova: (bundle && bundle['implementation-zipnova-demo']) || null,
+        mercadopago: (bundle && bundle['implementation-mercadopago-demo']) || null,
+      }
+
       this.load_setting(bundle)
       this.load_file_wait_setting(bundle)
       this.load_employees_wait_setting(bundle)

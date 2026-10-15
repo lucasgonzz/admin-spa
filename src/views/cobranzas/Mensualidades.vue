@@ -696,7 +696,9 @@ export default {
       // irreversible; el monto real se muestra recién en el toast de éxito, con `importe_total`.
       const confirmado = window.confirm(
         '¿Emitir la factura de la mensualidad de ' + (cliente.nombre || 'este cliente') +
-        ' (' + etiqueta_larga(this.mes_referencia) + ')? ' +
+        ' (' + etiqueta_larga(this.mes_referencia) + ')' +
+        // Con el flag guardado la factura sale sin CUIT; una API vieja no manda la clave (= false).
+        (cliente.facturar_consumidor_final ? ' a Consumidor final (sin CUIT)' : '') + '? ' +
         'El total se recalcula con los empleados actualizados del cliente antes de facturar. ' +
         'Genera un comprobante fiscal real e irreversible.'
       )
