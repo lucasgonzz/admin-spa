@@ -228,8 +228,8 @@
             <i class="bi bi-camera-video" aria-hidden="true" />Abrir Meet
           </a>
         </div>
-        <call-summary-panel v-if="call.call_summary" :call_summary="call.call_summary" />
-        <p v-else class="text-muted small mb-0">El resumen de la llamada todavía no está disponible.</p>
+        <p v-if="!call.call_summary" class="text-muted small mb-2">El resumen de la llamada todavía no está disponible.</p>
+        <call-summary-panel v-if="call_summary_para_panel" :call_summary="call_summary_para_panel" />
         <!-- La ficha de la oportunidad no tiene la conversación ni el resumen de la demo: eso está en el lead. -->
         <router-link v-if="lead_link" :to="lead_link" class="pl-ficha__call-link mt-2">
           <i class="bi bi-person-lines-fill" aria-hidden="true" />Ver el lead
@@ -465,6 +465,25 @@ export default {
      */
     call() {
       return (this.opportunity && this.opportunity.call) || null
+    },
+    /**
+     * Lo que se le pasa a `CallSummaryPanel`: el resumen si existe; si no, la transcripción cruda
+     * envuelta como `transcripcion_completa`, así el panel muestra solo el bloque plegable con
+     * "Copiar". Es el caso en que el resumen no se pudo generar y Tomás más necesita leer la
+     * llamada; la API manda `transcript` justamente para eso. Sin ninguna de las dos, null.
+     * @returns {Object|string|null}
+     */
+    call_summary_para_panel() {
+      if (!this.call) {
+        return null
+      }
+      if (this.call.call_summary) {
+        return this.call.call_summary
+      }
+      if (this.call.transcript) {
+        return { transcripcion_completa: this.call.transcript }
+      }
+      return null
     },
     /**
      * Cuándo fue (o va a ser) la llamada: lo agendado, y si no hay, cuándo arrancó de verdad.
