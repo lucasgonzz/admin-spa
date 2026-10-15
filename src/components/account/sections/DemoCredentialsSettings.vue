@@ -60,7 +60,7 @@
               v-model="formularios[integracion.clave][campo.clave]"
               :type="campo.secreto ? 'password' : 'text'"
               class="form-control form-control-sm"
-              autocomplete="off"
+              autocomplete="new-password"
               spellcheck="false"
               :placeholder="campo.placeholder"
               :disabled="estados[integracion.clave].guardando || estados[integracion.clave].borrando"
