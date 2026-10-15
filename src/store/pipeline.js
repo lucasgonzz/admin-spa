@@ -99,6 +99,39 @@ export default {
     },
 
     /**
+     * Busca un pipeline por id O por `slug` (misión embudo-lead-pipelines, 13/10/2026).
+     *
+     * El `slug` lo agregó el back justamente para que otra pantalla pueda apuntar a un pipeline
+     * sin conocer su id, que es distinto en cada instalación. Por eso el orden: si el valor
+     * parsea a número se busca por id (lo que ya hacía todo el módulo), y solo si no, por slug.
+     *
+     * 🔴 Tolera una API vieja que todavía no publica `slug`: ahí `p.slug` es `undefined` y la
+     * comparación con `String()` nunca matchea de casualidad (`String(undefined)` es `'undefined'`,
+     * que no es un slug válido y además se compara contra el valor pedido, nunca entre dos
+     * `undefined`).
+     *
+     * @param {Object} state
+     * @returns {function(number|string): (Object|null)}
+     */
+    pipeline_by_id_or_slug(state) {
+      return function (valor) {
+        if (valor === null || valor === undefined || valor === '') {
+          return null
+        }
+        const as_number = Number(valor)
+        if (!isNaN(as_number)) {
+          return state.pipelines.find(function (p) {
+            return Number(p.id) === as_number
+          }) || null
+        }
+        const target = String(valor)
+        return state.pipelines.find(function (p) {
+          return p.slug !== null && p.slug !== undefined && String(p.slug) === target
+        }) || null
+      }
+    },
+
+    /**
      * Etiqueta en español de un valor de enumeración, tal como la publica el back. Si el valor no
      * está en el catálogo (o el catálogo todavía no llegó) devuelve el valor crudo, para no
      * mostrar un hueco.

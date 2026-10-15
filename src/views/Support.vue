@@ -9,9 +9,41 @@
     <div class="support-left d-flex flex-column min-h-0">
       <div class="support-left-top flex-shrink-0">
         <user-tickets-nav />
+        <!--
+          Chip del filtro que llegó por deep link desde el panel de inicio. Sin él el operador ve
+          una bandeja corta y no sabe por qué.
+        -->
+        <div v-if="filtro_activo" class="support-filtro-chip px-2 py-2 border-bottom">
+          <span class="badge rounded-pill text-bg-primary d-inline-flex align-items-center">
+            {{ filtro_rotulo }}
+            <button
+              type="button"
+              class="btn btn-sm btn-link p-0 ms-2 text-white lh-1 text-decoration-none"
+              title="Quitar el filtro"
+              aria-label="Quitar el filtro"
+              @click="quitar_filtro"
+            >
+              <i class="bi bi-x-lg" aria-hidden="true" />
+            </button>
+          </span>
+          <!--
+            El aviso de API vieja pide `tickets.length`: durante la primera carga la bandeja
+            todavía está vacía y `api_manda_indicadores` da false por falta de filas, no porque
+            el servidor no mande el flag. Sin esta guarda el aviso parpadeaba en cada entrada.
+          -->
+          <p
+            v-if="!tickets_loading && tickets.length && !api_manda_indicadores"
+            class="text-muted small mb-0 mt-1"
+          >
+            Este servidor todavía no marca los tickets: se muestra la bandeja completa.
+          </p>
+          <p v-else-if="!tickets_loading && !tickets_visibles.length" class="text-muted small mb-0 mt-1">
+            Ningún ticket con este filtro.
+          </p>
+        </div>
       </div>
       <ticket-list
-        :tickets="tickets"
+        :tickets="tickets_visibles"
         :loading="tickets_loading"
         :selected_ticket_id="selected_ticket_id"
         :support_alert_minutes="support_alert_minutes"
@@ -158,6 +190,84 @@ export default {
       return this.$store.state.support_ticket.models
     },
     /**
+     * Filtro que llegó por la query (`?filtro=`), normalizado. Cualquier otro valor se ignora:
+     * la bandeja se muestra completa y sin chip.
+     *
+     * @returns {'sin-responder'|'hoy'|null}
+     */
+    filtro_activo() {
+      const valor = this.$route && this.$route.query ? this.$route.query.filtro : null
+      const normalizado = String(valor == null ? '' : valor)
+      if (normalizado === 'sin-responder' || normalizado === 'hoy') {
+        return normalizado
+      }
+      return null
+    },
+    /**
+     * Rótulo del chip del filtro activo.
+     *
+     * @returns {string}
+     */
+    filtro_rotulo() {
+      if (this.filtro_activo === 'sin-responder') {
+        return 'Solo sin responder'
+      }
+      if (this.filtro_activo === 'hoy') {
+        return 'Abiertos hoy'
+      }
+      return ''
+    },
+    /**
+     * Clave que manda la API para el filtro activo.
+     *
+     * 🔴 El filtro usa el flag de la API y NO un criterio recalculado acá: si se mirara
+     * `lastMessage` a mano, los borradores de IA contarían como respuesta y el número de la
+     * tarjeta de inicio y la cantidad de filas se separarían sin que nada lo avise.
+     *
+     * @returns {string|null}
+     */
+    clave_del_filtro() {
+      if (this.filtro_activo === 'sin-responder') {
+        return 'sin_responder'
+      }
+      if (this.filtro_activo === 'hoy') {
+        return 'abierto_hoy'
+      }
+      return null
+    },
+    /**
+     * Indica si la API manda los indicadores de inicio en las filas de la bandeja.
+     *
+     * 🔴 Compatibilidad hacia atrás: se mira si la clave está DEFINIDA en alguna fila, no fila
+     * por fila. Con una API vieja (SPA nuevo, API todavía no desplegada) ninguna fila la trae y
+     * filtrar dejaría la lista vacía, que es un falso "no hay nada".
+     *
+     * @returns {boolean}
+     */
+    api_manda_indicadores() {
+      const clave = this.clave_del_filtro
+      if (!clave) {
+        return false
+      }
+      return (this.tickets || []).some(function (ticket) {
+        return !!ticket && ticket[clave] !== undefined
+      })
+    },
+    /**
+     * Tickets que se muestran en la bandeja: la lista completa, o acotada al filtro del deep link.
+     *
+     * @returns {Array<Object>}
+     */
+    tickets_visibles() {
+      const clave = this.clave_del_filtro
+      if (!clave || !this.api_manda_indicadores) {
+        return this.tickets
+      }
+      return (this.tickets || []).filter(function (ticket) {
+        return !!(ticket && ticket[clave])
+      })
+    },
+    /**
      * Mensajes del ticket activo.
      */
     messages() {
@@ -177,6 +287,10 @@ export default {
     },
     /**
      * Ticket actualmente seleccionado.
+     *
+     * ⚠️ Busca sobre `tickets` (la lista COMPLETA) y no sobre `tickets_visibles`: el ticket que
+     * llega por `?ticket_id=` puede no cumplir el filtro del deep link, y buscándolo en la lista
+     * filtrada quedaría seleccionado y sin datos.
      */
     selected_ticket() {
       return this.tickets.find((ticket) => ticket.id == this.selected_ticket_id)
@@ -302,12 +416,21 @@ export default {
        requests sueltos y el puntual ganaba casi siempre: después llegaba el listado, pisaba el
        array entero (set_models) y seleccionaba tickets[0], así que el link del WhatsApp de
        escalado terminaba abriendo cualquier otro ticket. */
+    /* 🔴 Un deep link desde el panel de inicio fuerza la bandeja a 'all' ANTES del get_models.
+       La bandeja arranca en 'mine' (store/support_ticket.js) y las tarjetas de inicio cuentan
+       global: sin esto la tarjeta diría 3 y el listado mostraría 0 o 1 — el mismo defecto
+       "dice 2 y veo una sola fila" que Lucas reportó el 2/9/2026 del lado de leads. */
+    if (this.filtro_activo) {
+      this.$store.commit('support_ticket/set_assigned_filter', 'all')
+    }
     this.$store.dispatch('support_ticket/get_models').then(function () {
       if (self.abrir_ticket_del_query_param()) {
         return
       }
-      if (self.tickets.length) {
-        self.select_ticket(self.tickets[0].id)
+      /* El auto-seleccionado va sobre la lista YA filtrada: con el filtro puesto, abrir un
+         ticket que no cumple sería contradecir lo que se está mostrando. */
+      if (self.tickets_visibles.length) {
+        self.select_ticket(self.tickets_visibles[0].id)
       }
     })
   },
@@ -743,6 +866,20 @@ export default {
       window.alert(detalle || fallback)
     },
     /**
+     * Quita el filtro del deep link: saca `filtro` de la query y la bandeja vuelve completa.
+     *
+     * Va por `$router.replace` (y no `push`) para no dejar el filtro en el historial: el botón
+     * de atrás del navegador tiene que llevar a de dónde vino el operador, no a volver a poner
+     * el chip que acaba de sacar.
+     *
+     * @returns {void}
+     */
+    quitar_filtro() {
+      const query = Object.assign({}, this.$route.query)
+      delete query.filtro
+      this.$router.replace({ query: query }).catch(function () {})
+    },
+    /**
      * Abre el ticket que viene en ?ticket_id=, si lo hay.
      *
      * Es lo que hace clickeable el link del WhatsApp de escalado. El ticket puede no estar en
@@ -760,7 +897,11 @@ export default {
 
       const self = this
       const limpiar_query = function () {
-        self.$router.replace({ query: {} }).catch(function () {})
+        /* Se saca SOLO `ticket_id`: el `filtro` del deep link del panel de inicio tiene que
+           sobrevivir, o el chip desaparecería y la bandeja se desfiltraría sola. */
+        const query = Object.assign({}, self.$route.query)
+        delete query.ticket_id
+        self.$router.replace({ query: query }).catch(function () {})
       }
 
       const ya_esta = this.tickets.some(function (ticket) {
@@ -786,9 +927,9 @@ export default {
         })
         .catch(function () {
           /* Si no se pudo traer, al menos que no quede el panel vacío: se abre el primero de
-             la bandeja en vez de dejar la conversación en blanco sin explicación. */
-          if (self.tickets.length) {
-            self.select_ticket(self.tickets[0].id)
+             la bandeja (ya filtrada) en vez de dejar la conversación en blanco sin explicación. */
+          if (self.tickets_visibles.length) {
+            self.select_ticket(self.tickets_visibles[0].id)
           }
         })
         .then(limpiar_query)

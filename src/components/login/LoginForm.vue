@@ -82,7 +82,7 @@
 </template>
 
 <script>
-import { get_first_nav_route } from '@/router/nav'
+import { get_first_nav_location } from '@/router/nav'
 
 /**
  * Formulario de login del panel admin: credenciales email/contraseña y dispatch al store auth.
@@ -146,13 +146,17 @@ export default {
       self.$store
         .dispatch('auth/login', { email: self.email, password: self.password })
         .then(function () {
+          /* 🔴 El ?redirect= sigue ganando sobre la entrada por rol: el que llegó al login
+             rebotado de una ruta concreta vuelve a esa ruta, no al panel de inicio. */
           const redirect_path = self.$route.query.redirect
           if (redirect_path) {
             self.$router.push(redirect_path)
           } else {
-            const first_nav_route = get_first_nav_route(self.$store.state.auth.admin)
-            if (first_nav_route && first_nav_route.name) {
-              self.$router.push({ name: first_nav_route.name })
+            /* 🔴 `get_first_nav_location` y no `get_first_nav_route`: la ubicación ya trae la
+               query del rol (`?pipeline=lead` para el closer), que armando `{ name }` se perdía. */
+            const first_nav_location = get_first_nav_location(self.$store.state.auth.admin)
+            if (first_nav_location) {
+              self.$router.push(first_nav_location)
             }
           }
           self.loading = false
