@@ -90,6 +90,18 @@ const routes_def = [
     meta: { requiresAuth: true, nav: true, icon: 'life-preserver' },
   },
   {
+    /**
+     * Centro de recursos (misión centro-de-recursos-clientes, 13/10/2026): las preguntas que los
+     * clientes dejan en los videos de recursos.comerciocity.com, cómo puntúan cada video y cuánto
+     * avanzó cada cliente. Va pegado a Soporte porque es el mismo trabajo de atender al cliente.
+     */
+    path: '/centro-de-recursos',
+    name: 'centro_recursos',
+    text: 'Centro de recursos',
+    component: () => import('@/views/recursos/CentroRecursos.vue'),
+    meta: { requiresAuth: true, nav: true, icon: 'collection-play' },
+  },
+  {
     path: '/tareas',
     name: 'tasks',
     text: 'Tareas',

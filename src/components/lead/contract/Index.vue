@@ -24,7 +24,69 @@
       </div>
     </div>
 
-    <h6 class="text-primary mb-2">Pago único</h6>
+    <!--
+      Modalidad del contrato (misión precios-dos-modalidades, 13/10/2026). Decide la letra chica
+      del PDF: sin modalidad sale el contrato de siempre. Los ids van atados a record.id por lo
+      mismo que el de "Incluir mi firma" (más abajo): dos labels con el mismo `for` en el DOM se
+      tildan entre sí.
+    -->
+    <h6 class="text-primary mb-2">Modalidad y sistemas</h6>
+    <div class="alert alert-light border mb-3">
+      <div class="row g-2">
+        <div class="col-md-4">
+          <label class="form-label" :for="'contract_modalidad_' + record.id">Modalidad</label>
+          <select
+            :id="'contract_modalidad_' + record.id"
+            v-model="record.contract_modalidad"
+            class="form-select"
+          >
+            <option :value="null">Elegí la modalidad</option>
+            <option v-for="modalidad in modalidades" :key="modalidad.key" :value="modalidad.key">
+              {{ modalidad.label }}
+            </option>
+          </select>
+          <!-- Aviso compacto con el contraste de un alert: `text-warning` sobre este fondo da
+               ~1,6:1 y no se lee. -->
+          <div v-if="!record.contract_modalidad" class="alert alert-warning py-1 px-2 small mb-0 mt-1" role="note">
+            {{ aviso_sin_modalidad }}
+          </div>
+          <div v-else class="form-text">
+            {{ ayuda_modalidad }}
+          </div>
+        </div>
+        <div class="col-md-5">
+          <span class="form-label d-block">Sistemas contratados</span>
+          <!-- v-model sobre `sistemas_elegidos` y no sobre la columna: ver esa computada. -->
+          <div v-for="sistema in sistemas" :key="sistema.key" class="form-check form-check-inline">
+            <input
+              :id="'contract_sistema_' + sistema.key + '_' + record.id"
+              v-model="sistemas_elegidos"
+              :value="sistema.key"
+              class="form-check-input"
+              type="checkbox"
+            />
+            <label class="form-check-label" :for="'contract_sistema_' + sistema.key + '_' + record.id">
+              {{ sistema.label }}
+            </label>
+          </div>
+        </div>
+        <div v-if="es_suscripcion" class="col-md-3">
+          <label class="form-label" :for="'contract_permanencia_' + record.id">Plazo mínimo (meses)</label>
+          <input
+            :id="'contract_permanencia_' + record.id"
+            v-model.number="record.contract_permanencia_meses"
+            type="number"
+            min="1"
+            max="60"
+            step="1"
+            class="form-control"
+          />
+        </div>
+      </div>
+    </div>
+
+    <!-- En Suscripción no hay licencia que pagar: el pago inicial es la puesta en marcha. -->
+    <h6 class="text-primary mb-2">{{ es_suscripcion ? 'Pago inicial' : 'Pago único' }}</h6>
     <div class="alert alert-light border mb-3">
       <div class="row g-2">
         <div class="col-md-3">
@@ -35,7 +97,7 @@
           </select>
         </div>
         <div class="col-md-3">
-          <label class="form-label">Precio total (licencia + implementación)</label>
+          <label class="form-label">{{ es_suscripcion ? 'Pago inicial (puesta en marcha)' : 'Precio total (licencia + implementación)' }}</label>
           <input v-model="record.contract_precio_licencia" type="text" class="form-control" />
         </div>
         <div class="col-md-3">
@@ -252,6 +314,17 @@
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
 import clause_templates from '@/utils/contract_clause_templates'
+import {
+  MODALIDADES,
+  SISTEMAS,
+  AYUDA_MODALIDAD,
+  AVISO_SIN_MODALIDAD,
+  aplicar_defaults_de_modalidad,
+  sistemas_desde_cotizacion,
+  normalizar_modalidad,
+  normalizar_sistemas,
+  normalizar_permanencia,
+} from '@/utils/contract_modalidades'
 import CotizadorModal from './CotizadorModal.vue'
 
 export default {
@@ -306,6 +379,88 @@ export default {
     clause_templates() {
       return clause_templates
     },
+    /**
+     * Las dos modalidades del contrato (misión precios-dos-modalidades, 13/10/2026).
+     * @returns {Array<{key: string, label: string}>}
+     */
+    modalidades() {
+      return MODALIDADES
+    },
+    /**
+     * Los sistemas contratables, con las keys y etiquetas de `CotizadorSettings::SISTEMAS`.
+     * @returns {Array<{key: string, label: string}>}
+     */
+    sistemas() {
+      return SISTEMAS
+    },
+    /**
+     * true si el contrato es de Suscripción: muestra el plazo mínimo y cambia los rótulos del pago.
+     * @returns {boolean}
+     */
+    es_suscripcion() {
+      return !!this.record && this.record.contract_modalidad === 'suscripcion'
+    },
+    /**
+     * Línea de ayuda de la modalidad elegida.
+     * @returns {string}
+     */
+    ayuda_modalidad() {
+      const modalidad = this.record ? this.record.contract_modalidad : null
+      return AYUDA_MODALIDAD[modalidad] || ''
+    },
+    /**
+     * Aviso cuando no hay modalidad elegida.
+     * @returns {string}
+     */
+    aviso_sin_modalidad() {
+      return AVISO_SIN_MODALIDAD
+    },
+    /**
+     * El lead abierto y su modalidad, juntos, para el watch de abajo.
+     *
+     * Va el lead también para distinguir "quien vende cambió la modalidad" de "se abrió otro lead
+     * que tiene otra modalidad": un watch sobre `record.contract_modalidad` solo dispararía en los
+     * dos casos, y en el segundo les cambiaría los meses de IPC a un contrato ya guardado.
+     * @returns {{record: Object|null, modalidad: string}}
+     */
+    modalidad_vigilada() {
+      return {
+        record: this.record,
+        modalidad: this.record ? (this.record.contract_modalidad || '') : '',
+      }
+    },
+    /**
+     * Los sistemas tildados, para el v-model de los checkboxes.
+     *
+     * 🔴 El v-model NO va directo sobre `record.contract_sistemas`. Un checkbox con v-model sobre
+     * algo que no es un array lo trata como booleano: tildar uno asigna `true` y se ven los tres
+     * tildados. Y la columna puede volver a `null` sin que nadie abra otro lead: después de cotizar
+     * (o de guardar), el modal hace `Object.assign(draft, model)` sobre este mismo objeto, y un
+     * lead que nunca guardó sus sistemas trae `null`. El getter devuelve siempre un array (sin
+     * escribir nada) y el setter guarda lo tildado normalizado (keys conocidas, orden del
+     * catálogo). El watch de `sistemas_vigilados` repone el array en el record.
+     */
+    sistemas_elegidos: {
+      get() {
+        return this.record && Array.isArray(this.record.contract_sistemas) ? this.record.contract_sistemas : []
+      },
+      set(valor) {
+        if (this.record) {
+          this.record.contract_sistemas = normalizar_sistemas(valor)
+        }
+      },
+    },
+    /**
+     * El lead abierto y sus sistemas, juntos, para el watch de abajo (mismo motivo que
+     * `modalidad_vigilada`: distinguir un cambio en este lead de abrir otro).
+     * @returns {{record: Object|null, sistemas: any}}
+     */
+    sistemas_vigilados() {
+      return {
+        record: this.record,
+        sistemas: this.record ? this.record.contract_sistemas : null,
+      }
+    },
   },
   watch: {
     /**
@@ -316,6 +471,38 @@ export default {
       handler: function () {
         this.ensure_contract_defaults()
       },
+    },
+    /**
+     * Cambio de modalidad hecho en el formulario: ajusta los meses de IPC y el plazo mínimo
+     * (ver `aplicar_defaults_de_modalidad()`). 🔴 NO es `immediate` y no hace nada si lo que
+     * cambió es el lead abierto: abrir un contrato viejo no puede tocarle ningún valor.
+     */
+    modalidad_vigilada(nuevo, viejo) {
+      if (!viejo || nuevo.record !== viejo.record) {
+        return
+      }
+      if (nuevo.modalidad === viejo.modalidad) {
+        return
+      }
+      aplicar_defaults_de_modalidad(this.record, nuevo.modalidad || null)
+    },
+    /**
+     * Si en el MISMO lead los sistemas dejan de ser un array (el `Object.assign` del modal después
+     * de cotizar o de guardar trae `null` cuando nunca se guardaron), se repone lo que había en el
+     * borrador: es lo que quien vende tildó, o lo que se precargó al abrir, y lo que va a ver en
+     * los checkboxes es lo que se guarda. Si tampoco había un array, la misma regla de apertura
+     * (los sistemas de la cotización, o ninguno). Abrir otro lead lo resuelve el watch de `record`.
+     */
+    sistemas_vigilados(nuevo, viejo) {
+      if (!viejo || nuevo.record !== viejo.record || !this.record) {
+        return
+      }
+      if (Array.isArray(nuevo.sistemas)) {
+        return
+      }
+      this.record.contract_sistemas = Array.isArray(viejo.sistemas)
+        ? normalizar_sistemas(viejo.sistemas)
+        : sistemas_desde_cotizacion(this.record.contract_cotizacion_items)
     },
   },
   methods: {
@@ -359,7 +546,8 @@ export default {
       }
     },
     /**
-     * Valores por defecto de monedas y contadores numéricos del contrato.
+     * Valores por defecto de monedas y contadores numéricos del contrato, y la forma de los
+     * campos de la modalidad (sin elegir una modalidad: ver el comentario de adentro).
      * @returns {void}
      */
     ensure_contract_defaults() {
@@ -390,6 +578,20 @@ export default {
          viejo sin el campo cargado sigue generando el mismo PDF de siempre. */
       if (this.record.contract_meses_actualizacion == null || this.record.contract_meses_actualizacion === '') {
         this.record.contract_meses_actualizacion = 6
+      }
+      /* Modalidad del contrato (misión precios-dos-modalidades, 13/10/2026).
+         🔴 NO se elige una modalidad por defecto: sin modalidad el PDF sale con el texto de
+         siempre, y un lead viejo con contrato no puede cambiar su PDF por abrir esta pestaña. Solo
+         se normaliza lo que no sea una de las dos (o undefined, de una API vieja) a null, que es
+         lo mismo que hace el PDF con un valor desconocido y deja el selector en "Elegí". */
+      this.record.contract_modalidad = normalizar_modalidad(this.record.contract_modalidad)
+      /* Los checkboxes de sistemas necesitan un array. Si nunca se guardaron (null) y el lead ya
+         se cotizó con el cotizador, arrancan con los sistemas de esa cotización: es lo que se le
+         ofreció. Un `[]` guardado se respeta (alguien destildó todo a propósito), y como esto
+         corre también al armar el payload, por eso mira solo el "nunca guardado". Sin modalidad
+         el PDF no imprime los sistemas, así que esto tampoco cambia un contrato viejo. */
+      if (!Array.isArray(this.record.contract_sistemas)) {
+        this.record.contract_sistemas = sistemas_desde_cotizacion(this.record.contract_cotizacion_items)
       }
       this.ensure_financiacion_on_record()
       this.ensure_clausulas_on_record()
@@ -507,6 +709,13 @@ export default {
         contract_precio_perfil_ecommerce: this.record.contract_precio_perfil_ecommerce || null,
         contract_fecha_primer_pago_mensual: this.to_date_only_for_payload(this.record.contract_fecha_primer_pago_mensual),
         contract_meses_actualizacion: this.record.contract_meses_actualizacion,
+        /* Modalidad del contrato (misión precios-dos-modalidades, 13/10/2026). Una API vieja
+           ignora estas claves (ModelPropertiesHelper solo escribe las declaradas en LeadProperties).
+           🔴 El PUT del lead no valida nada, así que se normaliza acá: sistemas solo con keys
+           conocidas (orden del catálogo, sin repetidos) y plazo mínimo entero de 1 a 60 o null. */
+        contract_modalidad: this.record.contract_modalidad || null,
+        contract_sistemas: normalizar_sistemas(this.record.contract_sistemas),
+        contract_permanencia_meses: normalizar_permanencia(this.record.contract_permanencia_meses),
       }
     },
     /**
