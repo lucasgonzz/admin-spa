@@ -298,11 +298,15 @@ const ENTREGA = {
   ],
   etapas_rotulo: 'Las ocho etapas de tu implementación',
   /**
-   * 🔴 LAS OCHO ETAPAS, TEXTUALES. Son los nombres de las etapas de implementación del
-   * admin (prompts_agentes/implementacion_protocolo.md del repo de conocimiento): se
-   * transcriben, no se reescriben ni se "mejoran para la página". Si el admin renombra una
-   * etapa, esta lista se actualiza mirando ese archivo -- el lead que después abre su
-   * implementación tiene que leer los mismos ocho nombres.
+   * 🔴 LAS OCHO ETAPAS, TEXTUALES. Son los nombres que el cliente ve en la lista de progreso
+   * de su implementación por WhatsApp (`ImplementationConversationService::ETAPAS_DEL_PROGRESO`
+   * de admin-api): se transcriben, no se reescriben ni se "mejoran para la página". Si el
+   * admin renombra una etapa, esta lista se actualiza mirando esa constante -- el lead que
+   * después arranca su implementación tiene que leer los mismos ocho nombres.
+   *
+   * La 8 es «Seguimos con soporte» y NO «Videollamada de capacitación» (el nombre interno del
+   * panel): desde el 14/10/2026 la videollamada no se le nombra al cliente salvo que la pida
+   * (regla de Lucas, la misma que siguen los mails de hito).
    *
    * El número va aparte, en el círculo de la línea de tiempo, así que acá no lleva el
    * "N." adelante.
@@ -315,7 +319,7 @@ const ENTREGA = {
     'Entrega del sistema',
     'Capacitación',
     'Vinculación con ARCA/AFIP',
-    'Videollamada de capacitación',
+    'Seguimos con soporte',
   ],
 }
 
