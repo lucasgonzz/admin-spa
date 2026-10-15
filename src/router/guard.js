@@ -1,17 +1,16 @@
-import { get_first_nav_route } from './nav'
+import { get_first_nav_location } from './nav'
 
 /**
- * Destino por defecto autenticado: primer ítem del menú lateral según perfil.
+ * Destino por defecto autenticado: la ruta de entrada según el perfil.
+ *
+ * 🔴 Va por `get_first_nav_location` y NO por `get_first_nav_route`: la ubicación ya trae la query
+ * que el rol necesita (`?pipeline=lead` para el closer) y armar `{ name }` a mano acá la perdería.
  *
  * @param {import('vuex').Store} store
- * @returns {{ name: string }|null}
+ * @returns {{ name: string, query?: Object }|null}
  */
 function default_authenticated_target(store) {
-  const first_nav_route = get_first_nav_route(store.state.auth.admin)
-  if (!first_nav_route || !first_nav_route.name) {
-    return null
-  }
-  return { name: first_nav_route.name }
+  return get_first_nav_location(store.state.auth.admin)
 }
 
 /**
@@ -25,7 +24,7 @@ function default_authenticated_target(store) {
 function resolve_navigation(to, from, next, store) {
   const authenticated_target = default_authenticated_target(store)
 
-  /** Raíz sin ruta concreta: redirige según sesión y perfil (closers → panel, resto → leads). */
+  /** Raíz sin ruta concreta: redirige según sesión y perfil (closers → Tablero, resto → Inicio). */
   if (to.path === '/') {
     if (store.getters['auth/authenticated'] && authenticated_target) {
       next(authenticated_target)

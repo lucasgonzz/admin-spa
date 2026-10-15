@@ -293,6 +293,12 @@ export default __base_store({
      * el hook activated() detecte que debe recargar la lista y resetear filtros.
      */
     leads_reload_version: 0,
+    /**
+     * Deep link "solo sin responder" (misión inicio-y-entrada-por-rol, 13/10/2026): acota el
+     * listado base a los leads que requieren revisión, que es lo que cuenta la tarjeta de inicio.
+     * Aplica SOLO al listado base (`_get_models`), no a la búsqueda filtrada.
+     */
+    solo_sin_responder: false,
   },
   mutations: {
     /**
@@ -428,6 +434,15 @@ export default __base_store({
       state.sort_by = valid_sort_by_values.indexOf(value) !== -1 ? value : 'last_message'
     },
     /**
+     * Prende o apaga el acotado a "solo sin responder" del listado base.
+     *
+     * @param {Object} state
+     * @param {boolean} value
+     */
+    set_solo_sin_responder(state, value) {
+      state.solo_sin_responder = Boolean(value)
+    },
+    /**
      * Guarda o limpia la posición de scroll de la bandeja de leads.
      *
      * @param {Object} state
@@ -502,9 +517,16 @@ export default __base_store({
       const state = context.state
       commit('set_loading', true)
       const path = '/lead'
-      const q = state.use_per_page
+      let q = state.use_per_page
         ? '?page=' + state.page + '&per_page=' + state.per_page + '&sort_by=' + state.sort_by
         : '?sort_by=' + state.sort_by
+      /* Deep link "solo sin responder" desde el panel de inicio. Va solo acá y NO en
+         `run_filter`: ese camino pasa por el SearchController común, que es otra ruta y otro
+         contrato. Una API vieja ignora el parámetro y devuelve el listado sin acotar — de más,
+         no de menos. */
+      if (state.solo_sin_responder) {
+        q = q + '&sin_responder=1'
+      }
       return api
         .get(path + q)
         .then(function (res) {
