@@ -362,7 +362,14 @@ export default {
 				return ''
 			}
 
-			return 'El ' + dia + ' a las ' + hora + ' va a estar reservada exclusivamente para vos, durante ' + duracion + ', para que la pruebes con casos de tu negocio.'
+			/* "hoy" y "mañana" no llevan artículo: con "El " adelante salía «El hoy a las
+			   13:37…», que es justo lo que lee el lead de la demo directa (su turno arranca
+			   hoy, diez minutos después del sí). Medido el 15/10/2026. */
+			const cuando = (dia === 'hoy' || dia === 'mañana')
+				? dia.charAt(0).toUpperCase() + dia.slice(1)
+				: 'El ' + dia
+
+			return cuando + ' a las ' + hora + ' va a estar reservada exclusivamente para vos, durante ' + duracion + ', para que la pruebes con casos de tu negocio.'
 		},
 	},
 
