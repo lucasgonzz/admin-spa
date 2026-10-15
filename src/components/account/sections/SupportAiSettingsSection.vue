@@ -20,10 +20,15 @@
         </label>
       </div>
       <p class="text-muted small mb-3">
-        Prendido, el cliente que escribe al número principal abre un ticket (o sigue el que ya tenía) y una
-        persona lo lee. <strong>Apagado, su mensaje no abre ningún ticket</strong>: nadie se entera de que
+        Prendido, el cliente que escribe al número de leads y clientes abre un ticket (o sigue el que ya tenía) y
+        una persona lo lee. <strong>Apagado, su mensaje no abre ningún ticket</strong>: nadie se entera de que
         escribió, y lo único que recibe es el texto de abajo. Si ese texto está vacío, no recibe nada —
         queda esperando una respuesta que no va a llegar.
+      </p>
+      <p class="text-muted small mb-3">
+        Esto vale para los clientes. Cuando el número del agente personal está listo (ver «Números de
+        WhatsApp»), el dueño que le escribe a este número recibe un aviso con el número del asistente. Mientras
+        ese número no esté listo, no cambia nada para nadie.
       </p>
 
       <div class="mb-2">
