@@ -25,7 +25,7 @@
 
           <button
             type="button"
-            class="btn btn-primary btn-sm"
+            class="btn btn-primary"
             :disabled="pidiendo"
             @click="gestionar_extensiones"
           >
