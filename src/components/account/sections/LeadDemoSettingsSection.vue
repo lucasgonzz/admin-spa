@@ -5,11 +5,14 @@
 
     <!-- Formulario: visible una vez cargado -->
     <template v-else>
-      <!-- Campo: dinámica de demo por defecto para leads nuevos (grupo 293, prompt 04).
+      <!-- Campo: dinámica de demo para leads nuevos (grupo 293, prompt 04).
            Va primero de toda la pantalla: es la decisión más gruesa, se lee antes que
-           los parámetros finos de tiempos y horarios. Solo afecta a leads que se creen
-           de acá en adelante; no modifica leads existentes (eso se resuelve por lead,
-           con el control del panel de conversación). -->
+           los parámetros finos de tiempos y horarios.
+           🔴 Desde el 14/10/2026 (misión demo-solo-experiencia-nueva) la dinámica "actual" está
+           RETIRADA: todos los leads usan la página de experiencia con su formulario. El select
+           queda con una sola opción y deshabilitado, a propósito: se muestra qué dinámica rige
+           pero no hay nada que elegir. El PUT sigue mandando `experiencia_default` (siempre
+           'nueva') para no romper el contrato con la API, que además lo fuerza del lado servidor. -->
       <div class="row g-2 align-items-end mb-3">
         <div class="col-sm-7">
           <label class="form-label small" for="demo_experiencia_default">Dinámica de demo para leads nuevos</label>
@@ -17,15 +20,14 @@
             id="demo_experiencia_default"
             v-model="local.experiencia_default"
             class="form-select form-select-sm"
-            :disabled="saving"
+            disabled
           >
-            <option value="actual">Dinámica actual (mail con credenciales y videos)</option>
-            <option value="nueva">Dinámica nueva (página inmersiva, formulario y tour)</option>
+            <option value="nueva">Página de experiencia (inmersiva, formulario y tour)</option>
           </select>
           <p class="text-muted small mb-0 mt-1">
-            Aplica solo a los leads que se creen de acá en adelante. Los leads que ya existen
-            conservan la dinámica con la que nacieron; para cambiar uno puntual, usá el control
-            del panel de su conversación.
+            Todos los leads, los que ya existen y los que se creen de acá en adelante, usan la
+            página de experiencia con su formulario. La dinámica anterior (mail con credenciales y
+            videos) está retirada y ya no se puede elegir.
           </p>
         </div>
       </div>
@@ -46,8 +48,7 @@
             <option value="claro">Claro (como el formulario)</option>
           </select>
           <p class="text-muted small mb-0 mt-1">
-            Solo tiene efecto en la dinámica <strong>nueva</strong>: en la dinámica actual esta
-            página ni se renderiza, así que el tema no cambia nada para esos leads.
+            Aplica a la página de experiencia que ven todos los leads.
           </p>
         </div>
       </div>
@@ -780,9 +781,9 @@ import { cached_get, MAX_AGE_SETTINGS } from '@/common-vue/helpers/request_cache
  * Gestiona los parámetros que controlan duración, márgenes de setup/gracia,
  * tiempos de automatizaciones (recordatorio, check de ingreso, resumen del lead)
  * y la duración de la llamada del closer para el bloqueo global de disponibilidad.
- * Incluye también, primero de toda la pantalla, el selector de qué dinámica de demo
- * (`experiencia_default`) reciben los leads que se creen de acá en adelante (grupo 293,
- * prompt 04) — no afecta a los leads ya existentes.
+ * Incluye también, primero de toda la pantalla, la dinámica de demo (`experiencia_default`)
+ * (grupo 293, prompt 04). Desde el 14/10/2026 es siempre la experiencia nueva y el selector
+ * quedó fijo: la dinámica "actual" está retirada.
  *
  * Desde el 11/9/2026 (misión experiencia-landing) lleva además el CTA de la página de
  * experiencia para el lead sin demo: el número de WhatsApp al que escribe, el texto prearmado y
@@ -795,8 +796,8 @@ export default {
     return {
       /** Valores editables en el formulario. */
       local: {
-        /** Dinámica con la que nacen los leads nuevos: 'actual' | 'nueva'. No afecta leads existentes. */
-        experiencia_default: 'actual',
+        /** Dinámica de demo de los leads. Desde el 14/10/2026 es siempre 'nueva' (la 'actual' está retirada). */
+        experiencia_default: 'nueva',
         /** Tema visual ('oscuro' | 'claro') de la página inmersiva de experiencia. Solo tiene
             efecto en la dinámica 'nueva'. */
         experiencia_tema: 'oscuro',
@@ -885,8 +886,8 @@ export default {
       },
       /** Valores persistidos en servidor (para detectar cambios). */
       stored: {
-        /** Espejo del servidor: dinámica por defecto para leads nuevos. */
-        experiencia_default: 'actual',
+        /** Espejo del servidor: dinámica de demo (siempre 'nueva' desde el 14/10/2026). */
+        experiencia_default: 'nueva',
         /** Espejo del servidor: tema visual de la página de experiencia. */
         experiencia_tema: 'oscuro',
         /** Espejo del servidor: número, texto y seguimiento del CTA de la página (11/9/2026). */

@@ -2,9 +2,10 @@
   <!--
     Pipelines > Tablero (misión pipelines-crm, 27/9/2026).
 
-    Encabezado: selector de pipeline (recordado en localStorage y en ?pipeline=), toggle
-    Tablero/Listado, "Agregar", filtros (responsable, cliente/lead, búsqueda, chips de vencidas y de
-    hoy) y el resumen (abiertas / ganadas / perdidas / tasa) con el embudo desplegable.
+    Encabezado: selector de pipeline (recordado en localStorage y en ?pipeline=, que toma el id o
+    el slug del pipeline), toggle Tablero/Listado, "Agregar", filtros (responsable, cliente/lead,
+    búsqueda, chips de vencidas y de hoy) y el resumen (abiertas / ganadas / perdidas / tasa) con el
+    embudo desplegable.
 
     Todo sale de un solo pedido: GET pipelines/{id}/opportunities, que devuelve las oportunidades y
     el `resumen`. El resumen lo calcula el back SIN la búsqueda ni los chips (solo respeta
@@ -551,14 +552,21 @@ export default {
         self.filters.q = self.q_input
       }, SEARCH_DEBOUNCE_MS)
     },
-    /** Navegar con ?pipeline= (atrás/adelante del navegador, un link) cambia el pipeline. */
+    /**
+     * Navegar con ?pipeline= (atrás/adelante del navegador, un link) cambia el pipeline. Acepta id
+     * o slug, igual que la entrada.
+     *
+     * 🔴 La protección contra el bucle va sobre el id RESUELTO, no sobre el valor de la query:
+     * `select_pipeline` reescribe la query al id numérico, lo que vuelve a disparar este watcher.
+     * En esa segunda pasada el pipeline resuelto ya es el actual y la condición corta sola.
+     */
     '$route.query.pipeline': function (value) {
       if (!value || !this.pipelines_loaded) {
         return
       }
-      const id = Number(value)
-      if (!isNaN(id) && id !== Number(this.pipeline_id) && this.$store.getters['pipeline/pipeline_by_id'](id)) {
-        this.select_pipeline(id)
+      const found = this.$store.getters['pipeline/pipeline_by_id_or_slug'](value)
+      if (found && Number(found.id) !== Number(this.pipeline_id)) {
+        this.select_pipeline(found.id)
       }
     },
   },
@@ -593,11 +601,20 @@ export default {
     /**
      * Elige el pipeline de entrada: el de `?pipeline=`, si no el último usado (localStorage), si no
      * el primero activo (o el primero archivado, si no hay activos).
+     *
+     * 🔴 `?pipeline=` acepta id O slug (misión embudo-lead-pipelines, 13/10/2026). El motivo es que
+     * otra pantalla pueda linkear `?pipeline=lead` sin conocer el id del pipeline en la base de
+     * cada instalación: lo usa el panel de inicio por rol, y el aviso de WhatsApp al closer manda
+     * ese mismo link. Después de resolverlo, `select_pipeline` normaliza la URL al id numérico, a
+     * propósito: así lo que se comparte y lo que queda en el historial es siempre el id.
+     *
+     * El de localStorage se sigue resolviendo por id, que es lo único que se guarda ahí.
      */
     resolve_initial_pipeline() {
       const get = this.$store.getters['pipeline/pipeline_by_id']
+      const get_or_slug = this.$store.getters['pipeline/pipeline_by_id_or_slug']
       const from_query = this.$route.query.pipeline
-      let chosen = from_query ? get(from_query) : null
+      let chosen = from_query ? get_or_slug(from_query) : null
       if (!chosen) {
         const stored = storage_get(STORAGE_PIPELINE_KEY)
         const from_storage = stored ? get(stored) : null

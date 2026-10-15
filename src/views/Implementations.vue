@@ -248,6 +248,29 @@
                   >
                     {{ substep.done ? '✅' : '⬜' }} {{ substep.label }}
                     <span v-if="substep.note" class="text-muted ms-1">({{ substep.note }})</span>
+                    <!--
+                      Centro de recursos (misión centro-de-recursos-clientes, 13/10/2026): junto al
+                      hito, el link personal del dueño para mandárselo a mano. El avance va en la
+                      nota de arriba (substeps_from_stage).
+                    -->
+                    <button
+                      v-if="substep.key === 'resources_sent' && implementation_client_id"
+                      type="button"
+                      class="btn btn-link btn-sm p-0 ms-2 align-baseline"
+                      :disabled="recursos_link_copiando"
+                      @click="copiar_link_recursos"
+                    >
+                      {{ recursos_link_copiando ? 'Creando link…' : 'Copiar link del dueño' }}
+                    </button>
+                    <input
+                      v-if="substep.key === 'resources_sent' && recursos_link"
+                      class="form-control form-control-sm mt-1"
+                      type="text"
+                      readonly
+                      aria-label="Link personal del dueño al centro de recursos"
+                      :value="recursos_link"
+                      @focus="$event.target.select()"
+                    />
                   </div>
                 </div>
 
@@ -542,6 +565,7 @@ import FormularioSection from '@/components/formulario/FormularioSection.vue'
 import ImplementationConversationSidebar from '@/components/implementation/ImplementationConversationSidebar.vue'
 /* Modal de alta de una nueva implementación con selector de cliente (Prompt 178-05) */
 import CreateImplementationModal from '@/components/implementation/CreateImplementationModal.vue'
+import { copiar_link_dueno, resumen_de_cliente } from '@/views/recursos/recursos_admin'
 
 /**
  * Etiquetas en español de propiedades de sistema (mismo mapa que ImplementationImportService).
@@ -652,6 +676,25 @@ export default {
        * Visibilidad del modal de alta de una nueva implementación (Prompt 178-05).
        */
       show_create_modal: false,
+
+      /**
+       * Avance del cliente de la implementación abierta en el centro de recursos
+       * ({ terminados, total, porcentaje, usuarios }), o null si no se pudo traer o no entró nunca.
+       * Sale de GET admin/recursos/clientes/{client_id} (misión centro-de-recursos-clientes):
+       * es un pedido aparte, sin tocar el backend de implementaciones.
+       */
+      recursos_avance: null,
+
+      /**
+       * True mientras se crea el link personal del dueño al centro de recursos.
+       */
+      recursos_link_copiando: false,
+
+      /**
+       * Último link personal del dueño creado desde acá (se muestra para copiarlo a mano si el
+       * portapapeles no dejó).
+       */
+      recursos_link: '',
     }
   },
 
@@ -763,6 +806,20 @@ export default {
     },
 
     /**
+     * client_id de la implementación abierta (para el centro de recursos), o null.
+     *
+     * @returns {number|string|null}
+     */
+    implementation_client_id() {
+      /** Implementación abierta. */
+      const impl = this.selected_implementation
+      if (!impl) {
+        return null
+      }
+      return impl.client_id || (impl.client && impl.client.id) || null
+    },
+
+    /**
      * IDs de clientes que ya tienen una implementación (cualquier estado), a excluir
      * del buscador del modal de alta (Prompt 178-05).
      *
@@ -792,6 +849,7 @@ export default {
     'selected_implementation.id': {
       handler() {
         this.load_action_state()
+        this.cargar_avance_recursos()
       },
     },
     'selected_implementation.current_stage'() {
@@ -1714,6 +1772,7 @@ export default {
             key: 'resources_sent',
             label: 'Centro de recursos enviado',
             done: data.resources_sent === true,
+            note: this.nota_avance_recursos(),
           },
         ]
       }
@@ -1859,6 +1918,92 @@ export default {
        * los botones habilitados/deshabilitados cambian recién después de ejecutar.
        */
       this.load_action_state()
+    },
+
+    /**
+     * Trae el avance en el centro de recursos del cliente de la implementación abierta
+     * (GET admin/recursos/clientes/{client_id}). Silencioso: si falla, el hito queda sin nota.
+     *
+     * @returns {void}
+     */
+    cargar_avance_recursos() {
+      /** client_id de la implementación abierta. */
+      const client_id = this.implementation_client_id
+      this.recursos_avance = null
+      this.recursos_link = ''
+      if (!client_id) {
+        return
+      }
+
+      const self = this
+
+      api
+        .get('/recursos/clientes/' + encodeURIComponent(client_id), { silent_error: true })
+        .then(function (res) {
+          /* Si mientras tanto se abrió otra implementación, esta respuesta ya no corresponde. */
+          if (self.implementation_client_id !== client_id) {
+            return
+          }
+          self.recursos_avance = resumen_de_cliente(res.data)
+        })
+        .catch(function () {
+          /* Sin avance (cliente que todavía no entró, o admin-api sin el centro): sin nota. */
+          self.recursos_avance = null
+        })
+    },
+
+    /**
+     * Nota del hito "Centro de recursos enviado", o null si no hay avance para mostrar:
+     * - un usuario en el centro: "12 de 364 videos · 3 %";
+     * - varios: "3 % promedio · 25 videos terminados entre 3 usuarios" (los terminados del
+     *   backend son la SUMA de cada usuario y con dos ya puede pasar el total de videos).
+     *
+     * @returns {string|null}
+     */
+    nota_avance_recursos() {
+      /** Avance traído del centro. */
+      const a = this.recursos_avance
+      if (!a) {
+        return null
+      }
+      /** Porcentaje redondeado a la décima, con coma decimal. */
+      const pct = String(Math.round(a.porcentaje * 10) / 10).replace('.', ',') + ' %'
+      if (a.usuarios > 1) {
+        return pct + ' promedio · ' + a.terminados + ' videos terminados entre ' + a.usuarios + ' usuarios'
+      }
+      if (a.total) {
+        return a.terminados + ' de ' + a.total + ' videos · ' + pct
+      }
+      return a.terminados + ' videos terminados · ' + pct
+    },
+
+    /**
+     * Crea (o reusa el vigente) el link personal del dueño al centro de recursos y lo copia.
+     *
+     * @returns {void}
+     */
+    copiar_link_recursos() {
+      /** client_id de la implementación abierta. */
+      const client_id = this.implementation_client_id
+      if (!client_id) {
+        return
+      }
+
+      const self = this
+      self.recursos_link_copiando = true
+
+      copiar_link_dueno(client_id)
+        .then(function (r) {
+          if (self.implementation_client_id === client_id) {
+            self.recursos_link = r.url
+          }
+        })
+        .catch(function () {
+          /* El toast con el motivo ya lo mostró copiar_link_dueno. */
+        })
+        .then(function () {
+          self.recursos_link_copiando = false
+        })
     },
 
     /**

@@ -2,13 +2,22 @@
  * Rutas y metadatos del menú lateral.
  */
 const routes_def = [
-  // {
-  //   path: '/',
-  //   name: 'home',
-  //   text: 'Inicio',
-  //   component: () => import('@/views/Home.vue'),
-  //   meta: { requiresAuth: true, nav: true, icon: 'house' },
-  // },
+  {
+    /**
+     * Panel de inicio del administrador (misión inicio-y-entrada-por-rol, 13/10/2026): las tres
+     * cosas que esperan respuesta hoy (tickets sin responder, tickets abiertos hoy, leads sin
+     * responder), cada una con su deep link a la bandeja ya filtrada.
+     *
+     * Va PRIMERA del array a propósito: `get_nav_routes()` respeta este orden, así que ser la
+     * primera es lo que la vuelve el ítem de arriba del menú y el destino de entrada por defecto
+     * de cualquier admin que no sea closer (ver `get_first_nav_location` en router/nav.js).
+     */
+    path: '/inicio',
+    name: 'inicio',
+    text: 'Inicio',
+    component: () => import('@/views/Inicio.vue'),
+    meta: { requiresAuth: true, nav: true, icon: 'house' },
+  },
   {
     /** Panel operativo del closer: visible para cualquier admin autenticado. */
     path: '/closer',
@@ -79,6 +88,18 @@ const routes_def = [
     text: 'Soporte',
     component: () => import('@/views/Support.vue'),
     meta: { requiresAuth: true, nav: true, icon: 'life-preserver' },
+  },
+  {
+    /**
+     * Centro de recursos (misión centro-de-recursos-clientes, 13/10/2026): las preguntas que los
+     * clientes dejan en los videos de recursos.comerciocity.com, cómo puntúan cada video y cuánto
+     * avanzó cada cliente. Va pegado a Soporte porque es el mismo trabajo de atender al cliente.
+     */
+    path: '/centro-de-recursos',
+    name: 'centro_recursos',
+    text: 'Centro de recursos',
+    component: () => import('@/views/recursos/CentroRecursos.vue'),
+    meta: { requiresAuth: true, nav: true, icon: 'collection-play' },
   },
   {
     path: '/tareas',

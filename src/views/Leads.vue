@@ -170,6 +170,25 @@
       </template>
 
       <template #header>
+        <!--
+          Chip del deep link "solo sin responder" que llega desde el panel de inicio. Sin él el
+          operador ve una bandeja corta y no sabe por qué.
+        -->
+        <div v-if="solo_sin_responder_activo" class="mb-3">
+          <span class="badge rounded-pill text-bg-primary d-inline-flex align-items-center">
+            Solo sin responder
+            <button
+              type="button"
+              class="btn btn-sm btn-link p-0 ms-2 text-white lh-1 text-decoration-none"
+              title="Quitar el filtro"
+              aria-label="Quitar el filtro"
+              @click="quitar_filtro_sin_responder"
+            >
+              <i class="bi bi-x-lg" aria-hidden="true" />
+            </button>
+          </span>
+        </div>
+
         <!-- Barra de navegación por grupo/estado del pipeline de leads -->
         <div v-if="lead_status_groups.length" class="lead-status-nav mb-3">
           <!-- Fila 1: grupos del pipeline (Todos, Calificación, Demo, …) -->
@@ -853,6 +872,22 @@ export default {
       })
       return ids
     },
+
+    /**
+     * Indica si el chip "Solo sin responder" tiene que estar a la vista.
+     *
+     * Pide las dos cosas: el flag prendido y la grilla mostrando el LISTADO BASE. Con un filtro
+     * de columna o de estado aplicado, la grilla muestra `filtered` (otra ruta de la API, que no
+     * conoce `sin_responder`) y el chip estaría mintiendo.
+     *
+     * @returns {boolean}
+     */
+    solo_sin_responder_activo() {
+      return (
+        this.$store.state.lead.solo_sin_responder === true &&
+        this.$store.state.lead.is_filtered !== true
+      )
+    },
   },
   watch: {
     /**
@@ -879,7 +914,38 @@ export default {
       },
       deep: true,
     },
+    /**
+     * El chip "Solo sin responder" vale SOLO sobre el listado base. Al aplicar un filtro de
+     * columna o de estado la grilla pasa a mostrar `filtered` (otra ruta, otro contrato) y el
+     * flag ya no aplica: se apaga y el chip se esconde, para que no mienta.
+     *
+     * @param {boolean} nuevo
+     * @returns {void}
+     */
+    '$store.state.lead.is_filtered'(nuevo) {
+      if (!nuevo || !this.$store.state.lead.solo_sin_responder) {
+        return
+      }
+      this.$store.commit('lead/set_solo_sin_responder', false)
+      this.limpiar_filtro_de_la_query()
+    },
   },
+  /**
+   * 🔴 Va en `created()` y NO en `mounted()`: el que dispara el primer GET /lead es el
+   * ResourceView hijo, en SU `mounted()`, que corre ANTES del `mounted()` del padre. El flag
+   * tiene que estar puesto antes del request, o la primera carga sale sin acotar y el listado
+   * mostraría más filas que lo que dice la tarjeta del panel de inicio.
+   *
+   * Se commitea `false` cuando no hay deep link a propósito: el estado del store sobrevive a la
+   * navegación, así que entrar a /leads sin el parámetro tiene que mostrar la bandeja completa.
+   *
+   * @returns {void}
+   */
+  created() {
+    var pide_sin_responder = this.$route.query.filtro === 'sin-responder'
+    this.$store.commit('lead/set_solo_sin_responder', pide_sin_responder)
+  },
+
   mounted() {
     /* Guardar la versión de recarga inicial para comparar en activated() */
     this._last_leads_reload_version = this.$store.state.lead.leads_reload_version
@@ -985,6 +1051,10 @@ export default {
      */
     reload_module_from_nav() {
       this._last_leads_reload_version = this.$store.state.lead.leads_reload_version
+      /* Volver a Leads desde el menú es una entrada limpia: también se cae el deep link de
+         "solo sin responder", chip y query incluidos. */
+      this.$store.commit('lead/set_solo_sin_responder', false)
+      this.limpiar_filtro_de_la_query()
       this.$store.commit('lead/set_filters', [])
       this.$store.commit('lead/set_filter_page', 1)
       /* Volver a Leads desde el menú también vuelve a la primera página del listado base. */
@@ -1003,6 +1073,38 @@ export default {
       this.resource_view_reload_key = this.resource_view_reload_key + 1
       window.scrollTo(0, 0)
     },
+    /**
+     * Saca `filtro` de la query sin recargar la vista, dejando el resto de los parámetros.
+     *
+     * ⚠️ Borra SOLO `filtro`: `lead_id` tiene que poder convivir con el deep link
+     * (`/leads?filtro=sin-responder&lead_id=5`), igual que `open_lead_from_query_param()` borra
+     * solo `lead_id` y deja el `filtro` puesto.
+     *
+     * @returns {void}
+     */
+    limpiar_filtro_de_la_query() {
+      if (!this.$route.query.filtro) {
+        return
+      }
+      var query = Object.assign({}, this.$route.query)
+      delete query.filtro
+      this.$router.replace({ query: query }).catch(function () {})
+    },
+
+    /**
+     * ✕ del chip: apaga el flag, saca `filtro` de la query y recarga el listado base completo.
+     *
+     * @returns {void}
+     */
+    quitar_filtro_sin_responder() {
+      this.$store.commit('lead/set_solo_sin_responder', false)
+      this.limpiar_filtro_de_la_query()
+      /* Mismo criterio que el resto de los caminos que cambian el listado: las filas tildadas
+         no pueden sobrevivir a un cambio de lo que se está mostrando. */
+      this.$store.commit('lead/set_selected', [])
+      this.$store.dispatch('lead/get_models')
+    },
+
     /**
      * Si la URL trae ?lead_id=N (ej. al entrar desde un link de notificación WhatsApp),
      * busca ese lead completo y abre su modal automáticamente. Limpia el query param

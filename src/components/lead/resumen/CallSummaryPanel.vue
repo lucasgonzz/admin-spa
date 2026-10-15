@@ -177,15 +177,34 @@
 
     <!-- Sección 6: Transcripción completa (colapsada por defecto) -->
     <div v-if="call_summary_parsed.transcripcion_completa">
-      <!-- Botón para mostrar/ocultar la transcripción -->
-      <button
-        type="button"
-        class="btn btn-outline-secondary btn-sm mb-2"
-        @click="show_transcript = !show_transcript"
-      >
-        <i :class="show_transcript ? 'bi bi-chevron-up' : 'bi bi-chevron-down'" class="me-1"></i>
-        {{ show_transcript ? 'Ocultar transcripción' : 'Ver transcripción completa' }}
-      </button>
+      <!--
+        Acciones de la transcripción: ver/ocultar y copiar, en una fila que envuelve sola en
+        teléfono (d-flex + flex-wrap) para que los dos botones nunca se salgan del ancho.
+      -->
+      <div class="d-flex flex-wrap gap-2 mb-2">
+        <!-- Botón para mostrar/ocultar la transcripción -->
+        <button
+          type="button"
+          class="btn btn-outline-secondary btn-sm"
+          @click="show_transcript = !show_transcript"
+        >
+          <i :class="show_transcript ? 'bi bi-chevron-up' : 'bi bi-chevron-down'" class="me-1"></i>
+          {{ show_transcript ? 'Ocultar transcripción' : 'Ver transcripción completa' }}
+        </button>
+        <!--
+          Copiar la transcripción al portapapeles. No depende de que esté expandida: lo normal
+          es querer pegarla en otro lado sin leerla acá.
+        -->
+        <button
+          type="button"
+          class="btn btn-outline-secondary btn-sm"
+          :title="copy_title"
+          @click="copy_transcript"
+        >
+          <i :class="copiado ? 'bi bi-check2' : 'bi bi-clipboard'" class="me-1"></i>
+          {{ copiado ? 'Copiado' : 'Copiar' }}
+        </button>
+      </div>
       <!-- Bloque de transcripción: monospace, scroll vertical limitado -->
       <div
         v-if="show_transcript"
@@ -209,6 +228,10 @@
  * desde el webhook de Recall. Si se quiere permitir regenerarlo manualmente
  * será un prompt separado.
  */
+
+/** Cuánto queda el botón diciendo "Copiado" antes de volver a "Copiar". */
+var COPIADO_MS = 2000
+
 export default {
   name: 'CallSummaryPanel',
 
@@ -224,6 +247,10 @@ export default {
     return {
       /** Controla si la sección de transcripción está expandida o colapsada. */
       show_transcript: false,
+      /** true por unos segundos después de copiar, para que el botón diga "Copiado". */
+      copiado: false,
+      /** Timer que devuelve el botón a "Copiar". Se limpia al desmontar. */
+      copiado_timer: null,
     }
   },
 
@@ -315,6 +342,69 @@ export default {
       var s = this.call_summary_parsed
       if (!s || !s.precio_acordado) return false
       return s.precio_acordado.licencia_usd != null || s.precio_acordado.mensualidad_usd != null
+    },
+
+    /**
+     * Indica si el navegador deja copiar al portapapeles.
+     * La Clipboard API solo existe en contexto seguro (https o localhost): en http plano
+     * navigator.clipboard viene undefined y no hay nada que hacer (no se usa execCommand).
+     * @returns {boolean}
+     */
+    puede_copiar() {
+      return !!(typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText)
+    },
+
+    /**
+     * Texto del title del botón Copiar: explica el caso en que el navegador no lo permite,
+     * así un botón que no hace nada por lo menos dice por qué.
+     * @returns {string}
+     */
+    copy_title() {
+      if (!this.puede_copiar) {
+        return 'Este navegador no permite copiar al portapapeles desde acá (hace falta una conexión segura).'
+      }
+      return 'Copiar la transcripción completa al portapapeles'
+    },
+  },
+
+  beforeUnmount() {
+    /* Sin esto el timer del "Copiado" queda vivo después de cerrar el modal. */
+    if (this.copiado_timer) {
+      clearTimeout(this.copiado_timer)
+      this.copiado_timer = null
+    }
+  },
+
+  methods: {
+    /**
+     * Copia la transcripción completa al portapapeles y deja el botón en "Copiado" un rato.
+     *
+     * navigator.clipboard.writeText devuelve una promesa: si falla (permiso denegado, contexto
+     * no seguro) no se avisa nada y el botón queda como estaba. Es una comodidad, no una
+     * operación: romper la pantalla por esto no tendría sentido.
+     * @returns {void}
+     */
+    copy_transcript() {
+      var self = this
+      var texto = this.call_summary_parsed ? this.call_summary_parsed.transcripcion_completa : null
+      if (!texto || !this.puede_copiar) {
+        return
+      }
+      navigator.clipboard.writeText(String(texto))
+        .then(function () {
+          self.copiado = true
+          if (self.copiado_timer) {
+            clearTimeout(self.copiado_timer)
+          }
+          self.copiado_timer = setTimeout(function () {
+            self.copiado_timer = null
+            self.copiado = false
+          }, COPIADO_MS)
+        })
+        .catch(function () {
+          /* El navegador no dejó: el botón sigue diciendo "Copiar" y no pasa nada más. */
+          self.copiado = false
+        })
     },
   },
 }
