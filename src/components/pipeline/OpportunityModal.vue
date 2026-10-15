@@ -230,6 +230,15 @@
         </div>
         <p v-if="!call.call_summary" class="text-muted small mb-2">El resumen de la llamada todavía no está disponible.</p>
         <call-summary-panel v-if="call_summary_para_panel" :call_summary="call_summary_para_panel" />
+        <!--
+          La última llamada todavía no tiene resumen pero una anterior sí (caso típico de «En
+          seguimiento» con una segunda llamada agendada): se muestra el de esa, rotulado, para que
+          Tomás llegue a la segunda llamada sabiendo qué se habló en la primera.
+        -->
+        <div v-if="call.previous_summary && call.previous_summary.call_summary" class="mt-3">
+          <p class="small text-secondary mb-2">Resumen de la llamada anterior<span v-if="previous_when"> ({{ previous_when }})</span></p>
+          <call-summary-panel :call_summary="call.previous_summary.call_summary" />
+        </div>
         <!-- La ficha de la oportunidad no tiene la conversación ni el resumen de la demo: eso está en el lead. -->
         <router-link v-if="lead_link" :to="lead_link" class="pl-ficha__call-link mt-2">
           <i class="bi bi-person-lines-fill" aria-hidden="true" />Ver el lead
@@ -478,12 +487,28 @@ export default {
         return null
       }
       if (this.call.call_summary) {
-        return this.call.call_summary
+        /* Un resumen viejo puede no traer `transcripcion_completa`: se completa con la cruda. */
+        const resumen = this.call.call_summary
+        if (typeof resumen === 'object' && !resumen.transcripcion_completa && this.call.transcript) {
+          return Object.assign({}, resumen, { transcripcion_completa: this.call.transcript })
+        }
+        return resumen
       }
       if (this.call.transcript) {
         return { transcripcion_completa: this.call.transcript }
       }
       return null
+    },
+    /**
+     * Fecha de la llamada anterior cuyo resumen se muestra, o '' si no hay.
+     * @returns {string}
+     */
+    previous_when() {
+      const prev = this.call && this.call.previous_summary
+      if (!prev) {
+        return ''
+      }
+      return format_datetime(prev.scheduled_at) || format_datetime(prev.started_at) || ''
     },
     /**
      * Cuándo fue (o va a ser) la llamada: lo agendado, y si no hay, cuándo arrancó de verdad.

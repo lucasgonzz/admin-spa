@@ -263,7 +263,9 @@ export default {
      *
      * 🔴 `leads.call_summary` es una columna LEGADA: nadie la escribe más. Desde el refactor de
      * múltiples llamadas por lead el resumen real vive en `lead_calls.call_summary` (lo escribe
-     * CallSummaryService) y la API lo publica en `record.last_call`. Mientras esta pestaña leía
+     * CallSummaryService) y la API lo publica en `record.last_summarized_call`: la última llamada
+     * que ya tiene resumen, SIN `transcripcion_completa` (el lead viaja en listados y se
+     * rehidrata en cada acción; la transcripción entera está en la ficha del embudo «Leads»). Mientras esta pestaña leía
      * solo la columna vieja, mostraba el estado vacío para TODA llamada posterior a ese refactor,
      * aunque el resumen estuviera generado.
      *
@@ -273,8 +275,8 @@ export default {
      * @returns {Object|string|null} El JSON del resumen (objeto o string, lo resuelve el panel).
      */
     call_summary_vigente() {
-      if (this.record && this.record.last_call && this.record.last_call.call_summary) {
-        return this.record.last_call.call_summary
+      if (this.record && this.record.last_summarized_call && this.record.last_summarized_call.call_summary) {
+        return this.record.last_summarized_call.call_summary
       }
       if (this.record && this.record.call_summary) {
         return this.record.call_summary
