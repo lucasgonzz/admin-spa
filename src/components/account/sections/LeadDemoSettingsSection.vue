@@ -156,7 +156,8 @@
           <p class="text-muted small mb-0 mt-1">
             Tiempo real que la instancia queda reservada para este lead (nadie más puede tomarla) y
             que su link de reingreso sigue valiendo, aunque llegue tarde o quiera volver a entrar.
-            Al lead se le sigue diciendo la duración de arriba — este margen es solo interno.
+            Conviene que sea el mismo lapso que la reserva de abajo (120 minutos = dos
+            horas), que es lo que se le dice al lead.
           </p>
         </div>
       </div>
@@ -181,8 +182,9 @@
           />
           <p class="text-muted small mb-0 mt-1">
             Lo que se le RESERVA al lead: desde la hora de inicio, la instancia queda apartada para
-            él esta cantidad de horas (recortada al fin del día) y nadie más puede tomarla. Lo que
-            se le COMUNICA es la duración de la demo, el primer campo de arriba.
+            él esta cantidad de horas (recortada al fin del día) y nadie más puede tomarla. Es
+            también lo que se le dice: «dura menos de una hora; la tenés reservada dos horas,
+            hasta las …». Conviene que el bloqueo real de arriba sea este mismo lapso en minutos.
           </p>
         </div>
       </div>

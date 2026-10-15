@@ -110,7 +110,7 @@
         </p>
 
         <!-- Las cuatro cosas que migramos. No es una promesa nueva: es exactamente lo que
-             hacen las etapas 3 y 4 de la implementación, dicho en cuatro renglones. -->
+             hacen las etapas 3, 4 y 7 de la implementación, dicho en cuatro renglones. -->
         <ul class="demo-entrega__migramos" :style="estilo_apertura(progreso, true)">
           <li
             v-for="(cosa, indice) in entrega.migramos"
@@ -285,7 +285,7 @@ const ENTREGA = {
      la que abre el resto, y dice algo concreto en vez de repetir el titular. */
   subtitulo: 'Tu sistema no arranca vacío. Arranca con tu negocio adentro.',
   /**
-   * Las cuatro cosas que migramos. Es lo que hacen las etapas 3 y 4 de la implementación,
+   * Las cuatro cosas que migramos. Es lo que hacen las etapas 3, 4 y 7 de la implementación,
    * dicho en cuatro renglones -- no una promesa nueva: los artículos, las imágenes por IA,
    * los clientes y proveedores con saldo y la vinculación con ARCA son las cuatro cargas que
    * el cliente NO hace, y las cuatro están construidas.
