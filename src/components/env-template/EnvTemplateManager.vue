@@ -1,11 +1,12 @@
 <template>
   <div class="container-fluid px-0 py-4">
-    <div class="d-flex align-items-center mb-4 gap-3">
+    <!-- flex-wrap: en teléfono los botones bajan de línea en lugar de partirse en varias. -->
+    <div class="d-flex align-items-center flex-wrap mb-4 gap-3">
       <h2 class="h4 mb-0">{{ title }}</h2>
       <!-- Botón para desplegar el formulario de nueva variable -->
       <button
         type="button"
-        class="btn btn-outline-primary ms-auto"
+        class="btn btn-outline-primary text-nowrap ms-auto"
         @click="show_new_var_form = !show_new_var_form"
       >
         <i class="bi bi-plus-circle me-1" />
@@ -13,7 +14,7 @@
       </button>
       <button
         type="button"
-        class="btn btn-primary"
+        class="btn btn-primary text-nowrap"
         :disabled="saving"
         @click="save"
       >
@@ -217,15 +218,19 @@
             ensancha la página entera.
           -->
           <div class="table-responsive">
-          <table class="table table-sm mb-0">
+          <!--
+            env-table: en teléfono (<=576px) cada fila pasa a ser una tarjeta apilada (ver estilos
+            al final), así el valor se lee completo sin scrollear.
+          -->
+          <table class="table table-sm mb-0 env-table">
             <thead class="table-light">
               <tr>
-                <th style="width: 200px">Variable</th>
-                <th style="min-width: 260px">Valor (template)</th>
+                <th class="env-col-variable">Variable</th>
+                <th class="env-col-valor">Valor (template)</th>
                 <th style="width: 130px" class="text-center">Común</th>
                 <!-- Columna "Manual al crear": no aplica al scope tienda -->
                 <th v-if="scope === 'empresa'" style="width: 160px" class="text-center">Manual al crear</th>
-                <th>Notas</th>
+                <th class="env-col-notas">Notas</th>
               </tr>
             </thead>
             <tbody>
@@ -234,8 +239,8 @@
                 :key="tpl.id"
               >
                 <!-- Nombre de la variable (solo lectura) -->
-                <td class="align-middle">
-                  <code class="small">{{ tpl.key }}</code>
+                <td class="align-middle env-col-variable">
+                  <code class="small text-break">{{ tpl.key }}</code>
                   <!-- Etiqueta de variable secreta: el servidor nunca manda su valor -->
                   <span
                     v-if="es_sensible(tpl)"
@@ -253,7 +258,7 @@
                   empresa del cliente): se muestra un badge informativo y el placeholder
                   pasa a ser la nota de la variable, sin deshabilitar el input.
                 -->
-                <td class="align-middle">
+                <td class="align-middle env-col-valor">
                   <span
                     v-if="scope === 'tienda' && !drafts[tpl.id].is_common"
                     class="badge bg-secondary-subtle text-secondary-emphasis mb-1 d-inline-block"
@@ -267,12 +272,16 @@
                   -->
                   <div v-if="es_sensible(tpl)">
                     <div class="d-flex flex-wrap gap-1">
+                      <!--
+                        Valor ilegible (hay uno guardado que no se puede descifrar): borde ámbar y
+                        leyenda; escribir uno nuevo y guardar lo reemplaza como siempre.
+                      -->
                       <input
                         v-model="drafts[tpl.id].value"
                         type="password"
                         autocomplete="new-password"
-                        class="form-control form-control-sm flex-grow-1"
-                        style="min-width: 160px; width: auto"
+                        class="form-control form-control-sm env-input-valor"
+                        :class="{ 'border-warning': tpl.value_ilegible }"
                         :disabled="drafts[tpl.id].clear_value"
                         :placeholder="value_placeholder(tpl)"
                       />
@@ -280,7 +289,7 @@
                       <button
                         v-if="tpl.value_set"
                         type="button"
-                        class="btn btn-sm"
+                        class="btn btn-sm env-btn-accion"
                         :class="drafts[tpl.id].clear_value ? 'btn-danger' : 'btn-outline-danger'"
                         :title="drafts[tpl.id].clear_value ? 'Deshacer el borrado' : 'Borrar el valor al guardar'"
                         @click="toggle_clear_value(tpl)"
@@ -291,8 +300,8 @@
                       <button
                         v-if="can_probe(tpl)"
                         type="button"
-                        class="btn btn-sm btn-outline-primary"
-                        :disabled="probes[tpl.id] && probes[tpl.id].loading"
+                        class="btn btn-sm btn-outline-primary env-btn-accion"
+                        :disabled="tpl.value_ilegible || (probes[tpl.id] && probes[tpl.id].loading)"
                         @click="probar_clave(tpl)"
                       >
                         <span
@@ -304,6 +313,11 @@
                         <i v-else class="bi bi-shield-check me-1" />
                         {{ probes[tpl.id] && probes[tpl.id].loading ? 'Probando...' : 'Probar' }}
                       </button>
+                    </div>
+                    <!-- Leyenda del valor ilegible -->
+                    <div v-if="tpl.value_ilegible" class="form-text text-warning-emphasis">
+                      <i class="bi bi-exclamation-triangle-fill me-1" />
+                      El valor guardado no se puede leer. Escribí uno nuevo y guardá para reemplazarlo.
                     </div>
                     <!-- Aviso: lo escrito y sin guardar no se prueba -->
                     <div
@@ -333,7 +347,7 @@
                 </td>
 
                 <!-- Checkbox: es variable común (se contrasta al actualizar) -->
-                <td class="align-middle text-center">
+                <td class="align-middle text-center" data-label="Común">
                   <div class="form-check d-flex justify-content-center mb-0">
                     <input
                       v-model="drafts[tpl.id].is_common"
@@ -346,7 +360,7 @@
                 </td>
 
                 <!-- Checkbox: es manual al crear (recordatorio en alta de sistema); no aplica a tienda -->
-                <td v-if="scope === 'empresa'" class="align-middle text-center">
+                <td v-if="scope === 'empresa'" class="align-middle text-center" data-label="Manual al crear">
                   <div class="form-check d-flex justify-content-center mb-0">
                     <input
                       v-model="drafts[tpl.id].is_manual_on_create"
@@ -359,7 +373,7 @@
                 </td>
 
                 <!-- Textarea para notas internas del operador -->
-                <td class="align-middle">
+                <td class="align-middle env-col-notas" data-label="Notas">
                   <textarea
                     v-model="drafts[tpl.id].notes"
                     class="form-control form-control-sm"
@@ -868,6 +882,10 @@ export default {
         if (this.drafts[tpl.id].clear_value) {
           return 'Se borrará al guardar'
         }
+        if (tpl.value_ilegible) {
+          return 'Valor ilegible — volvé a cargarlo'
+        }
+        /* value_tail puede ser null aunque haya valor (claves *PASSWORD*): entonces solo "Cargada". */
         if (tpl.value_set) {
           return tpl.value_tail ? 'Cargada, termina en ••••' + tpl.value_tail : 'Cargada'
         }
@@ -958,3 +976,67 @@ export default {
   },
 }
 </script>
+
+<style scoped>
+/* Columnas de la tabla en escritorio y tablet. */
+.env-col-variable {
+  width: 200px;
+}
+.env-col-valor {
+  min-width: 260px;
+}
+/* Notas: sin un mínimo, a 768px la columna quedaba de ~44px y el textarea ilegible. */
+.env-col-notas {
+  min-width: 140px;
+}
+
+/* Input de valor de una fila secreta: crece, pero nunca por debajo de 160px. */
+.env-input-valor {
+  flex: 1 1 160px;
+  min-width: 160px;
+  width: auto;
+}
+
+/* Botones Borrar / Probar: btn-sm de Bootstrap mide 31px; acá, 36px para que se toquen bien. */
+.env-btn-accion {
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+/*
+  Teléfono: la fila pasa a tarjeta apilada. Se oculta el encabezado, cada celda ocupa todo el
+  ancho y las que tienen data-label muestran su nombre arriba. El input de valor ocupa la línea
+  entera y los botones Borrar / Probar bajan debajo.
+*/
+@media (max-width: 576px) {
+  .env-table thead {
+    display: none;
+  }
+  .env-table tbody tr {
+    display: block;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--bs-border-color);
+  }
+  .env-table tbody td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    padding: 0.25rem 0;
+    border: 0;
+    text-align: left !important;
+  }
+  .env-table tbody td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--bs-secondary-color);
+  }
+  .env-table tbody td .form-check {
+    justify-content: flex-start !important;
+  }
+  .env-input-valor {
+    flex-basis: 100%;
+  }
+}
+</style>
