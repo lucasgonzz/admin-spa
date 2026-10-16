@@ -11,8 +11,8 @@
  *
  * 1. La consulta se parte en palabras y cada una tiene que aparecer EN ALGÚN LADO del video (título,
  *    carpeta, "para qué", guion), en cualquier orden. Las palabras de relleno ("cómo", "una", "de"…) se
- *    ignoran. Si ningún video las tiene todas, se muestran los que tienen la mayoría y se avisa
- *    (`completo: false`).
+ *    ignoran. Si ningún video las tiene todas, o si alguna palabra no existe en ningún video, se
+ *    muestran los que tienen la mayoría y se avisa (`completo: false`).
  * 2. Cada palabra encuentra sus formas: sin acentos, plural, tiempos del verbo ("escanear" encuentra
  *    escaneo, escaneás, escaneala), la palabra a medio escribir ("escan"), sinónimos de la casa
  *    (`sinonimos.js`) y, SOLO si no encontró nada, un error de tipeo ("facutra").
@@ -25,12 +25,14 @@
  * - Peso del campo (`PESO_DE_CAMPO`): título 10, "para qué" 3, carpeta y sección 1,5, guion 1.
  * - Rareza: `ln(1 + N / df)`, con `df` = en cuántos videos aparece la palabra en ese campo. Se mide POR
  *   CAMPO a propósito: "reportes" sale en el guion de 360 de los 364 videos (el arranque se repite), así
- *   que ahí pesa casi nada, pero en los títulos es rara y quien lo escribe quiere esos títulos.
- * - Qué tan directa (`PUNTOS`): la palabra exacta 1, otra forma de la misma palabra 0,85, un sinónimo
- *   0,6, "empieza igual" 0,55 y un error de tipeo 0,4.
+ *   que ahí pesa casi nada, pero en los títulos es rara y quien lo escribe quiere esos títulos. Y se mide
+ *   por RAÍZ, no por forma suelta: "factura" y "facturarla" pesan igual.
+ * - Qué tan directa (`PUNTOS`): la palabra exacta 1, otra forma de la misma palabra 0,85, "empieza
+ *   igual" 0,55, un sinónimo 0,5 (y nunca más rara que la palabra que se escribió) y un error de tipeo 0,4.
  *
  * Después se le suma, por cada campo, un bonus por cercanía (que las palabras estén juntas) y un
- * pequeño premio por repetición (el video que habla mucho de algo). Nada de esto usa el servidor.
+ * pequeño premio por repetición en el guion (el video que habla mucho de algo). Nada de esto usa el
+ * servidor.
  */
 import { normalizar } from './utiles.js'
 import {
@@ -90,8 +92,10 @@ const FACTOR_OTROS_CAMPOS = 0.1
 /** Premio por repetición: cuánto sube el puntaje por cada vez que se repite la palabra en un campo (en escala logarítmica). */
 const FACTOR_REPETICION = 0.2
 
-/** Largo mínimo de una palabra para que valga como "empieza igual" y para corregirle el tipeo. */
+/** Largo mínimo de una palabra para que valga como "empieza igual" (con menos letras trae medio vocabulario). */
 const LARGO_MINIMO_PREFIJO = 3
+
+/** Largo mínimo de una palabra para corregirle un error de tipeo (en las cortas, "gato" y "dato" se confunden). */
 const LARGO_MINIMO_TIPEO = 5
 
 /** Largo mínimo para corregir una letra CAMBIADA por otra (más ambiguo que una de más, una de menos o dos intercambiadas). */
@@ -106,12 +110,14 @@ const PISO_PARCIALES = 0.25
 
 /**
  * Medidas del fragmento que se muestra debajo del título (caracteres). Entra en dos renglones de la
- * barra de carpetas: el comienzo del recorte queda `ANTES_DEL_FRAGMENTO` caracteres antes de la primera
- * palabra encontrada, para que lo que se buscó quede dentro de lo que se ve.
+ * barra de carpetas (unos 48 caracteres por renglón en el ancho de tablet): el recorte empieza
+ * `ANTES_DEL_FRAGMENTO` caracteres antes de la primera palabra encontrada y las palabras de un mismo grupo
+ * no se separan más de `ANCHO_DEL_GRUPO`, así lo que se buscó queda dentro de lo que se ve. Lo que
+ * sobre lo corta el CSS con puntos suspensivos.
  */
-const LARGO_DEL_FRAGMENTO = 120
-const ANTES_DEL_FRAGMENTO = 24
-const ANCHO_DEL_GRUPO = 60
+const LARGO_DEL_FRAGMENTO = 104
+const ANTES_DEL_FRAGMENTO = 22
+const ANCHO_DEL_GRUPO = 56
 
 /**
  * Una letra o un número en cualquier idioma. Una palabra es una racha de estos caracteres
