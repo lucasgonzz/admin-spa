@@ -1738,3 +1738,76 @@ describe('ronda 4: las partes marcadas reconstruyen el texto original', function
     assert.ok(unir(x.fragmento_partes).length < 300, 'largo: ' + unir(x.fragmento_partes).length)
   })
 })
+
+describe('ronda 5: un dígito suelto sigue pesando como una palabra rara y "boleta electrónica" es ARCA', function () {
+  test('"paso 2", "etapa 3", "factura 4": el video que tiene el número (raro) le gana al que solo tiene la palabra común', function () {
+    ;[
+      ['paso', '2'],
+      ['etapa', '3'],
+      ['factura', '4'],
+    ].forEach(function (par) {
+      const palabra = par[0]
+      const numero = par[1]
+      // PALABRA dice la palabra en el título; NUMERO dice solo el número; 6 videos más dicen la palabra, así que la
+      // palabra es común y el número, raro. (Sin dígitos en los rellenos: "2" tiene que aparecer en un solo video.)
+      const lista = [
+        { codigo: 'PALABRA', titulo: palabra.toUpperCase() + ' a ' + palabra + ' para vender' },
+        { codigo: 'NUMERO', titulo: 'Versión ' + numero + ' del sistema' },
+      ]
+      for (let i = 0; i < 6; i++) {
+        lista.push({ codigo: 'P' + i, titulo: 'Un ' + palabra + ' más ' + 'k'.repeat(i + 2) })
+      }
+      for (let i = 0; i < 40; i++) {
+        lista.push({ codigo: 'R' + i, titulo: 'Tema ' + 'x'.repeat(i + 2) })
+      }
+      assert.equal(buscar(armar(lista), palabra + ' ' + numero).resultados[0].codigo, 'NUMERO', palabra + ' ' + numero)
+    })
+  })
+
+  test('una letra suelta, en cambio, no le gana a la palabra (el mismo catálogo con "v" en lugar de "2")', function () {
+    const lista = [
+      { codigo: 'PALABRA', titulo: 'PASO a paso para vender' },
+      { codigo: 'LETRA', titulo: 'Versión v del sistema' },
+    ]
+    for (let i = 0; i < 6; i++) {
+      lista.push({ codigo: 'P' + i, titulo: 'Un paso más ' + 'k'.repeat(i + 2) })
+    }
+    for (let i = 0; i < 40; i++) {
+      lista.push({ codigo: 'R' + i, titulo: 'Tema ' + 'x'.repeat(i + 2) })
+    }
+    assert.notEqual(buscar(armar(lista), 'paso v').resultados[0].codigo, 'LETRA')
+  })
+
+  describe('boleta electrónica', function () {
+    function catalogo() {
+      const lista = [
+        { codigo: 'ARCA', titulo: 'Tus datos fiscales y el punto de venta de ARCA' },
+        { codigo: 'FACT', titulo: 'La factura de ARCA con tu diseño' },
+        { codigo: 'BALANZA', titulo: 'Configurar una balanza que imprime el peso' },
+        { codigo: 'TICKET', titulo: 'Imprimir el ticket y el recibo' },
+      ]
+      for (let i = 0; i < 10; i++) {
+        lista.push({ codigo: 'R' + i, titulo: 'Tema ' + 'x'.repeat(i + 2) })
+      }
+      return armar(lista)
+    }
+
+    test('"boleta electrónica" es la factura electrónica: lleva a los videos de ARCA', function () {
+      const r = buscar(catalogo(), 'boleta electronica')
+      assert.deepEqual(codigos(r).sort(), ['ARCA', 'FACT'])
+      assert.equal(r.completo, false, '"boleta" no la dice ningún video')
+    })
+
+    test('"ticket electrónico" y "recibo electrónico" no: son otro documento', function () {
+      ;['ticket electronica', 'recibo electronica', 'balanza electronica'].forEach(function (consulta) {
+        const r = buscar(catalogo(), consulta)
+        assert.equal(codigos(r).indexOf('ARCA'), -1, consulta)
+        assert.equal(codigos(r).indexOf('FACT'), -1, consulta)
+      })
+    })
+
+    test('"electrónica" sola sigue sin ser ARCA (es demasiado ambigua)', function () {
+      assert.deepEqual(codigos(buscar(catalogo(), 'electronica')), [])
+    })
+  })
+})

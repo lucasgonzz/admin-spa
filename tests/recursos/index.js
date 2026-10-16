@@ -3,3 +3,4 @@
  * fuera un módulo y no la recorre, así que esta carpeta se resuelve a este archivo, que carga las pruebas.
  */
 import './buscador.test.mjs'
+import './barra-carpetas.test.mjs'
