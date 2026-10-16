@@ -385,6 +385,11 @@ export default {
         }
         return
       }
+      // Un espacio suelto no es una búsqueda: si nunca se pasó a los resultados no hay nada que restaurar, y la lista
+      // de carpetas no se toca (antes se iba a 0 y después al video abierto).
+      if (this.scroll_guardado === null) {
+        return
+      }
       /** Dónde estaba la lista antes de buscar. */
       const donde = this.scroll_guardado
       this.scroll_guardado = null

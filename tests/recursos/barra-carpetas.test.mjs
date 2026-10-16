@@ -321,6 +321,9 @@ let estado_de_la_pagina = null
 let componente = null
 let cargar_catalogo_pagina = null
 let cuerpos = { catalogo: {}, indice: {} }
+/** Pedidos de catálogo que llegaron al "servidor", y si el catálogo tiene que fallar. */
+let pedidos_de_catalogo = 0
+let catalogo_caido = false
 
 /** Catálogo de la página con `carpetas` carpetas de `por_carpeta` videos, más lo que agreguen `extra`. */
 function catalogo_largo(carpetas, por_carpeta) {
@@ -408,7 +411,14 @@ describe('BarraCarpetas montada en un DOM simulado', function () {
     globalThis.ShadowRoot = class ShadowRootFalso {}
     // El catálogo y el índice que "devuelve el servidor": lo que haya en `cuerpos`.
     globalThis.fetch = async function (url) {
-      const cuerpo = String(url).endsWith('recursos/buscar-indice') ? cuerpos.indice : cuerpos.catalogo
+      const es_indice = String(url).endsWith('recursos/buscar-indice')
+      if (!es_indice && String(url).endsWith('recursos/catalogo')) {
+        pedidos_de_catalogo++
+        if (catalogo_caido) {
+          throw new Error('sin red')
+        }
+      }
+      const cuerpo = es_indice ? cuerpos.indice : cuerpos.catalogo
       const texto = JSON.stringify(cuerpo)
       return { ok: true, status: 200, text: async () => texto }
     }
@@ -481,6 +491,28 @@ describe('BarraCarpetas montada en un DOM simulado', function () {
       assert.equal(m.lista.scrollTop, 0)
       m.desmontar()
     })
+
+    for (const modo of ['real', 'sintetico']) {
+      test('un espacio suelto no es una búsqueda: la lista de carpetas no se mueve (eventos ' + NOMBRES[modo] + ')', async function () {
+        const m = await montar(catalogo_largo(8, 10))
+        // T3.4 está a la vista en la ventana 1500 a 1800; si el espacio moviera la lista, se alinearía a un borde (1276).
+        estado_de_la_pagina.actual = 'T3.4'
+        await microtareas()
+        m.lista.scrollTop = 1500
+        await escribir(m.entrada, ' ', modo)
+        assert.ok(m.lista.querySelector('cab'), 'siguen las carpetas')
+        assert.equal(m.lista.scrollTop, 1500)
+        await escribir(m.entrada, '  ', modo)
+        assert.equal(m.lista.scrollTop, 1500)
+        // Después de los espacios se busca de verdad, se borra todo y la lista vuelve a donde estaba.
+        await escribir(m.entrada, ' tema', modo)
+        assert.ok(m.lista.querySelector('vid.res'), 'se están viendo resultados')
+        assert.equal(m.lista.scrollTop, 0)
+        await escribir(m.entrada, '', modo)
+        assert.equal(m.lista.scrollTop, 1500)
+        m.desmontar()
+      })
+    }
   })
 
   describe('BarraCarpetas montada: el aviso', function () {
@@ -578,6 +610,63 @@ describe('BarraCarpetas montada en un DOM simulado', function () {
       assert.equal(boton(), undefined)
       assert.equal(filas()[90].enfocado, 1)
       assert.match(texto_de(m.raiz, 'busq-estado'), /Se sumaron 10 resultados\.$/)
+      m.desmontar()
+    })
+
+    test('una búsqueda nueva empieza otra vez con la primera tanda y sin el aviso de lo que se sumó', async function () {
+      const m = await montar(catalogo_largo(10, 10))
+      await escribir(m.entrada, 'tema', 'real')
+      const filas = () => m.lista.querySelectorAll('vid.res')
+      const boton = () => m.raiz.descendientes().filter((n) => n.etiqueta === 'button' && /^Mostrar \d+ más$/.test(n.textContent.trim()))[0]
+      await disparar(boton(), 'click', { detail: 1 }, 'real')
+      assert.equal(filas().length, 60)
+      assert.match(texto_de(m.raiz, 'busq-estado'), /Se sumaron 30 resultados\.$/)
+      // "tem" trae los mismos 100 videos: sin el reinicio se seguirían viendo 60.
+      await escribir(m.entrada, 'tem', 'real')
+      assert.equal(filas().length, 30)
+      assert.equal(texto_de(m.raiz, 'busq-estado'), '100 videos encontrados.')
+      assert.ok(boton(), 'el botón vuelve a ofrecer el resto')
+      m.desmontar()
+    })
+  })
+
+  describe('BarraCarpetas montada: el catálogo no llegó', function () {
+    test('"Reintentar" vuelve a pedir el catálogo y, cuando llega, aparecen los resultados', async function () {
+      const m = await montar(catalogo_largo(2, 3))
+      // El catálogo se cayó: sin buscador, con el error de carga puesto.
+      estado_de_la_pagina.buscador = null
+      estado_de_la_pagina.error_carga = true
+      estado_de_la_pagina.cargando = false
+      await escribir(m.entrada, 'tema', 'real')
+      assert.match(texto_de(m.raiz, 'vacio'), /No pudimos cargar los videos\. Probá de nuevo\./)
+      const reintentar = m.raiz.descendientes().filter((n) => n.etiqueta === 'button' && n.textContent === 'Reintentar')[0]
+      assert.ok(reintentar, 'hay un botón Reintentar')
+      const antes = pedidos_de_catalogo
+      await disparar(reintentar, 'click', { detail: 1 }, 'real')
+      await microtareas()
+      assert.equal(pedidos_de_catalogo, antes + 1, 'volvió a pedir el catálogo')
+      assert.equal(estado_de_la_pagina.error_carga, false)
+      assert.ok(m.lista.querySelector('vid.res'), 'aparecen los resultados')
+      m.desmontar()
+    })
+
+    test('si el catálogo sigue caído, Reintentar vuelve a mostrar el error y no se queda en "Cargando…"', async function () {
+      const m = await montar(catalogo_largo(2, 3))
+      estado_de_la_pagina.buscador = null
+      estado_de_la_pagina.error_carga = true
+      estado_de_la_pagina.cargando = false
+      await escribir(m.entrada, 'tema', 'real')
+      catalogo_caido = true
+      try {
+        const reintentar = m.raiz.descendientes().filter((n) => n.etiqueta === 'button' && n.textContent === 'Reintentar')[0]
+        await disparar(reintentar, 'click', { detail: 1 }, 'real')
+        await microtareas()
+        assert.equal(estado_de_la_pagina.error_carga, true)
+        assert.match(texto_de(m.raiz, 'vacio'), /No pudimos cargar los videos\./)
+        assert.doesNotMatch(texto_de(m.raiz, 'vacio'), /Cargando/)
+      } finally {
+        catalogo_caido = false
+      }
       m.desmontar()
     })
   })
