@@ -14,7 +14,8 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-import { crear_buscador, buscar, tokenizar, raiz } from '../../src/recursos/buscador.js'
+import { crear_buscador, buscar, tokenizar, raiz, son_parientes } from '../../src/recursos/buscador.js'
+import { GRUPOS_DE_SINONIMOS } from '../../src/recursos/sinonimos.js'
 
 /** Corpus real. */
 const CORPUS = JSON.parse(readFileSync(new URL('./corpus-real.json', import.meta.url), 'utf8'))
@@ -398,9 +399,9 @@ describe('el orden de los resultados', function () {
         { codigo: 'A', titulo: 'Contar el dinero de la caja' },
         { codigo: 'B', titulo: 'Los cheques que recibís' },
       ],
-      { A: 'Para controlar el dinero hay que revisar también cada cheque que entró.', B: 'Otro texto sin relación.' }
+      { A: 'Para controlar el dinero hay que revisar también cada uno de los cheques que entraron.', B: 'Otro texto sin relación.' }
     )
-    assert.deepEqual(codigos(buscar(b, 'cheque')), ['B', 'A'])
+    assert.deepEqual(codigos(buscar(b, 'cheques')), ['B', 'A'])
   })
 
   test('el "para qué" gana al guion', function () {
@@ -1015,5 +1016,204 @@ describe('vocabulario del comercio', function () {
     const r = buscar(armar(lista, trans), 'cargaron')
     assert.equal(r.resultados[0].codigo, 'V17')
     assert.ok(r.resultados.length > 30, 'las otras formas de cargar también se encuentran')
+  })
+})
+
+describe('ronda 3: una palabra que existe tal cual no la tapan sus expansiones', function () {
+  test('"arqueo" no comparte raíz con "arca": la regla "-que" → "-car" pide raíces de más de tres letras', function () {
+    assert.notEqual(raiz('arqueo'), raiz('arca'))
+    // Las raíces largas siguen juntando la forma con "-que" y el infinitivo (busque/buscar, aplique/aplicar).
+    assert.equal(raiz('busque'), raiz('buscar'))
+    assert.equal(raiz('aplique'), raiz('aplicar'))
+    assert.equal(raiz('expliques'), raiz('explicar'))
+    assert.equal(raiz('marque'), raiz('marcar'))
+    // Los verbos cortos que cambian de letra ("toqué/tocar", "saqué/sacar") están en la tabla de irregulares.
+    assert.equal(raiz('toque'), raiz('tocar'))
+    assert.equal(raiz('saques'), raiz('sacar'))
+    assert.equal(raiz('saque'), raiz('sacar'))
+  })
+
+  test('quien busca "arqueo" recibe los videos que lo dicen y no los de ARCA', function () {
+    const lista = [
+      { codigo: 'A1', titulo: 'Tus datos fiscales y el punto de venta de ARCA' },
+      { codigo: 'A2', titulo: 'La factura de ARCA con tu diseño' },
+      { codigo: 'A3', titulo: 'Dar de alta un cliente con los datos de ARCA' },
+      { codigo: 'A4', titulo: 'Registrar una devolución ante ARCA' },
+      { codigo: 'ARQ', titulo: 'Abrir y cerrar la caja del día' },
+    ]
+    const trans = { ARQ: 'Al cerrar, el arqueo te dice si falta plata en la caja.' }
+    const b = armar(lista, trans)
+    assert.deepEqual(codigos(buscar(b, 'arqueo')), ['ARQ'])
+    assert.equal(buscar(b, 'arqueo').completo, true)
+    // Y al revés: quien escribe "arca" no recibe el arqueo.
+    assert.equal(codigos(buscar(b, 'arca')).indexOf('ARQ'), -1)
+  })
+
+  test('dos formas de una misma raíz solo son parientes si empiezan igual o son de un verbo irregular', function () {
+    assert.equal(son_parientes('cargar', 'cargues'), true)
+    assert.equal(son_parientes('mostrar', 'muestra'), true)
+    assert.equal(son_parientes('pedir', 'pide'), true)
+    assert.equal(son_parientes('tocar', 'toque'), true)
+    assert.equal(son_parientes('sacar', 'saque'), true)
+    assert.equal(son_parientes('arca', 'arqueo'), false)
+    assert.equal(son_parientes('cubo', 'cabo'), false)
+  })
+
+  test('una palabra no cae en un grupo de sinónimos porque su raíz se escriba como una palabra del grupo', function () {
+    // raiz("cargara") es "cargar", que es una palabra del grupo de "alta"; raiz("inventario") es "inventar", y quien
+    // escribe "inventar" no pregunta por el stock. Los grupos se buscan por la raíz de cada palabra, nunca por la escrita.
+    const b = armar([
+      { codigo: 'ALTA', titulo: 'Dar de alta un cliente' },
+      { codigo: 'STOCK', titulo: 'El stock de la sucursal' },
+      { codigo: 'CARGARA', titulo: 'Cuando se cargara el saldo inicial' },
+      { codigo: 'INVENTAR', titulo: 'Si hay que inventar un código' },
+    ])
+    assert.deepEqual(codigos(buscar(b, 'cargara')), ['CARGARA'])
+    assert.deepEqual(codigos(buscar(b, 'inventar')), ['INVENTAR'])
+    // Los sinónimos de verdad siguen andando: "cargar" y "agregar" son del mismo grupo que "alta".
+    assert.ok(codigos(buscar(b, 'agregar cliente')).indexOf('ALTA') === 0)
+    assert.ok(codigos(buscar(b, 'inventario')).indexOf('STOCK') === 0)
+  })
+
+  test('en el corpus real, una palabra poco dicha trae primero un video que la dice o dice otra forma de su raíz', function () {
+    // Se dejan afuera las palabras que tienen sinónimos (ahí el título de un sinónimo puede pasar a una mención
+    // suelta de la palabra, y es lo que se quiere: ver "vocabulario del comercio").
+    /** Raíces de todas las palabras de los grupos de sinónimos. */
+    const con_sinonimos = new Set()
+    GRUPOS_DE_SINONIMOS.forEach(function (grupo) {
+      grupo.forEach(function (palabra) {
+        con_sinonimos.add(raiz(palabra))
+      })
+    })
+    /** Palabras de ≥ 5 letras que están (tal cual) en uno o dos videos del corpus, con su cantidad de videos. */
+    const por_palabra = new Map()
+    VIDEOS.forEach(function (v) {
+      /** Palabras que el video dice (título, ubicación y transcripción). */
+      const dichas = new Set(tokenizar(v.titulo + ' ' + TRANSCRIPCIONES[v.codigo]).pal)
+      dichas.forEach(function (p) {
+        if (p.length >= 5) {
+          por_palabra.set(p, (por_palabra.get(p) || 0) + 1)
+        }
+      })
+    })
+    let probadas = 0
+    por_palabra.forEach(function (cuantos, palabra) {
+      if (cuantos > 2 || con_sinonimos.has(raiz(palabra))) {
+        return
+      }
+      const r = buscar(CON_INDICE, palabra)
+      if (!r.resultados.length) {
+        return
+      }
+      probadas++
+      /** Primer resultado: tiene que decir la palabra o una forma de su raíz (los sinónimos van detrás de esos). */
+      const primero = VIDEOS.filter(function (v) {
+        return v.codigo === r.resultados[0].codigo
+      })[0]
+      const tiene = tokenizar(primero.titulo + ' ' + TRANSCRIPCIONES[primero.codigo]).pal.some(function (t) {
+        return t === palabra || raiz(t) === raiz(palabra)
+      })
+      assert.ok(tiene, '"' + palabra + '" trae primero ' + primero.codigo + ', que no la dice ni dice otra forma suya')
+    })
+    assert.ok(probadas > 100, 'se probaron ' + probadas + ' palabras')
+  })
+})
+
+describe('ronda 3: umbral de cobertura adaptativo', function () {
+  /**
+   * 60 videos. "stock" y "mercadería" son comunes (más de 15 videos cada una); "descuento" está en uno solo
+   * (JUNTO), que no dice nada más. "xyzzy" no existe. El video de STOCK dice "stock" en el título y "mercadería" en el guion.
+   */
+  function catalogo() {
+    const lista = [{ codigo: 'STOCK', titulo: 'Cuánto stock tenés' }]
+    const trans = { STOCK: 'Cuando entra mercadería se suma al stock.' }
+    for (let i = 0; i < 18; i++) {
+      lista.push({ codigo: 'S' + i, titulo: 'Stock de la sucursal ' + i })
+      trans['S' + i] = 'Se mueve mercadería.'
+    }
+    lista.push({ codigo: 'SOLO', titulo: 'Otra cosa' })
+    trans.SOLO = 'Hay un descuento.'
+    for (let i = 0; i < 40; i++) {
+      lista.push({ codigo: 'R' + i, titulo: 'Tema ' + i })
+      trans['R' + i] = 'Nada.'
+    }
+    return armar(lista, trans)
+  }
+
+  test('una pregunta larga en la que falta una palabra rara no se queda con un solo resultado', function () {
+    const r = buscar(catalogo(), 'mercaderia descuento stock xyzzy')
+    assert.ok(r.resultados.length >= 8, 'resultados: ' + r.resultados.length)
+    assert.ok(codigos(r).indexOf('STOCK') !== -1, 'el video del stock aparece')
+    // No dice todo lo que pidió (una palabra no existe en ningún video): no puede salir como "completo".
+    assert.equal(r.completo, false)
+  })
+
+  test('sin la palabra que no existe pasa lo mismo', function () {
+    const r = buscar(catalogo(), 'mercaderia descuento stock')
+    assert.ok(r.resultados.length >= 8, 'resultados: ' + r.resultados.length)
+    assert.ok(codigos(r).indexOf('STOCK') !== -1)
+    assert.equal(r.completo, false)
+  })
+
+  test('el multiplicador de cobertura sigue ordenando: el que dice más palabras va antes que el que dice menos', function () {
+    const r = buscar(catalogo(), 'mercaderia stock')
+    assert.equal(r.resultados[0].codigo, 'STOCK')
+    assert.equal(r.completo, true)
+    // Los que tienen las dos palabras (STOCK y los S) van antes que cualquiera que tenga una sola.
+    assert.ok(r.resultados.length >= 19)
+  })
+
+  test('cuando hay de sobra con el umbral de siempre no se baja', function () {
+    const lista = []
+    for (let i = 0; i < 12; i++) {
+      lista.push({ codigo: 'V' + i, titulo: 'Cheque rechazado número ' + i })
+    }
+    lista.push({ codigo: 'PARTE', titulo: 'Cheque que no tiene lo otro' })
+    const r = buscar(armar(lista), 'cheque rechazado')
+    assert.equal(codigos(r).indexOf('PARTE'), -1)
+    assert.equal(r.resultados.length, 12)
+    assert.equal(r.completo, true)
+  })
+
+  test('con una consulta de una sola palabra o con todas presentes el umbral no cambia nada', function () {
+    const b = catalogo()
+    assert.equal(buscar(b, 'descuento').resultados.length, 1)
+    assert.equal(buscar(b, 'descuento').completo, true)
+  })
+})
+
+describe('ronda 3: "sin" tiene contenido', function () {
+  test('"sin" ya no es relleno: queda entre las palabras de la consulta', function () {
+    assert.deepEqual(buscar(CON_INDICE, 'vender sin internet').palabras, ['vender', 'sin', 'internet'])
+    assert.deepEqual(buscar(CON_INDICE, 'ventas sin factura').palabras, ['ventas', 'sin', 'factura'])
+  })
+
+  test('"ventas sin factura" prefiere al video que dice "con o sin factura" sobre el que solo tiene "ventas" y "factura"', function () {
+    const b = armar([
+      { codigo: 'MUCHAS', titulo: 'Ventas y factura: las ventas de la factura' },
+      { codigo: 'SIN', titulo: 'Filtrar las ventas con o sin factura' },
+      { codigo: 'CON', titulo: 'Todas las ventas con factura' },
+      { codigo: 'OTRA', titulo: 'Vender sin internet' },
+      { codigo: 'OTRA2', titulo: 'Vender sin cliente' },
+    ])
+    const r = buscar(b, 'ventas sin factura')
+    assert.equal(r.resultados[0].codigo, 'SIN')
+    assert.equal(r.completo, true)
+  })
+
+  test('"sin internet" trae "Vender sin internet" antes que un video que solo nombra internet', function () {
+    const b = armar([
+      { codigo: 'LENTO', titulo: 'Si tu internet es lento' },
+      { codigo: 'SIN', titulo: 'Vender sin internet' },
+      { codigo: 'OTRA', titulo: 'Vender sin cliente' },
+    ])
+    assert.equal(buscar(b, 'sin internet').resultados[0].codigo, 'SIN')
+    assert.equal(buscar(b, 'vender sin internet').resultados[0].codigo, 'SIN')
+  })
+
+  test('el "sin" se resalta junto con la palabra de al lado', function () {
+    const b = armar([{ codigo: 'SIN', titulo: 'Vender sin internet' }])
+    const r = buscar(b, 'sin internet')
+    assert.deepEqual(marcas(r.resultados[0].titulo_partes), ['sin', 'internet'])
   })
 })
