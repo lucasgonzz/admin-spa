@@ -60,7 +60,8 @@
     <!-- Tabla de diferencias -->
     <!-- table-responsive: en teléfono la tabla scrollea dentro del modal y no queda recortada. -->
     <div class="table-responsive">
-    <table class="table table-sm mb-3">
+    <!-- min-width: en teléfono la tabla scrollea dentro del modal en lugar de comprimirse. -->
+    <table class="table table-sm mb-3" style="min-width: 540px">
       <thead class="table-light">
         <tr>
           <th style="width: 40px"></th>
@@ -103,22 +104,22 @@
             <span v-else-if="valor_de_diff(diff, 'template_value')" class="text-success small font-monospace">
               {{ valor_de_diff(diff, 'template_value') }}
             </span>
-            <span v-else class="text-muted small fst-italic">(vacío)</span>
+            <span v-else class="text-muted small fst-italic">{{ diff.sensitive ? 'sin valor' : '(vacío)' }}</span>
           </td>
           <!-- Valor actual en el cliente -->
           <td class="align-middle text-break">
             <span v-if="valor_de_diff(diff, 'client_value')" class="text-danger small font-monospace">
               {{ valor_de_diff(diff, 'client_value') }}
             </span>
-            <span v-else class="text-muted small fst-italic">(no existe)</span>
+            <span v-else class="text-muted small fst-italic">{{ diff.sensitive ? 'sin valor' : '(no existe)' }}</span>
             <!--
               En una secreta el enmascarado puede verse igual en ambos lados aunque los valores
-              reales difieran: el aviso evita que el diff parezca "igual". text-wrap deja que el
-              aviso rompa línea en teléfono (el .badge de Bootstrap es nowrap).
+              reales difieran: el aviso evita que el diff parezca "igual". text-nowrap: el aviso
+              no se parte letra por letra; la tabla scrollea dentro del modal.
             -->
             <span
               v-if="diff.sensitive || diff.ilegible"
-              class="badge bg-warning-subtle text-warning-emphasis text-wrap ms-1"
+              class="badge bg-warning-subtle text-warning-emphasis text-nowrap ms-1"
             >
               {{ diff.ilegible ? 'distinto' : 'distinto (valor oculto)' }}
             </span>

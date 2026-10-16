@@ -66,7 +66,7 @@
       <!-- Tabla de variables con diferencias -->
       <!-- table-responsive: en tablet y teléfono la tabla scrollea dentro del panel. -->
       <div class="table-responsive">
-      <table class="table table-sm table-hover mb-0">
+      <table class="table table-sm table-hover mb-0" style="min-width: 520px">
         <thead class="table-light">
           <tr>
             <!-- Checkbox de selección total -->
@@ -108,7 +108,11 @@
             <td class="align-middle small text-success text-break">
               <!-- `ilegible`: el valor guardado en la plantilla no se pudo descifrar -->
               <span v-if="item.ilegible" class="text-warning-emphasis fst-italic">valor ilegible</span>
-              <template v-else>{{ valor_visible(item.template_value, item.sensitive) || '(vacío)' }}</template>
+              <template v-else-if="valor_visible(item.template_value, item.sensitive)">
+                {{ valor_visible(item.template_value, item.sensitive) }}
+              </template>
+              <!-- Vacío: una secreta vacía dice "sin valor" (no el literal "(vacío)" del servidor) -->
+              <span v-else class="text-muted fst-italic">{{ item.sensitive ? 'sin valor' : '(vacío)' }}</span>
               <span
                 v-if="item.sensitive"
                 class="badge bg-secondary-subtle text-secondary-emphasis ms-1"
@@ -119,14 +123,18 @@
             </td>
             <!-- Valor actual en el cliente (muteado) -->
             <td class="align-middle small text-muted text-break">
-              {{ item.sample_client_value !== undefined ? (valor_visible(item.sample_client_value, item.sensitive) || '-') : '-' }}
+              <template v-if="item.sample_client_value !== undefined && valor_visible(item.sample_client_value, item.sensitive)">
+                {{ valor_visible(item.sample_client_value, item.sensitive) }}
+              </template>
+              <span v-else-if="item.sensitive" class="fst-italic">sin valor</span>
+              <template v-else>{{ item.sample_client_value !== undefined ? (item.sample_client_value || '-') : '-' }}</template>
               <!--
                 En una variable secreta el enmascarado puede verse igual en ambos lados aunque los
                 valores reales difieran: el aviso evita que el diff parezca "igual".
               -->
               <span
                 v-if="item.sensitive || item.ilegible"
-                class="badge bg-warning-subtle text-warning-emphasis text-wrap ms-1"
+                class="badge bg-warning-subtle text-warning-emphasis text-nowrap ms-1"
               >
                 {{ item.ilegible ? 'distinto' : 'distinto (valor oculto)' }}
               </span>
