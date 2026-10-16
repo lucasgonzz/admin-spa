@@ -104,7 +104,7 @@ main.principal { flex: 1; display: flex; min-height: 0; position: relative; }
 /* Barra de carpetas */
 .barra-lateral { width: 360px; flex: none; display: flex; flex-direction: column; border-right: 1px solid var(--borde); background: var(--panel); min-height: 0; }
 .buscar { padding: 10px; border-bottom: 1px solid var(--borde); }
-.buscar input { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--borde); background: var(--fondo); color: var(--texto); font: inherit; }
+.buscar input { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--borde); background: var(--fondo); color: var(--texto); font: inherit; text-overflow: ellipsis; }
 .lista-carpetas { overflow-y: auto; flex: 1; }
 .carpeta { border-bottom: 1px solid var(--borde); }
 .carpeta > .cab { width: 100%; border: 0; border-radius: 0; background: transparent; color: inherit; text-align: left; display: grid; grid-template-columns: 26px 1fr auto; gap: 4px 10px; align-items: center; padding: 11px 12px; cursor: pointer; user-select: none; }
@@ -144,6 +144,7 @@ main.principal { flex: 1; display: flex; min-height: 0; position: relative; }
 .busq-aviso { margin: 6px 0 0; padding: 6px 9px; border-radius: 8px; border: 1px solid var(--borde); background: var(--sel); font-size: 12px; line-height: 1.4; }
 .busq-aviso.espera { padding: 0; border: 0; background: transparent; color: var(--suave); }
 .vid.res { padding-left: 14px; }
+.vid.res + .vid.res::before { left: 14px; }
 .vid.res .t { overflow-wrap: anywhere; }
 .res-titulo { display: block; }
 .vid .t small.res-donde { margin-top: 1px; }

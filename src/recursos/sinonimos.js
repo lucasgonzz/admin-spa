@@ -49,6 +49,9 @@ export const PALABRAS_DE_RELLENO = new Set(
     'hago hace haces hacen hacer puedo puede pueden podes poder podria podrias quiero quiere quieren ' +
     'queres quisiera necesito necesita necesitan necesitas deberia voy va vas van ' +
     'sabes saber gustaria ' +
+    // ver y usar: "cómo veo…", "dónde veo…", "cómo uso…" piden un tema, no la palabra "ver" ni "usar" (que
+    // además abren casi todos los títulos y los "para qué": "Usalo cuando…", "Sirve para…")
+    'ver veo ves vea usar uso usas sirve sirven ' +
     // "ayudame con…", "explicame…", "video de…": se pide un video, no se busca la palabra "video"
     'ayuda ayudame explica explicame muestra muestrame video videos tutorial tutoriales'
   ).split(' ')

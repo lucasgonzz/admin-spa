@@ -97,6 +97,9 @@ const LARGO_MINIMO_TIPEO = 5
 /** Largo mínimo para corregir una letra CAMBIADA por otra (más ambiguo que una de más, una de menos o dos intercambiadas). */
 const LARGO_MINIMO_TIPEO_CON_LETRA_CAMBIADA = 6
 
+/** Cuántas palabras de la consulta se usan como máximo. */
+const MAXIMO_DE_PALABRAS = 12
+
 /** En una búsqueda sin coincidencia completa, lo que se muestra como máximo y el piso de puntaje (respecto del mejor). */
 const MAXIMO_PARCIALES = 40
 const PISO_PARCIALES = 0.25
@@ -112,9 +115,11 @@ const ANCHO_DEL_GRUPO = 60
 
 /**
  * Una letra o un número en cualquier idioma. Una palabra es una racha de estos caracteres
- * (`/[\p{L}\p{N}]+/gu`): los espacios, guiones, puntos y comas la separan.
+ * (`/[\p{L}\p{N}\p{M}]+/gu`): los espacios, guiones, puntos y comas la separan. Incluye las marcas
+ * combinables (`\p{M}`) para que una "ñ" escrita como "n" + tilde (así la mandan algunos teclados y
+ * algunos editores) no parta la palabra en dos: `normalizar` después le saca el acento igual.
  */
-const RE_LETRA_O_NUMERO = /[\p{L}\p{N}]/u
+const RE_LETRA_O_NUMERO = /[\p{L}\p{N}\p{M}]/u
 
 /** Hasta qué código de carácter llega la tabla de abajo (el latino básico y el extendido: todo lo que el español usa). */
 const LARGO_DE_LA_TABLA_DE_LETRAS = 0x250
@@ -193,8 +198,42 @@ const RE_COMIENZO_DE_SECUENCIA = INICIOS_DE_FORMAS_DICHAS.size
  * @returns {string}
  */
 export function raiz(palabra) {
-  if (RAICES_APARTE[palabra]) {
-    return RAICES_APARTE[palabra]
+  /** Raíz ya calculada antes, si estaba. */
+  let hecha = RAICES_CALCULADAS.get(palabra)
+  if (hecha === undefined) {
+    hecha = calcular_raiz(palabra)
+    if (RAICES_CALCULADAS.size >= LIMITE_DE_RAICES_CALCULADAS) {
+      RAICES_CALCULADAS.clear()
+    }
+    RAICES_CALCULADAS.set(palabra, hecha)
+  }
+  return hecha
+}
+
+/**
+ * Raíces ya calculadas (palabra → raíz). El vocabulario de la página casi no cambia entre el armado con el
+ * catálogo y el rearmado con el índice, y calcular las ~3.500 raíces cuesta una buena parte del armado. Si
+ * crece de más se vacía.
+ *
+ * @type {Map<string, string>}
+ */
+const RAICES_CALCULADAS = new Map()
+
+/** Cuántas raíces guarda `RAICES_CALCULADAS` antes de vaciarse. */
+const LIMITE_DE_RAICES_CALCULADAS = 30000
+
+/** `RAICES_APARTE` como mapa: con un objeto, "constructor" o "toString" se tomarían por una raíz propia. */
+const MAPA_DE_RAICES_APARTE = new Map(Object.entries(RAICES_APARTE))
+
+/**
+ * Hace el trabajo de `raiz` (sin la memoria).
+ *
+ * @param {string} palabra Palabra en minúsculas y sin acentos.
+ * @returns {string}
+ */
+function calcular_raiz(palabra) {
+  if (MAPA_DE_RAICES_APARTE.has(palabra)) {
+    return MAPA_DE_RAICES_APARTE.get(palabra)
   }
   /** Lo que va quedando de la palabra. */
   let r = palabra
@@ -334,11 +373,15 @@ export function tokenizar(texto) {
         desde = i
       }
     } else if (desde >= 0) {
-      /** La palabra tal como está escrita. */
+      /** La palabra tal como está escrita, y normalizada. */
       const cruda = texto.slice(desde, i)
-      pal.push(especial ? normalizar_palabra(cruda) : cruda)
-      ini[cuantas] = desde
-      fin[cuantas++] = i
+      const normal = especial ? normalizar_palabra(cruda) : cruda
+      // Una marca combinable suelta no es una palabra: normalizada queda vacía.
+      if (normal) {
+        pal.push(normal)
+        ini[cuantas] = desde
+        fin[cuantas++] = i
+      }
       desde = -1
       especial = false
     }
@@ -383,8 +426,8 @@ export function tokenizar(texto) {
 
 /**
  * Indica si dos palabras difieren en una sola letra: una cambiada, una de más, una de menos o dos
- * intercambiadas de lugar. Exige la misma letra inicial (los errores de tipeo casi nunca están en la
- * primera letra; la excepción es la confusión b/v, que sí es frecuente) para no traer palabras sin parentesco.
+ * intercambiadas de lugar. No acepta una letra inicial CAMBIADA por otra (los errores de tipeo casi nunca
+ * están ahí; la excepción es la confusión b/v, que sí es frecuente) para no traer palabras sin parentesco.
  *
  * @param {string} a
  * @param {string} b
@@ -405,7 +448,9 @@ function difieren_en_una_letra(a, b) {
   if (i === la && i === lb) {
     return false
   }
-  if (i === 0 && !(la === lb && (a[0] + b[0] === 'bv' || a[0] + b[0] === 'vb'))) {
+  // Una letra cambiada en la primera posición casi nunca es un error de tipeo (salvo b/v); una de más o de
+  // menos al principio sí ("estock").
+  if (i === 0 && la === lb && !(a[0] + b[0] === 'bv' || a[0] + b[0] === 'vb')) {
     return false
   }
   if (la === lb) {
@@ -958,8 +1003,8 @@ export function buscar(buscador, consulta) {
   const sin_relleno = distintas.filter(function (p) {
     return !PALABRAS_DE_RELLENO.has(p)
   })
-  /** Palabras que se buscan. */
-  const palabras = sin_relleno.length ? sin_relleno : distintas
+  /** Palabras que se buscan (si alguien pega un párrafo se usan las primeras: más no cambian el resultado y cuestan). */
+  const palabras = (sin_relleno.length ? sin_relleno : distintas).slice(0, MAXIMO_DE_PALABRAS)
   /** Cantidad de palabras y de videos. */
   const n = palabras.length
   const total = buscador.docs.length

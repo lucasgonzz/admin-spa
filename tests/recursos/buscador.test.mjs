@@ -258,6 +258,16 @@ describe('errores de tipeo', function () {
     assert.deepEqual(codigos(buscar(b, 'pizza')), [])
     assert.deepEqual(codigos(buscar(b, 'gato')), [])
   })
+
+  test('una letra de más al principio sí se corrige: "estock"', function () {
+    const b = armar([{ codigo: 'A', titulo: 'El stock mínimo' }])
+    assert.deepEqual(codigos(buscar(b, 'estock')), ['A'])
+  })
+
+  test('b y v se confunden: "bender" encuentra "vender"', function () {
+    const b = armar([{ codigo: 'A', titulo: 'Cómo vender más' }])
+    assert.deepEqual(codigos(buscar(b, 'bender')), ['A'])
+  })
 })
 
 describe('relleno y consultas vacías', function () {
@@ -273,6 +283,24 @@ describe('relleno y consultas vacías', function () {
     const r = buscar(CON_INDICE, 'como para')
     assert.deepEqual(r.palabras, ['como', 'para'])
     assert.ok(r.resultados.length > 0)
+  })
+
+  test('"ver", "usar" y "sirve" son relleno: "ver el historial" busca solo "historial"', function () {
+    assert.deepEqual(buscar(CON_INDICE, 'ver el historial').palabras, ['historial'])
+    assert.deepEqual(buscar(CON_INDICE, 'cómo uso el escáner').palabras, ['escaner'])
+  })
+
+  test('una ñ escrita como "n" + tilde combinada se busca igual', function () {
+    assert.equal(buscar(CON_INDICE, 'contraseña').resultados[0].codigo, 'T0.4')
+  })
+
+  test('si alguien pega un párrafo se usan solo las primeras 12 palabras', function () {
+    const parrafo = Array.from({ length: 40 }, function (_, i) {
+      return 'palabra' + i
+    }).join(' ')
+    const r = buscar(CON_INDICE, parrafo)
+    assert.equal(r.palabras.length, 12)
+    assert.deepEqual(r.resultados, [])
   })
 
   test('buscar sin buscador o con un buscador vacío no falla', function () {
@@ -574,7 +602,7 @@ describe('posiciones del texto original (tokenizar)', function () {
   /** Lo que daría la expresión regular de referencia: letras y números seguidos. */
   function con_regex(texto) {
     const salida = []
-    const re = /[\p{L}\p{N}]+/gu
+    const re = /[\p{L}\p{N}\p{M}]+/gu
     let m
     while ((m = re.exec(texto)) !== null) {
       salida.push([m[0], m.index, m.index + m[0].length])
@@ -582,7 +610,7 @@ describe('posiciones del texto original (tokenizar)', function () {
     return salida
   }
 
-  test('da las mismas palabras y posiciones que la expresión regular /[\\p{L}\\p{N}]+/gu', function () {
+  test('da las mismas palabras y posiciones que la expresión regular /[\\p{L}\\p{N}\\p{M}]+/gu', function () {
     ;[
       'Escanear la factura o el remito con la IA',
       'Año nuevo: ¿qué pasa con la contraseña? ¡Mirá!',
@@ -590,6 +618,8 @@ describe('posiciones del texto original (tokenizar)', function () {
       'a-b c.d e,f 1.200,50 x_y',
       'ÁÉÍÓÚ Ñandú ÜBER çedilla ñoño',
       'emoji 😀 en medio 👍🏽 y 日本語 sí',
+      'contraseña con tilde combinada',
+      'contrasen0303a con tilde combinada y n0303 suelta',
       '',
       '---',
     ].forEach(function (texto) {
