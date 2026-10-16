@@ -935,6 +935,20 @@ describe('BarraCarpetas montada en un DOM simulado', function () {
       m.desmontar()
     })
 
+    test('con el índice de transcripciones caído (sin llegar) no registra: los resultados serían solo por título', async function () {
+      const m = await montar(catalogo_largo(2, 3))
+      estado_de_la_pagina.indice = null
+      estado_de_la_pagina.indice_cargando = false
+      estado_de_la_pagina.indice_fallo = Date.now()
+      await escribir(m.entrada, 'tema', 'real')
+      await microtareas()
+      assert.equal(reloj.pendientes(), 0)
+      await reloj.pasar_la_espera()
+      assert.equal(busquedas_enviadas.length, 0)
+      estado_de_la_pagina.indice_fallo = 0
+      m.desmontar()
+    })
+
     test('si el servidor contesta 404 (API vieja) el buscador sigue mostrando resultados y se apaga solo', async function () {
       status_de_busquedas = 404
       const m = await montar(catalogo_largo(2, 3))

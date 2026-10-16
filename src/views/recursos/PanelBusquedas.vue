@@ -37,7 +37,7 @@
     </div>
 
     <p v-else-if="cargado && !totales.busquedas" class="text-body-secondary fst-italic">
-      Todavía no hay búsquedas registradas en este período. Se empiezan a registrar con el próximo deploy de la página.
+      No hay búsquedas registradas en este período. Si todavía no se ve ninguna, es que la página con el registro aún no se desplegó; si ya se desplegó, probá con un período más largo.
     </p>
 
     <template v-else-if="cargado">

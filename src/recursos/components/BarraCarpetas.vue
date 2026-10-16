@@ -314,7 +314,8 @@ export default {
      * @returns {{ consulta: string, resultados: number, primero: (string|null), completo: boolean }|null}
      */
     info_para_el_registro() {
-      if (!this.buscando || !this.estado.buscador || this.estado.indice_cargando || es_solo_lectura()) {
+      // Con el índice caído (y sin llegar) los resultados son solo por título: darían «sin resultados» falsos.
+      if (!this.buscando || !this.estado.buscador || this.estado.indice_cargando || (!this.estado.indice && this.estado.indice_fallo) || es_solo_lectura()) {
         return null
       }
       /** Resultados que ve la persona. */

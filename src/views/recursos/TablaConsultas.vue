@@ -19,13 +19,13 @@
               <td class="recursos-consultas__consulta fw-semibold">{{ fila.consulta }}</td>
               <td class="text-end">{{ fila.veces }}</td>
               <td class="recursos-consultas__devolvio">
-                <span v-if="!fila.primero_codigo" class="text-body-secondary fst-italic">nada</span>
+                <span v-if="!fila.primero_codigo" class="text-body-secondary fst-italic">nada{{ fila.sin_resultados < fila.veces ? ' (la última vez)' : '' }}</span>
                 <template v-else>
                   <span class="badge text-bg-light border me-1">{{ fila.primero_codigo }}</span>
                   <span v-if="fila.primero_titulo">{{ fila.primero_titulo }}</span>
                   <span v-else class="text-body-secondary fst-italic">(el video ya no existe)</span>
                 </template>
-                <small v-if="fila.sin_resultados > 0 && fila.primero_codigo" class="d-block text-body-secondary">
+                <small v-if="fila.sin_resultados > 0 && fila.sin_resultados < fila.veces" class="d-block text-body-secondary">
                   {{ fila.sin_resultados }} de {{ fila.veces }} {{ fila.veces === 1 ? 'vez' : 'veces' }} no devolvió nada
                 </small>
               </td>
@@ -44,14 +44,14 @@
           </div>
           <div class="small mt-1 recursos-consultas__devolvio">
             <span class="text-body-secondary">Devolvió: </span>
-            <span v-if="!fila.primero_codigo" class="text-body-secondary fst-italic">nada</span>
+            <span v-if="!fila.primero_codigo" class="text-body-secondary fst-italic">nada{{ fila.sin_resultados < fila.veces ? ' (la última vez)' : '' }}</span>
             <template v-else>
               <span class="badge text-bg-light border me-1">{{ fila.primero_codigo }}</span>
               <span v-if="fila.primero_titulo">{{ fila.primero_titulo }}</span>
               <span v-else class="text-body-secondary fst-italic">(el video ya no existe)</span>
             </template>
           </div>
-          <div v-if="fila.sin_resultados > 0 && fila.primero_codigo" class="small text-body-secondary">
+          <div v-if="fila.sin_resultados > 0 && fila.sin_resultados < fila.veces" class="small text-body-secondary">
             {{ fila.sin_resultados }} de {{ fila.veces }} {{ fila.veces === 1 ? 'vez' : 'veces' }} no devolvió nada
           </div>
           <div class="small text-body-secondary">Última: {{ fecha_corta(fila.ultima) }}</div>
@@ -88,7 +88,6 @@ export default {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--bs-secondary-color, #6c757d);
   font-weight: 600;
   white-space: nowrap;
 }

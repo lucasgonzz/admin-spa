@@ -48,7 +48,7 @@ function normalizar(texto) {
 /**
  * Indica si una consulta se puede registrar: false si parece traer datos personales o si quedó demasiado corta.
  * Es la misma regla que aplica el servidor (que descarta antes de guardar): mail (`@`), link (`http`, `www.`), una
- * corrida de 5 o más dígitos, 7 o más dígitos en total (teléfonos con espacios o guiones, CUIT, DNI, tarjetas) o
+ * corrida de 5 o más dígitos, un dominio, una clave larga (20 o más caracteres con letras y números), 7 o más dígitos en total (teléfonos con espacios o guiones, CUIT, DNI, tarjetas) o
  * menos de 2 caracteres alfanuméricos.
  *
  * @param {string} texto Lo que escribió la persona.
@@ -57,7 +57,18 @@ function normalizar(texto) {
 export function es_consulta_registrable(texto) {
   /** Consulta normalizada. */
   const t = normalizar(texto)
+  // El `＠` y el `﹫` (arroba de ancho completo y chica) también cuentan: se pasan a `@` con NFKC.
+  if (/[＠﹫]/.test(t) || normalizar(String(texto == null ? '' : texto).normalize('NFKC')).indexOf('@') !== -1) {
+    return false
+  }
   if (t.indexOf('@') !== -1 || t.indexOf('http') !== -1 || t.indexOf('www.') !== -1) {
+    return false
+  }
+  // Un dominio ("mi-sitio.com.ar/xxx") o una clave larga con letras y números ("clave_api_4ec39hq…").
+  if (/[a-z0-9-]+\.(com|net|org|ar|info|edu|gob|io|me|app|shop|store)(?![a-z0-9])/.test(t)) {
+    return false
+  }
+  if ((t.match(/[a-z0-9_-]{20,}/g) || []).some(function (palabra) { return /\d/.test(palabra) && /[a-z]/.test(palabra) })) {
     return false
   }
   if (/\d{5,}/.test(t)) {

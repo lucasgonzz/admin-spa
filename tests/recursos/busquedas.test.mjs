@@ -100,6 +100,10 @@ describe('es_consulta_registrable: la misma regla que el servidor', function () 
     'solo signos': '¿?',
     'cuatro dígitos corridos más tres sueltos (7 en total)': '1234 56 7',
     'cinco dígitos corridos': 'factura 12345',
+    'arroba de ancho completo': 'juan＠gmail.com',
+    'arroba chica': 'juan﹫gmail.com',
+    'un dominio sin esquema': 'mi-sitio.com.ar/xxx',
+    'una clave con letras y números': 'clave_api_4ec39hqlyjwdarjtt1zdp7dc',
   }
   for (const nombre of Object.keys(NO)) {
     test('no se registra: ' + nombre, function () {
