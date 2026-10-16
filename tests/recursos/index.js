@@ -4,3 +4,5 @@
  */
 import './buscador.test.mjs'
 import './barra-carpetas.test.mjs'
+import './busquedas.test.mjs'
+import './panel-busquedas-texto.test.mjs'

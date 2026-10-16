@@ -38,6 +38,7 @@
     >
       <panel-preguntas v-if="active_tab === 'preguntas'" />
       <panel-videos v-else-if="active_tab === 'videos'" />
+      <panel-busquedas v-else-if="active_tab === 'busquedas'" />
       <panel-clientes v-else />
     </div>
   </div>
@@ -47,20 +48,22 @@
 import PanelPreguntas from './PanelPreguntas.vue'
 import PanelVideos from './PanelVideos.vue'
 import PanelClientes from './PanelClientes.vue'
+import PanelBusquedas from './PanelBusquedas.vue'
 
 /**
  * "Centro de recursos" del admin (misión centro-de-recursos-clientes, 13/10/2026, §5.2 del
- * plan): tres solapas.
+ * plan): tres solapas, más "Búsquedas" (misión busquedas-centro-recursos, 16/10/2026).
  *
  * - Preguntas: pendientes primero; "Proponer respuesta" llena la caja con el borrador de la IA;
  *   Responder / Ocultar.
  * - Videos: los peor puntuados primero, con los "qué mejorar" desplegables.
  * - Clientes: avance por cliente, detalle por usuario y "Copiar link del dueño".
+ * - Búsquedas: lo que los clientes buscan en la página y no encuentran, o encuentran y no abren.
  */
 export default {
   name: 'ViewCentroRecursos',
 
-  components: { PanelPreguntas, PanelVideos, PanelClientes },
+  components: { PanelPreguntas, PanelVideos, PanelClientes, PanelBusquedas },
 
   data() {
     return {
@@ -73,6 +76,7 @@ export default {
         { key: 'preguntas', label: 'Preguntas' },
         { key: 'videos', label: 'Videos' },
         { key: 'clientes', label: 'Clientes' },
+        { key: 'busquedas', label: 'Búsquedas' },
       ],
     }
   },
