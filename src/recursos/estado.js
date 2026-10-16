@@ -12,6 +12,10 @@
  *   video SE VE).
  * - detalle de cada video (`detalles`): `GET recursos/videos/{codigo}` — transcripción y
  *   preguntas visibles.
+ * - buscador (`indice` y `buscador`): las transcripciones de todos los videos
+ *   (`GET recursos/buscar-indice`, se piden la primera vez que se escribe) y el buscador por contenido
+ *   (`buscador.js`) que se arma con ellas. Se arma ya con el catálogo, buscando por título y "para
+ *   qué", y se vuelve a armar cuando llega el índice.
  *
  * El progreso sigue la regla del prototipo (`registrar()`): solo cuentan los segundos
  * reproducidos de verdad; saltar con la barra no suma. Acá se juntan los TRAMOS reproducidos
@@ -25,7 +29,7 @@
  */
 import { reactive, markRaw } from 'vue'
 import { pedir, hay_sesion, guardar_token, borrar_token, sesion_guardada_es_soporte, cuando_se_pierda_la_sesion } from './api'
-import { normalizar } from './utiles'
+import { crear_buscador } from './buscador'
 
 /** Fracción vista a partir de la cual un video cuenta como terminado (la misma regla del servidor). */
 export const HECHO = 0.9
@@ -69,10 +73,19 @@ export const estado = reactive({
   encuestas: {},
   /** Respuestas nuevas a preguntas propias: [{ codigo, pregunta_id }]. */
   respuestas_nuevas: [],
-  /** Índice de búsqueda por transcripción (codigo → texto normalizado), o null si no se pidió. */
+  /**
+   * Transcripciones de todos los videos para el buscador (codigo → texto CRUDO, con acentos y
+   * mayúsculas: el buscador se arma con él y arma el fragmento con el texto original), o null si no
+   * se pidió.
+   */
   indice: null,
   /** true mientras se baja el índice de búsqueda. */
   indice_cargando: false,
+  /**
+   * Buscador por contenido (`buscador.js`) armado con el catálogo y, si ya llegó, el índice; null
+   * hasta que llega el catálogo. Va con `markRaw`: es una estructura grande que Vue no tiene que vigilar.
+   */
+  buscador: null,
   /** Detalle por código: { transcripcion, preguntas, cargando, error }. */
   detalles: {},
   /** Código del video abierto. */
@@ -533,12 +546,28 @@ export function cargar_catalogo() {
       por_codigo = indice
       estado.carpetas = markRaw(carpetas)
       estado.videos = markRaw(videos)
+      armar_buscador()
       estado.cargando = false
     })
     .catch(function () {
       estado.error_carga = true
       estado.cargando = false
     })
+}
+
+/**
+ * Arma (o vuelve a armar) el buscador con el catálogo y el índice de transcripciones que haya. Se llama
+ * apenas llega el catálogo, para poder buscar por título y "para qué" desde el primer momento, y otra
+ * vez cuando llega el índice. Si falla, el buscador queda en null y la lista de carpetas sigue andando.
+ *
+ * @returns {void}
+ */
+function armar_buscador() {
+  try {
+    estado.buscador = estado.videos.length ? markRaw(crear_buscador(estado.videos, estado.carpetas, estado.indice)) : null
+  } catch (e) {
+    estado.buscador = null
+  }
 }
 
 /**
@@ -736,7 +765,9 @@ export function cargar_detalle(codigo) {
 }
 
 /**
- * Baja el índice de transcripciones para el buscador, la primera vez que se escribe (§2, C2).
+ * Baja el índice de transcripciones para el buscador, la primera vez que se escribe (§2, C2), y
+ * rearma el buscador con él. Las transcripciones se guardan CRUDAS: el buscador las normaliza por su
+ * cuenta y necesita el texto original para mostrar el fragmento con sus acentos.
  *
  * @returns {void}
  */
@@ -747,12 +778,15 @@ export function cargar_indice() {
   estado.indice_cargando = true
   pedir('GET', 'recursos/buscar-indice', undefined, { sin_sesion: true })
     .then(function (r) {
-      /** Transcripciones normalizadas por código. */
+      /** Transcripciones por código (solo las que son texto). */
       const indice = {}
       Object.keys(r || {}).forEach(function (codigo) {
-        indice[codigo] = normalizar(r[codigo])
+        if (typeof r[codigo] === 'string') {
+          indice[codigo] = r[codigo]
+        }
       })
       estado.indice = markRaw(indice)
+      armar_buscador()
     })
     .catch(function () {
       /* Sin índice se busca igual por título y "para qué". */
