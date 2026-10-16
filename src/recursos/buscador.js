@@ -39,10 +39,18 @@
  *
  * La cobertura. Cada palabra de la consulta pesa lo rara que es en todo el centro (`ln(1 + N / videos que
  * la tienen)`), y la cobertura de un video es el peso de las palabras que tiene sobre el peso de todas. Entran
- * los videos con cobertura de al menos `UMBRAL_DE_COBERTURA` y el puntaje se multiplica por
+ * los videos con cobertura de al menos 0,5 y el puntaje se multiplica por
  * `cobertura ^ EXPONENTE_DE_COBERTURA`: un video que cubre tres de cuatro palabras, la rara incluida y
- * con el título cerca, le gana a uno que tiene las cuatro sueltas en el guion. `completo` es true si el
- * primero cubre todo.
+ * con el título cerca, le gana a uno que tiene las cuatro sueltas en el guion. Si con 0,5 no se juntan
+ * `CANDIDATOS_MINIMOS` videos (una pregunta larga en la que falta una palabra rara), el umbral baja de a
+ * pasos (`UMBRALES_DE_COBERTURA`: 0,5 → 0,4 → 0,3 → 0,25) hasta juntarlos o llegar al último; el multiplicador
+ * de cobertura sigue ordenando, así que bajar el umbral no pone arriba a los que dicen menos. `completo` es
+ * true solo si el primero cubre todo: bajar el umbral no cambia lo que significa (ni cuándo se muestra el aviso).
+ *
+ * Las palabras que existen tal cual. Quien escribe una palabra que está dicha en algún video no la ve tapada
+ * por una expansión: el tipeo y el "empieza igual" solo se aplican a lo que no existe, las otras formas de la
+ * raíz exigen ser parientes de verdad (`son_parientes`: "arqueo" no es "arca" aunque una regla general les
+ * haya dado la misma raíz) y los grupos de sinónimos se buscan por la raíz de cada palabra, nunca por la escrita.
  */
 import { normalizar } from './utiles.js'
 import {
@@ -103,6 +111,9 @@ const FACTOR_OTROS_CAMPOS = 0.1
 /** Premio por repetición: cuánto sube el puntaje por cada vez que se repite la palabra en un campo (en escala logarítmica). */
 const FACTOR_REPETICION = 0.2
 
+/** Letras iniciales que tienen que compartir dos palabras de la misma raíz para ser parientes (ver `son_parientes`). */
+const LARGO_MINIMO_DE_PARENTESCO = 3
+
 /** Largo mínimo de una palabra para que valga como "empieza igual" (con menos letras trae medio vocabulario). */
 const LARGO_MINIMO_PREFIJO = 3
 
@@ -116,11 +127,15 @@ const LARGO_MINIMO_TIPEO_CON_LETRA_CAMBIADA = 6
 const MAXIMO_DE_PALABRAS = 12
 
 /**
- * Cobertura mínima para que un video entre en los resultados aunque le falten palabras de la consulta: el peso
- * de las palabras que tiene sobre el peso de todas (ver `buscar`). Con 0,5, entre dos palabras igual de raras
- * alcanza con una; con tres, con dos.
+ * Coberturas mínimas para que un video entre en los resultados aunque le falten palabras de la consulta: el
+ * peso de las palabras que tiene sobre el peso de todas (ver `buscar`). Se empieza por la primera (con 0,5, entre
+ * dos palabras igual de raras alcanza con una; con tres, con dos) y se baja de a una si no se juntan
+ * `CANDIDATOS_MINIMOS`.
  */
-const UMBRAL_DE_COBERTURA = 0.5
+const UMBRALES_DE_COBERTURA = [0.5, 0.4, 0.3, 0.25]
+
+/** Cuántos videos se buscan juntar bajando el umbral de cobertura, y cuántos resultados se garantizan si los hay. */
+const CANDIDATOS_MINIMOS = 8
 
 /**
  * El puntaje de un video se multiplica por `cobertura ^ EXPONENTE_DE_COBERTURA`: cubrir 3 de 4 palabras igual de
@@ -317,6 +332,18 @@ const MAPA_DE_RAICES_IRREGULARES = new Map(Object.entries(RAICES_IRREGULARES))
  * @returns {string}
  */
 function calcular_raiz(palabra) {
+  /** La raíz que sale de las reglas generales. */
+  const regular = calcular_raiz_regular(palabra)
+  return MAPA_DE_RAICES_IRREGULARES.get(regular) || regular
+}
+
+/**
+ * La raíz que sacan las reglas generales, antes de mirar la tabla de verbos irregulares.
+ *
+ * @param {string} palabra Palabra en minúsculas y sin acentos.
+ * @returns {string}
+ */
+function calcular_raiz_regular(palabra) {
   if (MAPA_DE_RAICES_APARTE.has(palabra)) {
     return MAPA_DE_RAICES_APARTE.get(palabra)
   }
@@ -361,27 +388,33 @@ function calcular_raiz(palabra) {
   while (r.length > 3 && VOCALES.indexOf(r[r.length - 1]) !== -1) {
     r = r.slice(0, -1)
   }
-  // Ortografía: "busque" y "buscar", "empiece" y "empezar" tienen la misma raíz con otra letra al final.
-  if (r.endsWith('q')) {
+  // Ortografía: "busque" y "buscar", "empiece" y "empezar" tienen la misma raíz con otra letra al final. Con
+  // raíces de 4 letras o más: "arqueo" (arq-) y "arca" (arc-) no son el mismo verbo, y con tres letras no hay forma
+  // de saberlo. Los verbos cortos que sí cambian (tocar/toque, sacar/saque) están en `RAICES_IRREGULARES`.
+  if (r.endsWith('q') && r.length > 3) {
     r = r.slice(0, -1) + 'c'
   } else if (r.endsWith('z') && r.length > 3) {
     r = r.slice(0, -1) + 'c'
   }
-  return MAPA_DE_RAICES_IRREGULARES.get(r) || r
+  return r
 }
 
-/** Grupos de sinónimos indexados por palabra y por raíz: clave → números de grupo. Se arma una vez. */
+/**
+ * Grupos de sinónimos indexados por la RAÍZ de cada palabra: raíz → números de grupo. Se arma una vez. Se busca
+ * solo por raíz, nunca por la palabra escrita: si no, "cargara" (que tiene la raíz "cargar") caía en el grupo
+ * de "cargar", e "inventar" en el de "inventario", porque esa raíz se escribe igual que la palabra de la lista.
+ */
 const GRUPOS_POR_CLAVE = new Map()
 GRUPOS_DE_SINONIMOS.forEach(function (grupo, numero) {
   grupo.forEach(function (palabra) {
-    ;[palabra, raiz(palabra)].forEach(function (clave) {
-      if (!GRUPOS_POR_CLAVE.has(clave)) {
-        GRUPOS_POR_CLAVE.set(clave, [])
-      }
-      if (GRUPOS_POR_CLAVE.get(clave).indexOf(numero) === -1) {
-        GRUPOS_POR_CLAVE.get(clave).push(numero)
-      }
-    })
+    /** Raíz de la palabra del grupo. */
+    const clave = raiz(palabra)
+    if (!GRUPOS_POR_CLAVE.has(clave)) {
+      GRUPOS_POR_CLAVE.set(clave, [])
+    }
+    if (GRUPOS_POR_CLAVE.get(clave).indexOf(numero) === -1) {
+      GRUPOS_POR_CLAVE.get(clave).push(numero)
+    }
   })
 })
 
@@ -842,6 +875,29 @@ function rareza_de_la_coincidencia(entrada, campo, puntos) {
 }
 
 /**
+ * Indica si dos palabras que tienen la misma raíz son de verdad formas de lo mismo: empiezan igual en las tres
+ * primeras letras, o alguna es de un verbo irregular (muestra y mostrar no empiezan igual y son parientes). Es
+ * la defensa contra un parentesco falso de las reglas generales: "arqueo" y "arca" llegaron a tener la misma
+ * raíz, y quien escribía "arqueo" encontraba antes los 4 videos de ARCA que los 3 que dicen "arqueo".
+ *
+ * @param {string} a
+ * @param {string} b
+ * @returns {boolean}
+ */
+export function son_parientes(a, b) {
+  /** Cuántas letras iniciales tienen en común. */
+  let i = 0
+  while (i < LARGO_MINIMO_DE_PARENTESCO && a[i] !== undefined && a[i] === b[i]) {
+    i++
+  }
+  return (
+    i >= LARGO_MINIMO_DE_PARENTESCO ||
+    MAPA_DE_RAICES_IRREGULARES.has(calcular_raiz_regular(a)) ||
+    MAPA_DE_RAICES_IRREGULARES.has(calcular_raiz_regular(b))
+  )
+}
+
+/**
  * Suma al mapa la palabra tal cual y las otras formas de su raíz (plural, verbo), si existen en el corpus.
  *
  * @param {Object} b Buscador.
@@ -863,7 +919,7 @@ function anotar_formas(b, mapa, palabra, base) {
   const hermanas = b.por_raiz.get(raiz(palabra))
   if (hermanas) {
     hermanas.forEach(function (e) {
-      if (e !== exacta) {
+      if (e !== exacta && son_parientes(palabra, e.palabra)) {
         anotar(mapa, e, base * PUNTOS.raiz)
         hallo = true
       }
@@ -911,13 +967,11 @@ function resolver_palabra(b, palabra) {
   }
 
   // Sinónimos: los de la palabra y los de su raíz. Pesan igual de raros que ella (ver `crear_buscador`).
-  ;[palabra, raiz(palabra)].forEach(function (clave) {
-    ;(GRUPOS_POR_CLAVE.get(clave) || []).forEach(function (numero) {
-      GRUPOS_DE_SINONIMOS[numero].forEach(function (otra) {
-        if (otra !== palabra && raiz(otra) !== raiz(palabra)) {
-          anotar_formas(b, mapa, otra, PUNTOS.sinonimo)
-        }
-      })
+  ;(GRUPOS_POR_CLAVE.get(raiz(palabra)) || []).forEach(function (numero) {
+    GRUPOS_DE_SINONIMOS[numero].forEach(function (otra) {
+      if (otra !== palabra && raiz(otra) !== raiz(palabra)) {
+        anotar_formas(b, mapa, otra, PUNTOS.sinonimo)
+      }
     })
   })
 
@@ -1133,7 +1187,9 @@ function elegir_fragmento(doc, eventos) {
  *   siempre se listan; los que cubren solo parte, si su puntaje no quedó lejos del mejor.
  * - `completo: false`: el mejor no cubre todo, o alguna palabra no existe en ningún video, o es una
  *   coincidencia floja. La página muestra el aviso "los que más se parecen". Los resultados son los que
- *   cubren la mayor parte de la consulta, con un máximo. Con una sola palabra: o hay videos o no hay nada.
+ *   cubren la mayor parte de la consulta, con un máximo, y nunca menos de `CANDIDATOS_MINIMOS` si hay tantos
+ *   que cubran algo (el umbral de cobertura baja de a pasos hasta juntarlos). Con una sola palabra: o hay videos
+ *   o no hay nada.
  *
  * @param {Object} buscador Lo que devolvió `crear_buscador`.
  * @param {string} consulta Lo que escribió la persona.
@@ -1258,9 +1314,8 @@ export function buscar(buscador, consulta) {
   }
   /** Cobertura de cada video (0 a 1) y valor previo para quedarse con los mejores parciales. */
   const cobertura = new Float64Array(total)
-  /** Videos que cubren todo y videos que cubren bastante pero no todo, con su valor previo. */
-  const enteros = []
-  const parciales = []
+  /** Valor previo de cada video: lo que suman sus palabras por el multiplicador de cobertura. */
+  const previos = new Float64Array(total)
   for (let d = 0; d < total; d++) {
     let cubierto = 0
     let valor = 0
@@ -1271,10 +1326,32 @@ export function buscar(buscador, consulta) {
       }
     }
     cobertura[d] = cubierto / suma_de_pesos
+    previos[d] = valor * Math.pow(cobertura[d], EXPONENTE_DE_COBERTURA)
+  }
+  // Umbral adaptativo: con una pregunta larga en la que falta una palabra rara, el 0,5 deja casi vacío. Si con el
+  // umbral actual no llegan a `CANDIDATOS_MINIMOS`, se baja de a pasos hasta juntarlos o llegar al último.
+  /** Umbral de cobertura con el que se eligen los videos. */
+  let umbral = UMBRALES_DE_COBERTURA[0]
+  for (let u = 0; u < UMBRALES_DE_COBERTURA.length; u++) {
+    umbral = UMBRALES_DE_COBERTURA[u]
+    let cuantos = 0
+    for (let d = 0; d < total && cuantos < CANDIDATOS_MINIMOS; d++) {
+      if (cobertura[d] >= umbral - 1e-9) {
+        cuantos++
+      }
+    }
+    if (cuantos >= CANDIDATOS_MINIMOS) {
+      break
+    }
+  }
+  /** Videos que cubren todo y videos que cubren bastante pero no todo, con su valor previo. */
+  const enteros = []
+  const parciales = []
+  for (let d = 0; d < total; d++) {
     if (cobertura[d] >= 1 - 1e-9) {
       enteros.push(d)
-    } else if (cobertura[d] >= UMBRAL_DE_COBERTURA - 1e-9) {
-      parciales.push({ d: d, previo: valor * Math.pow(cobertura[d], EXPONENTE_DE_COBERTURA) })
+    } else if (cobertura[d] >= umbral - 1e-9) {
+      parciales.push({ d: d, previo: previos[d] })
     }
   }
   // Los parciales son muchos cuando la consulta es larga: se leen los textos solo de los mejores.
@@ -1419,14 +1496,19 @@ export function buscar(buscador, consulta) {
   /** true si el mejor video cubre todas las palabras de la consulta, ninguna faltó en el centro entero y no es una coincidencia floja. */
   const completo = buscables === n && resultados[0].cobertura >= 1 - 1e-9 && !debil
   // Los videos que cubren todo se muestran siempre; los que cubren solo parte, si no quedaron lejos del mejor
-  // y hasta un máximo.
-  /** Cuántos parciales entraron. */
+  // (o si todavía no hay `CANDIDATOS_MINIMOS` en la lista) y hasta un máximo.
+  /** Cuántos parciales entraron y cuántos resultados lleva la lista. */
   let parciales_mostrados = 0
+  let en_lista = 0
   const lista = resultados.filter(function (x) {
-    if (x.cobertura >= 1 - 1e-9) {
-      return true
+    /** Si entra en la lista. */
+    const entra =
+      x.cobertura >= 1 - 1e-9 ||
+      ((x.puntaje >= PISO_PARCIALES * resultados[0].puntaje || en_lista < CANDIDATOS_MINIMOS) && parciales_mostrados++ < MAXIMO_PARCIALES)
+    if (entra) {
+      en_lista++
     }
-    return x.puntaje >= PISO_PARCIALES * resultados[0].puntaje && parciales_mostrados++ < MAXIMO_PARCIALES
+    return entra
   })
   lista.forEach(function (x) {
     delete x.orden

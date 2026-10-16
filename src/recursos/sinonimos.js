@@ -26,6 +26,10 @@
  * campo por campo. Y alguien que escribe "reportes" tiene que encontrar los videos de la carpeta
  * Reportes por su título: si fueran relleno, no encontraría nada.
  *
+ * "Sin" NO está: es lo que distingue "ventas sin factura" de "ventas" y "vender sin internet" de "vender" (21
+ * títulos, 184 guiones). Pesa poco por ser común, y la cercanía premia al video que dice justo "sin factura".
+ * "No" sí está: se probó sacarlo y no cambió ningún resultado.
+ *
  * Si TODAS las palabras de la consulta están acá, el buscador las busca tal cual (no se queda sin
  * nada que buscar: "para qué sirve" sigue buscando).
  *
@@ -35,7 +39,7 @@ export const PALABRAS_DE_RELLENO = new Set(
   (
     // artículos, preposiciones y conjunciones
     'a al ante con contra de del desde e el en entre hacia hasta la las le les lo los o para pero por ' +
-    'porque pues que se segun sin sobre su sus tras u un una unas unos y ya ' +
+    'porque pues que se segun sobre su sus tras u un una unas unos y ya ' +
     // pronombres, demostrativos y posesivos
     'me mi mis nos te ti tu tus vos yo ella ello ellos esa ese eso esas esos esta este esto estas estos ' +
     'aquel aquella aquello algo alguien nada nadie ' +
@@ -225,11 +229,15 @@ export const RAICES_APARTE = {
  * encontrar 28 y encuentra 15; mover 19 y mueve 26; devolver 17 y devuelve 9; empezar 32 y empieza 7;
  * repetir 12 y repite 11; costar 73 y cuesta 6; resolver 4 y resuelve 9; perder 14 y pierde 5; entender 15
  * y entiende 2; desplegar 329 y despliega 6; probar 5 y prueba 11). Quedan afuera los que juntarían
- * palabras que no son parientes: "ficha" y "fecha", "cuenta" y "contar", "dice" y "decir".
+ * palabras que no son parientes: "ficha" y "fecha", "cuenta" y "contar", "dice" y "decir". "toq" y "saq"
+ * (toque y tocar; saque y sacar) son los únicos de tres letras: la regla general de "-que" → "-car" pide
+ * cuatro para no juntar "arqueo" (3 videos) con "arca" (29).
  *
  * @type {Object<string, string>}
  */
 export const RAICES_IRREGULARES = {
+  toq: 'toc',
+  saq: 'sac',
   muestr: 'mostr',
   pid: 'ped',
   vuelv: 'volv',
