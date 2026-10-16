@@ -2,6 +2,7 @@
   <aside class="barra-lateral" aria-label="Carpetas de videos" :inert="oculta || null">
     <div class="buscar">
       <input
+        ref="entrada"
         v-model="consulta"
         type="search"
         placeholder="¿Qué querés aprender? (ej. escanear factura, cheque, lista)"
@@ -13,9 +14,10 @@
       <!-- Cuántos videos encontró. Está siempre en la página (vacía cuando no se busca nada) porque un
            aviso `aria-live` solo se anuncia si ya existía antes de cambiar su texto. -->
       <p class="busq-estado" role="status" aria-live="polite">{{ texto_de_estado }}</p>
-      <!-- Ninguno tiene todas las palabras: se muestran los que más se parecen. -->
+      <!-- El mejor no tiene todas las palabras: se muestran los que más se parecen. El texto no afirma nada de los
+           que vienen más abajo (alguno puede tenerlas todas). -->
       <p v-if="busqueda.resultados.length && !busqueda.completo" class="busq-aviso">
-        Ninguno tiene todas las palabras: estos son los que más se parecen.
+        Estos son los videos que más se parecen a lo que buscás.
       </p>
       <!-- El índice de transcripciones todavía no llegó: se busca ya por título y "para qué". -->
       <p v-if="buscando && estado.indice_cargando" class="busq-aviso espera">
@@ -33,7 +35,17 @@
             <button type="button" @click="limpiar">Volver a las carpetas</button>
           </template>
           <!-- Se escribió antes de que llegara el catálogo: todavía no hay dónde buscar. -->
-          <p v-else>Cargando los videos…</p>
+          <p v-else-if="estado.cargando">Cargando los videos…</p>
+          <!-- El catálogo no llegó: no se puede quedar diciendo "Cargando…" para siempre. -->
+          <template v-else-if="estado.error_carga">
+            <p role="alert">No pudimos cargar los videos. Probá de nuevo.</p>
+            <button type="button" @click="reintentar">Reintentar</button>
+          </template>
+          <!-- Llegó el catálogo pero la búsqueda no se pudo armar (o no hay videos): las carpetas siguen andando. -->
+          <template v-else>
+            <p>La búsqueda no está disponible por ahora.</p>
+            <button type="button" @click="limpiar">Volver a las carpetas</button>
+          </template>
         </div>
         <template v-else>
           <button
@@ -56,7 +68,7 @@
             </span>
             <span class="dur">{{ mmss(r.video.duracion) }}</span>
           </button>
-          <button v-if="quedan_por_mostrar" type="button" class="mas-resultados" @click="mostrar_mas">
+          <button v-if="quedan_por_mostrar" ref="mas" type="button" class="mas-resultados" @click="mostrar_mas">
             Mostrar {{ cuantos_mas }} más
           </button>
         </template>
@@ -129,6 +141,7 @@ import {
   abrir_video,
   alternar_carpeta,
   cargar_indice,
+  reintentar_carga,
   video_por_codigo,
 } from '../estado'
 import { buscar } from '../buscador'
@@ -163,6 +176,10 @@ export default {
       consulta: '',
       /** Cuántos resultados se muestran (crece de a `RESULTADOS_POR_TANDA` con "Mostrar más"). */
       limite: RESULTADOS_POR_TANDA,
+      /** Cuántos resultados sumó el último "Mostrar más" (0 = ninguno): lo lee el aviso `aria-live`. */
+      sumados: 0,
+      /** `scrollTop` de la lista de carpetas antes de empezar a buscar, o null si no se está buscando. */
+      scroll_guardado: null,
     }
   },
   computed: {
@@ -250,10 +267,12 @@ export default {
       if (!n) {
         return 'No se encontraron videos.'
       }
+      /** Lo que se anuncia después de tocar "Mostrar más" (una sola vez por toque). */
+      const sumados = this.sumados ? ' Se sumaron ' + this.sumados + (this.sumados === 1 ? ' resultado.' : ' resultados.') : ''
       if (!this.busqueda.completo) {
-        return n === 1 ? '1 video que se parece.' : n + ' videos que se parecen.'
+        return (n === 1 ? '1 video que se parece.' : n + ' videos que se parecen.') + sumados
       }
-      return n === 1 ? '1 video encontrado.' : n + ' videos encontrados.'
+      return (n === 1 ? '1 video encontrado.' : n + ' videos encontrados.') + sumados
     },
     /**
      * Carpetas a dibujar, cada una con su avance y sus filas (secciones y videos). Es la lista de
@@ -311,23 +330,47 @@ export default {
     /** Al abrir otro video, la lista lo trae a la vista (como `pintarCarpetas()` del prototipo). */
     'estado.actual'() {
       this.$nextTick(() => {
-        /** Video seleccionado en la lista. */
-        const sel = this.$refs.lista ? this.$refs.lista.querySelector('.vid.sel') : null
-        if (sel && typeof sel.scrollIntoView === 'function') {
-          sel.scrollIntoView({ block: 'nearest' })
-        }
+        this.traer_el_actual_a_la_vista()
       })
     },
-    /** Cada búsqueda nueva empieza con la primera tanda, desde arriba de la lista. */
-    consulta() {
+    /**
+     * Cada búsqueda nueva empieza con la primera tanda, desde arriba de la lista. Al borrar lo escrito vuelven las
+     * carpetas en el lugar donde estaban antes de buscar (y el video abierto, a la vista).
+     */
+    consulta(nueva) {
       this.limite = RESULTADOS_POR_TANDA
-      if (this.$refs.lista) {
-        this.$refs.lista.scrollTop = 0
+      this.sumados = 0
+      if (nueva.trim()) {
+        if (this.$refs.lista) {
+          this.$refs.lista.scrollTop = 0
+        }
+        return
       }
+      /** Dónde estaba la lista antes de buscar. */
+      const donde = this.scroll_guardado
+      this.scroll_guardado = null
+      this.$nextTick(() => {
+        if (!this.$refs.lista) {
+          return
+        }
+        this.$refs.lista.scrollTop = donde === null ? 0 : donde
+        this.traer_el_actual_a_la_vista()
+      })
     },
   },
   methods: {
     mmss: mmss,
+    /**
+     * Deja a la vista, en la lista, el video que está abierto (si se está dibujando).
+     * @returns {void}
+     */
+    traer_el_actual_a_la_vista() {
+      /** Video seleccionado en la lista. */
+      const sel = this.$refs.lista ? this.$refs.lista.querySelector('.vid.sel') : null
+      if (sel && typeof sel.scrollIntoView === 'function') {
+        sel.scrollIntoView({ block: 'nearest' })
+      }
+    },
     /**
      * Renglón de datos de una carpeta: "12 videos · 18 min" ("1 video" en singular). Los minutos suman
      * todos los videos de la carpeta.
@@ -397,18 +440,23 @@ export default {
      * @returns {void}
      */
     al_escribir() {
+      // Todavía se ven las carpetas (la lista se redibuja después de este evento): se guarda dónde estaban.
+      if (this.scroll_guardado === null && this.$refs.lista) {
+        this.scroll_guardado = this.$refs.lista.scrollTop
+      }
       if (this.consulta.trim()) {
         cargar_indice()
       }
     },
     /**
      * Enter en el buscador abre el primer resultado. No hace nada si se está componiendo un carácter
-     * con un teclado de teléfono (ahí Enter confirma la palabra, no la búsqueda).
+     * con un teclado de teléfono o de escritura asistida (ahí Enter confirma la palabra, no la búsqueda). Safari
+     * manda ese Enter con `isComposing` en false y `keyCode` 229.
      * @param {KeyboardEvent} ev
      * @returns {void}
      */
     al_apretar_enter(ev) {
-      if (ev.isComposing || !this.buscando) {
+      if (ev.isComposing || ev.keyCode === 229 || !this.buscando) {
         return
       }
       ev.preventDefault()
@@ -439,13 +487,47 @@ export default {
      */
     limpiar() {
       this.consulta = ''
+      // El botón "Volver a las carpetas" desaparece al apretarlo: sin esto el foco se perdía en el `body`.
+      this.$nextTick(() => {
+        if (this.$refs.entrada) {
+          this.$refs.entrada.focus()
+        }
+      })
     },
     /**
-     * Suma otra tanda de resultados.
+     * Reintenta la carga del catálogo (cuando falló y se había empezado a buscar).
      * @returns {void}
      */
-    mostrar_mas() {
+    reintentar() {
+      reintentar_carga()
+    },
+    /**
+     * Suma otra tanda de resultados. Si se apretó con el teclado, o si con esta tanda el botón desaparece (el
+     * foco se perdería en el `body`), el foco pasa al primer resultado nuevo; el aviso `aria-live` dice cuántos
+     * se sumaron.
+     * @param {MouseEvent} [ev] Evento del clic; `detail` es 0 cuando lo disparó el teclado.
+     * @returns {void}
+     */
+    mostrar_mas(ev) {
+      /** Cuántos había y cuántos se suman. */
+      const antes = this.limite
+      const cuantos = this.cuantos_mas
+      /** true si lo disparó el teclado (Enter o espacio sobre el botón). */
+      const con_teclado = !ev || ev.detail === 0
       this.limite += RESULTADOS_POR_TANDA
+      this.sumados = cuantos
+      this.$nextTick(() => {
+        /** El botón sigue ahí si todavía quedan resultados por mostrar. */
+        const sigue = !!this.$refs.mas
+        if (!this.$refs.lista || (sigue && !con_teclado)) {
+          return
+        }
+        /** Primer resultado de la tanda nueva. */
+        const nuevo = this.$refs.lista.querySelectorAll('.vid.res')[antes]
+        if (nuevo && typeof nuevo.focus === 'function') {
+          nuevo.focus()
+        }
+      })
     },
   },
 }

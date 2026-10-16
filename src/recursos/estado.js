@@ -50,6 +50,9 @@ const MS_ENTRE_ENVIOS = 10000
 /** Clave de `localStorage` de las preferencias del visitante (velocidad y carpetas abiertas). */
 const CLAVE_PREFERENCIAS = 'cc-recursos-preferencias'
 
+/** Cuánto se espera para volver a pedir el índice de búsqueda después de que falló (milisegundos). */
+const ESPERA_TRAS_FALLO_DEL_INDICE = 30000
+
 /** Velocidades que ofrece el reproductor (las del prototipo). */
 export const VELOCIDADES = [1, 1.25, 1.5, 2]
 
@@ -81,6 +84,8 @@ export const estado = reactive({
   indice: null,
   /** true mientras se baja el índice de búsqueda. */
   indice_cargando: false,
+  /** Cuándo falló el último pedido del índice (milisegundos, `Date.now()`), o 0 si no falló: ver `cargar_indice`. */
+  indice_fallo: 0,
   /**
    * Buscador por contenido (`buscador.js`) armado con el catálogo y, si ya llegó, el índice; null
    * hasta que llega el catálogo. Va con `markRaw`: es una estructura grande que Vue no tiene que vigilar.
@@ -775,6 +780,10 @@ export function cargar_indice() {
   if (estado.indice || estado.indice_cargando) {
     return
   }
+  // Tras un fallo no se vuelve a pedir en cada tecla: con 16 teclas eran 16 pedidos y 16 errores.
+  if (estado.indice_fallo && Date.now() - estado.indice_fallo < ESPERA_TRAS_FALLO_DEL_INDICE) {
+    return
+  }
   estado.indice_cargando = true
   pedir('GET', 'recursos/buscar-indice', undefined, { sin_sesion: true })
     .then(function (r) {
@@ -786,10 +795,12 @@ export function cargar_indice() {
         }
       })
       estado.indice = markRaw(indice)
+      estado.indice_fallo = 0
       armar_buscador()
     })
     .catch(function () {
-      /* Sin índice se busca igual por título y "para qué". */
+      // Sin índice se busca igual por título y "para qué"; se vuelve a intentar a lo sumo cada tanto.
+      estado.indice_fallo = Date.now()
     })
     .then(function () {
       estado.indice_cargando = false
