@@ -15,7 +15,7 @@
  *   lo que mide el contenido (como hace el navegador cuando el contenido se achica) y `scrollIntoView` mueve lo
  *   justo.
  */
-import { test, describe, before, after } from 'node:test'
+import { test, describe, before, after, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -324,6 +324,12 @@ let cuerpos = { catalogo: {}, indice: {} }
 /** Pedidos de catálogo que llegaron al "servidor", y si el catálogo tiene que fallar. */
 let pedidos_de_catalogo = 0
 let catalogo_caido = false
+/** Búsquedas que la página le mandó al "servidor" (cuerpos de `POST recursos/busquedas`), y con qué status contesta. */
+let busquedas_enviadas = []
+let status_de_busquedas = 200
+/** Módulos de la página cargados con el mismo Vite que el componente (comparten estado con él). */
+let modulo_api = null
+let modulo_buscador = null
 
 /** Catálogo de la página con `carpetas` carpetas de `por_carpeta` videos, más lo que agreguen `extra`. */
 function catalogo_largo(carpetas, por_carpeta) {
@@ -410,7 +416,11 @@ describe('BarraCarpetas montada en un DOM simulado', function () {
     globalThis.Document = DocumentoFalso
     globalThis.ShadowRoot = class ShadowRootFalso {}
     // El catálogo y el índice que "devuelve el servidor": lo que haya en `cuerpos`.
-    globalThis.fetch = async function (url) {
+    globalThis.fetch = async function (url, opciones) {
+      if (String(url).endsWith('recursos/busquedas')) {
+        busquedas_enviadas.push(JSON.parse(opciones.body))
+        return { ok: status_de_busquedas < 300, status: status_de_busquedas, text: async () => '{"registrado":true}' }
+      }
       const es_indice = String(url).endsWith('recursos/buscar-indice')
       if (!es_indice && String(url).endsWith('recursos/catalogo')) {
         pedidos_de_catalogo++
@@ -437,6 +447,8 @@ describe('BarraCarpetas montada en un DOM simulado', function () {
     const estado = await servidor.ssrLoadModule('/src/recursos/estado.js')
     estado_de_la_pagina = estado.estado
     cargar_catalogo_pagina = estado.cargar_catalogo
+    modulo_api = await servidor.ssrLoadModule('/src/recursos/api.js')
+    modulo_buscador = await servidor.ssrLoadModule('/src/recursos/buscador.js')
   })
 
   after(async function () {
@@ -667,6 +679,316 @@ describe('BarraCarpetas montada en un DOM simulado', function () {
       } finally {
         catalogo_caido = false
       }
+      m.desmontar()
+    })
+  })
+
+  describe('BarraCarpetas montada: el registro de búsquedas (misión busquedas-centro-recursos)', function () {
+    /** Cuánto espera la página sin cambios antes de registrar la búsqueda. */
+    const ESPERA = 1500
+    let reloj = null
+
+    /** Cambia `setTimeout` por un reloj que solo avanza cuando el test lo pide (solo para la espera del registro). */
+    function instalar_reloj() {
+      const real = { poner: globalThis.setTimeout, sacar: globalThis.clearTimeout }
+      const tareas = new Map()
+      let n = 0
+      globalThis.setTimeout = function (funcion, ms, ...resto) {
+        if (ms === ESPERA) {
+          const id = 'falso' + ++n
+          tareas.set(id, funcion)
+          return id
+        }
+        return real.poner(funcion, ms, ...resto)
+      }
+      globalThis.clearTimeout = function (id) {
+        if (typeof id === 'string' && id.startsWith('falso')) {
+          tareas.delete(id)
+          return
+        }
+        return real.sacar(id)
+      }
+      return {
+        pendientes: () => tareas.size,
+        /** Pasa la espera: corre todo lo que estaba esperando. */
+        async pasar_la_espera() {
+          for (const [id, funcion] of Array.from(tareas)) {
+            tareas.delete(id)
+            funcion()
+          }
+          await microtareas()
+        },
+        restaurar() {
+          globalThis.setTimeout = real.poner
+          globalThis.clearTimeout = real.sacar
+        },
+      }
+    }
+
+    /** Espera a que termine de cargar el índice de transcripciones (el registro no cuenta resultados provisorios). */
+    async function esperar_el_indice() {
+      for (let i = 0; i < 50 && estado_de_la_pagina.indice_cargando; i++) {
+        await microtareas()
+      }
+    }
+
+    /** Escribe y espera a que el índice esté cargado. */
+    async function escribir_y_esperar(m, texto) {
+      await escribir(m.entrada, texto, 'real')
+      await esperar_el_indice()
+      await microtareas()
+    }
+
+    /** Lo que el buscador devuelve ahora para `texto`. */
+    function lo_que_encuentra(texto) {
+      return modulo_buscador.buscar(estado_de_la_pagina.buscador, texto)
+    }
+
+    beforeEach(function () {
+      busquedas_enviadas = []
+      status_de_busquedas = 200
+      modulo_api.reactivar_registro_de_busquedas()
+      reloj = instalar_reloj()
+    })
+
+    afterEach(function () {
+      reloj.restaurar()
+      estado_de_la_pagina.usuario = null
+      modulo_api.reactivar_registro_de_busquedas()
+    })
+
+    test('escribir una consulta y esperar manda UN evento con resultados, primero y completo', async function () {
+      const m = await montar(catalogo_largo(2, 3))
+      await escribir_y_esperar(m, 'tem')
+      await escribir_y_esperar(m, 'tema')
+      assert.equal(reloj.pendientes(), 1, 'una sola búsqueda esperando, no una por tecla')
+      await reloj.pasar_la_espera()
+      const esperado = lo_que_encuentra('tema')
+      assert.equal(busquedas_enviadas.length, 1)
+      const e = busquedas_enviadas[0]
+      assert.match(e.evento, /^[A-Za-z0-9]{8,40}$/)
+      assert.equal(e.consulta, 'tema')
+      assert.equal(e.resultados, 6)
+      assert.equal(e.resultados, m.lista.querySelectorAll('vid.res').length, 'lo mismo que ve la persona')
+      assert.equal(e.primero, esperado.resultados[0].codigo)
+      assert.equal(e.completo, esperado.completo)
+      assert.equal('abrio' in e, false)
+      await reloj.pasar_la_espera()
+      assert.equal(busquedas_enviadas.length, 1, 'no se repite')
+      m.desmontar()
+    })
+
+    test('una consulta sin resultados se registra con resultados 0 y primero null', async function () {
+      const m = await montar(catalogo_largo(2, 3))
+      await escribir_y_esperar(m, 'zzzzqx')
+      await reloj.pasar_la_espera()
+      assert.equal(busquedas_enviadas.length, 1)
+      assert.equal(busquedas_enviadas[0].resultados, 0)
+      assert.equal(busquedas_enviadas[0].primero, null)
+      assert.equal(typeof busquedas_enviadas[0].completo, 'boolean')
+      m.desmontar()
+    })
+
+    test('un clic en un resultado manda el evento con abrio y posicion', async function () {
+      const m = await montar(catalogo_largo(2, 3))
+      await escribir_y_esperar(m, 'tema')
+      const esperado = lo_que_encuentra('tema')
+      await disparar(m.lista.querySelectorAll('vid.res')[2], 'click', { detail: 1 }, 'real')
+      assert.equal(busquedas_enviadas.length, 1, 'salió sin esperar')
+      assert.equal(busquedas_enviadas[0].abrio, esperado.resultados[2].codigo)
+      assert.equal(busquedas_enviadas[0].posicion, 3)
+      assert.equal(busquedas_enviadas[0].consulta, 'tema')
+      assert.equal(busquedas_enviadas[0].resultados, 6)
+      assert.equal(reloj.pendientes(), 0)
+      // Otro clic en la misma búsqueda no suma.
+      await disparar(m.lista.querySelectorAll('vid.res')[0], 'click', { detail: 1 }, 'real')
+      assert.equal(busquedas_enviadas.length, 1)
+      m.desmontar()
+    })
+
+    test('el clic después de que salió el evento sin clic manda otro con el MISMO evento', async function () {
+      const m = await montar(catalogo_largo(2, 3))
+      await escribir_y_esperar(m, 'tema')
+      await reloj.pasar_la_espera()
+      await disparar(m.lista.querySelectorAll('vid.res')[0], 'click', { detail: 1 }, 'real')
+      assert.equal(busquedas_enviadas.length, 2)
+      assert.equal(busquedas_enviadas[0].evento, busquedas_enviadas[1].evento)
+      assert.equal(busquedas_enviadas[1].abrio, lo_que_encuentra('tema').resultados[0].codigo)
+      assert.equal(busquedas_enviadas[1].posicion, 1)
+      m.desmontar()
+    })
+
+    test('Enter abre el primer resultado y lo registra como posicion 1', async function () {
+      const m = await montar(catalogo_largo(2, 3))
+      await escribir_y_esperar(m, 'tema')
+      await disparar(m.entrada, 'keydown', { key: 'Enter', isComposing: false, keyCode: 13 }, 'real')
+      assert.equal(busquedas_enviadas.length, 1)
+      assert.equal(busquedas_enviadas[0].abrio, lo_que_encuentra('tema').resultados[0].codigo)
+      assert.equal(busquedas_enviadas[0].posicion, 1)
+      assert.equal(estado_de_la_pagina.actual, busquedas_enviadas[0].abrio, 'el video se abrió igual')
+      m.desmontar()
+    })
+
+    test('un resultado más abajo de "Mostrar más" lleva su posición real en la lista', async function () {
+      const m = await montar(catalogo_largo(10, 10))
+      await escribir_y_esperar(m, 'tema')
+      const boton = m.raiz.descendientes().filter((n) => n.etiqueta === 'button' && /^Mostrar \d+ más$/.test(n.textContent.trim()))[0]
+      await disparar(boton, 'click', { detail: 1 }, 'real')
+      await disparar(m.lista.querySelectorAll('vid.res')[44], 'click', { detail: 1 }, 'real')
+      assert.equal(busquedas_enviadas.length, 1)
+      assert.equal(busquedas_enviadas[0].posicion, 45)
+      assert.equal(busquedas_enviadas[0].resultados, 100)
+      m.desmontar()
+    })
+
+    test('un clic en un video de las carpetas (sin buscar) no registra nada', async function () {
+      const m = await montar(catalogo_largo(2, 3))
+      const video = m.lista.querySelectorAll('vid')[0]
+      assert.ok(video, 'hay videos en las carpetas')
+      await disparar(video, 'click', { detail: 1 }, 'real')
+      await reloj.pasar_la_espera()
+      assert.deepEqual(busquedas_enviadas, [])
+      m.desmontar()
+    })
+
+    test('sin nada escrito no emite nada; escribir y borrar antes de la espera tampoco', async function () {
+      const m = await montar(catalogo_largo(2, 3))
+      await reloj.pasar_la_espera()
+      assert.deepEqual(busquedas_enviadas, [])
+      await escribir_y_esperar(m, 'tema')
+      assert.equal(reloj.pendientes(), 1)
+      await escribir_y_esperar(m, '')
+      assert.equal(reloj.pendientes(), 0, 'borrar descarta lo pendiente')
+      await reloj.pasar_la_espera()
+      assert.deepEqual(busquedas_enviadas, [])
+      await escribir_y_esperar(m, '   ')
+      await reloj.pasar_la_espera()
+      assert.deepEqual(busquedas_enviadas, [])
+      m.desmontar()
+    })
+
+    test('Escape descarta la búsqueda pendiente', async function () {
+      const m = await montar(catalogo_largo(2, 3))
+      await escribir_y_esperar(m, 'tema')
+      await disparar(m.entrada, 'keydown', { key: 'Escape', isComposing: false, keyCode: 27 }, 'real')
+      await reloj.pasar_la_espera()
+      assert.deepEqual(busquedas_enviadas, [])
+      m.desmontar()
+    })
+
+    test('al desmontar el componente se descarta lo pendiente', async function () {
+      const m = await montar(catalogo_largo(2, 3))
+      await escribir_y_esperar(m, 'tema')
+      assert.equal(reloj.pendientes(), 1)
+      m.desmontar()
+      assert.equal(reloj.pendientes(), 0)
+      await reloj.pasar_la_espera()
+      assert.deepEqual(busquedas_enviadas, [])
+    })
+
+    test('una consulta con datos personales no se registra (ni sale el clic)', async function () {
+      const m = await montar(catalogo_largo(2, 3))
+      for (const texto of ['tema 3444622139', 'tema a@b.com', 'tema 11 5555 1234']) {
+        await escribir_y_esperar(m, texto)
+        assert.equal(reloj.pendientes(), 0, texto)
+        await reloj.pasar_la_espera()
+        const fila = m.lista.querySelectorAll('vid.res')[0]
+        if (fila) {
+          await disparar(fila, 'click', { detail: 1 }, 'real')
+        }
+      }
+      assert.deepEqual(busquedas_enviadas, [])
+      m.desmontar()
+    })
+
+    test('con una sesión de soporte (solo lectura) no registra nada', async function () {
+      estado_de_la_pagina.usuario = { id: 1, nombre: 'Soporte', solo_lectura: true }
+      const m = await montar(catalogo_largo(2, 3))
+      await escribir_y_esperar(m, 'tema')
+      assert.equal(reloj.pendientes(), 0)
+      await reloj.pasar_la_espera()
+      await disparar(m.lista.querySelectorAll('vid.res')[0], 'click', { detail: 1 }, 'real')
+      assert.deepEqual(busquedas_enviadas, [])
+      assert.ok(m.lista.querySelector('vid.res'), 'el buscador anda igual')
+      m.desmontar()
+    })
+
+    test('con un cliente común (sesión que no es de soporte) sí registra', async function () {
+      estado_de_la_pagina.usuario = { id: 2, nombre: 'Dueño', solo_lectura: false }
+      const m = await montar(catalogo_largo(2, 3))
+      await escribir_y_esperar(m, 'tema')
+      await reloj.pasar_la_espera()
+      assert.equal(busquedas_enviadas.length, 1)
+      m.desmontar()
+    })
+
+    test('mientras el índice de transcripciones carga no registra, y al llegar registra lo definitivo', async function () {
+      const m = await montar(catalogo_largo(2, 3))
+      estado_de_la_pagina.indice_cargando = true
+      await escribir(m.entrada, 'tema', 'real')
+      assert.equal(reloj.pendientes(), 0, 'los resultados son provisorios')
+      estado_de_la_pagina.indice_cargando = false
+      await microtareas()
+      assert.equal(reloj.pendientes(), 1)
+      await reloj.pasar_la_espera()
+      assert.equal(busquedas_enviadas.length, 1)
+      m.desmontar()
+    })
+
+    test('si el servidor contesta 404 (API vieja) el buscador sigue mostrando resultados y se apaga solo', async function () {
+      status_de_busquedas = 404
+      const m = await montar(catalogo_largo(2, 3))
+      await escribir_y_esperar(m, 'tema')
+      await reloj.pasar_la_espera()
+      await microtareas()
+      assert.equal(busquedas_enviadas.length, 1, 'lo intentó una vez')
+      assert.equal(modulo_api.registro_de_busquedas_esta_apagado(), true)
+      assert.equal(m.lista.querySelectorAll('vid.res').length, 6, 'el buscador sigue mostrando los resultados')
+      assert.equal(texto_de(m.raiz, 'busq-estado'), '6 videos encontrados.')
+      // Otra búsqueda en la misma visita ya no sale.
+      await escribir_y_esperar(m, 'carpeta')
+      await reloj.pasar_la_espera()
+      await disparar(m.lista.querySelectorAll('vid.res')[0], 'click', { detail: 1 }, 'real')
+      await microtareas()
+      assert.equal(busquedas_enviadas.length, 1, 'no volvió a pegarle a la API')
+      assert.ok(m.lista.querySelector('vid.res'))
+      m.desmontar()
+    })
+
+    test('si el envío revienta (sin red) el buscador sigue andando', async function () {
+      const fetch_de_la_prueba = globalThis.fetch
+      globalThis.fetch = async function (url, opciones) {
+        if (String(url).endsWith('recursos/busquedas')) {
+          throw new TypeError('Failed to fetch')
+        }
+        return fetch_de_la_prueba(url, opciones)
+      }
+      try {
+        const m = await montar(catalogo_largo(2, 3))
+        await escribir_y_esperar(m, 'tema')
+        await reloj.pasar_la_espera()
+        await disparar(m.lista.querySelectorAll('vid.res')[1], 'click', { detail: 1 }, 'real')
+        await microtareas()
+        assert.equal(estado_de_la_pagina.actual, lo_que_encuentra('tema').resultados[1].codigo)
+        assert.equal(m.lista.querySelectorAll('vid.res').length, 6)
+        m.desmontar()
+      } finally {
+        globalThis.fetch = fetch_de_la_prueba
+      }
+    })
+
+    test('un 500 no apaga el registro: la búsqueda siguiente sale', async function () {
+      status_de_busquedas = 500
+      const m = await montar(catalogo_largo(2, 3))
+      await escribir_y_esperar(m, 'tema')
+      await reloj.pasar_la_espera()
+      await microtareas()
+      assert.equal(modulo_api.registro_de_busquedas_esta_apagado(), false)
+      status_de_busquedas = 200
+      await escribir_y_esperar(m, 'carpeta')
+      await reloj.pasar_la_espera()
+      assert.equal(busquedas_enviadas.length, 2)
+      assert.equal(busquedas_enviadas[1].consulta, 'carpeta')
       m.desmontar()
     })
   })

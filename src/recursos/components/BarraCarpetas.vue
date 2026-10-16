@@ -47,13 +47,13 @@
         </div>
         <template v-else>
           <button
-            v-for="r in filas_visibles"
+            v-for="(r, i) in filas_visibles"
             :key="r.codigo"
             type="button"
             class="vid res"
             :class="{ sel: r.codigo === estado.actual }"
             :aria-current="r.codigo === estado.actual ? 'true' : null"
-            @click="abrir(r.codigo)"
+            @click="abrir_resultado(r.codigo, i + 1)"
           >
             <icono-estado :fraccion="fraccion_de(r.video)" :hecho="terminado_de(r.video)" />
             <span class="t">
@@ -137,12 +137,15 @@ import {
   fraccion,
   terminado,
   abrir_video,
+  es_solo_lectura,
   alternar_carpeta,
   cargar_indice,
   reintentar_carga,
   video_por_codigo,
 } from '../estado'
 import { buscar } from '../buscador'
+import { crear_registro_de_busquedas } from '../busquedas'
+import { enviar_busqueda } from '../api'
 import { mmss, minutos_texto } from '../utiles'
 
 /** Cuántos resultados se muestran de entrada, y cuántos más se suman cada vez que se toca "Mostrar más". */
@@ -304,6 +307,26 @@ export default {
       return (n === 1 ? '1 video encontrado.' : n + ' videos encontrados.') + sumados
     },
     /**
+     * Lo que se informa al registro de búsquedas (misión busquedas-centro-recursos): la consulta, cuántos resultados
+     * dio, el código del primero y si alguno tiene todas las palabras. Es null cuando no hay nada que registrar: sin
+     * nada escrito, sin buscador, con el índice de transcripciones todavía cargándose (los resultados son
+     * provisorios) o con una sesión de soporte (solo lectura: soporte no cuenta).
+     * @returns {{ consulta: string, resultados: number, primero: (string|null), completo: boolean }|null}
+     */
+    info_para_el_registro() {
+      if (!this.buscando || !this.estado.buscador || this.estado.indice_cargando || es_solo_lectura()) {
+        return null
+      }
+      /** Resultados que ve la persona. */
+      const filas = this.filas_de_resultados
+      return {
+        consulta: this.consulta,
+        resultados: filas.length,
+        primero: filas.length ? filas[0].codigo : null,
+        completo: this.busqueda.completo,
+      }
+    },
+    /**
      * Carpetas a dibujar, cada una con su avance y sus filas (secciones y videos). Es la lista de
      * siempre; con algo escrito en el buscador no se usa (se muestran resultados).
      * @returns {Array<Object>}
@@ -356,6 +379,18 @@ export default {
     },
   },
   watch: {
+    /**
+     * Cuando el buscador contesta para lo escrito, se lo cuenta al registro de búsquedas, que decide solo cuándo
+     * mandarlo (al dejar de escribir). Sin nada que registrar, se descarta lo pendiente. No toca la pantalla.
+     * @param {Object|null} info
+     */
+    info_para_el_registro(info) {
+      if (info) {
+        this.registro.buscado(info)
+      } else {
+        this.registro.cancelar()
+      }
+    },
     /** Al abrir otro video, la lista lo trae a la vista (como `pintarCarpetas()` del prototipo). */
     'estado.actual'() {
       this.$nextTick(() => {
@@ -401,6 +436,13 @@ export default {
         this.traer_el_actual_a_la_vista()
       })
     },
+  },
+  created() {
+    /** Registro de las búsquedas de esta visita (no reactivo: la pantalla no lo mira). */
+    this.registro = crear_registro_de_busquedas({ enviar: enviar_busqueda })
+  },
+  beforeUnmount() {
+    this.registro.cancelar()
   },
   methods: {
     mmss: mmss,
@@ -480,6 +522,16 @@ export default {
       abrir_video(codigo)
     },
     /**
+     * Abre un resultado de la búsqueda y se lo cuenta al registro (solo cuenta el primer clic de cada búsqueda).
+     * @param {string} codigo
+     * @param {number} posicion Lugar del resultado en la lista, empezando en 1.
+     * @returns {void}
+     */
+    abrir_resultado(codigo, posicion) {
+      this.registro.abrio(codigo, posicion)
+      this.abrir(codigo)
+    },
+    /**
      * La primera vez que se escribe se pide el índice de transcripciones (§2, C2).
      * @returns {void}
      */
@@ -503,7 +555,7 @@ export default {
       /** Primer resultado. */
       const primero = this.filas_de_resultados[0]
       if (primero) {
-        this.abrir(primero.codigo)
+        this.abrir_resultado(primero.codigo, 1)
       }
     },
     /**
@@ -530,6 +582,7 @@ export default {
      * @returns {void}
      */
     limpiar(ev) {
+      this.registro.cancelar()
       this.consulta = ''
       /** true si lo pidió el teclado. */
       const con_teclado = !ev || ev.detail === 0
