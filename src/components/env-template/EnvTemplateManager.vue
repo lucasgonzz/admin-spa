@@ -1,11 +1,12 @@
 <template>
   <div class="container-fluid px-0 py-4">
-    <div class="d-flex align-items-center mb-4 gap-3">
+    <!-- flex-wrap: en teléfono los botones bajan de línea en lugar de partirse en varias. -->
+    <div class="d-flex align-items-center flex-wrap mb-4 gap-3">
       <h2 class="h4 mb-0">{{ title }}</h2>
       <!-- Botón para desplegar el formulario de nueva variable -->
       <button
         type="button"
-        class="btn btn-outline-primary ms-auto"
+        class="btn btn-outline-primary text-nowrap ms-auto"
         @click="show_new_var_form = !show_new_var_form"
       >
         <i class="bi bi-plus-circle me-1" />
@@ -13,7 +14,7 @@
       </button>
       <button
         type="button"
-        class="btn btn-primary"
+        class="btn btn-primary text-nowrap"
         :disabled="saving"
         @click="save"
       >
@@ -108,12 +109,22 @@
           <!-- Valor del template (opcional) -->
           <div class="col-md-5">
             <label class="form-label small mb-1 fw-semibold">Valor</label>
+            <!--
+              Si el nombre tipeado matchea la regla de variable sensible (KEY, SECRET, TOKEN...),
+              el input pasa a type="password": lo que se escribe no queda a la vista. La regla acá
+              es un espejo solo para decidir el tipo de input; el servidor la revalida.
+            -->
             <input
               v-model="new_var_form.value"
-              type="text"
+              :type="new_var_es_sensible ? 'password' : 'text'"
+              :autocomplete="new_var_es_sensible ? 'new-password' : 'off'"
               class="form-control form-control-sm"
               placeholder="Dejar vacío si se completará manualmente"
             />
+            <div v-if="new_var_es_sensible" class="form-text">
+              <i class="bi bi-lock-fill me-1" />
+              Variable secreta: se guarda cifrada y después no se puede volver a ver.
+            </div>
           </div>
 
           <!--
@@ -202,15 +213,24 @@
           {{ group_label(group_name) }}
         </div>
         <div class="card-body p-0">
-          <table class="table table-sm mb-0">
+          <!--
+            table-responsive: en tablet y teléfono la tabla scrollea dentro de la card y no
+            ensancha la página entera.
+          -->
+          <div class="table-responsive">
+          <!--
+            env-table: en teléfono (<=576px) cada fila pasa a ser una tarjeta apilada (ver estilos
+            al final), así el valor se lee completo sin scrollear.
+          -->
+          <table class="table table-sm mb-0 env-table">
             <thead class="table-light">
               <tr>
-                <th style="width: 200px">Variable</th>
-                <th>Valor (template)</th>
+                <th class="env-col-variable">Variable</th>
+                <th class="env-col-valor">Valor (template)</th>
                 <th style="width: 130px" class="text-center">Común</th>
                 <!-- Columna "Manual al crear": no aplica al scope tienda -->
                 <th v-if="scope === 'empresa'" style="width: 160px" class="text-center">Manual al crear</th>
-                <th>Notas</th>
+                <th class="env-col-notas">Notas</th>
               </tr>
             </thead>
             <tbody>
@@ -219,8 +239,16 @@
                 :key="tpl.id"
               >
                 <!-- Nombre de la variable (solo lectura) -->
-                <td class="align-middle">
-                  <code class="small">{{ tpl.key }}</code>
+                <td class="align-middle env-col-variable">
+                  <code class="small text-break">{{ tpl.key }}</code>
+                  <!-- Etiqueta de variable secreta: el servidor nunca manda su valor -->
+                  <span
+                    v-if="es_sensible(tpl)"
+                    class="badge bg-secondary-subtle text-secondary-emphasis ms-1"
+                    title="Variable secreta: se guarda cifrada y no se puede volver a ver"
+                  >
+                    <i class="bi bi-lock-fill me-1" />secreta
+                  </span>
                 </td>
 
                 <!--
@@ -230,14 +258,87 @@
                   empresa del cliente): se muestra un badge informativo y el placeholder
                   pasa a ser la nota de la variable, sin deshabilitar el input.
                 -->
-                <td class="align-middle">
+                <td class="align-middle env-col-valor">
                   <span
                     v-if="scope === 'tienda' && !drafts[tpl.id].is_common"
                     class="badge bg-secondary-subtle text-secondary-emphasis mb-1 d-inline-block"
                   >
                     La completa la instalación
                   </span>
+                  <!--
+                    Fila secreta: el input arranca vacío (el servidor no manda el valor) y es
+                    type="password". Solo se manda `value` al guardar si se escribió algo; vacío
+                    significa "no tocar". "Borrar" marca la variable para vaciarse al guardar.
+                  -->
+                  <div v-if="es_sensible(tpl)">
+                    <div class="d-flex flex-wrap gap-1">
+                      <!--
+                        Valor ilegible (hay uno guardado que no se puede descifrar): borde ámbar y
+                        leyenda; escribir uno nuevo y guardar lo reemplaza como siempre.
+                      -->
+                      <input
+                        v-model="drafts[tpl.id].value"
+                        type="password"
+                        autocomplete="new-password"
+                        class="form-control form-control-sm env-input-valor"
+                        :class="{ 'border-warning': tpl.value_ilegible }"
+                        :disabled="drafts[tpl.id].clear_value"
+                        :placeholder="value_placeholder(tpl)"
+                      />
+                      <!-- Borrar: solo si hay un valor cargado; se aplica recién al guardar -->
+                      <button
+                        v-if="tpl.value_set"
+                        type="button"
+                        class="btn btn-sm env-btn-accion"
+                        :class="drafts[tpl.id].clear_value ? 'btn-danger' : 'btn-outline-danger'"
+                        :title="drafts[tpl.id].clear_value ? 'Deshacer el borrado' : 'Borrar el valor al guardar'"
+                        @click="toggle_clear_value(tpl)"
+                      >
+                        <i class="bi bi-trash me-1" />{{ drafts[tpl.id].clear_value ? 'Se borra al guardar' : 'Borrar' }}
+                      </button>
+                      <!-- Probar: solo ANTHROPIC_API_KEY del scope empresa; prueba la clave GUARDADA -->
+                      <button
+                        v-if="can_probe(tpl)"
+                        type="button"
+                        class="btn btn-sm btn-outline-primary env-btn-accion"
+                        :disabled="tpl.value_ilegible || (probes[tpl.id] && probes[tpl.id].loading)"
+                        @click="probar_clave(tpl)"
+                      >
+                        <span
+                          v-if="probes[tpl.id] && probes[tpl.id].loading"
+                          class="spinner-border spinner-border-sm me-1"
+                          role="status"
+                          aria-hidden="true"
+                        />
+                        <i v-else class="bi bi-shield-check me-1" />
+                        {{ probes[tpl.id] && probes[tpl.id].loading ? 'Probando...' : 'Probar' }}
+                      </button>
+                    </div>
+                    <!-- Leyenda del valor ilegible -->
+                    <div v-if="tpl.value_ilegible" class="form-text text-warning-emphasis">
+                      <i class="bi bi-exclamation-triangle-fill me-1" />
+                      El valor guardado no se puede leer. Escribí uno nuevo y guardá para reemplazarlo.
+                    </div>
+                    <!-- Aviso: lo escrito y sin guardar no se prueba -->
+                    <div
+                      v-if="can_probe(tpl) && drafts[tpl.id].value"
+                      class="form-text text-warning-emphasis"
+                    >
+                      Probar usa la clave guardada, no la que escribiste: guardá primero para probar la nueva.
+                    </div>
+                    <!-- Resultado de la última prueba -->
+                    <div
+                      v-if="probes[tpl.id] && probes[tpl.id].result"
+                      class="small mt-1 text-break"
+                      :class="'text-' + probe_color(probes[tpl.id].result.estado)"
+                    >
+                      <strong>{{ probe_label(probes[tpl.id].result.estado) }}</strong>
+                      <span v-if="probes[tpl.id].result.mensaje"> — {{ probes[tpl.id].result.mensaje }}</span>
+                    </div>
+                  </div>
+                  <!-- Fila común: se edita el valor tal cual, como siempre -->
                   <input
+                    v-else
                     v-model="drafts[tpl.id].value"
                     type="text"
                     class="form-control form-control-sm"
@@ -246,7 +347,7 @@
                 </td>
 
                 <!-- Checkbox: es variable común (se contrasta al actualizar) -->
-                <td class="align-middle text-center">
+                <td class="align-middle text-center" data-label="Común">
                   <div class="form-check d-flex justify-content-center mb-0">
                     <input
                       v-model="drafts[tpl.id].is_common"
@@ -259,7 +360,7 @@
                 </td>
 
                 <!-- Checkbox: es manual al crear (recordatorio en alta de sistema); no aplica a tienda -->
-                <td v-if="scope === 'empresa'" class="align-middle text-center">
+                <td v-if="scope === 'empresa'" class="align-middle text-center" data-label="Manual al crear">
                   <div class="form-check d-flex justify-content-center mb-0">
                     <input
                       v-model="drafts[tpl.id].is_manual_on_create"
@@ -272,7 +373,7 @@
                 </td>
 
                 <!-- Textarea para notas internas del operador -->
-                <td class="align-middle">
+                <td class="align-middle env-col-notas" data-label="Notas">
                   <textarea
                     v-model="drafts[tpl.id].notes"
                     class="form-control form-control-sm"
@@ -283,6 +384,7 @@
               </tr>
             </tbody>
           </table>
+          </div>
         </div>
       </div>
 
@@ -344,6 +446,12 @@ import api from '@/utils/axios'
  * Muestra las variables agrupadas por grupo funcional (app, db, mail, pusher, misc).
  * Permite editar el valor, marcado de is_common (y is_manual_on_create en empresa), y notas.
  * El botón "Guardar" llama a POST /env-template/bulk-update con todos los drafts.
+ *
+ * Variables secretas (claves, tokens, contraseñas): el servidor NO manda su valor; manda
+ * `value_sensitive`, `value_set` y `value_tail` (últimos 4 caracteres, si es largo). El input
+ * arranca vacío y solo se manda `value` si el operador escribió algo (vacío = "no tocar");
+ * `clear_value: true` vacía la variable a propósito. ANTHROPIC_API_KEY (scope empresa) tiene
+ * además un botón "Probar" que valida la clave guardada contra el proveedor.
  */
 export default {
   name: 'EnvTemplateManager',
@@ -402,6 +510,12 @@ export default {
       /** Mensaje de error del backend para el formulario de nueva variable (null = sin error). */
       new_var_error: null,
 
+      /**
+       * Estado de las pruebas de clave por ID de variable:
+       * { [id]: { loading: bool, result: { estado, mensaje, http } | null } }.
+       */
+      probes: {},
+
       /** Campos del formulario de nueva variable con valores por defecto. */
       new_var_form: {
         key:                  '',
@@ -444,6 +558,16 @@ export default {
     },
 
     /**
+     * true si el nombre tipeado en el alta de variable nueva matchea la regla de variable
+     * sensible. Solo decide el tipo del input de valor.
+     *
+     * @returns {boolean}
+     */
+    new_var_es_sensible() {
+      return this.nombre_es_sensible(this.new_var_form.key)
+    },
+
+    /**
      * Variables agrupadas por nombre de grupo, en el orden de sort_order original.
      *
      * @returns {Record<string, Array>}
@@ -481,6 +605,197 @@ export default {
 
   methods: {
     /**
+     * Regla espejo de "variable sensible" del servidor: el nombre contiene KEY, SECRET,
+     * PASSWORD, PASS, TOKEN, DSN o CREDENTIAL, o es uno de los nombres exactos listados.
+     * Solo se usa para decidir el tipo de input del alta nueva; el servidor la revalida.
+     *
+     * @param {string} key  Nombre de la variable (se compara sin distinguir mayúsculas).
+     * @returns {boolean}
+     */
+    nombre_es_sensible(key) {
+      const nombre = String(key || '').toUpperCase()
+      if (nombre === '') {
+        return false
+      }
+      const nombres_exactos = ['DATABASE_URL', 'DB_URL', 'REDIS_URL', 'MAIL_URL', 'QUEUE_URL', 'MAIL_USERNAME']
+      if (nombres_exactos.indexOf(nombre) !== -1) {
+        return true
+      }
+      const fragmentos = ['KEY', 'SECRET', 'PASSWORD', 'PASS', 'TOKEN', 'DSN', 'CREDENTIAL']
+      return fragmentos.some(function (fragmento) {
+        return nombre.indexOf(fragmento) !== -1
+      })
+    },
+
+    /**
+     * ¿La fila es secreta? Lo dice el servidor con `value_sensitive` (la SPA no decide).
+     *
+     * @param {Object} tpl Variable de template.
+     * @returns {boolean}
+     */
+    es_sensible(tpl) {
+      return !!(tpl && tpl.value_sensitive)
+    },
+
+    /**
+     * Arma el draft editable de una variable a partir de lo que devolvió el servidor.
+     *
+     * Para una fila secreta el valor SIEMPRE arranca vacío ('' = "no tocar"): el servidor no
+     * manda `value` y no hay nada que mostrar. `clear_value` queda en false hasta que el
+     * operador toque "Borrar".
+     *
+     * @param {Object} tpl Variable de template devuelta por el backend.
+     * @returns {Object}
+     */
+    build_draft(tpl) {
+      return {
+        id:                   tpl.id,
+        value:                tpl.value_sensitive ? '' : (tpl.value || ''),
+        clear_value:          false,
+        is_common:            !!tpl.is_common,
+        is_manual_on_create:  !!tpl.is_manual_on_create,
+        notes:                tpl.notes || '',
+        group:                tpl.group || '',
+        sort_order:           tpl.sort_order || 0,
+      }
+    },
+
+    /**
+     * Arma el mapa de drafts por ID desde la lista de variables del backend.
+     * Único punto que reconstruye drafts (carga, guardado masivo y alta de variable).
+     *
+     * @param {Array} templates Variables devueltas por el backend.
+     * @returns {Record<number, Object>}
+     */
+    build_drafts(templates) {
+      const self = this
+      const drafts = {}
+      templates.forEach(function (tpl) {
+        drafts[tpl.id] = self.build_draft(tpl)
+      })
+      return drafts
+    },
+
+    /**
+     * Arma los items de POST /env-template/bulk-update desde los drafts.
+     *
+     * Reglas para una fila secreta (según el estado del servidor, no del draft):
+     *  - "Borrar" marcado: manda `clear_value: true` y NO manda `value`.
+     *  - Escribió algo: manda `value` con lo escrito, tal cual.
+     *  - No escribió nada: omite `value` (el servidor lo toma como "no tocar").
+     * Una fila común manda `value` como siempre.
+     *
+     * @returns {Array<Object>}
+     */
+    build_items() {
+      const self = this
+      return self.templates.map(function (tpl) {
+        const draft = self.drafts[tpl.id]
+        const item = {
+          id:                   draft.id,
+          is_common:            draft.is_common,
+          is_manual_on_create:  draft.is_manual_on_create,
+          notes:                draft.notes,
+          group:                draft.group,
+          sort_order:           draft.sort_order,
+        }
+        if (!self.es_sensible(tpl)) {
+          item.value = draft.value
+        } else if (draft.clear_value) {
+          item.clear_value = true
+        } else if (draft.value && draft.value.trim() !== '') {
+          item.value = draft.value
+        }
+        return item
+      })
+    },
+
+    /**
+     * Marca o desmarca "Borrar" en una fila secreta. Al marcar se descarta lo escrito.
+     * El borrado recién se aplica al presionar "Guardar".
+     *
+     * @param {Object} tpl Variable de template.
+     * @returns {void}
+     */
+    toggle_clear_value(tpl) {
+      const draft = this.drafts[tpl.id]
+      draft.clear_value = !draft.clear_value
+      if (draft.clear_value) {
+        draft.value = ''
+      }
+    },
+
+    /**
+     * ¿Esta fila tiene botón "Probar"? Hoy solo ANTHROPIC_API_KEY del scope empresa.
+     *
+     * @param {Object} tpl Variable de template.
+     * @returns {boolean}
+     */
+    can_probe(tpl) {
+      return this.scope === 'empresa' && tpl.key === 'ANTHROPIC_API_KEY'
+    },
+
+    /**
+     * Prueba la clave GUARDADA de una variable contra el proveedor
+     * (POST /env-template/probar-clave) y deja el resultado en `probes`.
+     * Nunca se manda la clave: solo el nombre y el scope.
+     *
+     * @param {Object} tpl Variable de template.
+     * @returns {void}
+     */
+    probar_clave(tpl) {
+      const self = this
+      self.probes = Object.assign({}, self.probes, { [tpl.id]: { loading: true, result: null } })
+
+      api.post('/env-template/probar-clave', { key: tpl.key, scope: self.scope }).then(function (res) {
+        self.probes = Object.assign({}, self.probes, { [tpl.id]: { loading: false, result: res.data } })
+      }).catch(function (err) {
+        /* Error de red o del servidor: se muestra como prueba no concluyente, sin datos sensibles. */
+        const mensaje = err && err.response && err.response.data && err.response.data.message
+        self.probes = Object.assign({}, self.probes, {
+          [tpl.id]: {
+            loading: false,
+            result: { estado: 'no_concluyente', mensaje: mensaje || 'No se pudo hacer la prueba. Intentá de nuevo.' },
+          },
+        })
+      })
+    },
+
+    /**
+     * Color de Bootstrap (text-*) para el estado devuelto por probar-clave.
+     *
+     * @param {string} estado valida | rechazada | no_concluyente | no_soportada | sin_valor
+     * @returns {string}
+     */
+    probe_color(estado) {
+      const colores = {
+        valida:         'success',
+        rechazada:      'danger',
+        no_concluyente: 'warning-emphasis',
+        no_soportada:   'secondary',
+        sin_valor:      'secondary',
+      }
+      return colores[estado] || 'secondary'
+    },
+
+    /**
+     * Etiqueta legible para el estado devuelto por probar-clave.
+     *
+     * @param {string} estado valida | rechazada | no_concluyente | no_soportada | sin_valor
+     * @returns {string}
+     */
+    probe_label(estado) {
+      const etiquetas = {
+        valida:         'Válida',
+        rechazada:      'Rechazada',
+        no_concluyente: 'No concluyente',
+        no_soportada:   'Sin prueba disponible',
+        sin_valor:      'Sin valor cargado',
+      }
+      return etiquetas[estado] || estado
+    },
+
+    /**
      * Carga la lista de variables del template desde el backend, filtradas por scope.
      *
      * @returns {void}
@@ -494,19 +809,8 @@ export default {
         const templates = res.data.models || []
         self.templates = templates
         /* Inicializa drafts editables por ID para que Vue pueda rastrear los cambios. */
-        const drafts = {}
-        templates.forEach(function (tpl) {
-          drafts[tpl.id] = {
-            id:                   tpl.id,
-            value:                tpl.value || '',
-            is_common:            !!tpl.is_common,
-            is_manual_on_create:  !!tpl.is_manual_on_create,
-            notes:                tpl.notes || '',
-            group:                tpl.group || '',
-            sort_order:           tpl.sort_order || 0,
-          }
-        })
-        self.drafts = drafts
+        self.drafts = self.build_drafts(templates)
+        self.probes = {}
         self.loading = false
       }).catch(function () {
         self.load_error = 'No se pudo cargar la plantilla. Intentá de nuevo.'
@@ -523,27 +827,16 @@ export default {
       const self = this
       self.saving = true
 
-      /* Construye el array de items a enviar desde los drafts. */
-      const items = Object.values(self.drafts)
+      /* Construye el array de items a enviar desde los drafts (ver build_items). */
+      const items = self.build_items()
 
       api.post('/env-template/bulk-update', { items: items, scope: self.scope }).then(function (res) {
         const templates = res.data.models || []
         self.templates = templates
 
-        /* Actualiza los drafts con los valores confirmados por el backend. */
-        const drafts = {}
-        templates.forEach(function (tpl) {
-          drafts[tpl.id] = {
-            id:                   tpl.id,
-            value:                tpl.value || '',
-            is_common:            !!tpl.is_common,
-            is_manual_on_create:  !!tpl.is_manual_on_create,
-            notes:                tpl.notes || '',
-            group:                tpl.group || '',
-            sort_order:           tpl.sort_order || 0,
-          }
-        })
-        self.drafts = drafts
+        /* Actualiza los drafts con lo confirmado por el backend (las secretas vuelven vacías). */
+        self.drafts = self.build_drafts(templates)
+        self.probes = {}
         self.saving = false
 
         /* Notifica al usuario con toast de éxito. */
@@ -584,6 +877,20 @@ export default {
      * @returns {string}
      */
     value_placeholder(tpl) {
+      /* Fila secreta: el placeholder cuenta el estado del valor guardado (que nunca se muestra). */
+      if (this.es_sensible(tpl)) {
+        if (this.drafts[tpl.id].clear_value) {
+          return 'Se borrará al guardar'
+        }
+        if (tpl.value_ilegible) {
+          return 'Ilegible — volvé a cargarlo'
+        }
+        /* value_tail puede ser null aunque haya valor (claves *PASSWORD*): entonces solo "Cargada". */
+        if (tpl.value_set) {
+          return tpl.value_tail ? 'Cargada, termina en ••••' + tpl.value_tail : 'Cargada'
+        }
+        return 'Sin cargar'
+      }
       if (this.scope === 'tienda' && !this.drafts[tpl.id].is_common) {
         return this.drafts[tpl.id].notes || ''
       }
@@ -609,25 +916,22 @@ export default {
 
       const payload = Object.assign({}, self.new_var_form, { scope: self.scope })
 
+      /*
+        Variable secreta sin valor: no se manda `value` (el servidor la guarda sin valor);
+        nunca viaja un '' que pueda interpretarse como pisar algo.
+      */
+      if (self.nombre_es_sensible(payload.key) && !payload.value) {
+        delete payload.value
+      }
+
       api.post('/env-template', payload).then(function (res) {
         /* Actualiza la lista de templates con la respuesta del backend. */
         const templates = res.data.models || []
         self.templates = templates
 
         /* Reconstruye los drafts con la lista actualizada (incluye la nueva variable). */
-        const drafts = {}
-        templates.forEach(function (tpl) {
-          drafts[tpl.id] = {
-            id:                   tpl.id,
-            value:                tpl.value || '',
-            is_common:            !!tpl.is_common,
-            is_manual_on_create:  !!tpl.is_manual_on_create,
-            notes:                tpl.notes || '',
-            group:                tpl.group || '',
-            sort_order:           tpl.sort_order || 0,
-          }
-        })
-        self.drafts = drafts
+        self.drafts = self.build_drafts(templates)
+        self.probes = {}
 
         self.cancel_new_var()
         self.new_var_saving = false
@@ -672,3 +976,69 @@ export default {
   },
 }
 </script>
+
+<style scoped>
+/* Columnas de la tabla en escritorio y tablet. */
+.env-col-variable {
+  width: 200px;
+}
+.env-col-valor {
+  min-width: 260px;
+}
+/* Notas: sin un mínimo, a 768px la columna quedaba de ~44px y el textarea ilegible. */
+.env-col-notas {
+  min-width: 140px;
+}
+
+/*
+  Input de valor de una fila secreta: ocupa toda la línea de la celda y los botones Borrar /
+  Probar bajan debajo (a 768px y 1024px, con los botones al lado, el placeholder se cortaba).
+  text-overflow: ellipsis es la red de seguridad si algún texto igual no entra.
+*/
+.env-input-valor {
+  flex: 1 1 100%;
+  min-width: 0;
+  width: auto;
+  text-overflow: ellipsis;
+}
+
+/* Botones Borrar / Probar: btn-sm de Bootstrap mide 31px; acá, 36px para que se toquen bien. */
+.env-btn-accion {
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+/*
+  Teléfono: la fila pasa a tarjeta apilada. Se oculta el encabezado, cada celda ocupa todo el
+  ancho y las que tienen data-label muestran su nombre arriba. El input de valor ocupa la línea
+  entera y los botones Borrar / Probar bajan debajo.
+*/
+@media (max-width: 576px) {
+  .env-table thead {
+    display: none;
+  }
+  .env-table tbody tr {
+    display: block;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--bs-border-color);
+  }
+  .env-table tbody td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    padding: 0.25rem 0;
+    border: 0;
+    text-align: left !important;
+  }
+  .env-table tbody td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--bs-secondary-color);
+  }
+  .env-table tbody td .form-check {
+    justify-content: flex-start !important;
+  }
+}
+</style>

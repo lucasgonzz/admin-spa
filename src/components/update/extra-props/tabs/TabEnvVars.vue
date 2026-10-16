@@ -64,7 +64,9 @@
       </div>
 
       <!-- Tabla de variables con diferencias -->
-      <table class="table table-sm table-hover mb-0">
+      <!-- table-responsive: en tablet y teléfono la tabla scrollea dentro del panel. -->
+      <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0" style="min-width: 520px">
         <thead class="table-light">
           <tr>
             <!-- Checkbox de selección total -->
@@ -99,20 +101,50 @@
             <td class="align-middle">
               <code class="small">{{ item.key }}</code>
             </td>
-            <!-- Valor esperado según el template (en verde) -->
-            <td class="align-middle small text-success">
-              {{ item.template_value || '(vacío)' }}
+            <!--
+              Valor esperado según el template (en verde). Si la variable es secreta el servidor
+              ya manda el valor enmascarado: se muestra tal cual, con la etiqueta "secreta".
+            -->
+            <td class="align-middle small text-success text-break">
+              <!-- `ilegible`: el valor guardado en la plantilla no se pudo descifrar -->
+              <span v-if="item.ilegible" class="text-warning-emphasis fst-italic">valor ilegible</span>
+              <template v-else-if="valor_visible(item.template_value, item.sensitive)">
+                {{ valor_visible(item.template_value, item.sensitive) }}
+              </template>
+              <!-- Vacío: una secreta vacía dice "sin valor" (no el literal "(vacío)" del servidor) -->
+              <span v-else class="text-muted fst-italic">{{ item.sensitive ? 'sin valor' : '(vacío)' }}</span>
+              <span
+                v-if="item.sensitive"
+                class="badge bg-secondary-subtle text-secondary-emphasis ms-1"
+                title="Variable secreta: el valor se muestra enmascarado"
+              >
+                <i class="bi bi-lock-fill me-1"></i>secreta
+              </span>
             </td>
             <!-- Valor actual en el cliente (muteado) -->
-            <td class="align-middle small text-muted">
-              {{ item.sample_client_value !== undefined ? (item.sample_client_value || '-') : '-' }}
+            <td class="align-middle small text-muted text-break">
+              <template v-if="item.sample_client_value !== undefined && valor_visible(item.sample_client_value, item.sensitive)">
+                {{ valor_visible(item.sample_client_value, item.sensitive) }}
+              </template>
+              <span v-else-if="item.sensitive" class="fst-italic">sin valor</span>
+              <template v-else>{{ item.sample_client_value !== undefined ? (item.sample_client_value || '-') : '-' }}</template>
+              <!--
+                En una variable secreta el enmascarado puede verse igual en ambos lados aunque los
+                valores reales difieran: el aviso evita que el diff parezca "igual".
+              -->
+              <span
+                v-if="item.sensitive || item.ilegible"
+                class="badge bg-warning-subtle text-warning-emphasis text-nowrap ms-1"
+              >
+                {{ item.ilegible ? 'distinto' : 'distinto (valor oculto)' }}
+              </span>
             </td>
             <!-- Badges con el slug de cada API donde hay diferencia -->
             <td class="align-middle">
               <span
                 v-for="api_url in item.affected_apis"
                 :key="api_url"
-                class="badge bg-warning text-dark me-1 small"
+                class="badge bg-warning text-dark text-wrap me-1 small"
                 :title="api_url"
               >
                 {{ short_api_label(api_url) }}
@@ -121,6 +153,7 @@
           </tr>
         </tbody>
       </table>
+      </div>
     </template>
   </div>
 </template>
@@ -174,7 +207,10 @@ export default {
      * Cada item incluye las APIs donde esa variable difiere (affected_apis).
      *
      * Estructura devuelta:
-     * [{ key, template_value, sample_client_value, affected_apis: [api_url] }]
+     * [{ key, sensitive, ilegible, template_value, sample_client_value, affected_apis: [api_url] }]
+     *
+     * `sensitive` viene del servidor: si es true, template_value y client_value llegan
+     * enmascarados y no se intenta mostrar el valor completo.
      *
      * @returns {Array}
      */
@@ -188,11 +224,21 @@ export default {
           if (!map[diff.key]) {
             map[diff.key] = {
               key:                 diff.key,
+              sensitive:           !!diff.sensitive,
+              ilegible:            !!diff.ilegible,
               template_value:      diff.template_value,
               /* Toma el primer valor de cliente encontrado como muestra representativa. */
               sample_client_value: diff.client_value,
               affected_apis:       [],
             }
+          }
+          /* Si en cualquier API el servidor la marcó secreta, la fila se trata como secreta. */
+          if (diff.sensitive) {
+            map[diff.key].sensitive = true
+          }
+          /* `ilegible`: el valor guardado en la plantilla no se pudo descifrar. */
+          if (diff.ilegible) {
+            map[diff.key].ilegible = true
           }
           map[diff.key].affected_apis.push(result.api_url)
         })
@@ -217,6 +263,21 @@ export default {
   },
 
   methods: {
+    /**
+     * Valor listo para mostrar. Para una variable secreta vacía el servidor manda el literal
+     * "(vacío)": se trata como "sin valor" ('') para que se vea como el resto de las vacías.
+     *
+     * @param {string}  valor      Valor tal como lo manda el servidor (enmascarado si es secreta).
+     * @param {boolean} sensitive  true si la variable es secreta.
+     * @returns {string}
+     */
+    valor_visible(valor, sensitive) {
+      if (sensitive && valor === '(vacío)') {
+        return ''
+      }
+      return valor || ''
+    },
+
     /**
      * Llama a check_diff_all y carga los diffs de todas las APIs del cliente del update.
      * Selecciona todas las keys por defecto para facilitar la aplicación masiva.
