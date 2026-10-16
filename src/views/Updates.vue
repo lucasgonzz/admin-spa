@@ -83,20 +83,38 @@
           </td>
           <td class="align-middle">
             <code>{{ diff.key }}</code>
+            <!-- Variable secreta: el servidor manda los valores enmascarados -->
+            <span
+              v-if="diff.sensitive"
+              class="badge bg-secondary-subtle text-secondary-emphasis ms-1"
+              title="Variable secreta: el valor se muestra enmascarado"
+            >
+              <i class="bi bi-lock-fill me-1"></i>secreta
+            </span>
           </td>
           <!-- Valor en el template base -->
-          <td class="align-middle">
+          <td class="align-middle text-break">
             <span v-if="diff.template_value" class="text-success small font-monospace">
               {{ diff.template_value }}
             </span>
             <span v-else class="text-muted small fst-italic">(vacío)</span>
           </td>
           <!-- Valor actual en el cliente -->
-          <td class="align-middle">
+          <td class="align-middle text-break">
             <span v-if="diff.client_value" class="text-danger small font-monospace">
               {{ diff.client_value }}
             </span>
             <span v-else class="text-muted small fst-italic">(no existe)</span>
+            <!--
+              En una secreta el enmascarado puede verse igual en ambos lados aunque los valores
+              reales difieran: el aviso evita que el diff parezca "igual".
+            -->
+            <span
+              v-if="diff.sensitive"
+              class="badge bg-warning-subtle text-warning-emphasis ms-1"
+            >
+              distinto (valor oculto)
+            </span>
           </td>
         </tr>
       </tbody>

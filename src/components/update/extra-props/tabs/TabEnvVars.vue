@@ -99,13 +99,30 @@
             <td class="align-middle">
               <code class="small">{{ item.key }}</code>
             </td>
-            <!-- Valor esperado según el template (en verde) -->
-            <td class="align-middle small text-success">
+            <!--
+              Valor esperado según el template (en verde). Si la variable es secreta el servidor
+              ya manda el valor enmascarado: se muestra tal cual, con la etiqueta "secreta".
+            -->
+            <td class="align-middle small text-success text-break">
               {{ item.template_value || '(vacío)' }}
+              <span
+                v-if="item.sensitive"
+                class="badge bg-secondary-subtle text-secondary-emphasis ms-1"
+                title="Variable secreta: el valor se muestra enmascarado"
+              >
+                <i class="bi bi-lock-fill me-1"></i>secreta
+              </span>
             </td>
             <!-- Valor actual en el cliente (muteado) -->
-            <td class="align-middle small text-muted">
+            <td class="align-middle small text-muted text-break">
               {{ item.sample_client_value !== undefined ? (item.sample_client_value || '-') : '-' }}
+              <!--
+                En una variable secreta el enmascarado puede verse igual en ambos lados aunque los
+                valores reales difieran: el aviso evita que el diff parezca "igual".
+              -->
+              <span v-if="item.sensitive" class="badge bg-warning-subtle text-warning-emphasis ms-1">
+                distinto (valor oculto)
+              </span>
             </td>
             <!-- Badges con el slug de cada API donde hay diferencia -->
             <td class="align-middle">
@@ -174,7 +191,10 @@ export default {
      * Cada item incluye las APIs donde esa variable difiere (affected_apis).
      *
      * Estructura devuelta:
-     * [{ key, template_value, sample_client_value, affected_apis: [api_url] }]
+     * [{ key, sensitive, template_value, sample_client_value, affected_apis: [api_url] }]
+     *
+     * `sensitive` viene del servidor: si es true, template_value y client_value llegan
+     * enmascarados y no se intenta mostrar el valor completo.
      *
      * @returns {Array}
      */
@@ -188,11 +208,16 @@ export default {
           if (!map[diff.key]) {
             map[diff.key] = {
               key:                 diff.key,
+              sensitive:           !!diff.sensitive,
               template_value:      diff.template_value,
               /* Toma el primer valor de cliente encontrado como muestra representativa. */
               sample_client_value: diff.client_value,
               affected_apis:       [],
             }
+          }
+          /* Si en cualquier API el servidor la marcó secreta, la fila se trata como secreta. */
+          if (diff.sensitive) {
+            map[diff.key].sensitive = true
           }
           map[diff.key].affected_apis.push(result.api_url)
         })
