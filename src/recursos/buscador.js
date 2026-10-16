@@ -356,11 +356,13 @@ export function tokenizar(texto) {
   const fin = borrador_de_finales
   /** Cuántas palabras van. */
   let cuantas = 0
-  /** true si la palabra en curso tiene algo que no sea minúscula ASCII o cifra: mayúsculas o acentos, que hay que normalizar. */
-  let especial = false
-  // Se recorre carácter por carácter en lugar de usar `RE_PALABRA.exec`: es lo mismo (letras y números
-  // seguidos), pero arma las 75.000 palabras de los guiones en la mitad del tiempo. Y como la gran
-  // mayoría ya viene en minúscula y sin acentos, esas ni pasan por la normalización.
+  /** Si la palabra en curso tiene alguna mayúscula ASCII, o alguna letra con acento (u otra no ASCII). */
+  let mayuscula = false
+  let acento = false
+  // Se recorre carácter por carácter en lugar de usar una expresión regular: es lo mismo (letras y
+  // números seguidos), pero arma las 75.000 palabras de los guiones en la mitad del tiempo. Y como la
+  // gran mayoría ya viene en minúscula y sin acentos, esas ni pasan por la normalización; las que solo
+  // tienen mayúsculas se resuelven con `toLowerCase` y solo las acentuadas con `normalizar`.
   for (let i = 0; i <= largo; i++) {
     /** Si el carácter es parte de una palabra (el carácter "de después del final" no lo es). */
     let dentro = false
@@ -370,8 +372,10 @@ export function tokenizar(texto) {
       /** Lo que dice la tabla: 0 = no se calculó todavía, 1 = es de palabra, 2 = no lo es. */
       const t = c < LARGO_DE_LA_TABLA_DE_LETRAS ? TABLA_DE_LETRAS[c] : 0
       dentro = t ? t === 1 : es_letra_o_numero(c)
-      if (dentro && (c > 122 || (c < 97 && (c < 48 || c > 57)))) {
-        especial = true
+      if (c > 127) {
+        acento = true
+      } else if (c < 97 && c > 57) {
+        mayuscula = true
       }
     }
     if (dentro) {
@@ -381,7 +385,7 @@ export function tokenizar(texto) {
     } else if (desde >= 0) {
       /** La palabra tal como está escrita, y normalizada. */
       const cruda = texto.slice(desde, i)
-      const normal = especial ? normalizar_palabra(cruda) : cruda
+      const normal = acento ? normalizar_palabra(cruda) : mayuscula ? cruda.toLowerCase() : cruda
       // Una marca combinable suelta no es una palabra: normalizada queda vacía.
       if (normal) {
         pal.push(normal)
@@ -389,7 +393,8 @@ export function tokenizar(texto) {
         fin[cuantas++] = i
       }
       desde = -1
-      especial = false
+      mayuscula = false
+      acento = false
     }
   }
   // Casi ningún texto trae una secuencia dicha: se mira antes, de un vistazo, para no recorrer todo otra vez.
@@ -428,6 +433,42 @@ export function tokenizar(texto) {
     }
   }
   return { pal: salida.pal, ini: Int32Array.from(salida.ini), fin: Int32Array.from(salida.fin) }
+}
+
+/**
+ * Palabras ya separadas de los textos cortos (título, carpeta, "para qué", "cuándo no"): texto → resultado
+ * de `tokenizar`. El buscador se arma dos veces seguidas (con el catálogo y después con el índice) y esos
+ * textos no cambian entre una y otra: se separan una sola vez. El guion no entra: solo existe en el
+ * segundo armado y es lo que más pesa en memoria. Si crece de más se vacía.
+ *
+ * @type {Map<string, { pal: Array<string>, ini: Int32Array, fin: Int32Array }>}
+ */
+const TEXTOS_SEPARADOS = new Map()
+
+/** Cuántos textos guarda `TEXTOS_SEPARADOS` antes de vaciarse. */
+const LIMITE_DE_TEXTOS_SEPARADOS = 6000
+
+/**
+ * `tokenizar` con la memoria de `TEXTOS_SEPARADOS`. El resultado se comparte entre buscadores, así que
+ * quien lo recibe no puede modificarlo.
+ *
+ * @param {string} texto
+ * @param {boolean} recordar false para no guardar el resultado (el guion).
+ * @returns {{ pal: Array<string>, ini: Int32Array, fin: Int32Array }}
+ */
+function tokenizar_con_memoria(texto, recordar) {
+  /** Resultado de una vez anterior, si hay. */
+  let hecho = recordar ? TEXTOS_SEPARADOS.get(texto) : undefined
+  if (hecho === undefined) {
+    hecho = tokenizar(texto)
+    if (recordar) {
+      if (TEXTOS_SEPARADOS.size >= LIMITE_DE_TEXTOS_SEPARADOS) {
+        TEXTOS_SEPARADOS.clear()
+      }
+      TEXTOS_SEPARADOS.set(texto, hecho)
+    }
+  }
+  return hecho
 }
 
 /**
@@ -539,7 +580,7 @@ export function crear_buscador(videos, carpetas, transcripciones) {
     const doc = { codigo: video.codigo, video: video, textos: textos, pal: [], ini: [], fin: [] }
     for (let c = 0; c < CANTIDAD_CAMPOS; c++) {
       /** Palabras del campo. */
-      const tk = textos[c] ? tokenizar(textos[c]) : { pal: [], ini: [], fin: [] }
+      const tk = textos[c] ? tokenizar_con_memoria(textos[c], c !== CAMPO_VOZ) : { pal: [], ini: [], fin: [] }
       doc.pal.push(tk.pal)
       doc.ini.push(tk.ini)
       doc.fin.push(tk.fin)
