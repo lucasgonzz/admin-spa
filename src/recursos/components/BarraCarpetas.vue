@@ -15,10 +15,8 @@
            aviso `aria-live` solo se anuncia si ya existía antes de cambiar su texto. -->
       <p class="busq-estado" role="status" aria-live="polite">{{ texto_de_estado }}</p>
       <!-- El mejor no tiene todas las palabras: se muestran los que más se parecen. El texto no afirma nada de los
-           que vienen más abajo (alguno puede tenerlas todas). -->
-      <p v-if="busqueda.resultados.length && !busqueda.completo" class="busq-aviso">
-        Estos son los videos que más se parecen a lo que buscás.
-      </p>
+           que vienen más abajo (alguno puede tenerlas todas), y concuerda con la línea de estado (uno o varios). -->
+      <p v-if="mostrar_aviso" class="busq-aviso">{{ texto_del_aviso }}</p>
       <!-- El índice de transcripciones todavía no llegó: se busca ya por título y "para qué". -->
       <p v-if="buscando && estado.indice_cargando" class="busq-aviso espera">
         Buscando también dentro de los videos…
@@ -150,6 +148,9 @@ import { mmss, minutos_texto } from '../utiles'
 /** Cuántos resultados se muestran de entrada, y cuántos más se suman cada vez que se toca "Mostrar más". */
 const RESULTADOS_POR_TANDA = 30
 
+/** Hasta cuántas letras tiene una última palabra "a medio escribir" que todavía no enciende el aviso de "se parecen". */
+const LARGO_DE_PALABRA_A_MEDIAS = 2
+
 /**
  * Barra de carpetas: el buscador y la lista de carpetas desplegables con sus videos, como la
  * del prototipo (número, nombre, barra verde, n/N, check al completar; adentro las secciones y
@@ -253,6 +254,34 @@ export default {
       return Math.min(RESULTADOS_POR_TANDA, this.filas_de_resultados.length - this.limite)
     },
     /**
+     * true si se está escribiendo la última palabra: tiene una o dos letras y no hay un espacio después. Con tres o
+     * más el buscador ya la completa ("fac" llega a "factura"); con una o dos es un tramo de palabra que todavía no
+     * existe, y el aviso de "se parecen" se encendía y se apagaba a cada tecla (la lista saltaba ~37 px).
+     * @returns {boolean}
+     */
+    escribiendo_la_ultima_palabra() {
+      /** Último pedazo sin espacios de lo escrito (vacío si termina en espacio). */
+      const ultima = /\S*$/.exec(this.consulta)[0]
+      return ultima !== '' && Array.from(ultima).length <= LARGO_DE_PALABRA_A_MEDIAS
+    },
+    /**
+     * true si hay que avisar que ninguno tiene todas las palabras. Mientras se escribe la última palabra no se
+     * avisa; la línea de estado (que no cambia el alto de la lista) sigue diciendo "se parecen".
+     * @returns {boolean}
+     */
+    mostrar_aviso() {
+      return this.filas_de_resultados.length > 0 && !this.busqueda.completo && !this.escribiendo_la_ultima_palabra
+    },
+    /**
+     * Texto del aviso, en singular con un solo resultado y en plural con varios.
+     * @returns {string}
+     */
+    texto_del_aviso() {
+      return this.filas_de_resultados.length === 1
+        ? 'Este es el video que más se parece a lo que buscás.'
+        : 'Estos son los videos que más se parecen a lo que buscás.'
+    },
+    /**
      * Línea de estado de la búsqueda, para leer en pantalla y por lector de pantalla: "12 videos
      * encontrados", "1 video encontrado" o "No se encontraron videos". Vacía sin búsqueda.
      * @returns {string}
@@ -336,12 +365,22 @@ export default {
     /**
      * Cada búsqueda nueva empieza con la primera tanda, desde arriba de la lista. Al borrar lo escrito vuelven las
      * carpetas en el lugar donde estaban antes de buscar (y el video abierto, a la vista).
+     *
+     * La posición de las carpetas se lee ACÁ, no en el oyente de `@input`. Con el teclado de verdad el navegador
+     * vacía las microtareas entre un oyente y el siguiente, así que este observador (que Vue corre antes del
+     * render, en una microtarea) se ejecuta DESPUÉS del oyente de `v-model` y ANTES que `al_escribir`: ahí la lista
+     * ya está en 0 y mostrando resultados, y lo que se guardaba era 0. Acá el DOM todavía muestra las carpetas
+     * (los observadores `pre` corren antes de dibujar), y funciona igual con un `dispatchEvent` desde un script,
+     * donde los oyentes corren todos seguidos.
      */
     consulta(nueva) {
       this.limite = RESULTADOS_POR_TANDA
       this.sumados = 0
       if (nueva.trim()) {
         if (this.$refs.lista) {
+          if (this.scroll_guardado === null) {
+            this.scroll_guardado = this.$refs.lista.scrollTop
+          }
           this.$refs.lista.scrollTop = 0
         }
         return
@@ -440,10 +479,6 @@ export default {
      * @returns {void}
      */
     al_escribir() {
-      // Todavía se ven las carpetas (la lista se redibuja después de este evento): se guarda dónde estaban.
-      if (this.scroll_guardado === null && this.$refs.lista) {
-        this.scroll_guardado = this.$refs.lista.scrollTop
-      }
       if (this.consulta.trim()) {
         cargar_indice()
       }
@@ -468,12 +503,13 @@ export default {
     },
     /**
      * Escape limpia la búsqueda. Con el buscador vacío no hace nada propio: el evento sigue su camino
-     * y la página lo usa para cerrar el cajón de carpetas.
+     * y la página lo usa para cerrar el cajón de carpetas. Durante una composición (IME) cancela la composición, no
+     * la búsqueda: Safari manda ese Escape con `isComposing` en false y `keyCode` 229.
      * @param {KeyboardEvent} ev
      * @returns {void}
      */
     al_apretar_escape(ev) {
-      if (!this.consulta) {
+      if (ev.isComposing || ev.keyCode === 229 || !this.consulta) {
         return
       }
       // Sin esto el mismo Escape también cerraría el cajón, y el buscador de tipo "search" lo borraría dos veces.
@@ -482,12 +518,19 @@ export default {
       this.limpiar()
     },
     /**
-     * Borra lo escrito y vuelve a las carpetas.
+     * Borra lo escrito y vuelve a las carpetas. Si lo pidió el teclado (Escape, o Enter o espacio sobre el botón
+     * "Volver a las carpetas", que desaparece al apretarlo) el foco queda en el buscador para no perderse en el
+     * `body`. Con un clic o un toque no: en un celular enfocar el buscador abre el teclado en pantalla.
+     * @param {MouseEvent} [ev] Evento del clic; `detail` es 0 cuando lo disparó el teclado. Sin evento (Escape) enfoca.
      * @returns {void}
      */
-    limpiar() {
+    limpiar(ev) {
       this.consulta = ''
-      // El botón "Volver a las carpetas" desaparece al apretarlo: sin esto el foco se perdía en el `body`.
+      /** true si lo pidió el teclado. */
+      const con_teclado = !ev || ev.detail === 0
+      if (!con_teclado) {
+        return
+      }
       this.$nextTick(() => {
         if (this.$refs.entrada) {
           this.$refs.entrada.focus()

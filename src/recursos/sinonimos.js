@@ -142,13 +142,14 @@ export const GRUPOS_DE_SINONIMOS = [
  *   pero quien escribe "masa" no quiere todos los videos que dicen "varios". Dentro de un grupo, además, las
  *   comunes le bajan la rareza a la rara.
  * - Palabras que solo equivalen en compañía (`con`, si está): "electrónica" es ARCA cuando se escribe "factura
- *   electrónica"; "balanza electrónica" no tiene nada que ver con ARCA. Una palabra de `con` tiene que estar
- *   también en la consulta (por su raíz).
+ *   electrónica" o "boleta electrónica" (así lo dice mucha gente; ningún video dice "boleta"); "balanza
+ *   electrónica" no tiene nada que ver con ARCA. Una palabra de `con` tiene que estar también en la consulta (por
+ *   su raíz). "Ticket" y "recibo" no habilitan: en el sistema son otro documento.
  *
  * @type {Array<{ de: Array<string>, a: Array<string>, con?: Array<string> }>}
  */
 export const EQUIVALENCIAS_DE_LA_CONSULTA = [
-  { de: ['electronica'], con: ['factura', 'facturacion', 'facturar', 'comprobante'], a: ['arca', 'afip'] },
+  { de: ['electronica'], con: ['factura', 'facturacion', 'facturar', 'comprobante', 'boleta'], a: ['arca', 'afip'] },
   { de: ['muchos', 'varios'], a: ['masa', 'masiva', 'lote'] },
 ]
 
