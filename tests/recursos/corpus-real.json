@@ -1,0 +1,229 @@
+{
+ "carpetas": [
+  {
+   "nro": 0,
+   "nombre": "Empezá por acá"
+  },
+  {
+   "nro": 1,
+   "nombre": "Tus artículos (Listado)"
+  },
+  {
+   "nro": 2,
+   "nombre": "Vender"
+  },
+  {
+   "nro": 3,
+   "nombre": "Tus ventas"
+  },
+  {
+   "nro": 4,
+   "nombre": "Clientes y cuentas corrientes"
+  },
+  {
+   "nro": 5,
+   "nombre": "Proveedores y compras"
+  },
+  {
+   "nro": 6,
+   "nombre": "Tesorería, gastos y cheques"
+  },
+  {
+   "nro": 9,
+   "nombre": "Tu tienda online"
+  },
+  {
+   "nro": 11,
+   "nombre": "Configuración"
+  }
+ ],
+ "videos": [
+  {
+   "codigo": "T5.15",
+   "titulo": "Escanear la factura o el remito con la IA",
+   "carpeta": 5,
+   "seccion": "B · Las compras",
+   "orden": 185,
+   "para_que": "Sirve para cargar una factura larga sin tipear: la inteligencia artificial lee los renglones y vos revisás. Usalo con facturas de muchos renglones y una foto que se lea bien.",
+   "cuando_no": "Para una compra de dos renglones es más rápido cargarla a mano. Si el proveedor te manda el pedido en Excel, importalo. Y si estás en el depósito, lejos de la computadora, mandale la foto al asistente por WhatsApp.",
+   "duracion": 146,
+   "voz": "Al entrar al sistema estás en Reportes. Desplegá la barra de la izquierda y entrá en Proveedores; Compras. Una factura de muchos renglones lleva tiempo tipearla. Creás la compra con el proveedor y el depósito, y la guardás vacía. En su fila, Escanear: subís las fotos de la factura, o desde el celular, Tomar foto; hasta seis páginas, y las lee juntas. Escanear. La lectura corre en segundo plano: podés seguir trabajando, y en medio minuto, más o menos, te avisa que terminó, con cuántos artículos encontró."
+  },
+  {
+   "codigo": "T5.16",
+   "titulo": "El historial de escaneos de una compra",
+   "carpeta": 5,
+   "seccion": "B · Las compras",
+   "orden": 186,
+   "para_que": "Sirve para volver a ver el papel original y saber qué pasó con cada escaneo. Usalo cuando dudás de un renglón tiempo después, o cuando una factura se escaneó dos veces.",
+   "cuando_no": "No es el historial de la compra: los cambios de stock y de precio están en cada artículo. Y para volver a cargar una factura no uses este historial: escaneá de nuevo.",
+   "duracion": 67.7,
+   "voz": "Al entrar al sistema estás en Reportes. Desplegá la barra de la izquierda y entrá en Proveedores; Compras. En la fila de la compra, el botón Historial, con la cantidad de escaneos que le hiciste. Cada escaneo, con su estado: este, confirmado, y lo que cargó en la compra; el comprobante, las fotos originales, y los renglones que leyó. Este otro, descartado: no cargó nada. Los estados son procesando, para revisar, confirmado, descartado, o con error. Si una factura se escaneó dos veces, o querés ver el papel meses después, está acá."
+  },
+  {
+   "codigo": "T5.17",
+   "titulo": "Importar el Excel del proveedor a una compra, y volver a importarlo",
+   "carpeta": 5,
+   "seccion": "B · Las compras",
+   "orden": 187,
+   "para_que": "Sirve para cargar el pedido desde la planilla del proveedor, y después lo que llegó, sin duplicar renglones. Usalo cuando el proveedor trabaja con Excel.",
+   "cuando_no": "No sirve para actualizar tu catálogo con la lista de precios del proveedor: eso se importa desde el Listado. Y si la factura te llega en papel, escaneala.",
+   "duracion": 126.8,
+   "voz": "Al entrar al sistema estás en Reportes. Desplegá la barra de la izquierda y entrá en Proveedores; Compras. Con la compra creada y guardada, en su fila, Importar Excel. Este es el pedido que te mandó el proveedor. Para cada dato, la letra de su columna: código de barras, código de proveedor, nombre, cantidad, costo y notas. Si tu planilla viene en otro orden, cambiás la letra; los títulos no importan. Tipo: importar pedido. Modo: actualizar la lista, que conserva lo que la compra ya tenía; sobreescribir la reemplaza."
+  },
+  {
+   "codigo": "T2.31",
+   "titulo": "Imprimir el ticket desde Vender",
+   "carpeta": 2,
+   "seccion": "F · Guardar, imprimir y enviar",
+   "orden": 104,
+   "para_que": "Sirve para darle el comprobante en papel al cliente, en el formato que corresponda: el ticket en la comandera, o la hoja. Usalo apenas guardás, mientras el cliente está en el mostrador.",
+   "cuando_no": "Si el cliente no quiere papel, no imprimas: mandale el comprobante por WhatsApp. Si la impresora no responde, el problema no está en Vender: está en la configuración de la impresora. Y si la hoja tiene que salir con otros datos, es el diseño de pe-de-efe, en la carpeta de configuración.",
+   "duracion": 87.3,
+   "voz": "Al entrar al sistema estás en Reportes. Desplegá la barra de la izquierda y entrá en Vender. Después de guardar, abajo queda la última venta, e Imprimir despliega los formatos. Arriba, los tickets: Ticket venta, en pe-de-efe, y Ticket dos punto cero, que sale directo a la impresora térmica, sin abrir nada. Abajo, los remitos en hoja A4: con precios, con los costos y las comisiones al pie, para uso interno, o sin precios. Si la venta está facturada, se suman el ticket de la factura y la factura en A4."
+  },
+  {
+   "codigo": "T3.20",
+   "titulo": "Imprimir el comprobante de una venta: ticket, factura o remito",
+   "carpeta": 3,
+   "seccion": "D · El comprobante al cliente",
+   "orden": 143,
+   "para_que": "Sirve para volver a darle el comprobante en papel a un cliente. Usalo cuando lo perdió, o lo pide días después.",
+   "cuando_no": "Si el cliente lo quiere en el celular o en su correo, no imprimas para sacarle una foto: mandáselo, que le llega el link del comprobante. Y si querés que la hoja salga con otros datos u otro orden, no es acá: es el diseño de pe-de-efe, en la carpeta de configuración.",
+   "duracion": 86.4,
+   "voz": "Al entrar al sistema estás en Reportes. Desplegá la barra de la izquierda y entrá en Ventas. Abrí la venta, y en la barra, Imprimir despliega los formatos. Arriba, los tickets. Ticket dos punto cero sale directo a la impresora térmica, sin abrir nada. Ticket venta es el mismo ticket, en pe-de-efe. Si la venta está facturada, aparece el ticket de la factura, y abajo, la factura en hoja A4. Es el comprobante con los datos fiscales, el CAE y el código QR de Arca. En una venta sin factura no hay factura para imprimir: están los remitos en A4."
+  },
+  {
+   "codigo": "T6.23",
+   "titulo": "Marcar un cheque como cobrado, o como rechazado con su motivo",
+   "carpeta": 6,
+   "seccion": "D · Cheques",
+   "orden": 218,
+   "para_que": "Sirve para decirle al sistema qué pasó con un cheque que depositaste: si se acreditó, la plata entra a una caja; si rebotó, queda anotado por qué. Usalo cuando el banco te da el resultado.",
+   "cuando_no": "No lo marques cobrado cuando lo recibís ni cuando lo depositás: marcalo cuando se acreditó. Y ojo: rechazarlo no le vuelve a cargar la deuda al cliente; el pago con ese cheque sigue en su cuenta. Si te lo tiene que volver a pagar, cargale una nota de débito.",
+   "duracion": 109,
+   "voz": "Al entrar al sistema estás en Reportes. Desplegá la barra de la izquierda; al lado de Tesorería, la flechita, y Cheques. Andá a Disponibles para cobrar: los que ya llegaron a su fecha de pago. Depositaste uno y se acreditó: en su fila, Cobrar. Elegís a qué caja entra la plata, por ejemplo, Banco Nación, y Cobrar cheque. Recién ahora la plata está en esa caja: hasta este momento, el cheque era una promesa. Pasa a la solapa Cobrados, con el día y quién lo marcó. Si el banco lo rebota, volvé a Disponibles para cobrar, y en su fila, Rechazar."
+  },
+  {
+   "codigo": "T6.24",
+   "titulo": "Endosar un cheque a un proveedor: desde Cheques, desde el pago o desde un gasto",
+   "carpeta": 6,
+   "seccion": "D · Cheques",
+   "orden": 219,
+   "para_que": "Sirve para pagar con un cheque de un cliente sin que esa plata pase por tu caja. Usalo cuando el proveedor acepta cheques de terceros.",
+   "cuando_no": "Desde la pantalla de Cheques, el endoso paga el cheque entero y nada más. Si al proveedor le pagás una parte con el cheque y el resto en efectivo o transferencia, hacelo desde su cuenta corriente: en el mismo pago sumás los otros métodos. Y un cheque vencido o rechazado no se endosa.",
+   "duracion": 162.9,
+   "voz": "Al entrar al sistema estás en Reportes. Desplegá la barra de la izquierda; al lado de Tesorería, la flechita, y Cheques. Endosar es darle a un proveedor un cheque que te dio un cliente. La forma directa: en la fila del cheque, Endosar. Se puede mientras está pendiente, disponible o pronto a vencerse. Elegís el proveedor, y Endosar cheque. El cheque sale de Recibido, y pasa a la solapa Endosado, con el proveedor al que fue. Y en Emitido aparece su copia, porque ahora lo entregaste vos."
+  },
+  {
+   "codigo": "T0.4",
+   "titulo": "Entrar al sistema con tu documento y tu contraseña, y cerrar sesión",
+   "carpeta": 0,
+   "seccion": "A · Empezar",
+   "orden": 3,
+   "para_que": "Sirve para entrar al sistema con tu propio usuario. Cada persona entra con su documento y su contraseña, y así queda registrado quién hizo cada venta, cada pago y cada cambio. Usalo cada vez que empezás a trabajar, y cerrá sesión si la computadora la usa otro.",
+   "cuando_no": "No le prestes tu usuario a un empleado: creale el suyo, con sus permisos. Y si el sistema te dice que tu cuenta está en uso en otro dispositivo, no es un problema de contraseña: es el candado de sesión, que tiene su video.",
+   "duracion": 100.1,
+   "voz": "Abrís la dirección de tu sistema en el navegador, y te pide dos cosas: tu número de documento y tu contraseña. Fijate que no hay un olvidé mi contraseña: la de cada empleado la pone y la cambia el dueño, desde Empleados; y la del dueño se cambia desde el pie del menú. Si se te pierde, pedísela a quien administra el sistema. Cargo el documento, la contraseña, e Iniciar sesión. Adentro. El dueño arranca en Reportes; cada empleado, en lo primero que tiene habilitado: Marcela, en Vender."
+  },
+  {
+   "codigo": "T11.39",
+   "titulo": "Diseño de PDF: los diseños que ya vienen, el registro y las columnas de comprobantes, presupuestos, pedidos y catálogo",
+   "carpeta": 11,
+   "seccion": "F · Impresión y PDF",
+   "orden": 339,
+   "para_que": "Sirve para decidir cómo sale cada PDF del sistema: el remito, la factura, el presupuesto, el pedido de la tienda y la lista de artículos. Usalo cuando un comprobante muestra algo de más, o le falta algo.",
+   "cuando_no": "Para sumar o sacar un dato de un comprobante, como los métodos de pago o el saldo, no es acá: es Diseñar PDF. Y los datos del negocio que salen arriba se cargan en General.",
+   "duracion": 141.6,
+   "voz": "Al entrar al sistema estás en Reportes. Desplegá la barra de la izquierda y entrá en ABM; arriba, Impresión, y abajo, Diseño de PDF. No arrancás de cero: ya vienen los de venta, tres de presupuesto, el del pedido online, y la lista de artículos. Abro el remito. El modelo dice para qué es, y el nombre, cómo lo vas a ver. La hoja o la comandera, si es una factura de ARCA, cómo se detallan los descuentos, si el pie sale en cada hoja, y si imprime con la fecha del día. El perfil por defecto es el que sale si no elegís otro, y los predeterminados dicen cuál se manda por WhatsApp y cuál usa la tienda."
+  },
+  {
+   "codigo": "T1.35",
+   "titulo": "Importar el Excel de un proveedor de punta a punta, con un ejemplo",
+   "carpeta": 1,
+   "seccion": "F · Importar el Excel del proveedor",
+   "orden": 52,
+   "para_que": "Sirve para cargar o actualizar cientos de artículos desde la lista del proveedor, en minutos. Usalo cada vez que un proveedor te manda su lista nueva, y el primer día, para cargar tu catálogo.",
+   "cuando_no": "Para cambiar un precio o dos, abrí la ficha. Para subir un porcentaje parejo sin tener una lista nueva, la actualización masiva. Y si los precios nuevos te llegan con una compra, se actualizan desde la compra.",
+   "duracion": 277.6,
+   "voz": "Este es el Excel que te manda un proveedor. Tiene tres hojas. Arriba, los datos del proveedor, y la tabla empieza en la fila siete. Los costos vienen con punto y con coma, mezclados, y hay códigos repetidos. Lo típico. Vamos a cargarlo sin tipear nada. Al entrar al sistema estás en Reportes. Desplegá la barra de la izquierda y entrá en Listado. En Crear, la flechita; Importación, e Importar con IA. Son cuatro pasos. Paso uno, el archivo: Explorar, y elegís el Excel. Como tiene varias hojas, te pregunta cuál, con cuántas filas tiene cada una: la lista de agosto."
+  },
+  {
+   "codigo": "T11.47",
+   "titulo": "Modo oscuro",
+   "carpeta": 11,
+   "seccion": "H · Tu cuenta",
+   "orden": 344,
+   "para_que": "Sirve para trabajar con el fondo oscuro. Usalo si pasás muchas horas frente a la pantalla, o trabajás de noche.",
+   "cuando_no": "Es por usuario: no le cambia nada a los demás. Y si lo que te molesta es el tamaño, no es esto: es el tamaño de los componentes, en General.",
+   "duracion": 41.7,
+   "voz": "Al entrar al sistema estás en Reportes. Desplegá la barra de la izquierda, y abajo, en Configuración, Modo oscuro: lo prendés, y todo el sistema pasa a oscuro. Queda guardado en tu usuario, y lo apagás igual."
+  },
+  {
+   "codigo": "T9.4",
+   "titulo": "Por qué un artículo no aparece en la tienda: sin foto, sin stock y el stock sin especificar",
+   "carpeta": 9,
+   "seccion": "A · Tu catálogo en la tienda",
+   "orden": 260,
+   "para_que": "Sirve para resolver la duda más común de la tienda: por qué un artículo publicado no aparece. Miralo el día que cargás un producto, vas a la tienda y no está.",
+   "cuando_no": "Si el artículo tiene foto y tiene stock y no aparece igual, no es esto: revisá que en su ficha esté en sí Disponible en la tienda. Y si querés venderlo aunque no tenga stock, es otra opción.",
+   "duracion": 102.4,
+   "voz": "Al entrar al sistema estás en Reportes. Desplegá la barra de la izquierda y abajo, en el bloque configuración, entrá en Configuración online; la pestaña Catálogo y stock. Ahí está la respuesta a la pregunta que más recibimos: por qué un artículo publicado no aparece. Casi siempre es una de dos: no tiene foto, o no tiene stock, y la tienda está configurada para no mostrarlos. Mostrar artículos sin stock, y mostrar artículos sin imágenes: apagados, esos artículos se esconden solos, y vuelven solos cuando reponés o cargás la foto."
+  },
+  {
+   "codigo": "T2.28",
+   "titulo": "Factura A, B o C: qué exige cada una",
+   "carpeta": 2,
+   "seccion": "E · Cuenta corriente, crédito y factura",
+   "orden": 102,
+   "para_que": "Sirve para saber por qué el sistema eligió ese tipo de factura, y qué te pide cada uno. Miralo el día que el sistema te frene una factura A y no sepas qué falta.",
+   "cuando_no": "El tipo no se elige a mano. Si sale uno que no esperabas, lo que hay que revisar es la condición frente al iva del cliente, o la tuya.",
+   "duracion": 72.1,
+   "voz": "Al entrar al sistema estás en Reportes. Desplegá la barra de la izquierda y entrá en Vender. Elegís el punto de venta, y sin cliente, o con un consumidor final, el comprobante es Factura B. Elijo a un cliente responsable inscripto, y pasa a Factura A. Si tu negocio es monotributista, siempre Factura C. Para una Factura A, el cliente tiene que tener el CUIT cargado. Este es responsable inscripto, pero no tiene CUIT: al guardar, el sistema me frena y me dice qué falta. Y por encima de un millón de pesos, aunque sea consumidor final, hay que identificar al comprador con CUIT o DNI, como pide Arca."
+  },
+  {
+   "codigo": "T4.1",
+   "titulo": "Dar de alta un cliente con los datos de ARCA",
+   "carpeta": 4,
+   "seccion": "A · La ficha del cliente",
+   "orden": 150,
+   "para_que": "La ficha del cliente es lo que te deja facturarle, fiarle y hacerle un precio propio. Dalo de alta cuando sabés que le vas a vender más de una vez, o cuando te pide factura A: con el cuit, los datos fiscales los trae el sistema y no hay forma de equivocarse.",
+   "cuando_no": "Para el cliente de paso, que paga y se va, no hace falta ficha: esa venta se guarda sin cliente. Si el cliente aparece en pleno mostrador, no vengas hasta acá: se da de alta desde Vender con su cuit, sin salir de la venta. Y si tenés que cargar toda una cartera, no lo hagas de a uno: se importa desde un Excel.",
+   "duracion": 118,
+   "voz": "Al entrar al sistema estás en Reportes. Desplegá la barra de la izquierda y entrá en Clientes. La tabla trae a cada uno con su saldo: cuánto te debe. Crear, y se abre el cliente nuevo. Antes de tipear nada, andá a la solapa Facturación y cargá el cuit. Tocás la lupa, y el sistema le pide los datos a Arca: el nombre, el domicilio, la condición frente al iva. Usar estos datos. Queda la condición frente al iva; en contacto, la dirección y la provincia; y en datos generales, el nombre."
+  },
+  {
+   "codigo": "T1.2",
+   "titulo": "Crear un artículo: los tres códigos, el nombre y el proveedor",
+   "carpeta": 1,
+   "seccion": "A · El Listado y la ficha del artículo",
+   "orden": 23,
+   "para_que": "Sirve para dar de alta un producto nuevo a mano. Usalo cuando son uno o pocos artículos: el producto que sumaste esta semana, el que un cliente te pidió. Los códigos que cargues son los que después lee el escáner y la importación.",
+   "cuando_no": "Para cargar la lista entera de un proveedor no lo hagas de a uno: importá su Excel. Si el producto llegó y hay que venderlo ya, se carga desde Vender. Y si tenés el asistente, alcanza con mandarle una foto.",
+   "duracion": 125,
+   "voz": "Al entrar al sistema estás en Reportes. Desplegá la barra de la izquierda y entrá en Listado, donde están todos tus artículos. Arriba a la izquierda, tocá Crear: la ficha del artículo nuevo tiene pestañas, y hoy vamos por Datos generales. Tres códigos, y no hace falta cargar los tres. El código de barras es el del envase: lo escaneás y entra, y es el que vas a usar para vender. El SKU es tu código interno. Y el código de proveedor es el de la lista de tu proveedor: el que el sistema mira al importar su Excel para saber que este es este."
+  },
+  {
+   "codigo": "T6.16",
+   "titulo": "Cargar un gasto: la sub categoría, cómo lo pagaste y de qué caja sale",
+   "carpeta": 6,
+   "seccion": "C · Gastos",
+   "orden": 211,
+   "para_que": "Un gasto es toda plata que sale y no es mercadería: alquiler, sueldos, luz, flete. Cargalo el día que lo pagás, con su sub categoría: es lo que después te dice en qué se te va la plata.",
+   "cuando_no": "La mercadería no es un gasto: va en Compras, porque mueve el stock y los costos. El retiro del dueño tampoco: es un movimiento de caja. Y si el gasto se repite todos los meses, no dependas de tu memoria: armalo en la Agenda.",
+   "duracion": 113.1,
+   "voz": "Al entrar al sistema estás en Reportes. Desplegá la barra de la izquierda; al lado de Tesorería hay una flechita: la tocás, y abajo aparece Gastos. Acá está todo lo que salió, con el total arriba. Gasto nuevo: Crear. Lo primero, la sub categoría: qué gasto es. Elijo Impuestos provinciales, y la categoría, Impuestos, se completa sola. Si tenés muchas, elegís primero la categoría para acortar la lista. Fijate que el monto no se escribe: sale de cómo lo pagaste. Indicar métodos de pago: la sucursal, Efectivo, el monto, y la caja se propone sola."
+  },
+  {
+   "codigo": "T3.23",
+   "titulo": "Registrar una devolución, con o sin nota de crédito ante ARCA",
+   "carpeta": 3,
+   "seccion": "E · Devoluciones",
+   "orden": 144,
+   "para_que": "Sirve para registrar lo que el cliente trae de vuelta: vuelve el stock, se ajusta su cuenta y sale la nota de crédito. Usalo cuando hay mercadería que vuelve, sea un cambio o una falla.",
+   "cuando_no": "Si la venta se cargó por error y no está facturada, no es una devolución: se borra. Si es un ajuste de importe, sin mercadería, es una nota de crédito desde la cuenta del cliente. Y si el que devuelve sos vos, a un proveedor, es esta misma pantalla en Compra: está en la carpeta de proveedores.",
+   "duracion": 184.7,
+   "voz": "Al entrar al sistema estás en Reportes. Desplegá la barra de la izquierda. Al lado de Ventas hay una flechita: tocala, y abajo aparece Devoluciones. Cuando un cliente te devuelve algo, no editás la venta ni la borrás: registrás la devolución acá. Arriba elegís Venta o Compra: Venta es lo que te devuelve un cliente; Compra, lo que vos le devolvés a un proveedor, que está en la carpeta de proveedores. Y si ya tenés la venta abierta, su botón Nota de crédito te trae hasta acá con la venta cargada."
+  }
+ ]
+}
