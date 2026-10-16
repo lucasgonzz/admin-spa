@@ -15,7 +15,7 @@
 
 :root {
 	--fondo: #f4f5f7; --panel: #ffffff; --borde: #e3e5ea; --texto: #16181d; --suave: #5f6673; --azul: #2979ff;
-	--verde: #16a34a; --verde-osc: #13834a; --verde-fondo: #e3f5ea; --sel: #eaf1ff; --pista: #e6e8ec;
+	--verde: #16a34a; --verde-osc: #13834a; --verde-fondo: #e3f5ea; --sel: #eaf1ff; --pista: #e6e8ec; --lista: #eceef3;
 	--naranja: #a84d08; --naranja-fondo: #fdf0dc; --sombra: 0 10px 30px rgba(0,0,0,.18);
 	/* Texto sobre un fondo verde / azul lleno (botón "Publicar", check, insignia "Equipo"): blanco en el
 	   claro; en el oscuro esos fondos se aclaran y el blanco no se lee, así que pasa a casi negro. */
@@ -24,7 +24,7 @@
 }
 :root[data-tema="dark"] {
 	--fondo: #121418; --panel: #1b1e24; --borde: #2c3038; --texto: #e8eaee; --suave: #9aa1ad; --azul: #5b9bff;
-	--verde: #34c46a; --verde-osc: #4cc584; --verde-fondo: #173525; --sel: #1f2c44; --pista: #2c3038;
+	--verde: #34c46a; --verde-osc: #4cc584; --verde-fondo: #173525; --sel: #1f2c44; --pista: #2c3038; --lista: #14171c;
 	--naranja: #f0a64a; --naranja-fondo: #3a2a13; --sombra: 0 10px 30px rgba(0,0,0,.5);
 	--sobre-verde: #06210f; --sobre-azul: #06101f; --velo: rgba(0,0,0,.62);
 	color-scheme: dark;
@@ -120,7 +120,12 @@ main.principal { flex: 1; display: flex; min-height: 0; position: relative; }
 .carpeta .mini .pct { font-size: 11px; color: var(--suave); min-width: 32px; text-align: right; }
 .carpeta .flecha { display: inline-block; transition: transform .2s; color: var(--suave); font-size: 11px; margin-left: 6px; }
 .carpeta.abierta .flecha { transform: rotate(90deg); }
-.carpeta .videos { padding: 2px 0 10px; }
+/* La lista de videos de una carpeta abierta va sobre un fondo propio, un poco más oscuro que el de la cabecera:
+   así se lee como contenido de esa carpeta y no como más carpetas (pedido de Lucas, 16/10/2026) */
+.carpeta .videos { padding: 2px 0 10px; background: var(--lista); border-top: 1px solid var(--borde); }
+/* Sobre ese fondo el celeste del hover (--sel) casi no se distingue en el tema claro: dentro de la lista el
+   hover aclara hacia el panel; el video seleccionado conserva su --sel y su barra azul */
+.carpeta .videos .vid:not(.sel):hover { background: var(--panel); }
 .seccion { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--suave); padding: 18px 14px 6px 48px; }
 .vid { width: 100%; border: 0; border-radius: 0; background: transparent; color: inherit; text-align: left; display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: start; padding: 9px 12px 9px 22px; cursor: pointer; font-size: 13px; position: relative; }
 .vid:hover { background: var(--sel); }
