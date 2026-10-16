@@ -620,42 +620,45 @@ export function crear_buscador(videos, carpetas, transcripciones) {
 /**
  * Suma una entrada del vocabulario al mapa de una palabra con ese puntaje, si es mejor que el que ya tenía.
  *
- * @param {Map<Object, {puntos: number, tope: (Array<number>|null)}>} mapa Entradas del vocabulario que valen para la palabra → qué tan directas son y, si es un sinónimo, el tope de rareza.
+ * @param {Map<Object, {puntos: number, tope: (number|null)}>} mapa Entradas del vocabulario que valen para la palabra → qué tan directas son y, si es un sinónimo, el tope de rareza.
  * @param {Object} entrada Entrada del vocabulario.
  * @param {number} puntos Qué tan directa es la coincidencia (`PUNTOS`).
- * @param {Array<number>|null} [tope] Rareza máxima por campo que puede valer esta coincidencia (ver `idf_de`).
+ * @param {number|null} [tope] Rareza máxima que puede valer esta coincidencia (ver `idf_de`).
  * @returns {void}
  */
 function anotar(mapa, entrada, puntos, tope) {
   /** Lo que ya había anotado para esta entrada. */
   const actual = mapa.get(entrada)
   if (!actual || actual.puntos < puntos) {
-    mapa.set(entrada, { puntos: puntos, tope: tope || null })
+    mapa.set(entrada, { puntos: puntos, tope: tope === undefined ? null : tope })
   }
 }
 
 /**
  * Lo rara que es una palabra en un campo, para una coincidencia. Un sinónimo trae un tope: no puede
- * pesar más que la palabra que se escribió. Sin tope, "artículo" (en 43 títulos) perdía contra
- * "mercadería" (en uno solo), que le gana en rareza aunque sea la segunda opción.
+ * ser más rara que la palabra que se escribió (en su campo donde más rara es). Sin tope, "artículo" (en
+ * 43 títulos) perdía contra "mercadería" (en uno solo), que le gana en rareza aunque sea la segunda
+ * opción. El tope es un solo número para todos los campos, y no uno por campo, porque la palabra
+ * escrita puede no existir en un campo ("fiado" solo está en los guiones) y entonces sus sinónimos no
+ * valdrían nada en el título, que es justo donde está la respuesta.
  *
  * @param {Object} entrada Entrada del vocabulario.
  * @param {number} campo Número de campo.
- * @param {{ tope: (Array<number>|null) }} info Lo anotado en el mapa de la palabra.
+ * @param {{ tope: (number|null) }} info Lo anotado en el mapa de la palabra.
  * @returns {number}
  */
 function idf_de(entrada, campo, info) {
-  return info.tope ? Math.min(entrada.idf[campo], info.tope[campo]) : entrada.idf[campo]
+  return info.tope === null ? entrada.idf[campo] : Math.min(entrada.idf[campo], info.tope)
 }
 
 /**
  * Suma al mapa la palabra tal cual y las otras formas de su raíz (plural, verbo), si existen en el corpus.
  *
  * @param {Object} b Buscador.
- * @param {Map<Object, {puntos: number, tope: (Array<number>|null)}>} mapa
+ * @param {Map<Object, {puntos: number, tope: (number|null)}>} mapa
  * @param {string} palabra Palabra normalizada.
  * @param {number} base Puntos de una coincidencia exacta; las otras formas valen `PUNTOS.raiz` de eso.
- * @param {Array<number>|null} [tope] Tope de rareza (para sinónimos).
+ * @param {number|null} [tope] Tope de rareza (para sinónimos).
  * @returns {boolean} true si encontró algo.
  */
 function anotar_formas(b, mapa, palabra, base, tope) {
@@ -704,7 +707,7 @@ function numero_en_letras(palabra) {
  *
  * @param {Object} b Buscador.
  * @param {string} palabra Palabra de la consulta, normalizada.
- * @returns {Map<Object, {puntos: number, tope: (Array<number>|null)}>} Entradas del vocabulario → qué tan directa es cada una. Vacío si no hay nada.
+ * @returns {Map<Object, {puntos: number, tope: (number|null)}>} Entradas del vocabulario → qué tan directa es cada una. Vacío si no hay nada.
  */
 function resolver_palabra(b, palabra) {
   /** Resultado. */
@@ -721,8 +724,8 @@ function resolver_palabra(b, palabra) {
   // Sinónimos: los de la palabra y los de su raíz. Ninguno puede pesar más que la palabra escrita (si existe en el corpus).
   /** Formas de la palabra escrita que existen en los videos. */
   const propias = b.por_raiz.get(raiz(palabra))
-  /** Rareza de la palabra escrita, por campo; null si no existe en ningún video ("afip"). */
-  const tope = propias ? propias[0].idf : null
+  /** Rareza de la palabra escrita (la de su campo donde es más rara); null si no existe en ningún video ("afip"). */
+  const tope = propias ? Math.max.apply(null, propias[0].idf) : null
   ;[palabra, raiz(palabra)].forEach(function (clave) {
     ;(GRUPOS_POR_CLAVE.get(clave) || []).forEach(function (numero) {
       GRUPOS_DE_SINONIMOS[numero].forEach(function (otra) {
