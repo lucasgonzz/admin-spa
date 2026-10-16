@@ -58,6 +58,8 @@
     </p>
 
     <!-- Tabla de diferencias -->
+    <!-- table-responsive: en teléfono la tabla scrollea dentro del modal y no queda recortada. -->
+    <div class="table-responsive">
     <table class="table table-sm mb-3">
       <thead class="table-light">
         <tr>
@@ -92,33 +94,39 @@
               <i class="bi bi-lock-fill me-1"></i>secreta
             </span>
           </td>
-          <!-- Valor en el template base -->
+          <!--
+            Valor en el template base. Si el servidor marca `ilegible`, el valor guardado en la
+            plantilla no se pudo descifrar: se muestra esa etiqueta en lugar del valor.
+          -->
           <td class="align-middle text-break">
-            <span v-if="diff.template_value" class="text-success small font-monospace">
-              {{ diff.template_value }}
+            <span v-if="diff.ilegible" class="text-warning-emphasis small fst-italic">valor ilegible</span>
+            <span v-else-if="valor_de_diff(diff, 'template_value')" class="text-success small font-monospace">
+              {{ valor_de_diff(diff, 'template_value') }}
             </span>
             <span v-else class="text-muted small fst-italic">(vacío)</span>
           </td>
           <!-- Valor actual en el cliente -->
           <td class="align-middle text-break">
-            <span v-if="diff.client_value" class="text-danger small font-monospace">
-              {{ diff.client_value }}
+            <span v-if="valor_de_diff(diff, 'client_value')" class="text-danger small font-monospace">
+              {{ valor_de_diff(diff, 'client_value') }}
             </span>
             <span v-else class="text-muted small fst-italic">(no existe)</span>
             <!--
               En una secreta el enmascarado puede verse igual en ambos lados aunque los valores
-              reales difieran: el aviso evita que el diff parezca "igual".
+              reales difieran: el aviso evita que el diff parezca "igual". text-wrap deja que el
+              aviso rompa línea en teléfono (el .badge de Bootstrap es nowrap).
             -->
             <span
-              v-if="diff.sensitive"
-              class="badge bg-warning-subtle text-warning-emphasis ms-1"
+              v-if="diff.sensitive || diff.ilegible"
+              class="badge bg-warning-subtle text-warning-emphasis text-wrap ms-1"
             >
-              distinto (valor oculto)
+              {{ diff.ilegible ? 'distinto' : 'distinto (valor oculto)' }}
             </span>
           </td>
         </tr>
       </tbody>
     </table>
+    </div>
 
     <template #footer>
       <div class="d-flex w-100 gap-2 flex-wrap align-items-center">
@@ -316,6 +324,25 @@ export default {
     },
   },
   methods: {
+    /**
+     * Valor de un diff de .env listo para mostrar en el modal.
+     *
+     * Para una variable secreta vacía el servidor manda el literal "(vacío)" en lugar de un
+     * string vacío: se trata como "sin valor" para que se vea igual que el resto de las
+     * celdas vacías de la tabla.
+     *
+     * @param {Object} diff  Diff devuelto por check-diff.
+     * @param {string} campo 'template_value' o 'client_value'.
+     * @returns {string}  El valor a mostrar, o '' si no hay.
+     */
+    valor_de_diff(diff, campo) {
+      const valor = diff[campo]
+      if (diff.sensitive && valor === '(vacío)') {
+        return ''
+      }
+      return valor || ''
+    },
+
     /**
      * Abre el modal de creación reutilizando el handler del ResourceView montado.
      *

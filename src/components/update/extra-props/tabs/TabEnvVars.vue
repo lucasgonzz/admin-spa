@@ -64,6 +64,8 @@
       </div>
 
       <!-- Tabla de variables con diferencias -->
+      <!-- table-responsive: en tablet y teléfono la tabla scrollea dentro del panel. -->
+      <div class="table-responsive">
       <table class="table table-sm table-hover mb-0">
         <thead class="table-light">
           <tr>
@@ -104,7 +106,9 @@
               ya manda el valor enmascarado: se muestra tal cual, con la etiqueta "secreta".
             -->
             <td class="align-middle small text-success text-break">
-              {{ item.template_value || '(vacío)' }}
+              <!-- `ilegible`: el valor guardado en la plantilla no se pudo descifrar -->
+              <span v-if="item.ilegible" class="text-warning-emphasis fst-italic">valor ilegible</span>
+              <template v-else>{{ valor_visible(item.template_value, item.sensitive) || '(vacío)' }}</template>
               <span
                 v-if="item.sensitive"
                 class="badge bg-secondary-subtle text-secondary-emphasis ms-1"
@@ -115,13 +119,16 @@
             </td>
             <!-- Valor actual en el cliente (muteado) -->
             <td class="align-middle small text-muted text-break">
-              {{ item.sample_client_value !== undefined ? (item.sample_client_value || '-') : '-' }}
+              {{ item.sample_client_value !== undefined ? (valor_visible(item.sample_client_value, item.sensitive) || '-') : '-' }}
               <!--
                 En una variable secreta el enmascarado puede verse igual en ambos lados aunque los
                 valores reales difieran: el aviso evita que el diff parezca "igual".
               -->
-              <span v-if="item.sensitive" class="badge bg-warning-subtle text-warning-emphasis ms-1">
-                distinto (valor oculto)
+              <span
+                v-if="item.sensitive || item.ilegible"
+                class="badge bg-warning-subtle text-warning-emphasis text-wrap ms-1"
+              >
+                {{ item.ilegible ? 'distinto' : 'distinto (valor oculto)' }}
               </span>
             </td>
             <!-- Badges con el slug de cada API donde hay diferencia -->
@@ -129,7 +136,7 @@
               <span
                 v-for="api_url in item.affected_apis"
                 :key="api_url"
-                class="badge bg-warning text-dark me-1 small"
+                class="badge bg-warning text-dark text-wrap me-1 small"
                 :title="api_url"
               >
                 {{ short_api_label(api_url) }}
@@ -138,6 +145,7 @@
           </tr>
         </tbody>
       </table>
+      </div>
     </template>
   </div>
 </template>
@@ -191,7 +199,7 @@ export default {
      * Cada item incluye las APIs donde esa variable difiere (affected_apis).
      *
      * Estructura devuelta:
-     * [{ key, sensitive, template_value, sample_client_value, affected_apis: [api_url] }]
+     * [{ key, sensitive, ilegible, template_value, sample_client_value, affected_apis: [api_url] }]
      *
      * `sensitive` viene del servidor: si es true, template_value y client_value llegan
      * enmascarados y no se intenta mostrar el valor completo.
@@ -209,6 +217,7 @@ export default {
             map[diff.key] = {
               key:                 diff.key,
               sensitive:           !!diff.sensitive,
+              ilegible:            !!diff.ilegible,
               template_value:      diff.template_value,
               /* Toma el primer valor de cliente encontrado como muestra representativa. */
               sample_client_value: diff.client_value,
@@ -218,6 +227,10 @@ export default {
           /* Si en cualquier API el servidor la marcó secreta, la fila se trata como secreta. */
           if (diff.sensitive) {
             map[diff.key].sensitive = true
+          }
+          /* `ilegible`: el valor guardado en la plantilla no se pudo descifrar. */
+          if (diff.ilegible) {
+            map[diff.key].ilegible = true
           }
           map[diff.key].affected_apis.push(result.api_url)
         })
@@ -242,6 +255,21 @@ export default {
   },
 
   methods: {
+    /**
+     * Valor listo para mostrar. Para una variable secreta vacía el servidor manda el literal
+     * "(vacío)": se trata como "sin valor" ('') para que se vea como el resto de las vacías.
+     *
+     * @param {string}  valor      Valor tal como lo manda el servidor (enmascarado si es secreta).
+     * @param {boolean} sensitive  true si la variable es secreta.
+     * @returns {string}
+     */
+    valor_visible(valor, sensitive) {
+      if (sensitive && valor === '(vacío)') {
+        return ''
+      }
+      return valor || ''
+    },
+
     /**
      * Llama a check_diff_all y carga los diffs de todas las APIs del cliente del update.
      * Selecciona todas las keys por defecto para facilitar la aplicación masiva.
