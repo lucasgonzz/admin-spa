@@ -51,12 +51,21 @@
  * por una expansión: el tipeo y el "empieza igual" solo se aplican a lo que no existe, las otras formas de la
  * raíz exigen ser parientes de verdad (`son_parientes`: "arqueo" no es "arca" aunque una regla general les
  * haya dado la misma raíz) y los grupos de sinónimos se buscan por la raíz de cada palabra, nunca por la escrita.
+ *
+ * Lo que no se junta con nadie. Las palabras de relleno ("más", "esta", "tras", "uno"…) tienen su propia clase en el
+ * vocabulario (`clase_de`): si no, "masa" (sin la vocal final, "mas") era lo mismo que "más" y quien escribía "en
+ * masa" recibía 129 videos, y "estado" traía el catálogo entero por "esta" y "estas". Una letra suelta que no es un
+ * dígito ("escanear f", mientras se escribe "factura") pesa como una palabra común, no como una rara. Un grupo de
+ * sinónimos que aparece en más del 40 % de los videos ("alta / crear / agregar / cargar / registrar", 75 %) aporta
+ * cada vez menos (`factor_de_amplitud`), y lo que vale en un solo sentido ("muchos" → "en masa", "electrónica" →
+ * ARCA solo si se escribe también "factura") va en `EQUIVALENCIAS_DE_LA_CONSULTA`, no en un grupo.
  */
 import { normalizar } from './utiles.js'
 import {
   PALABRAS_DE_RELLENO,
   GRUPOS_DE_SINONIMOS,
   FORMAS_DICHAS,
+  EQUIVALENCIAS_DE_LA_CONSULTA,
   NUMEROS_HASTA_30,
   NUMEROS_REDONDOS,
   RAICES_APARTE,
@@ -125,6 +134,23 @@ const LARGO_MINIMO_TIPEO_CON_LETRA_CAMBIADA = 6
 
 /** Cuántas palabras de la consulta se usan como máximo. */
 const MAXIMO_DE_PALABRAS = 12
+
+/** Hasta qué parte de los videos puede cubrir un grupo de sinónimos sin que sus sinónimos valgan menos. */
+const AMPLITUD_SIN_DESCUENTO = 0.4
+
+/** Lo menos que puede valer (como fracción) un sinónimo de un grupo que cubre casi todo. */
+const FACTOR_MINIMO_DE_AMPLITUD = 0.1
+
+/** Cuántos caracteres de la consulta se leen como máximo (más no cambian el resultado y cuestan al separar en palabras). */
+const MAXIMO_DE_CARACTERES = 200
+
+/**
+ * Tope de lo rara y de lo pesada que puede ser una letra suelta que no es un dígito ("escanear f", "factura b"):
+ * en un catálogo casi todas las letras sueltas aparecen en un par de videos ("F tres, F cuatro") y pesaban lo mismo
+ * que la palabra que se quería. Con el tope pesan como una palabra común.
+ */
+const TOPE_DE_RAREZA_DE_UNA_LETRA = 1
+const TOPE_DE_PESO_DE_UNA_LETRA = 1
 
 /**
  * Coberturas mínimas para que un video entre en los resultados aunque le falten palabras de la consulta: el
@@ -398,6 +424,36 @@ function calcular_raiz_regular(palabra) {
   }
   return r
 }
+
+/**
+ * A qué clase de formas pertenece una palabra en el vocabulario: su raíz, salvo las palabras de relleno, que no
+ * se juntan con nadie. "estado" (30 videos, "Estado de resultados") tiene la misma raíz que "esta", "estas" y
+ * "este" (relleno, dichas en 359 videos), y quien escribía "estado" recibía el catálogo entero; "masa" y "más",
+ * "trae" y "tras", "uno" y "unos" eran lo mismo. Una palabra de relleno no cuenta para la rareza ni para las
+ * formas de las demás.
+ *
+ * @param {string} palabra Palabra normalizada.
+ * @returns {string}
+ */
+function clase_de(palabra) {
+  return PALABRAS_DE_RELLENO.has(palabra) ? palabra + '#' : raiz(palabra)
+}
+
+/**
+ * `EQUIVALENCIAS_DE_LA_CONSULTA` indexadas por la raíz de lo que se escribe: raíz → { a, con } con las raíces de
+ * `con` ya calculadas (o `null` si valen siempre).
+ */
+const EQUIVALENCIAS_POR_RAIZ = new Map()
+EQUIVALENCIAS_DE_LA_CONSULTA.forEach(function (equivalencia) {
+  equivalencia.de.forEach(function (palabra) {
+    /** Raíz de lo que se escribe. */
+    const clave = raiz(palabra)
+    if (!EQUIVALENCIAS_POR_RAIZ.has(clave)) {
+      EQUIVALENCIAS_POR_RAIZ.set(clave, [])
+    }
+    EQUIVALENCIAS_POR_RAIZ.get(clave).push({ a: equivalencia.a, con: equivalencia.con ? equivalencia.con.map(raiz) : null })
+  })
+})
 
 /**
  * Grupos de sinónimos indexados por la RAÍZ de cada palabra: raíz → números de grupo. Se arma una vez. Se busca
@@ -681,6 +737,29 @@ function textos_del_video(video, nombres_de_carpeta, transcripcion) {
 }
 
 /**
+ * @param {*} x
+ * @returns {boolean} true si es un objeto (no `null`, no un texto ni un número).
+ */
+function es_un_objeto(x) {
+  return x !== null && typeof x === 'object'
+}
+
+/**
+ * @param {*} buscador Lo que se pasa como buscador.
+ * @returns {boolean} true si tiene la forma de lo que devuelve `crear_buscador`.
+ */
+function es_un_buscador(buscador) {
+  return (
+    es_un_objeto(buscador) &&
+    Array.isArray(buscador.docs) &&
+    buscador.vocab instanceof Map &&
+    buscador.por_raiz instanceof Map &&
+    buscador.por_numero instanceof Map &&
+    Array.isArray(buscador.amplitud)
+  )
+}
+
+/**
  * Arma el buscador. Hay que volver a armarlo cuando llega el índice de transcripciones; con
  * `transcripciones` en `null` busca igual por título, carpeta, sección, "para qué" y "cuándo no".
  *
@@ -690,11 +769,11 @@ function textos_del_video(video, nombres_de_carpeta, transcripcion) {
  * @returns {Object} El buscador: una estructura opaca para pasar a `buscar`.
  */
 export function crear_buscador(videos, carpetas, transcripciones) {
-  /** Videos válidos. */
-  const lista = Array.isArray(videos) ? videos : []
+  /** Videos válidos (lo que no sea un objeto, un `null` por ejemplo, se salta). */
+  const lista = (Array.isArray(videos) ? videos : []).filter(es_un_objeto)
   /** Nombre de cada carpeta por número. */
   const nombres_de_carpeta = {}
-  ;(Array.isArray(carpetas) ? carpetas : []).forEach(function (c) {
+  ;(Array.isArray(carpetas) ? carpetas : []).filter(es_un_objeto).forEach(function (c) {
     nombres_de_carpeta[c.nro] = c.nombre
   })
   /** Vocabulario: palabra normalizada → { palabra, raiz, df, idf, idf_exacta, docs, masc, sello }. */
@@ -719,7 +798,7 @@ export function crear_buscador(videos, carpetas, transcripciones) {
         /** Entrada del vocabulario, creada la primera vez que aparece la palabra. */
         let e = vocab.get(tk.pal[k])
         if (!e) {
-          e = { palabra: tk.pal[k], raiz: raiz(tk.pal[k]), df: [0, 0, 0, 0, 0], idf: null, idf_exacta: null, docs: [], masc: [], sello: -1 }
+          e = { palabra: tk.pal[k], raiz: clase_de(tk.pal[k]), df: [0, 0, 0, 0, 0], idf: null, idf_exacta: null, docs: [], masc: [], sello: -1 }
           vocab.set(tk.pal[k], e)
         }
         // Todos los videos comparten la misma palabra del vocabulario en lugar de una copia cada uno.
@@ -755,6 +834,8 @@ export function crear_buscador(videos, carpetas, transcripciones) {
   const rareza_de = function (d) {
     return d ? Math.log(1 + total / d) : 0
   }
+  /** Qué parte de los videos cubre cada grupo de sinónimos (0 a 1), para `factor_de_amplitud`. */
+  const amplitud = []
   /** Entradas del vocabulario agrupadas por raíz. */
   const por_raiz = new Map()
   vocab.forEach(function (e) {
@@ -800,7 +881,7 @@ export function crear_buscador(videos, carpetas, transcripciones) {
   // doble que "artículo" (43 títulos) aunque sea el mismo tema, y "productos más vendidos" iba a "Agregar
   // productos con el lector" en lugar de al reporte de Artículos. El grupo cuenta los videos donde aparece
   // cualquiera de sus palabras; la rareza de una palabra nunca sube por pertenecer a un grupo.
-  GRUPOS_DE_SINONIMOS.forEach(function (grupo) {
+  GRUPOS_DE_SINONIMOS.forEach(function (grupo, numero_de_grupo) {
     /** Entradas del vocabulario de todas las palabras del grupo. */
     const entradas = []
     grupo
@@ -822,13 +903,19 @@ export function crear_buscador(videos, carpetas, transcripciones) {
     })
     /** Videos del grupo por campo y rareza que sale de ahí. */
     const df = [0, 0, 0, 0, 0]
+    /** En cuántos videos aparece alguna palabra del grupo. */
+    let en_alguno = 0
     for (let d = 0; d < total; d++) {
+      if (mascaras[d]) {
+        en_alguno++
+      }
       for (let c = 0; c < CANTIDAD_CAMPOS && mascaras[d]; c++) {
         if (mascaras[d] & (1 << c)) {
           df[c]++
         }
       }
     }
+    amplitud[numero_de_grupo] = en_alguno / total
     /** Rareza del grupo por campo, y cada entrada se queda con la menor entre la suya y la del grupo. */
     const del_grupo = df.map(rareza_de)
     /**
@@ -844,7 +931,22 @@ export function crear_buscador(videos, carpetas, transcripciones) {
       e.idf_exacta = e.idf_exacta.map(tope)
     })
   })
-  return { docs: docs, vocab: vocab, por_raiz: por_raiz, por_numero: por_numero }
+  return { docs: docs, vocab: vocab, por_raiz: por_raiz, por_numero: por_numero, amplitud: amplitud }
+}
+
+/**
+ * Cuánto vale un sinónimo según lo común que sea su grupo. Un grupo que está en pocos videos dice mucho (1). Uno
+ * que aparece en más del `AMPLITUD_SIN_DESCUENTO` de los videos ("alta / crear / agregar / cargar / registrar":
+ * 75 %) dice poco: el aporte baja hasta `FACTOR_MINIMO_DE_AMPLITUD`, sin llegar a cero.
+ *
+ * @param {number} cobertura Qué parte de los videos cubre el grupo (0 a 1).
+ * @returns {number} Entre `FACTOR_MINIMO_DE_AMPLITUD` y 1.
+ */
+function factor_de_amplitud(cobertura) {
+  if (cobertura <= AMPLITUD_SIN_DESCUENTO) {
+    return 1
+  }
+  return Math.max(FACTOR_MINIMO_DE_AMPLITUD, (1 - cobertura) / (1 - AMPLITUD_SIN_DESCUENTO))
 }
 
 /**
@@ -952,9 +1054,10 @@ function numero_en_letras(palabra) {
  *
  * @param {Object} b Buscador.
  * @param {string} palabra Palabra de la consulta, normalizada.
+ * @param {Array<string>} consulta Todas las palabras que se buscan (para las equivalencias que valen en compañía).
  * @returns {Map<Object, number>} Entradas del vocabulario → qué tan directa es cada una. Vacío si no hay nada.
  */
-function resolver_palabra(b, palabra) {
+function resolver_palabra(b, palabra, consulta) {
   /** Resultado. */
   const mapa = new Map()
   anotar_formas(b, mapa, palabra, PUNTOS.directa)
@@ -966,13 +1069,29 @@ function resolver_palabra(b, palabra) {
     anotar_formas(b, mapa, dicho, PUNTOS.numero)
   }
 
-  // Sinónimos: los de la palabra y los de su raíz. Pesan igual de raros que ella (ver `crear_buscador`).
+  // Sinónimos: los de la palabra y los de su raíz. Pesan igual de raros que ella (ver `crear_buscador`). Un grupo
+  // que cubre buena parte de los videos aporta menos (ver `factor_de_amplitud`).
   ;(GRUPOS_POR_CLAVE.get(raiz(palabra)) || []).forEach(function (numero) {
+    /** Puntos de un sinónimo de este grupo. */
+    const puntos = PUNTOS.sinonimo * factor_de_amplitud(b.amplitud[numero] || 0)
     GRUPOS_DE_SINONIMOS[numero].forEach(function (otra) {
       if (otra !== palabra && raiz(otra) !== raiz(palabra)) {
-        anotar_formas(b, mapa, otra, PUNTOS.sinonimo)
+        anotar_formas(b, mapa, otra, puntos)
       }
     })
+  })
+  // Equivalencias de un solo sentido: lo escrito busca también lo que dicen los videos.
+  ;(EQUIVALENCIAS_POR_RAIZ.get(raiz(palabra)) || []).forEach(function (equivalencia) {
+    if (
+      !equivalencia.con ||
+      consulta.some(function (otra) {
+        return otra !== palabra && equivalencia.con.indexOf(raiz(otra)) !== -1
+      })
+    ) {
+      equivalencia.a.forEach(function (otra) {
+        anotar_formas(b, mapa, otra, PUNTOS.sinonimo)
+      })
+    }
   })
 
   // La palabra a medio escribir: solo si no existe tal cual.
@@ -1209,11 +1328,13 @@ function elegir_fragmento(doc, eventos) {
 export function buscar(buscador, consulta) {
   /** Respuesta de "no hay nada que buscar". */
   const vacio = { resultados: [], completo: true, palabras: [] }
-  if (!buscador || !buscador.docs.length) {
+  if (!es_un_buscador(buscador) || !buscador.docs.length) {
     return vacio
   }
-  /** Lo escrito, sin espacios de más. */
-  const texto = String(consulta == null ? '' : consulta).trim()
+  /** Lo escrito, sin espacios de más y sin pasarse del largo que tiene sentido (alguien pega un párrafo o un archivo). */
+  const texto = String(consulta == null ? '' : consulta)
+    .trim()
+    .slice(0, MAXIMO_DE_CARACTERES)
   if (!texto) {
     return vacio
   }
@@ -1247,9 +1368,15 @@ export function buscar(buscador, consulta) {
   if (!escritas.length) {
     return vacio
   }
+  /** Palabras ya vistas, para no repetirlas. */
+  const vistas = new Set()
   /** Palabras sin repetir. */
-  const distintas = escritas.filter(function (p, k) {
-    return escritas.indexOf(p) === k
+  const distintas = escritas.filter(function (p) {
+    if (vistas.has(p)) {
+      return false
+    }
+    vistas.add(p)
+    return true
   })
   /** Palabras sin el relleno; si todas lo son, se buscan tal cual. */
   const sin_relleno = distintas.filter(function (p) {
@@ -1263,7 +1390,11 @@ export function buscar(buscador, consulta) {
 
   /** Para cada palabra, qué entradas del vocabulario le sirven y con cuántos puntos. */
   const mapas = palabras.map(function (p) {
-    return resolver_palabra(buscador, p)
+    return resolver_palabra(buscador, p, palabras)
+  })
+  /** Tope de rareza de cada palabra: una letra suelta que no es un dígito no puede ser "rara". */
+  const topes = palabras.map(function (p) {
+    return p.length === 1 && !/\d/.test(p) ? TOPE_DE_RAREZA_DE_UNA_LETRA : Infinity
   })
 
   // Etapa 1: qué palabras tiene cada video y cuánto valen (usando solo el índice invertido, sin leer los textos).
@@ -1278,7 +1409,7 @@ export function buscar(buscador, consulta) {
         for (let c = 0; c < CANTIDAD_CAMPOS; c++) {
           if (mascara & (1 << c)) {
             /** Valor de esta coincidencia. */
-            const v = PESO_DE_CAMPO[c] * rareza_de_la_coincidencia(e, c, puntos) * puntos
+            const v = PESO_DE_CAMPO[c] * Math.min(rareza_de_la_coincidencia(e, c, puntos), topes[i]) * puntos
             if (v > valores[i * total + d]) {
               valores[i * total + d] = v
             }
@@ -1304,7 +1435,7 @@ export function buscar(buscador, consulta) {
       }
     }
     if (en_cuantos) {
-      pesos[i] = Math.log(1 + total / en_cuantos)
+      pesos[i] = Math.min(Math.log(1 + total / en_cuantos), topes[i] === Infinity ? Infinity : TOPE_DE_PESO_DE_UNA_LETRA)
       suma_de_pesos += pesos[i]
       buscables++
     }
@@ -1404,7 +1535,7 @@ export function buscar(buscador, consulta) {
         }
         for (let s = 0; s < sirve.length; s++) {
           /** Valor de esta coincidencia. */
-          const valor = PESO_DE_CAMPO[c] * rareza_de_la_coincidencia(sirve[s].e, c, sirve[s].puntos) * sirve[s].puntos
+          const valor = PESO_DE_CAMPO[c] * Math.min(rareza_de_la_coincidencia(sirve[s].e, c, sirve[s].puntos), topes[sirve[s].i]) * sirve[s].puntos
           evs.push({ k: k, i: sirve[s].i, valor: valor })
           /** Posición en las tablas de mejores valores. */
           const pos = sirve[s].i * CANTIDAD_CAMPOS + c

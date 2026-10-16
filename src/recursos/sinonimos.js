@@ -75,9 +75,9 @@ export const PALABRAS_DE_RELLENO = new Set(
  */
 export const GRUPOS_DE_SINONIMOS = [
   // El organismo se llama ARCA desde 2024 y los guiones solo dicen "ARCA" (29 videos; "afip" 0): el dueño
-  // todavía dice "AFIP". Y "factura electrónica" (0) es como lo dice quien factura; en los guiones es
-  // "la factura de ARCA".
-  ['arca', 'afip', 'electronica'],
+  // todavía dice "AFIP". ("Factura electrónica", que también es ARCA, está en `EQUIVALENCIAS_DE_LA_CONSULTA`:
+  // "electrónica" suelta no es ARCA, "balanza electrónica" no tiene nada que ver.)
+  ['arca', 'afip'],
   // El sistema llama "artículo" (171 videos) a lo que todo el mundo llama "producto" (70), y el guion dice
   // "mercadería" (35) cuando habla del stock que entra.
   ['articulo', 'producto', 'mercaderia'],
@@ -107,8 +107,9 @@ export const GRUPOS_DE_SINONIMOS = [
   // (72 videos dicen "corriente"); "fiar" y "fiarle" no comparten raíz con "fiado".
   ['fiado', 'fiar', 'fiarle', 'fiando', 'corriente'],
   // "En masa" (T1.44, T1.45, T1.47, 3 videos), "masiva" (actualización o disponibilidad masiva, 16) y "de una
-  // vez" (arriba): la gente dice "muchos" (23) o "varios" (17). "Todos" no entra: es relleno.
-  ['masa', 'masiva', 'muchos', 'varios', 'lote'],
+  // vez" (arriba). "Muchos" (23) y "varios" (17) NO están acá: son palabras comunes y, dentro del grupo, le bajaban
+  // la rareza a "masa" (ver `EQUIVALENCIAS_DE_LA_CONSULTA`).
+  ['masa', 'masiva', 'lote'],
   // Lo que la tarjeta "liquida" (T6.2 "a liquidar", 6 videos) y "acredita" (T6.13 "días de acreditación", 6): cuándo
   // le llega la plata a quien cobra con tarjeta.
   ['liquidar', 'liquida', 'acreditar'],
@@ -132,6 +133,23 @@ export const GRUPOS_DE_SINONIMOS = [
   ['ia', 'inteligencia'],
   // WhatsApp (23): las abreviaturas con las que se lo escribe a mano (0): ningún guion las usa.
   ['whatsapp', 'wpp', 'wsp', 'wasap', 'whats'],
+]
+
+/**
+ * Equivalencias que valen en UN solo sentido: lo que la persona escribe (`de`) también busca lo que dicen los
+ * videos (`a`), pero no al revés. Sirven para dos casos que un grupo de sinónimos hace mal:
+ * - Palabras comunes que apuntan a una rara: quien escribe "muchos" o "varios" quiere el "en masa" / "masiva",
+ *   pero quien escribe "masa" no quiere todos los videos que dicen "varios". Dentro de un grupo, además, las
+ *   comunes le bajan la rareza a la rara.
+ * - Palabras que solo equivalen en compañía (`con`, si está): "electrónica" es ARCA cuando se escribe "factura
+ *   electrónica"; "balanza electrónica" no tiene nada que ver con ARCA. Una palabra de `con` tiene que estar
+ *   también en la consulta (por su raíz).
+ *
+ * @type {Array<{ de: Array<string>, a: Array<string>, con?: Array<string> }>}
+ */
+export const EQUIVALENCIAS_DE_LA_CONSULTA = [
+  { de: ['electronica'], con: ['factura', 'facturacion', 'facturar', 'comprobante'], a: ['arca', 'afip'] },
+  { de: ['muchos', 'varios'], a: ['masa', 'masiva', 'lote'] },
 ]
 
 /**
@@ -196,7 +214,8 @@ export const NUMEROS_REDONDOS = {
  * "corre" (17, "la lectura corre en segundo plano"); "tipo" (26, el tipo de factura) contra "tipear" (5); "bloque"
  * (43, los "bloques" del guion) contra "bloquear"; "listo" (28, "queda listo") contra "lista" y "listado"; "orden" (19) contra "ordenar", porque la
  * terminación de la tercera del plural ("-en") le dejaría la raíz "ord"; y "últimos", "mínimos", "máximos" y
- * "próximos", que terminan como "vendimos" y perderían su singular.
+ * "próximos", que terminan como "vendimos" y perderían su singular; y "masa" (20 videos, "actualizar en masa"),
+ * que sin la vocal final se escribe como "más" (129 videos, relleno).
  * Cada palabra se queda con su propia raíz.
  *
  * @type {Object<string, string>}
@@ -216,6 +235,8 @@ export const RAICES_APARTE = {
   proximos: 'proxim',
   bloque: 'bloque',
   bloques: 'bloque',
+  masa: 'masa',
+  masas: 'masa',
   listo: 'listo',
   listos: 'listo',
 }
