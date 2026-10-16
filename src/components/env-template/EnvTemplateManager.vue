@@ -883,7 +883,7 @@ export default {
           return 'Se borrará al guardar'
         }
         if (tpl.value_ilegible) {
-          return 'Valor ilegible — volvé a cargarlo'
+          return 'Ilegible — volvé a cargarlo'
         }
         /* value_tail puede ser null aunque haya valor (claves *PASSWORD*): entonces solo "Cargada". */
         if (tpl.value_set) {
@@ -990,11 +990,16 @@ export default {
   min-width: 140px;
 }
 
-/* Input de valor de una fila secreta: crece, pero nunca por debajo de 160px. */
+/*
+  Input de valor de una fila secreta: ocupa toda la línea de la celda y los botones Borrar /
+  Probar bajan debajo (a 768px y 1024px, con los botones al lado, el placeholder se cortaba).
+  text-overflow: ellipsis es la red de seguridad si algún texto igual no entra.
+*/
 .env-input-valor {
-  flex: 1 1 160px;
-  min-width: 160px;
+  flex: 1 1 100%;
+  min-width: 0;
   width: auto;
+  text-overflow: ellipsis;
 }
 
 /* Botones Borrar / Probar: btn-sm de Bootstrap mide 31px; acá, 36px para que se toquen bien. */
@@ -1034,9 +1039,6 @@ export default {
   }
   .env-table tbody td .form-check {
     justify-content: flex-start !important;
-  }
-  .env-input-valor {
-    flex-basis: 100%;
   }
 }
 </style>
