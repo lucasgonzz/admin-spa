@@ -15,7 +15,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
 import { crear_buscador, buscar, tokenizar, raiz, son_parientes } from '../../src/recursos/buscador.js'
-import { GRUPOS_DE_SINONIMOS } from '../../src/recursos/sinonimos.js'
+import { GRUPOS_DE_SINONIMOS, EQUIVALENCIAS_DE_LA_CONSULTA, PALABRAS_DE_RELLENO } from '../../src/recursos/sinonimos.js'
 
 /** Corpus real. */
 const CORPUS = JSON.parse(readFileSync(new URL('./corpus-real.json', import.meta.url), 'utf8'))
@@ -235,10 +235,6 @@ describe('errores de tipeo', function () {
 
   test('una letra de menos: "contrasea"', function () {
     assert.equal(buscar(CON_INDICE, 'contrasea').resultados[0].codigo, 'T0.4')
-  })
-
-  test('una letra cambiada, en palabra larga: "endosat cheque"', function () {
-    assert.equal(codigos(buscar(CON_INDICE, 'endosat cheque'))[0], 'T6.24')
   })
 
   test('el tipeo vale menos y solo se usa si la palabra no encontró nada', function () {
@@ -1085,6 +1081,11 @@ describe('ronda 3: una palabra que existe tal cual no la tapan sus expansiones',
         con_sinonimos.add(raiz(palabra))
       })
     })
+    EQUIVALENCIAS_DE_LA_CONSULTA.forEach(function (equivalencia) {
+      equivalencia.de.forEach(function (palabra) {
+        con_sinonimos.add(raiz(palabra))
+      })
+    })
     /** Palabras de ≥ 5 letras que están (tal cual) en uno o dos videos del corpus, con su cantidad de videos. */
     const por_palabra = new Map()
     VIDEOS.forEach(function (v) {
@@ -1155,11 +1156,11 @@ describe('ronda 3: umbral de cobertura adaptativo', function () {
     assert.equal(r.completo, false)
   })
 
-  test('el multiplicador de cobertura sigue ordenando: el que dice más palabras va antes que el que dice menos', function () {
+  test('si hay videos que dicen las dos palabras, el primero es uno de ellos y la respuesta es completa', function () {
+    // (Que el multiplicador de cobertura ordena se prueba en "pruebas que antes no probaban lo que decían".)
     const r = buscar(catalogo(), 'mercaderia stock')
     assert.equal(r.resultados[0].codigo, 'STOCK')
     assert.equal(r.completo, true)
-    // Los que tienen las dos palabras (STOCK y los S) van antes que cualquiera que tenga una sola.
     assert.ok(r.resultados.length >= 19)
   })
 
@@ -1215,5 +1216,525 @@ describe('ronda 3: "sin" tiene contenido', function () {
     const b = armar([{ codigo: 'SIN', titulo: 'Vender sin internet' }])
     const r = buscar(b, 'sin internet')
     assert.deepEqual(marcas(r.resultados[0].titulo_partes), ['sin', 'internet'])
+  })
+})
+
+describe('ronda 4: "masa" no es "más" y las palabras de relleno no arrastran a las demás', function () {
+  /**
+   * 30 videos que dicen "más" y "esta" por todos lados (relleno), uno de "en masa", uno de "actualización masiva",
+   * uno con "más" en el título y uno con "estado". El corpus real de 17 videos no tiene ni "más" ni "masa": por eso
+   * ninguna prueba vio el choque.
+   */
+  function catalogo() {
+    const lista = [
+      { codigo: 'MASA', titulo: 'Actualizar en masa con un filtro' },
+      { codigo: 'MASIVA', titulo: 'Revertir una actualización masiva' },
+      { codigo: 'MAS', titulo: 'Precio con costo más iva' },
+      { codigo: 'ESTADO', titulo: 'Estado de resultados' },
+    ]
+    const trans = { MASA: 'Elegís los artículos y cambiás el precio de todos juntos.', MAS: 'El precio sale más barato.' }
+    for (let i = 0; i < 30; i++) {
+      lista.push({ codigo: 'R' + i, titulo: 'Tema ' + i })
+      trans['R' + i] = 'Esto es más fácil y más rápido. Esta pantalla, estas columnas y este botón. Esto es más o menos igual.'
+    }
+    return armar(lista, trans)
+  }
+
+  test('"masa" y "más" tienen raíces distintas (sin la vocal final se escribían igual)', function () {
+    assert.notEqual(raiz('masa'), raiz('mas'))
+    assert.notEqual(raiz('masas'), raiz('mas'))
+    assert.equal(raiz('masas'), raiz('masa'))
+  })
+
+  test('"en masa" trae los videos de masa y no los 30 que dicen "más"', function () {
+    const r = buscar(catalogo(), 'en masa')
+    assert.deepEqual(codigos(r).slice(0, 2).sort(), ['MASA', 'MASIVA'])
+    assert.ok(r.resultados.length <= 3, 'resultados: ' + r.resultados.length)
+    assert.equal(codigos(r).indexOf('MAS'), -1)
+  })
+
+  test('"precios en masa": el video de masa gana al que tiene "precio" y "más" en el título', function () {
+    const r = buscar(catalogo(), 'precios en masa')
+    assert.equal(r.resultados[0].codigo, 'MASA')
+    assert.equal(r.completo, true)
+  })
+
+  test('quien escribe "más" no recibe los videos de masa (es relleno: no se busca)', function () {
+    assert.deepEqual(buscar(catalogo(), 'más').palabras, ['mas'])
+    assert.equal(codigos(buscar(catalogo(), 'más')).indexOf('MASIVA'), -1)
+  })
+
+  test('"estado" no trae los 30 videos que dicen "esta", "estas" y "este"', function () {
+    const r = buscar(catalogo(), 'estado')
+    assert.deepEqual(codigos(r), ['ESTADO'])
+  })
+
+  test('ninguna palabra de un grupo de sinónimos ni de una equivalencia comparte raíz con una palabra de relleno', function () {
+    /** Raíces de las palabras de relleno. */
+    const del_relleno = new Map()
+    PALABRAS_DE_RELLENO.forEach(function (r) {
+      del_relleno.set(raiz(r), r)
+    })
+    /** Palabras de los grupos y de las equivalencias. */
+    const del_diccionario = []
+    GRUPOS_DE_SINONIMOS.forEach(function (g) {
+      del_diccionario.push.apply(del_diccionario, g)
+    })
+    EQUIVALENCIAS_DE_LA_CONSULTA.forEach(function (e) {
+      del_diccionario.push.apply(del_diccionario, e.de.concat(e.a, e.con || []))
+    })
+    del_diccionario.forEach(function (palabra) {
+      const choca = del_relleno.get(raiz(palabra))
+      assert.ok(!choca || choca === palabra, '"' + palabra + '" tiene la misma raíz que la palabra de relleno "' + choca + '"')
+    })
+  })
+})
+
+describe('ronda 4: robustez', function () {
+  test('crear_buscador se salta los videos y las carpetas que no son objetos', function () {
+    const b = crear_buscador(
+      [null, undefined, 5, 'texto', { codigo: 'A', titulo: 'Escanear la factura', carpeta: 1 }, { codigo: 'B', titulo: 'Otra cosa', carpeta: 1 }],
+      [null, 7, undefined, { nro: 1, nombre: 'Compras' }],
+      null
+    )
+    assert.deepEqual(codigos(buscar(b, 'escanear')), ['A'])
+    assert.deepEqual(marcas(buscar(b, 'compras').resultados[0].ubicacion_partes), ['Compras'])
+  })
+
+  test('crear_buscador con algo que no es una lista no falla', function () {
+    ;[undefined, null, 'x', 5, {}].forEach(function (cosa) {
+      assert.deepEqual(codigos(buscar(crear_buscador(cosa, cosa, cosa), 'factura')), [])
+    })
+  })
+
+  test('buscar con algo que no es un buscador devuelve el resultado vacío', function () {
+    const vacio = { resultados: [], completo: true, palabras: [] }
+    ;[undefined, null, {}, [], 'x', 5, { docs: [] }, { docs: [1] }, { docs: [1], vocab: new Map() }, { docs: [1], vocab: {}, por_raiz: {}, por_numero: {} }].forEach(function (cosa) {
+      assert.deepEqual(buscar(cosa, 'factura'), vacio)
+    })
+  })
+
+  test('una consulta que no es un texto no falla', function () {
+    ;[undefined, null, 5, {}, [], ['factura']].forEach(function (consulta) {
+      assert.doesNotThrow(function () {
+        buscar(CON_INDICE, consulta)
+      })
+    })
+  })
+
+  test('un texto larguísimo con 40.000 palabras distintas se lee en milisegundos y se queda con las primeras', function () {
+    const larga = Array.from({ length: 40000 }, function (_, i) {
+      return 'palabra' + i
+    }).join(' ')
+    const desde = Date.now()
+    const r = buscar(CON_INDICE, 'factura ' + larga)
+    assert.ok(Date.now() - desde < 1000, 'tardó ' + (Date.now() - desde) + ' ms')
+    assert.ok(r.palabras.length <= 12)
+    assert.equal(r.palabras[0], 'factura')
+  })
+
+  test('de la consulta solo se leen los primeros 200 caracteres', function () {
+    const r = buscar(CON_INDICE, 'escanear ' + 'a'.repeat(250) + ' factura')
+    assert.equal(r.palabras.indexOf('factura'), -1)
+    assert.equal(r.palabras[0], 'escanear')
+  })
+
+  test('las palabras repetidas (y las que solo cambian de mayúsculas) se buscan una vez', function () {
+    assert.deepEqual(buscar(CON_INDICE, 'escanear escanear  ESCANEAR Escanear').palabras, ['escanear'])
+  })
+})
+
+describe('ronda 4: una letra suelta no pesa como una palabra rara', function () {
+  /**
+   * ESC dice "escanear" en el título; ATA tiene la letra "f" en el título ("F tres, F cuatro"); LETRA dice "escanear"
+   * en el guion y "f" en el título. 60 videos de relleno para que "escanear" y "f" sean raras.
+   */
+  function catalogo() {
+    const lista = [
+      { codigo: 'ATA', titulo: 'Los atajos de teclado: F tres, F cuatro' },
+      { codigo: 'ESC', titulo: 'Escanear la factura' },
+      { codigo: 'LETRA', titulo: 'La tecla F' },
+    ]
+    for (let i = 0; i < 60; i++) {
+      lista.push({ codigo: 'R' + i, titulo: 'Tema ' + i })
+    }
+    return armar(lista, { LETRA: 'Sirve para escanear.' })
+  }
+
+  test('"escanear f" (mientras se tipea "factura") trae el video de escanear primero, no el de las teclas F', function () {
+    const r = buscar(catalogo(), 'escanear f')
+    assert.equal(r.resultados[0].codigo, 'ESC')
+    assert.ok(codigos(r).indexOf('ATA') === -1 || codigos(r).indexOf('ESC') < codigos(r).indexOf('ATA'))
+  })
+
+  test('la letra no le saca más de la mitad al video que tiene la otra palabra', function () {
+    const b = catalogo()
+    const sola = buscar(b, 'escanear').resultados.filter(function (x) {
+      return x.codigo === 'ESC'
+    })[0].puntaje
+    const con_letra = buscar(b, 'escanear f').resultados.filter(function (x) {
+      return x.codigo === 'ESC'
+    })[0].puntaje
+    assert.ok(con_letra > 0.3 * sola, con_letra + ' contra ' + sola)
+  })
+
+  test('el valor de la letra también tiene tope: el que la tiene en el título y la palabra en el guion no pasa al que tiene la palabra en el título', function () {
+    // LETRA dice las dos palabras (cubre todo) pero "escanear" solo en el guion; ESC dice "escanear" en el título.
+    const r = buscar(catalogo(), 'escanear f')
+    assert.ok(codigos(r).indexOf('ESC') < codigos(r).indexOf('LETRA'))
+  })
+
+  test('una letra sola sigue buscando, y "factura b" sigue llevando a "Factura A, B o C"', function () {
+    assert.equal(buscar(catalogo(), 'f').resultados[0].codigo === 'ATA' || buscar(catalogo(), 'f').resultados[0].codigo === 'LETRA', true)
+    const b = armar([
+      { codigo: 'OTRA', titulo: 'Facturar una venta después de guardarla' },
+      { codigo: 'OTRA2', titulo: 'La factura de ARCA con tu diseño' },
+      { codigo: 'FAC', titulo: 'Factura A, B o C: qué exige cada una' },
+    ])
+    assert.equal(buscar(b, 'factura b').resultados[0].codigo, 'FAC')
+    assert.equal(buscar(b, 'factura a o b').resultados[0].codigo, 'FAC')
+  })
+})
+
+describe('ronda 4: equivalencias de un solo sentido y grupos amplios', function () {
+  /** "Actualizar en masa" (MASA), "Elegir varios clientes" (VARIOS), "Datos de ARCA" y "Configurar la balanza". */
+  function catalogo() {
+    const lista = [
+      { codigo: 'MASA', titulo: 'Actualizar en masa con un filtro' },
+      { codigo: 'VARIOS', titulo: 'Elegir varios clientes a la vez' },
+      { codigo: 'ARCA', titulo: 'Tus datos fiscales y el punto de venta de ARCA' },
+      { codigo: 'FACT', titulo: 'La factura de ARCA con tu diseño' },
+      { codigo: 'BALANZA', titulo: 'Configurar una balanza que imprime el peso' },
+    ]
+    for (let i = 0; i < 10; i++) {
+      lista.push({ codigo: 'R' + i, titulo: 'Tema ' + i })
+    }
+    return armar(lista)
+  }
+
+  test('"muchos" lleva a "en masa", pero "masa" no lleva a todos los videos que dicen "varios"', function () {
+    const b = catalogo()
+    assert.deepEqual(codigos(buscar(b, 'masa')), ['MASA'])
+    assert.deepEqual(codigos(buscar(b, 'muchos')), ['MASA'])
+    // "varios" aparece en un video: ese va primero y el de masa detrás.
+    assert.deepEqual(codigos(buscar(b, 'varios')), ['VARIOS', 'MASA'])
+  })
+
+  test('"electrónica" sola no es ARCA: "balanza electrónica" no trae los videos de ARCA', function () {
+    const b = catalogo()
+    const r = buscar(b, 'balanza electronica')
+    assert.deepEqual(codigos(r), ['BALANZA'])
+    assert.equal(r.completo, false)
+    assert.deepEqual(codigos(buscar(b, 'electronica')), [])
+  })
+
+  test('"factura electrónica" sí lleva a ARCA', function () {
+    const r = buscar(catalogo(), 'factura electronica')
+    assert.ok(codigos(r).indexOf('ARCA') !== -1)
+    assert.equal(r.resultados[0].codigo, 'FACT')
+    assert.deepEqual(codigos(buscar(catalogo(), 'afip')).sort(), ['ARCA', 'FACT'])
+  })
+
+  test('un sinónimo de un grupo que está en casi todos los videos vale mucho menos que el de un grupo chico', function () {
+    /**
+     * @param {Array<string>} palabras Una palabra por título: el primero es la que se busca.
+     * @returns {number} Lo que vale, al buscar la primera, el video de la segunda (un sinónimo) frente al de la primera.
+     */
+    function razon(palabras, sobran) {
+      const lista = palabras.map(function (p, i) {
+        return { codigo: 'V' + i, titulo: 'Cómo ' + p + ' un dato' }
+      })
+      for (let i = 0; i < sobran; i++) {
+        lista.push({ codigo: 'R' + i, titulo: 'Tema ' + i })
+      }
+      const r = buscar(armar(lista), palabras[0])
+      const exacto = r.resultados.filter(function (x) {
+        return x.codigo === 'V0'
+      })[0].puntaje
+      const sinonimo = r.resultados.filter(function (x) {
+        return x.codigo === 'V1'
+      })[0].puntaje
+      return sinonimo / exacto
+    }
+    // Grupo chico: "borrar / eliminar / quitar / anular" en 2 de 14 videos.
+    const chico = razon(['borrar', 'eliminar'], 12)
+    // Grupo que cubre casi todo: "cargar / crear / agregar / registrar / alta" en 12 de 14.
+    const amplio = razon(['cargar', 'crear', 'agregar', 'registrar', 'alta', 'cargar', 'crear', 'agregar', 'registrar', 'alta', 'cargar', 'crear'], 2)
+    assert.ok(chico > 0.3, 'grupo chico: ' + chico)
+    assert.ok(amplio < 0.2, 'grupo amplio: ' + amplio)
+  })
+})
+
+describe('ronda 4: pruebas que antes no probaban lo que decían', function () {
+  test('una letra cambiada en una palabra larga: SOLO el tipeo encuentra "endosat"', function () {
+    const b = armar([
+      { codigo: 'A', titulo: 'Endosar un cheque a un proveedor' },
+      { codigo: 'B', titulo: 'Otra cosa distinta' },
+    ])
+    assert.deepEqual(codigos(buscar(b, 'endosat')), ['A'])
+    // En el corpus real también, y sin ayuda de "cheque".
+    assert.equal(buscar(CON_INDICE, 'endosat').resultados[0].codigo, 'T6.24')
+  })
+
+  test('una letra inicial cambiada no se corrige, ni en una palabra larga', function () {
+    const b = armar([{ codigo: 'A', titulo: 'Imprimir etiquetas' }])
+    assert.deepEqual(codigos(buscar(b, 'zmprimir')), [])
+    assert.deepEqual(codigos(buscar(b, 'imprimir')), ['A'])
+  })
+
+  test('el tipeo no corrige palabras de cuatro letras ni siquiera si están intercambiadas', function () {
+    const b = armar([{ codigo: 'A', titulo: 'Cargar un dato' }])
+    assert.deepEqual(codigos(buscar(b, 'dtao')), [])
+    assert.deepEqual(codigos(buscar(b, 'datos')), ['A'])
+    // Con cinco letras sí: "dtaos" (datos con la "a" y la "t" cambiadas de lugar).
+    assert.deepEqual(codigos(buscar(armar([{ codigo: 'A', titulo: 'Cargar los datos' }]), 'dtaos')), ['A'])
+  })
+
+  test('el multiplicador de cobertura decide el orden: el que dice las tres palabras gana al que dice dos aunque estas pesen más', function () {
+    // B dice "tornillo" en el título y "martillo" en el guion (2 de 3); A dice las tres, pero separadas, en el "para qué".
+    // Sin el multiplicador B le gana a A por el peso del título.
+    const lista = [
+      { codigo: 'B', titulo: 'Tornillo' },
+      {
+        codigo: 'A',
+        titulo: 'Herramientas varias',
+        para_que: 'Sirve para el tornillo; también hay trabajos con el martillo, y por último el destornillador.',
+      },
+    ]
+    for (let i = 0; i < 10; i++) {
+      lista.push({ codigo: 'R' + i, titulo: 'Tema ' + i })
+    }
+    const r = buscar(armar(lista, { B: 'martillo' }), 'tornillo martillo destornillador')
+    assert.deepEqual(codigos(r).slice(0, 2), ['A', 'B'])
+    assert.ok(r.resultados[0].puntaje > 2 * r.resultados[1].puntaje)
+  })
+
+  test('después de los 8 primeros, un parcial que quedó por debajo de la cuarta parte del mejor no entra', function () {
+    // G dice 2 de 3 palabras en el título; 8 M las dicen en el "para qué" (un poco menos); 6 W las dicen en el guion
+    // (una fracción de G); Z dice la tercera.
+    const lista = [{ codigo: 'G', titulo: 'Alfa beta' }]
+    const trans = {}
+    for (let i = 0; i < 8; i++) {
+      lista.push({ codigo: 'M' + i, titulo: 'Medio ' + i, para_que: 'Sirve para alfa beta.' })
+    }
+    for (let i = 0; i < 6; i++) {
+      lista.push({ codigo: 'W' + i, titulo: 'Flojo ' + i })
+      trans['W' + i] = 'Y también alfa beta.'
+    }
+    lista.push({ codigo: 'Z', titulo: 'Gamma' })
+    for (let i = 0; i < 20; i++) {
+      lista.push({ codigo: 'R' + i, titulo: 'Tema ' + i })
+    }
+    const r = buscar(armar(lista, trans), 'alfa beta gamma')
+    assert.equal(r.resultados.length, 8)
+    assert.equal(
+      codigos(r).filter(function (c) {
+        return c[0] === 'W'
+      }).length,
+      0
+    )
+    r.resultados.slice(8).forEach(function (x) {
+      assert.ok(x.puntaje >= 0.25 * r.resultados[0].puntaje)
+    })
+  })
+
+  test('de más de 60 parciales se leen los de mejor valor POR la cobertura, no los de mayor valor a secas', function () {
+    // 40 X dicen 3 de las 4 palabras en el guion (valor bajo, cobertura alta); 70 Y dicen 2 en el "para qué" (valor
+    // alto, cobertura baja); 150 G dicen solo las otras dos. Se leen 60: tienen que ser los X.
+    const lista = []
+    const trans = {}
+    for (let i = 0; i < 40; i++) {
+      lista.push({ codigo: 'X' + i, titulo: 'Equis ' + i })
+      trans['X' + i] = 'Se usa alfa, beta y gamma.'
+    }
+    for (let i = 0; i < 70; i++) {
+      lista.push({ codigo: 'Y' + i, titulo: 'Ye ' + i, para_que: 'Sirve para alfa y beta.' })
+    }
+    for (let i = 0; i < 150; i++) {
+      lista.push({ codigo: 'G' + i, titulo: 'Ge ' + i })
+      trans['G' + i] = 'Aparecen gamma y delta.'
+    }
+    const r = buscar(armar(lista, trans), 'alfa beta gamma delta')
+    assert.equal(r.resultados.length, 40)
+    assert.ok(
+      r.resultados.every(function (x) {
+        return x.codigo[0] === 'X'
+      })
+    )
+  })
+
+  test('a lo sumo 40 parciales entran en la lista', function () {
+    // 70 videos que dicen 2 de las 3 palabras (todos con el mismo puntaje: ninguno queda por debajo del piso) y 70
+    // que dicen solo la tercera.
+    const lista = []
+    for (let i = 0; i < 70; i++) {
+      lista.push({ codigo: 'P' + i, titulo: 'Alfa beta ' + i })
+      lista.push({ codigo: 'Q' + i, titulo: 'Gamma ' + i })
+    }
+    const r = buscar(armar(lista), 'alfa beta gamma')
+    assert.equal(r.resultados.length, 40)
+    assert.ok(
+      r.resultados.every(function (x) {
+        return x.codigo[0] === 'P'
+      })
+    )
+  })
+
+  test('el "para qué" y el "cuándo no" que vienen pegados en la transcripción no se cuentan dos veces', function () {
+    /**
+     * @param {string} palabra Palabra que se busca.
+     * @param {boolean} pegados true si la transcripción trae el "para qué" y el "cuándo no" (como el índice real).
+     * @returns {number} Puntaje del video de prueba.
+     */
+    function puntaje(palabra, pegados) {
+      const video = { codigo: 'A', titulo: 'Un tema', para_que: 'Sirve para sumar la alfombra.', cuando_no: 'No sirve para el tornillo.' }
+      const guion = 'Esto es el guion de voz.'
+      const trans = pegados ? video.para_que + ' ' + guion + ' ' + video.cuando_no : guion
+      const lista = [video, { codigo: 'B', titulo: 'Otro tema' }]
+      return buscar(armar(lista, { A: trans }), palabra).resultados[0].puntaje
+    }
+    ;['alfombra', 'tornillo'].forEach(function (palabra) {
+      assert.equal(puntaje(palabra, true), puntaje(palabra, false), palabra)
+    })
+  })
+
+  test('repetir una palabra en el guion suma un poco, repetirla en el título no', function () {
+    const en_guion = armar(
+      [
+        { codigo: 'UNA', titulo: 'Tema uno' },
+        { codigo: 'MUCHAS', titulo: 'Tema dos' },
+      ],
+      { UNA: 'Se usa el tornillo.', MUCHAS: 'El tornillo, el tornillo, el tornillo y otra vez el tornillo.' }
+    )
+    assert.equal(buscar(en_guion, 'tornillo').resultados[0].codigo, 'MUCHAS')
+    const en_titulo = armar([
+      { codigo: 'UNA', titulo: 'El tornillo' },
+      { codigo: 'MUCHAS', titulo: 'Tornillo, tornillo y tornillo' },
+    ])
+    assert.equal(buscar(en_titulo, 'tornillo').resultados[0].codigo, 'UNA')
+  })
+
+  test('la palabra que también está en otro campo suma un poco', function () {
+    const b = armar([
+      { codigo: 'SOLO', titulo: 'El tornillo' },
+      { codigo: 'DOBLE', titulo: 'El tornillo', para_que: 'Sirve para el tornillo.' },
+    ])
+    assert.equal(buscar(b, 'tornillo').resultados[0].codigo, 'DOBLE')
+  })
+})
+
+describe('ronda 4: las partes marcadas reconstruyen el texto original', function () {
+  /** Texto largo con acentos y ñ, con las palabras buscadas repetidas desde el principio hasta el final. */
+  const VOZ =
+    'Con la contraseña del niño y la señal de la compañía, la factura de acá llega al año siguiente. '.repeat(24) +
+    'El cheque, la FACTURA y el café del señor Ñandú: ¿qué hacés? ¡Mirá!'
+
+  const VIDEOS_AÑO = [
+    { codigo: 'A', titulo: 'Facturación del año: la contraseña y la compañía', para_que: 'Sirve para la factura, la señal y el año.', cuando_no: 'No sirve para el café.', seccion: 'B · Las compras' },
+    { codigo: 'B', titulo: 'ÁREA de niños: el cheque y la señal', para_que: 'Para ver el área.', cuando_no: 'No uses el cheque acá.', seccion: null },
+    { codigo: 'C', titulo: 'Factura facturas facturación', para_que: '', cuando_no: '', seccion: null },
+  ]
+  const TRANS = {
+    A: 'Sirve para la factura, la señal y el año. ' + VOZ + ' No sirve para el café.',
+    B: 'Para ver el área. ' + VOZ + ' No uses el cheque acá.',
+    C: VOZ,
+  }
+  const CONSULTAS = [
+    'factura',
+    'factura facturas',
+    'facturación factura facturas',
+    'año',
+    'contraseña niño',
+    'señal compañía año',
+    'FACTURA',
+    'ñandú',
+    'café señor',
+    'cheque factura',
+    'área niños',
+    'la factura de acá llega',
+    'factura  ,  año',
+  ]
+
+  /**
+   * Revisa un resultado contra el texto original de su video.
+   *
+   * @param {Object} x Resultado de `buscar`.
+   * @param {string} titulo Título original.
+   * @param {string} ubicacion Ubicación original (carpeta y sección).
+   * @param {Array<string>} cuerpos Textos donde puede estar el fragmento.
+   * @param {string} consulta
+   * @returns {void}
+   */
+  function revisar(x, titulo, ubicacion, cuerpos, consulta) {
+    ;[x.titulo_partes, x.ubicacion_partes, x.fragmento_partes].forEach(function (partes) {
+      partes.forEach(function (p) {
+        assert.equal(typeof p.texto, 'string', consulta)
+        assert.equal(typeof p.marca, 'boolean', consulta)
+        assert.ok(!/NaN|undefined|null/.test(p.texto), consulta + ': ' + p.texto)
+        assert.ok(p.texto.length > 0, consulta)
+      })
+    })
+    assert.equal(unir(x.titulo_partes), titulo, consulta)
+    assert.equal(unir(x.ubicacion_partes), ubicacion, consulta)
+    /** El fragmento sin los puntos suspensivos de los bordes. */
+    const fragmento = unir(x.fragmento_partes).replace(/^…/, '').replace(/…$/, '')
+    if (fragmento) {
+      assert.ok(
+        cuerpos.some(function (c) {
+          return c.indexOf(fragmento) !== -1
+        }),
+        consulta + ': el fragmento no es un pedazo del texto original: ' + fragmento
+      )
+      // Un fragmento es un recorte: no arrastra todo el guion detrás de cada coincidencia.
+      assert.ok(fragmento.length < 400, consulta + ': fragmento de ' + fragmento.length)
+    }
+    // Lo marcado son palabras del texto original, enteras.
+    x.titulo_partes
+      .concat(x.fragmento_partes)
+      .filter(function (p) {
+        return p.marca
+      })
+      .forEach(function (p) {
+        assert.ok(/^[\p{L}\p{N}\p{M}\s-]+$/u.test(p.texto), consulta + ': marca rara ' + p.texto)
+      })
+  }
+
+  test('con acentos, ñ y mayúsculas, y con dos palabras que caen sobre la misma del texto', function () {
+    const b = armar(VIDEOS_AÑO, TRANS)
+    CONSULTAS.forEach(function (consulta) {
+      const r = buscar(b, consulta)
+      assert.ok(r.resultados.length > 0, consulta)
+      r.resultados.forEach(function (x) {
+        const v = VIDEOS_AÑO.filter(function (y) {
+          return y.codigo === x.codigo
+        })[0]
+        revisar(x, v.titulo, 'Carpeta de prueba' + (v.seccion ? ' · ' + v.seccion.replace(/^[A-Za-z0-9]{1,3}\s*·\s*/, '') : ''), [v.para_que, TRANS[x.codigo], v.cuando_no], consulta)
+      })
+    })
+  })
+
+  test('en el corpus real, con los títulos y con consultas de una y varias palabras', function () {
+    const consultas = VIDEOS.map(function (v) {
+      return v.titulo
+    }).concat(['factura', 'factura facturas', 'imprimir ticket', 'cheque endosar', 'contraseña', 'Excel proveedor', 'ÁREA', 'cómo se escanea una factura de compra'])
+    consultas.forEach(function (consulta) {
+      buscar(CON_INDICE, consulta).resultados.forEach(function (x) {
+        const v = VIDEOS.filter(function (y) {
+          return y.codigo === x.codigo
+        })[0]
+        /** Carpeta y sección como los arma el buscador. */
+        const carpeta = CORPUS.carpetas.filter(function (c) {
+          return c.nro === v.carpeta
+        })[0]
+        const ubicacion = [carpeta ? carpeta.nombre : '', String(v.seccion || '').replace(/^[A-Za-z0-9]{1,3}\s*·\s*/, '')].filter(Boolean).join(' · ')
+        revisar(x, v.titulo, ubicacion, [v.para_que, TRANSCRIPCIONES[x.codigo], v.cuando_no], consulta)
+      })
+    })
+  })
+
+  test('el fragmento de un guion larguísimo con coincidencias de punta a punta se queda en un recorte', function () {
+    const b = armar([{ codigo: 'A', titulo: 'Tema' }], { A: VOZ })
+    const x = buscar(b, 'factura').resultados[0]
+    assert.ok(unir(x.fragmento_partes).length < 300, 'largo: ' + unir(x.fragmento_partes).length)
   })
 })
