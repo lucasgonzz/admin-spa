@@ -192,12 +192,12 @@ describe('palabra a medio escribir', function () {
 
   test('una palabra completa NO se estira a otra que empieza igual ("venta" no es "ventana")', function () {
     const b = armar([
-      { codigo: 'A', titulo: 'Abrir una ventana' },
+      { codigo: 'A', titulo: 'Abrir una ventanilla' },
       { codigo: 'B', titulo: 'Hacer una venta' },
     ])
     assert.deepEqual(codigos(buscar(b, 'venta')), ['B'])
-    // Pero a medias sí: "ventan" solo puede ser "ventana".
-    assert.deepEqual(codigos(buscar(b, 'ventan')), ['A'])
+    // Pero a medias sí: "ventani" solo puede ser "ventanilla".
+    assert.deepEqual(codigos(buscar(b, 'ventani')), ['A'])
   })
 })
 
@@ -682,5 +682,338 @@ describe('rendimiento', function () {
     const r = buscar(b, 'sistema')
     assert.equal(r.resultados.length, grande.length)
     assert.equal(r.completo, true)
+  })
+})
+
+describe('conjugaciones: las formas de un verbo llegan a la misma raíz', function () {
+  /**
+   * Familias de verbos con sus formas: primera persona, voseo, nosotros, ellos, pretérito, imperfecto, participio,
+   * gerundio, subjuntivo y con pronombre pegado. Todas sin acentos (el buscador normaliza antes de sacar la raíz).
+   * Los verbos son los más frecuentes de los guiones reales más algunos irregulares.
+   */
+  const FAMILIAS = {
+    vender: ['vendo', 'vendes', 'vende', 'vendemos', 'venden', 'vendi', 'vendiste', 'vendio', 'vendimos', 'vendieron', 'vendia', 'vendian', 'vendido', 'vendidas', 'vendiendo', 'venda', 'vendan', 'venderlo', 'venderle', 'vendelo'],
+    cambiar: ['cambio', 'cambias', 'cambia', 'cambiamos', 'cambian', 'cambie', 'cambies', 'cambiaste', 'cambiaron', 'cambiaba', 'cambiaban', 'cambiado', 'cambiando', 'cambiarlo', 'cambiarle', 'cambiala'],
+    cargar: ['cargo', 'cargas', 'carga', 'cargamos', 'cargan', 'cargue', 'cargues', 'carguen', 'cargaste', 'cargaron', 'cargaba', 'cargado', 'cargada', 'cargando', 'cargarlo', 'cargala', 'cargarla'],
+    escribir: ['escribo', 'escribis', 'escribe', 'escribimos', 'escriben', 'escribi', 'escribiste', 'escribio', 'escribieron', 'escribia', 'escribiendo', 'escribirle', 'escribilo'],
+    abrir: ['abro', 'abris', 'abre', 'abrimos', 'abren', 'abri', 'abriste', 'abrio', 'abrieron', 'abria', 'abriendo', 'abrirlo', 'abrirla'],
+    guardar: ['guardo', 'guardas', 'guarda', 'guardamos', 'guardan', 'guarde', 'guardes', 'guardaste', 'guardaron', 'guardaba', 'guardado', 'guardando', 'guardarlo', 'guardalo'],
+    buscar: ['busco', 'buscas', 'busca', 'buscamos', 'buscan', 'busque', 'busques', 'buscaste', 'buscaron', 'buscando', 'buscarlo', 'buscala'],
+    cobrar: ['cobro', 'cobras', 'cobra', 'cobramos', 'cobran', 'cobre', 'cobres', 'cobraste', 'cobraron', 'cobrado', 'cobrando', 'cobrarle'],
+    actualizar: ['actualizo', 'actualizas', 'actualiza', 'actualizamos', 'actualizan', 'actualice', 'actualices', 'actualizaste', 'actualizaron', 'actualizado', 'actualizarlo', 'actualizala'],
+    // Irregulares: la raíz cambia (e → ie, o → ue, e → i, g → j).
+    elegir: ['elijo', 'elegis', 'elige', 'elegimos', 'eligen', 'elegi', 'elegiste', 'eligio', 'eligieron', 'elegido', 'eligiendo', 'elegirlo'],
+    mostrar: ['muestro', 'mostras', 'muestra', 'mostramos', 'muestran', 'muestre', 'mostraste', 'mostraron', 'mostrado', 'mostrando', 'mostrarlo'],
+    cerrar: ['cierro', 'cerras', 'cierra', 'cerramos', 'cierran', 'cierre', 'cerraste', 'cerraron', 'cerrado', 'cerrando', 'cerrarla'],
+    volver: ['vuelvo', 'volves', 'vuelve', 'volvemos', 'vuelven', 'volvi', 'volviste', 'volvio', 'volvieron', 'vuelva', 'volviendo', 'volverlo'],
+    pedir: ['pido', 'pedis', 'pide', 'pedimos', 'piden', 'pedi', 'pediste', 'pidio', 'pidieron', 'pedido', 'pidiendo', 'pedirle'],
+    seguir: ['sigo', 'seguis', 'sigue', 'seguimos', 'siguen', 'segui', 'seguiste', 'siguio', 'siguieron', 'seguido', 'siguiendo'],
+    corregir: ['corrijo', 'corregis', 'corrige', 'corregimos', 'corrigen', 'corregi', 'corregiste', 'corrigio', 'corrigieron', 'corregido', 'corrigiendo', 'corregirlo'],
+    empezar: ['empiezo', 'empezas', 'empieza', 'empezamos', 'empiezan', 'empiece', 'empezaste', 'empezaron', 'empezado', 'empezando'],
+  }
+
+  Object.keys(FAMILIAS).forEach(function (infinitivo) {
+    test('todas las formas de "' + infinitivo + '" tienen su raíz', function () {
+      FAMILIAS[infinitivo].forEach(function (forma) {
+        assert.equal(raiz(forma), raiz(infinitivo), forma + ' tendría que juntarse con ' + infinitivo)
+      })
+    })
+  })
+
+  test('las raíces de verbos distintos no se juntan entre sí', function () {
+    const vistas = {}
+    Object.keys(FAMILIAS).forEach(function (infinitivo) {
+      const r = raiz(infinitivo)
+      assert.equal(vistas[r], undefined, infinitivo + ' choca con ' + vistas[r])
+      vistas[r] = infinitivo
+    })
+  })
+
+  test('palabras que parecen parientes pero no lo son se quedan separadas', function () {
+    ;[
+      ['importe', 'importar'],
+      ['correo', 'corre'],
+      ['tipo', 'tipear'],
+      ['bloque', 'bloquear'],
+      ['listo', 'lista'],
+      ['ficha', 'fecha'],
+      ['cuenta', 'contar'],
+      ['venta', 'vender'],
+      ['pago', 'pagina'],
+      ['caja', 'cajero'],
+      ['ventana', 'venta'],
+    ].forEach(function (par) {
+      assert.notEqual(raiz(par[0]), raiz(par[1]), par[0] + ' y ' + par[1] + ' no son la misma raíz')
+    })
+  })
+
+  test('sustantivos y adjetivos que terminan como un verbo conservan su singular', function () {
+    ;[
+      ['ultimo', 'ultimos', 'ultima', 'ultimas'],
+      ['minimo', 'minimos'],
+      ['maximo', 'maximos'],
+      ['proximo', 'proximos'],
+      ['orden', 'ordenes', 'ordenar', 'ordena', 'ordenan'],
+      ['imagen', 'imagenes'],
+    ].forEach(function (grupo) {
+      grupo.forEach(function (palabra) {
+        assert.equal(raiz(palabra), raiz(grupo[0]), palabra + ' tendría que juntarse con ' + grupo[0])
+      })
+    })
+  })
+
+  test('"venden" encuentra lo que dice "vendiste", y "cambio" lo que dice "cambiar" y "cambiá"', function () {
+    const b = armar([
+      { codigo: 'A', titulo: 'Qué vendiste hoy' },
+      { codigo: 'B', titulo: 'Cambiar el precio de un artículo' },
+      { codigo: 'C', titulo: 'Cambiá la contraseña' },
+      { codigo: 'D', titulo: 'Otra cosa' },
+    ])
+    assert.deepEqual(codigos(buscar(b, 'venden')), ['A'])
+    assert.deepEqual(codigos(buscar(b, 'cambio')).sort(), ['B', 'C'])
+    assert.deepEqual(codigos(buscar(b, 'cambiaron')).sort(), ['B', 'C'])
+  })
+
+  test('el voseo y el subjuntivo: "cargá", "cargás" y "cargues" encuentran "cargar"', function () {
+    const b = armar([{ codigo: 'A', titulo: 'Cargar una compra' }, { codigo: 'B', titulo: 'Otra cosa' }])
+    ;['cargá', 'cargás', 'cargues', 'cargamos', 'cargaron', 'cargalo'].forEach(function (forma) {
+      assert.deepEqual(codigos(buscar(b, forma)), ['A'], forma)
+    })
+  })
+
+  test('las formas irregulares: "muestra" encuentra "mostrar", "elige" encuentra "elegir"', function () {
+    const b = armar([
+      { codigo: 'A', titulo: 'Mostrar u ocultar columnas' },
+      { codigo: 'B', titulo: 'Elegir el cliente' },
+      { codigo: 'C', titulo: 'Cerrar la caja' },
+      { codigo: 'D', titulo: 'Otra cosa' },
+    ])
+    assert.deepEqual(codigos(buscar(b, 'muestra')), ['A'])
+    assert.deepEqual(codigos(buscar(b, 'elige')), ['B'])
+    assert.deepEqual(codigos(buscar(b, 'cierran')), ['C'])
+  })
+})
+
+describe('cobertura ponderada por rareza', function () {
+  /**
+   * Un catálogo donde "escanear" es raro y "factura", "compra" y "proveedor" son comunes. El video bueno
+   * (ESC) cubre tres de las cuatro palabras, con la rara en el título; tres videos de relleno tienen las
+   * cuatro palabras sueltas en el guion.
+   */
+  function catalogo() {
+    const lista = [{ codigo: 'ESC', titulo: 'Escanear la factura de una compra' }]
+    const trans = { ESC: 'Subís la foto y la lee.' }
+    for (let i = 0; i < 30; i++) {
+      lista.push({ codigo: 'R' + i, titulo: 'Tema número ' + i })
+      trans['R' + i] =
+        (i % 2 ? 'Hablamos de la factura. ' : 'Nada. ') + (i % 3 ? 'Una compra cualquiera. ' : 'Nada. ') + (i % 5 ? 'El proveedor llama. ' : 'Nada. ')
+    }
+    // Tres que tienen las cuatro palabras, pero solo de pasada en el guion.
+    for (let j = 0; j < 3; j++) {
+      lista.push({ codigo: 'J' + j, titulo: 'Un video largo ' + j })
+      trans['J' + j] = 'Primero se puede escanear, y mucho después la factura de una compra a un proveedor.'
+    }
+    return armar(lista, trans)
+  }
+
+  test('el video que cubre tres de cuatro con la palabra rara en el título le gana a los que tienen las cuatro de pasada', function () {
+    const r = buscar(catalogo(), 'escanear factura compra proveedor')
+    assert.equal(r.resultados[0].codigo, 'ESC')
+    assert.equal(r.completo, false, 'el primero no cubre las cuatro palabras: se avisa')
+    // Los que cubren las cuatro siguen en la lista, después.
+    assert.ok(codigos(r).indexOf('J0') > 0)
+  })
+
+  test('si el que cubre todo también es bueno, gana y la respuesta es completa', function () {
+    const b = armar([
+      { codigo: 'TODO', titulo: 'Escanear la factura de la compra de un proveedor' },
+      { codigo: 'PARTE', titulo: 'Escanear la factura de una compra' },
+      { codigo: 'OTRO', titulo: 'Nada que ver' },
+    ])
+    const r = buscar(b, 'escanear factura compra proveedor')
+    assert.equal(r.resultados[0].codigo, 'TODO')
+    assert.equal(r.completo, true)
+    assert.ok(codigos(r).indexOf('OTRO') === -1)
+  })
+
+  test('un video que cubre menos de la mitad del peso de la consulta no entra', function () {
+    const b = armar([
+      { codigo: 'A', titulo: 'Gato perro' },
+      { codigo: 'B', titulo: 'Gato casa' },
+      { codigo: 'C', titulo: 'Casa perro' },
+      { codigo: 'D', titulo: 'Gato' },
+      { codigo: 'E', titulo: 'Gato perro casa mesa' },
+    ])
+    // Cuatro palabras igual de raras: con una sola nadie llega a la mitad.
+    const r = buscar(b, 'gato perro casa mesa')
+    assert.ok(codigos(r).indexOf('D') === -1)
+    assert.equal(r.resultados[0].codigo, 'E')
+  })
+
+  test('con una palabra rara y una común, el que tiene solo la rara se muestra (y se avisa)', function () {
+    const trans = {}
+    const lista = []
+    for (let i = 0; i < 40; i++) {
+      lista.push({ codigo: 'V' + i, titulo: 'Video ' + i })
+      trans['V' + i] = 'Hablamos del cliente en este video.'
+    }
+    lista.push({ codigo: 'RARO', titulo: 'Un video sobre balanza' })
+    trans.RARO = 'Nada más.'
+    const r = buscar(armar(lista, trans), 'balanza cliente')
+    assert.equal(r.resultados[0].codigo, 'RARO')
+    assert.equal(r.completo, false)
+  })
+
+  test('una consulta de una palabra sigue siendo "todo o nada"', function () {
+    const r = buscar(CON_INDICE, 'seis')
+    assert.equal(r.completo, true)
+  })
+})
+
+describe('piso de relevancia', function () {
+  /** 40 videos: "alfa" y "beta" son comunes (en la mitad cada una) y solo coinciden de pasada en el guion del último. */
+  function catalogo_comun() {
+    const lista = []
+    const trans = {}
+    for (let i = 0; i < 39; i++) {
+      lista.push({ codigo: 'C' + i, titulo: 'Video ' + i })
+      trans['C' + i] = i < 19 ? 'Se habla de alfa un rato.' : 'Se habla de beta un rato.'
+    }
+    lista.push({ codigo: 'LARGO', titulo: 'Video largo' })
+    trans.LARGO =
+      'Un guion largo donde de pasada aparece alfa. Después se habla de muchas otras cosas durante un buen rato, ' +
+      'con ejemplos, aclaraciones y recomendaciones, hasta que al final se nombra también a beta.'
+    // Dos palabras raras, también solo en un guion.
+    trans.C3 += ' Y la zeta junto con la eta.'
+    return armar(lista, trans)
+  }
+
+  test('dos palabras comunes dichas solo de pasada en un guion no dan una respuesta completa', function () {
+    const r = buscar(catalogo_comun(), 'alfa beta')
+    assert.equal(r.resultados[0].codigo, 'LARGO')
+    assert.equal(r.completo, false)
+  })
+
+  test('dos palabras raras dichas solo en el guion de un video sí', function () {
+    const r = buscar(catalogo_comun(), 'zeta eta')
+    assert.deepEqual(codigos(r), ['C3'])
+    assert.equal(r.completo, true)
+  })
+
+  test('una palabra rara dicha solo en la voz sigue devolviendo su video, como completa', function () {
+    const r = buscar(catalogo_comun(), 'zeta')
+    assert.deepEqual(codigos(r), ['C3'])
+    assert.equal(r.completo, true)
+  })
+
+  test('dos palabras medianas pegadas, como una frase, sí cuentan como respuesta completa', function () {
+    const lista = []
+    const trans = {}
+    for (let i = 0; i < 39; i++) {
+      lista.push({ codigo: 'C' + i, titulo: 'Video ' + i })
+      trans['C' + i] = i < 19 ? 'Se habla de alfa un rato.' : 'Se habla de beta un rato.'
+    }
+    lista.push({ codigo: 'FRASE', titulo: 'Video de la frase' })
+    trans.FRASE = 'Y el límite es de alfa beta por día.'
+    const r = buscar(armar(lista, trans), 'alfa beta')
+    assert.equal(r.resultados[0].codigo, 'FRASE')
+    assert.equal(r.completo, true)
+  })
+
+  test('con una palabra en el título el piso no se aplica', function () {
+    const lista = [{ codigo: 'T', titulo: 'Alfa y beta' }]
+    const trans = { T: 'Nada.' }
+    for (let i = 0; i < 39; i++) {
+      lista.push({ codigo: 'C' + i, titulo: 'Video ' + i })
+      trans['C' + i] = i < 19 ? 'Alfa.' : 'Beta.'
+    }
+    const r = buscar(armar(lista, trans), 'alfa beta')
+    assert.equal(r.resultados[0].codigo, 'T')
+    assert.equal(r.completo, true)
+  })
+})
+
+describe('vocabulario del comercio', function () {
+  test('"fiar", "fiarle" y "fiado" llevan a la cuenta corriente', function () {
+    const b = armar([
+      { codigo: 'A', titulo: 'Leer la cuenta corriente' },
+      { codigo: 'B', titulo: 'Cobrar con tarjeta' },
+    ])
+    ;['fiar', 'fiarle', 'fiado', 'fiando'].forEach(function (palabra) {
+      assert.deepEqual(codigos(buscar(b, palabra)), ['A'], palabra)
+    })
+  })
+
+  test('"en masa", "masiva", "de una vez", "de un saque" y "muchos" son lo mismo', function () {
+    const b = armar([
+      { codigo: 'A', titulo: 'Actualizar en masa con un filtro' },
+      { codigo: 'B', titulo: 'Disponibilidad masiva de variantes' },
+      { codigo: 'C', titulo: 'Ponerle foto a todo el catálogo de una vez' },
+      { codigo: 'D', titulo: 'Volver todo a cero de un saque' },
+      { codigo: 'E', titulo: 'Crear un artículo' },
+    ])
+    ;['masiva', 'en masa', 'de una vez', 'muchos', 'varios'].forEach(function (consulta) {
+      assert.deepEqual(codigos(buscar(b, consulta)).sort(), ['A', 'B', 'C', 'D'], consulta)
+    })
+  })
+
+  test('"sacar plata de la caja" lleva al retiro', function () {
+    const b = armar([
+      { codigo: 'A', titulo: 'Un retiro, un ajuste o un ingreso suelto: el movimiento manual' },
+      { codigo: 'B', titulo: 'Pasar plata de una caja a otra' },
+      { codigo: 'C', titulo: 'Sacar un reporte' },
+    ])
+    const r = buscar(b, 'sacar plata de la caja')
+    assert.equal(r.resultados[0].codigo, 'A')
+  })
+
+  test('"acreditan" y "liquidar" son el mismo tema de la tarjeta', function () {
+    const b = armar([
+      { codigo: 'A', titulo: 'Los tres saldos: contable, disponible y a liquidar' },
+      { codigo: 'B', titulo: 'Configurar los días de acreditación de una caja' },
+      { codigo: 'C', titulo: 'Otra cosa' },
+    ])
+    assert.deepEqual(codigos(buscar(b, 'cuando me acreditan')).sort(), ['A', 'B'])
+  })
+
+  test('"cuesta" y "cuestan" encuentran "costo"', function () {
+    const b = armar([{ codigo: 'A', titulo: 'Cómo se arma el costo de un artículo' }, { codigo: 'B', titulo: 'Otra cosa' }])
+    assert.deepEqual(codigos(buscar(b, 'cuanto cuestan')), ['A'])
+  })
+
+  test('un grupo de sinónimos comparte la rareza: "producto", que casi no se dice, no pesa el triple que "artículo"', function () {
+    // "artículo" está en 30 títulos y "producto" en uno: sin rareza compartida el único título con "producto" valía
+    // seis veces lo que uno con "artículo" y "productos más vendidos" iba a "Agregar productos…".
+    const lista = [
+      { codigo: 'PRODUCTO', titulo: 'Agregar productos con el lector' },
+      { codigo: 'ARTICULO', titulo: 'Cargar un artículo' },
+    ]
+    for (let i = 0; i < 29; i++) {
+      lista.push({ codigo: 'X' + i, titulo: 'Un artículo número ' + i })
+    }
+    for (let i = 0; i < 100; i++) {
+      lista.push({ codigo: 'R' + i, titulo: 'Tema ' + i })
+    }
+    const r = buscar(armar(lista), 'productos')
+    const por_codigo = {}
+    r.resultados.forEach(function (x) {
+      por_codigo[x.codigo] = x.puntaje
+    })
+    assert.equal(r.resultados[0].codigo, 'PRODUCTO')
+    assert.ok(por_codigo.PRODUCTO / por_codigo.ARTICULO < 3, JSON.stringify([por_codigo.PRODUCTO, por_codigo.ARTICULO]))
+    assert.equal(por_codigo.ARTICULO, por_codigo.X0, 'todos los títulos con "artículo" valen lo mismo')
+  })
+
+  test('la forma exacta que se escribió conserva su rareza: "cargaron", dicho en un solo video, lo encuentra primero', function () {
+    const lista = []
+    const trans = {}
+    for (let i = 0; i < 40; i++) {
+      lista.push({ codigo: 'V' + i, titulo: 'Video ' + i })
+      trans['V' + i] = 'Se carga el artículo y después se cargan los demás.'
+    }
+    trans.V17 = 'Ayer cargaron todo.'
+    const r = buscar(armar(lista, trans), 'cargaron')
+    assert.equal(r.resultados[0].codigo, 'V17')
+    assert.ok(r.resultados.length > 30, 'las otras formas de cargar también se encuentran')
   })
 })
