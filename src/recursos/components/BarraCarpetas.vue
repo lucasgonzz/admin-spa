@@ -241,7 +241,8 @@ export default {
      * @returns {string}
      */
     texto_de_estado() {
-      if (!this.buscando) {
+      // Sin buscador (el catálogo todavía no llegó) no hay nada que contar: la lista dice "Cargando…".
+      if (!this.buscando || !this.estado.buscador) {
         return ''
       }
       /** Cantidad de resultados. */
