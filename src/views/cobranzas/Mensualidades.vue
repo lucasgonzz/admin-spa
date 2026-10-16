@@ -64,32 +64,89 @@
     </div>
 
     <div v-else>
-      <!-- Las tres cifras del mes de referencia -->
+      <!-- ============================================================ -->
+      <!-- Las cuatro tarjetas del mes de referencia. Cobrado y Falta    -->
+      <!-- cobrar son las que más información llevan: ancho completo en  -->
+      <!-- teléfono, la mitad en tablet y un tercio en escritorio (xl).  -->
+      <!-- Pendientes y Facturadas, que son solo un conteo, van juntas   -->
+      <!-- en una tercera celda: lado a lado (de a mitad) hasta lg y     -->
+      <!-- apiladas en xl, para no dejar dos tarjetas altas y vacías.    -->
+      <!-- ============================================================ -->
       <div class="row g-2 g-md-3 mb-3">
-        <div class="col-12 col-md-4">
+        <!-- Cobrado: dos números. Arriba lo que corresponde al mes de referencia (se haya cobrado
+             cuando se haya cobrado); abajo el total que entró en el mes, que suma además lo
+             cobrado de deudas de meses anteriores. Con la API vieja (sin `resumen`) el primero
+             cae al cálculo local y el segundo muestra «—». -->
+        <div class="col-12 col-md-6 col-xl-4">
           <div class="card h-100 cobranzas-cifra cobranzas-cifra--success">
             <div class="card-body py-3">
-              <p class="cobranzas-cifra__rotulo mb-1">Cobrado · {{ etiqueta_larga(mes_referencia) }}</p>
-              <p class="cobranzas-cifra__valor mb-0">{{ format_plata(cifras.cobrado) }}</p>
+              <p class="cobranzas-cifra__rotulo mb-1">Cobrado · {{ etiqueta_larga(mes_rotulo) }}</p>
+              <p class="cobranzas-cifra__subrotulo mb-0">Correspondiente al mes</p>
+              <p class="cobranzas-cifra__valor mb-0">{{ format_plata(cobrado_del_mes) }}</p>
               <p class="cobranzas-cifra__pie mb-0">{{ cifras.pagados }} {{ cifras.pagados === 1 ? 'cliente pagó' : 'clientes pagaron' }}</p>
+              <!-- Total cobrado en el mes, con la apertura de lo que vino de meses anteriores -->
+              <div class="cobranzas-cifra__bloque cobranzas-cifra__bloque--success">
+                <p class="cobranzas-cifra__subrotulo mb-0">Total cobrado en el mes</p>
+                <p class="cobranzas-cifra__valor mb-0">{{ plata_o_guion(resumen_vista.cobrado.total) }}</p>
+                <p v-if="resumen_vista.cobrado.de_anteriores !== null" class="cobranzas-cifra__pie mb-0">
+                  {{ detalle_cobrado_anteriores(resumen_vista.cobrado) }}
+                </p>
+              </div>
             </div>
           </div>
         </div>
-        <div class="col-6 col-md-4">
+
+        <!-- Falta cobrar: el total que se debe hasta el mes de referencia y, debajo, de dónde sale:
+             deudas de meses anteriores y deuda del mes. Con la API vieja todo muestra «—». -->
+        <div class="col-12 col-md-6 col-xl-4">
           <div class="card h-100 cobranzas-cifra cobranzas-cifra--danger">
             <div class="card-body py-3">
-              <p class="cobranzas-cifra__rotulo mb-1">Pendientes</p>
-              <p class="cobranzas-cifra__valor mb-0" :class="{ 'text-danger': cifras.pendientes > 0 }">{{ cifras.pendientes }}</p>
-              <p class="cobranzas-cifra__pie mb-0">sin factura ni pago</p>
+              <p class="cobranzas-cifra__rotulo mb-1">Falta cobrar · {{ etiqueta_larga(mes_rotulo) }}</p>
+              <p class="cobranzas-cifra__valor mb-0" :class="{ 'text-danger': resumen_vista.falta_cobrar.total > 0 }">{{ plata_o_guion(resumen_vista.falta_cobrar.total) }}</p>
+              <p class="cobranzas-cifra__pie mb-0">entre deudas anteriores y del mes</p>
+              <!-- Las dos partes del total -->
+              <div class="cobranzas-cifra__bloque cobranzas-cifra__bloque--danger">
+                <div class="cobranzas-cifra__fila">
+                  <div class="cobranzas-cifra__fila-texto">
+                    <span class="cobranzas-cifra__fila-rotulo">Deudas anteriores</span>
+                    <span v-if="detalle_deuda_anterior(resumen_vista.falta_cobrar)" class="cobranzas-cifra__pie d-block mt-0">{{ detalle_deuda_anterior(resumen_vista.falta_cobrar) }}</span>
+                  </div>
+                  <span class="cobranzas-cifra__fila-monto">{{ plata_o_guion(resumen_vista.falta_cobrar.de_anteriores) }}</span>
+                </div>
+                <div class="cobranzas-cifra__fila">
+                  <div class="cobranzas-cifra__fila-texto">
+                    <span class="cobranzas-cifra__fila-rotulo">Del mes de {{ etiqueta_larga(mes_rotulo) }}</span>
+                    <span v-if="detalle_deuda_del_mes(resumen_vista.falta_cobrar)" class="cobranzas-cifra__pie d-block mt-0">{{ detalle_deuda_del_mes(resumen_vista.falta_cobrar) }}</span>
+                  </div>
+                  <span class="cobranzas-cifra__fila-monto">{{ plata_o_guion(resumen_vista.falta_cobrar.del_mes) }}</span>
+                </div>
+              </div>
+              <!-- Aviso: hay meses que se deben pero sin precio cargado; no están en el total -->
+              <p v-if="resumen_vista.falta_cobrar.sin_monto > 0" class="cobranzas-cifra__aviso mb-0">
+                <i class="bi bi-exclamation-triangle text-warning-emphasis me-1"></i>{{ texto_sin_monto(resumen_vista.falta_cobrar.sin_monto) }}
+              </p>
             </div>
           </div>
         </div>
-        <div class="col-6 col-md-4">
-          <div class="card h-100 cobranzas-cifra cobranzas-cifra--warning">
-            <div class="card-body py-3">
-              <p class="cobranzas-cifra__rotulo mb-1">Facturadas sin pago</p>
-              <p class="cobranzas-cifra__valor mb-0" :class="{ 'text-warning-emphasis': cifras.facturadas > 0 }">{{ cifras.facturadas }}</p>
-              <p class="cobranzas-cifra__pie mb-0">{{ cifras.parciales }} {{ cifras.parciales === 1 ? 'pago parcial' : 'pagos parciales' }}</p>
+
+        <!-- Pendientes y Facturadas sin pago: sin cambios en lo que muestran (cálculo local sobre la
+             tabla). Comparten una celda con su propio flex: en fila hasta lg (cada una la mitad,
+             igual que las otras dos tarjetas de arriba) y en columna en xl (una sobre otra). -->
+        <div class="col-12 col-xl-4">
+          <div class="cobranzas-cifras-chicas d-flex flex-row flex-xl-column gap-2 gap-md-3 h-100">
+            <div class="card cobranzas-cifra cobranzas-cifra--danger">
+              <div class="card-body py-3">
+                <p class="cobranzas-cifra__rotulo mb-1">Pendientes</p>
+                <p class="cobranzas-cifra__valor mb-0" :class="{ 'text-danger': cifras.pendientes > 0 }">{{ cifras.pendientes }}</p>
+                <p class="cobranzas-cifra__pie mb-0">sin factura ni pago</p>
+              </div>
+            </div>
+            <div class="card cobranzas-cifra cobranzas-cifra--warning">
+              <div class="card-body py-3">
+                <p class="cobranzas-cifra__rotulo mb-1">Facturadas sin pago</p>
+                <p class="cobranzas-cifra__valor mb-0" :class="{ 'text-warning-emphasis': cifras.facturadas > 0 }">{{ cifras.facturadas }}</p>
+                <p class="cobranzas-cifra__pie mb-0">{{ cifras.parciales }} {{ cifras.parciales === 1 ? 'pago parcial' : 'pagos parciales' }}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -258,6 +315,12 @@ const MAXIMO_MESES = 24
  * instancia de cliente; lo único que sí sale hacia afuera es "Traer empleados", y eso lo hace
  * el backend contra la empresa-api de ese cliente.
  *
+ * Arriba de la tabla, cuatro tarjetas del mes de referencia: «Cobrado» (lo que corresponde al mes
+ * y el total que entró en el mes, con lo cobrado de meses anteriores), «Falta cobrar» (deudas
+ * anteriores + deuda del mes), «Pendientes» y «Facturadas sin pago». Las dos de plata salen del
+ * `resumen` que manda el backend junto con la tabla; si la API es una versión anterior y no lo
+ * manda, «Cobrado» cae a la suma local de la tabla y lo que no se puede calcular muestra «—».
+ *
  * La selección de meses y el orden se guardan por admin (`PUT cobranzas/preferencias`), con un
  * debounce corto para que tocar tres meses seguidos no mande tres PUT ni tres GET.
  */
@@ -282,6 +345,11 @@ export default {
       clientes: [],
       // Rango de meses que ofrece la tira: `{desde, hasta}` del backend.
       rango: { desde: '', hasta: '' },
+      // Resumen de la cobranza que arma el backend para el mes de referencia (`resumen` de la
+      // respuesta de la tabla): `{mes_referencia, cobrado: {...}, falta_cobrar: {...}}`. Vale null
+      // hasta que responde la primera carga y también con una API vieja que todavía no manda esa
+      // clave: en ese caso las tarjetas caen al cálculo local o muestran «—», sin romperse.
+      resumen: null,
       // Mes corriente según el backend (cae al del navegador hasta que responda).
       mes_corriente_actual: mes_corriente(),
       // Acción corriendo por cliente: `{[client_id]: 'factura' | 'pago' | 'empleados'}`.
@@ -383,6 +451,61 @@ export default {
       })
       return acumulado
     },
+    /**
+     * El `resumen` del backend normalizado para la plantilla: SIEMPRE devuelve los dos bloques
+     * (`cobrado` y `falta_cobrar`) con todas sus claves, y cada valor es un número o null. Así la
+     * plantilla nunca lee una propiedad de algo indefinido, ni con la API vieja (`resumen` null),
+     * ni con una respuesta a medias. Un null significa «no lo sé» y la tarjeta lo muestra como «—».
+     * @returns {{
+     *   mes_referencia: (string|null),
+     *   cobrado: {del_mes: (number|null), de_anteriores: (number|null), total: (number|null), clientes_de_anteriores: (number|null)},
+     *   falta_cobrar: {del_mes: (number|null), de_anteriores: (number|null), total: (number|null), clientes_del_mes: (number|null), clientes_de_anteriores: (number|null), meses_de_anteriores: (number|null), sin_monto: (number|null)}
+     * }}
+     */
+    resumen_vista() {
+      const self = this
+      const resumen = this.resumen && typeof this.resumen === 'object' ? this.resumen : {}
+      const cobrado = resumen.cobrado && typeof resumen.cobrado === 'object' ? resumen.cobrado : {}
+      const falta = resumen.falta_cobrar && typeof resumen.falta_cobrar === 'object' ? resumen.falta_cobrar : {}
+      return {
+        mes_referencia: resumen.mes_referencia ? String(resumen.mes_referencia) : null,
+        cobrado: {
+          del_mes: self.numero_o_null(cobrado.del_mes),
+          de_anteriores: self.numero_o_null(cobrado.de_anteriores),
+          total: self.numero_o_null(cobrado.total),
+          clientes_de_anteriores: self.numero_o_null(cobrado.clientes_de_anteriores),
+        },
+        falta_cobrar: {
+          del_mes: self.numero_o_null(falta.del_mes),
+          de_anteriores: self.numero_o_null(falta.de_anteriores),
+          total: self.numero_o_null(falta.total),
+          clientes_del_mes: self.numero_o_null(falta.clientes_del_mes),
+          clientes_de_anteriores: self.numero_o_null(falta.clientes_de_anteriores),
+          meses_de_anteriores: self.numero_o_null(falta.meses_de_anteriores),
+          sin_monto: self.numero_o_null(falta.sin_monto),
+        },
+      }
+    },
+    /**
+     * El mes que rotula las tarjetas de plata. Si el backend mandó `resumen`, manda SU mes de
+     * referencia: los montos y el rótulo salen de la misma respuesta y nunca se contradicen, ni
+     * siquiera en el instante entre tocar la tira de meses y que llegue la recarga. Sin `resumen`
+     * (API vieja o primera carga) se usa el mes de referencia local.
+     * @returns {string} `YYYY-MM`
+     */
+    mes_rotulo() {
+      return this.resumen_vista.mes_referencia || this.mes_referencia
+    },
+    /**
+     * Lo cobrado que corresponde al mes de referencia. Con `resumen` es `cobrado.del_mes` del
+     * backend; sin él (API vieja) cae al cálculo local de siempre (`cifras.cobrado`, la suma del
+     * monto pagado de la celda del mes), que es exactamente la misma definición.
+     * @returns {number}
+     */
+    cobrado_del_mes() {
+      const del_mes = this.resumen_vista.cobrado.del_mes
+      return del_mes === null ? this.cifras.cobrado : del_mes
+    },
   },
   mounted() {
     this.cargar_preferencias()
@@ -419,6 +542,96 @@ export default {
      */
     primera_linea(texto) {
       return String(texto || '').split('\n')[0]
+    },
+    /**
+     * Convierte un valor del `resumen` en número, o null si no hay un número usable (clave
+     * ausente, null, texto vacío o algo que no se puede leer como número). Distingue «no vino»
+     * de «cero», que son cosas distintas: un cero es un dato; un null es «mostrar —».
+     * @param {*} valor
+     * @returns {number|null}
+     */
+    numero_o_null(valor) {
+      if (valor === null || valor === undefined || valor === '') {
+        return null
+      }
+      const numero = Number(valor)
+      return Number.isFinite(numero) ? numero : null
+    },
+    /**
+     * Monto en pesos para una tarjeta, o «—» si el valor no está disponible (null).
+     * @param {number|null} valor
+     * @returns {string}
+     */
+    plata_o_guion(valor) {
+      return valor === null || valor === undefined ? '—' : format_plata(valor)
+    },
+    /**
+     * Cantidad con su unidad en singular o plural: `1 cliente`, `3 clientes`.
+     * @param {number} cantidad
+     * @param {string} singular
+     * @param {string} plural
+     * @returns {string}
+     */
+    texto_cantidad(cantidad, singular, plural) {
+      return cantidad + ' ' + (cantidad === 1 ? singular : plural)
+    },
+    /**
+     * Apertura del total cobrado: cuánto de lo que entró en el mes era de meses anteriores y de
+     * cuántos clientes. Se llama solo cuando `cobrado.de_anteriores` está disponible.
+     * @param {{de_anteriores: number, clientes_de_anteriores: (number|null)}} cobrado bloque `cobrado` de `resumen_vista`
+     * @returns {string}
+     */
+    detalle_cobrado_anteriores(cobrado) {
+      if (!(cobrado.de_anteriores > 0)) {
+        return 'sin cobros de meses anteriores'
+      }
+      const clientes = cobrado.clientes_de_anteriores
+      return 'incluye ' + format_plata(cobrado.de_anteriores) + ' de meses anteriores' +
+        (clientes ? ' · ' + this.texto_cantidad(clientes, 'cliente', 'clientes') : '')
+    },
+    /**
+     * Subtítulo de la fila «Deudas anteriores» de la tarjeta Falta cobrar: de cuántos meses y de
+     * cuántos clientes es la deuda. Texto vacío si el backend no mandó esos conteos (API vieja).
+     * @param {{meses_de_anteriores: (number|null), clientes_de_anteriores: (number|null)}} falta bloque `falta_cobrar` de `resumen_vista`
+     * @returns {string}
+     */
+    detalle_deuda_anterior(falta) {
+      if (falta.meses_de_anteriores === null || falta.clientes_de_anteriores === null) {
+        return ''
+      }
+      if (falta.meses_de_anteriores === 0) {
+        return 'sin deudas'
+      }
+      return this.texto_cantidad(falta.meses_de_anteriores, 'mes', 'meses') + ' de ' +
+        this.texto_cantidad(falta.clientes_de_anteriores, 'cliente', 'clientes')
+    },
+    /**
+     * Subtítulo de la fila «Del mes» de la tarjeta Falta cobrar: cuántos clientes deben el mes de
+     * referencia. Texto vacío si el backend no mandó el conteo (API vieja).
+     * @param {{clientes_del_mes: (number|null)}} falta bloque `falta_cobrar` de `resumen_vista`
+     * @returns {string}
+     */
+    detalle_deuda_del_mes(falta) {
+      if (falta.clientes_del_mes === null) {
+        return ''
+      }
+      if (falta.clientes_del_mes === 0) {
+        return 'sin deudas'
+      }
+      return this.texto_cantidad(falta.clientes_del_mes, 'cliente', 'clientes')
+    },
+    /**
+     * Aviso de la tarjeta Falta cobrar cuando hay meses que se deben pero no se pueden valuar
+     * porque el cliente no tiene precios cargados: esos meses NO están en el total, que por eso
+     * es un piso y no la cifra exacta.
+     * @param {number} cantidad meses sin monto (> 0)
+     * @returns {string}
+     */
+    texto_sin_monto(cantidad) {
+      if (cantidad === 1) {
+        return 'Hay 1 mes de un cliente sin precio cargado que no está sumado: el total es un piso.'
+      }
+      return 'Hay ' + cantidad + ' meses de clientes sin precio cargado que no están sumados: el total es un piso.'
     },
     /**
      * `estado_de` de un cliente para un mes (o null si el backend no lo mandó).
@@ -543,7 +756,8 @@ export default {
         })
     },
     /**
-     * GET cobranzas/mensualidades?meses=… → la tabla entera.
+     * GET cobranzas/mensualidades?meses=… → la tabla entera, más el `resumen` (cobrado y falta
+     * cobrar del mes de referencia) que alimenta las dos tarjetas de plata.
      */
     cargar() {
       const self = this
@@ -563,6 +777,10 @@ export default {
           }
           const data = res.data || {}
           self.clientes = Array.isArray(data.clientes) ? data.clientes : []
+          /* El resumen se asigna junto con las filas y dentro del chequeo de secuencia de arriba:
+             así una respuesta vieja que llega tarde no pisa los montos de la nueva. Con una API
+             anterior a esta clave no viene, y queda en null (las tarjetas lo manejan). */
+          self.resumen = data.resumen || null
           if (data.rango) {
             self.rango = { desde: data.rango.desde || '', hasta: data.rango.hasta || '' }
           }
@@ -944,6 +1162,79 @@ export default {
   font-size: 0.75rem;
   color: #6c757d;
   margin-top: 0.25rem;
+}
+
+/* Tarjetas «Cobrado» y «Falta cobrar» (16/10/2026): llevan más de un dato, así que tienen un
+   segundo nivel de texto y un bloque separado por una línea fina del color de la tarjeta. Todo
+   reusa la paleta `subtle` de arriba; no hay colores nuevos. */
+
+/* Título chico de un número dentro de la tarjeta («Correspondiente al mes», «Total cobrado en
+   el mes»): más suave que el rótulo en mayúsculas de arriba, para que el número sea lo que manda. */
+.cobranzas-cifra__subrotulo {
+  font-size: 0.75rem;
+  color: #6c757d;
+}
+
+/* Bloque secundario de la tarjeta (el segundo número, o el desglose): arranca con una línea fina
+   del color de borde de la tarjeta, así se lee como una segunda parte del mismo dato. */
+.cobranzas-cifra__bloque {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid transparent;
+}
+
+.cobranzas-cifra__bloque--success {
+  border-top-color: var(--bs-success-border-subtle);
+}
+
+.cobranzas-cifra__bloque--danger {
+  border-top-color: var(--bs-danger-border-subtle);
+}
+
+/* Fila del desglose de «Falta cobrar»: el texto a la izquierda (puede partirse en dos renglones
+   si la tarjeta es angosta) y el monto a la derecha, que nunca se corta ni se parte. El
+   `min-width: 0` deja que el texto se achique en vez de empujar el monto fuera de la tarjeta. */
+.cobranzas-cifra__fila {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.cobranzas-cifra__fila + .cobranzas-cifra__fila {
+  margin-top: 0.5rem;
+}
+
+.cobranzas-cifra__fila-texto {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cobranzas-cifra__fila-rotulo {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.cobranzas-cifra__fila-monto {
+  flex: 0 0 auto;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+/* Celda que junta Pendientes y Facturadas sin pago: las dos tarjetas se reparten el espacio por
+   partes iguales (`flex: 1 1 0`), tanto lado a lado como apiladas, y el `min-width: 0` deja que
+   la de la derecha se achique en teléfono en vez de ensanchar la página. */
+.cobranzas-cifras-chicas > .cobranzas-cifra {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* Aviso de «hay meses sin precio cargado que no están sumados». */
+.cobranzas-cifra__aviso {
+  font-size: 0.75rem;
+  margin-top: 0.75rem;
 }
 
 .cobranzas-tabla-wrap {
