@@ -18,7 +18,7 @@
  * "cómo escanear una foto de la factura en una compra" anda igual que "escanear foto factura compra".
  *
  * Es una cadena separada por espacios (y no un arreglo) para que pese poco en el bundle: la página
- * ocupa ~46 kB y esto se baja en cada visita.
+ * ocupa ~62 kB y esto se baja en cada visita.
  *
  * Faltan a propósito "sistema", "reportes", "barra" e "izquierda": salen en casi todos los guiones (el
  * arranque "Al entrar al sistema estás en Reportes. Desplegá la barra de la izquierda…" se repite en
@@ -62,63 +62,64 @@ export const PALABRAS_DE_RELLENO = new Set(
  * grupo con menos puntaje (`PUNTOS.sinonimo`). Cada palabra se compara también por su raíz (forma
  * del verbo, plural), así que alcanza con anotar una forma: `borrar` cubre borra, borraste, borrarlo.
  *
- * Los comentarios dicen qué hay en el corpus: "N" es en cuántos de los 364 videos aparece la palabra
- * (título o guion), medido el 16/10/2026. Donde una palabra tiene 0, no es un error: es lo que la gente
- * ESCRIBE y los guiones no dicen, y es justo el caso que el grupo existe para resolver.
+ * Los comentarios dicen qué hay en el corpus: "N" es en cuántos de los 364 videos aparece la palabra o
+ * alguna de sus formas (plural, verbo) en el título, el "para qué" o el guion, medido el 16/10/2026. Donde
+ * una palabra tiene 0, no es un error: es lo que la gente ESCRIBE y los guiones no dicen, y es justo el
+ * caso que el grupo existe para resolver.
  *
  * @type {Array<Array<string>>}
  */
 export const GRUPOS_DE_SINONIMOS = [
-  // El organismo se llama ARCA desde 2024 y los guiones solo dicen "ARCA" (29 videos, "afip" 0); el dueño
-  // todavía dice "AFIP" y es lo primero que escribe para buscar facturación electrónica.
-  // "Factura electrónica" es como lo dice quien factura; en los guiones es "la factura de ARCA".
+  // El organismo se llama ARCA desde 2024 y los guiones solo dicen "ARCA" (29 videos; "afip" 0): el dueño
+  // todavía dice "AFIP". Y "factura electrónica" (0) es como lo dice quien factura; en los guiones es
+  // "la factura de ARCA".
   ['arca', 'afip', 'electronica'],
-  // El sistema llama "artículo" a lo que todo el mundo llama "producto" (artículo 118, producto 51) y el
-  // guion dice "mercadería" cuando habla del stock que entra (35).
+  // El sistema llama "artículo" (171 videos) a lo que todo el mundo llama "producto" (70), y el guion dice
+  // "mercadería" (35) cuando habla del stock que entra.
   ['articulo', 'producto', 'mercaderia'],
-  // Los guiones hablan de "plata" (51 videos, voz de la casa) y "efectivo" (26); la gente escribe
-  // "dinero" (0 en los guiones).
+  // Los guiones hablan de "plata" (51, voz de la casa) y "efectivo" (26); la gente escribe "dinero" (0).
   ['plata', 'dinero', 'efectivo'],
-  // Borrar (32 con sus formas), eliminar (23), quitar (2) y anular (1: "anularlo", un presupuesto) se usan
-  // para la misma acción. "Sacar" (18) NO entra: también es "sacar un reporte" o "sacar plata", y metería ruido.
+  // Borrar (35), eliminar (18), quitar (5) y anular (6: "anularlo", un presupuesto) se usan para la misma
+  // acción. "Sacar" (18) NO entra: también es "sacar un reporte" o "sacar plata", y metería ruido.
   ['borrar', 'eliminar', 'quitar', 'anular'],
-  // "Subir los precios" es el "aumentar" del título T1.44 ("aumentar, bajar o fijar un valor").
+  // "Subir los precios" es el "aumentar" (5) del título T1.44 ("aumentar, bajar o fijar un valor"); subir
+  // (53) también es "subir una imagen", pero ahí la palabra directa gana por mucho.
   ['aumentar', 'subir', 'incrementar'],
-  // El centro dice "imagen" (26) y "foto" (44) indistintamente; quien busca escribe una u otra.
+  // El centro dice "foto" (35) e "imagen" (18) indistintamente; quien busca escribe una u otra.
   ['foto', 'imagen', 'fotografia'],
   // "Excel" (36) y "planilla" (6): el proveedor manda "una planilla" y el sistema importa "un Excel".
   ['excel', 'planilla'],
-  // Contraseña (7) y clave (5) son lo mismo para quien no puede entrar; "password" se escribe aunque
+  // Contraseña (7) y clave (8) son lo mismo para quien no puede entrar; "password" (0) se escribe aunque
   // ningún guion lo diga.
   ['contrasena', 'clave', 'password'],
-  // Imprimir (22), impresora (11) e impresión (8) no comparten raíz y son el mismo tema (tickets y etiquetas).
+  // Imprimir (29), impresora (11) e impresión (8) no comparten raíz y son el mismo tema (tickets y etiquetas).
   ['imprimir', 'impresora', 'impresion'],
-  // "Ganancia" (18 videos) lo dice el sistema, "cuánto gano" / "utilidad" lo dice el dueño; "ganar" suma
-  // las formas del verbo (ganaste 7, gana 6) que no comparten raíz con "ganancia".
+  // "Ganancia" (19) lo dice el sistema, "cuánto gano" y "utilidad" (1) lo dice el dueño; "ganar" suma las
+  // formas del verbo (gana, ganaste: 17 videos) que no comparten raíz con "ganancia".
   ['ganancia', 'ganar', 'utilidad', 'rentabilidad'],
-  // Lo que un cliente "debe" (debe 20, debes 14, deben 7) es su "deuda" (21) o su "saldo" (32); "deudor" (4).
+  // Lo que un cliente "debe" (debe 33, deben 7) es su "deuda" (23) o su "saldo" (36); "deudor" (3).
   ['deuda', 'saldo', 'debe', 'deben', 'deudor'],
-  // "Fiado" (2 videos) es cómo el comercio llama a la cuenta corriente (72 videos dicen "corriente").
+  // "Fiado" (6 videos) es cómo el comercio llama a la cuenta corriente (72 videos dicen "corriente").
   ['fiado', 'corriente'],
-  // Descuento (72 entre singular y plural) y bonificación (16): en compras la rebaja del proveedor se
-  // llama "bonificación".
+  // Descuento (76) y bonificación (12): en compras la rebaja del proveedor se llama "bonificación".
   ['descuento', 'bonificacion', 'rebaja'],
-  // Las acciones de dar de alta: crear (71), cargar (57), agregar (29), registrar (16), alta (16). Los
+  // Las acciones de dar de alta: crear (90), cargar (202), agregar (44), registrar (52), alta (22). Los
   // títulos dicen "Dar de alta un cliente" y quien busca escribe "agregar cliente" o "cargar cliente".
   ['alta', 'crear', 'agregar', 'cargar', 'registrar'],
   // El stock (68) y el "inventario" (5, es también un módulo): quien cuenta mercadería dice cualquiera.
   ['stock', 'inventario', 'existencias'],
-  // Comprobante (34), ticket (17) y recibo (2): lo que se le da al cliente. Factura y remito NO entran:
-  // son documentos distintos con sus propios videos.
+  // Comprobante (43), ticket (19) y recibo (2 videos con la palabra tal cual; su raíz arrastra "recibir" y
+  // "recibido", 32): lo que se le da al cliente. Factura y remito NO entran: son documentos distintos con
+  // sus propios videos.
   ['comprobante', 'ticket', 'recibo', 'tiquet'],
-  // Devolución (13 videos) y devolver (devolvés, devolviste: 14): la devolución de una compra se llama
+  // Devolución (13 videos) y devolver (11: devolvés, devolviste): la devolución de una compra se llama
   // "Devolverle mercadería a un proveedor" (T5.26) y quien busca escribe "devolución".
   ['devolucion', 'devolver'],
-  // Cobro (28) y cobranza (4) no comparten raíz.
+  // Cobro (88 con sus formas: cobrar, cobré) y cobranza (4) no comparten raíz.
   ['cobro', 'cobranza'],
-  // Los guiones dicen "IA" (15) y "inteligencia artificial"; quien busca escribe cualquiera de las dos.
+  // Los guiones dicen "IA" (15) y "inteligencia artificial" (21); quien busca escribe cualquiera de las dos.
   ['ia', 'inteligencia'],
-  // WhatsApp (23 videos): las abreviaturas con las que se lo escribe a mano. Ningún guion las usa.
+  // WhatsApp (23): las abreviaturas con las que se lo escribe a mano (0): ningún guion las usa.
   ['whatsapp', 'wpp', 'wsp', 'wasap', 'whats'],
 ]
 
