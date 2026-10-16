@@ -123,6 +123,9 @@ main.principal { flex: 1; display: flex; min-height: 0; position: relative; }
 /* La lista de videos de una carpeta abierta va sobre un fondo propio, un poco más oscuro que el de la cabecera:
    así se lee como contenido de esa carpeta y no como más carpetas (pedido de Lucas, 16/10/2026) */
 .carpeta .videos { padding: 2px 0 10px; background: var(--lista); border-top: 1px solid var(--borde); }
+/* Sobre ese fondo el celeste del hover (--sel) casi no se distingue en el tema claro: dentro de la lista el
+   hover aclara hacia el panel; el video seleccionado conserva su --sel y su barra azul */
+.carpeta .videos .vid:not(.sel):hover { background: var(--panel); }
 .seccion { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--suave); padding: 18px 14px 6px 48px; }
 .vid { width: 100%; border: 0; border-radius: 0; background: transparent; color: inherit; text-align: left; display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: start; padding: 9px 12px 9px 22px; cursor: pointer; font-size: 13px; position: relative; }
 .vid:hover { background: var(--sel); }
