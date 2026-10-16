@@ -74,7 +74,7 @@
       <!-- ============================================================ -->
       <div class="row g-2 g-md-3 mb-3">
         <!-- Cobrado: dos números. Arriba lo que corresponde al mes de referencia (se haya cobrado
-             cuando se haya cobrado); abajo el total que entró en el mes, que suma además lo
+             cuando se haya cobrado); abajo el total con meses anteriores, que suma además lo
              cobrado de deudas de meses anteriores. Con la API vieja (sin `resumen`) el primero
              cae al cálculo local y el segundo muestra «—». -->
         <div class="col-12 col-md-6 col-xl-4">
@@ -84,9 +84,17 @@
               <p class="cobranzas-cifra__subrotulo mb-0">Correspondiente al mes</p>
               <p class="cobranzas-cifra__valor mb-0">{{ format_plata(cobrado_del_mes) }}</p>
               <p class="cobranzas-cifra__pie mb-0">{{ cifras.pagados }} {{ cifras.pagados === 1 ? 'cliente pagó' : 'clientes pagaron' }}</p>
-              <!-- Total cobrado en el mes, con la apertura de lo que vino de meses anteriores -->
+              <!-- Total con meses anteriores: lo cobrado POR el mes más lo que entró DURANTE el mes por
+                   deudas de meses anteriores. No es la caja estricta por fecha (lo del mes se cuenta
+                   por el período al que se imputó), por eso el rótulo no dice «caja» y la ayuda
+                   explica qué suma. -->
               <div class="cobranzas-cifra__bloque cobranzas-cifra__bloque--success">
-                <p class="cobranzas-cifra__subrotulo mb-0">Total cobrado en el mes</p>
+                <p
+                  class="cobranzas-cifra__subrotulo mb-0"
+                  title="Lo cobrado por el mes de referencia, más lo que entró durante ese mes por deudas de meses anteriores"
+                >
+                  Total, con meses anteriores
+                </p>
                 <p class="cobranzas-cifra__valor mb-0">{{ plata_o_guion(resumen_vista.cobrado.total) }}</p>
                 <p v-if="resumen_vista.cobrado.de_anteriores !== null" class="cobranzas-cifra__pie mb-0">
                   {{ detalle_cobrado_anteriores(resumen_vista.cobrado) }}
@@ -316,7 +324,7 @@ const MAXIMO_MESES = 24
  * el backend contra la empresa-api de ese cliente.
  *
  * Arriba de la tabla, cuatro tarjetas del mes de referencia: «Cobrado» (lo que corresponde al mes
- * y el total que entró en el mes, con lo cobrado de meses anteriores), «Falta cobrar» (deudas
+ * y el total con lo cobrado de meses anteriores), «Falta cobrar» (deudas
  * anteriores + deuda del mes), «Pendientes» y «Facturadas sin pago». Las dos de plata salen del
  * `resumen` que manda el backend junto con la tabla; si la API es una versión anterior y no lo
  * manda, «Cobrado» cae a la suma local de la tabla y lo que no se puede calcular muestra «—».
@@ -586,7 +594,7 @@ export default {
         return 'sin cobros de meses anteriores'
       }
       const clientes = cobrado.clientes_de_anteriores
-      return 'incluye ' + format_plata(cobrado.de_anteriores) + ' de meses anteriores' +
+      return 'incluye ' + format_plata(cobrado.de_anteriores) + ' cobrados de meses anteriores' +
         (clientes ? ' · ' + this.texto_cantidad(clientes, 'cliente', 'clientes') : '')
     },
     /**
@@ -1168,8 +1176,8 @@ export default {
    segundo nivel de texto y un bloque separado por una línea fina del color de la tarjeta. Todo
    reusa la paleta `subtle` de arriba; no hay colores nuevos. */
 
-/* Título chico de un número dentro de la tarjeta («Correspondiente al mes», «Total cobrado en
-   el mes»): más suave que el rótulo en mayúsculas de arriba, para que el número sea lo que manda. */
+/* Título chico de un número dentro de la tarjeta («Correspondiente al mes», «Total, con meses
+   anteriores»): más suave que el rótulo en mayúsculas de arriba, para que el número sea lo que manda. */
 .cobranzas-cifra__subrotulo {
   font-size: 0.75rem;
   color: #6c757d;
