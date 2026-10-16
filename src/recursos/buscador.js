@@ -9,14 +9,14 @@
  * texto: "escanear factura" daba 0 resultados aunque el video T5.15 se llame "Escanear la factura o el
  * remito con la IA" (le sobra el "la"). Ahora:
  *
- * 1. La consulta se parte en palabras y cada una tiene que aparecer EN ALGÚN LADO del video (título,
- *    carpeta, "para qué", guion), en cualquier orden. Las palabras de relleno ("cómo", "una", "de"…) se
- *    ignoran. Si ningún video las tiene todas, o si alguna palabra no existe en ningún video, se
- *    muestran los que tienen la mayoría y se avisa (`completo: false`).
- * 2. Cada palabra encuentra sus formas: sin acentos, plural, tiempos del verbo ("escanear" encuentra
- *    escaneo, escaneás, escaneala), la palabra a medio escribir ("escan"), sinónimos de la casa
- *    (`sinonimos.js`) y, SOLO si no encontró nada, un error de tipeo ("facutra").
- * 3. Los resultados salen ordenados por relevancia, no por el orden del guion (ver "El puntaje").
+ * 1. La consulta se parte en palabras que pueden aparecer EN ALGÚN LADO del video (título, carpeta, "para
+ *    qué", guion), en cualquier orden. Las palabras de relleno ("cómo", "una", "de"…) se ignoran.
+ * 2. Cada palabra encuentra sus formas: sin acentos, plural, tiempos del verbo (cobrar: cobro, cobrás,
+ *    cobraron, cobrado, cobrarlo; y los que cambian la raíz: muestra/mostrar, elige/elegir), la palabra a
+ *    medio escribir ("escan"), sinónimos de la casa (`sinonimos.js`) y, SOLO si no encontró nada, un
+ *    error de tipeo ("facutra").
+ * 3. Un video entra si cubre bastante de la consulta (ver "La cobertura") y los resultados salen ordenados
+ *    por relevancia, no por el orden del guion (ver "El puntaje").
  *
  * El puntaje. Para cada palabra de la consulta y cada video se toma el mejor campo donde aparece:
  *
@@ -25,14 +25,24 @@
  * - Peso del campo (`PESO_DE_CAMPO`): título 10, "para qué" 3, carpeta y sección 1,5, guion 1.
  * - Rareza: `ln(1 + N / df)`, con `df` = en cuántos videos aparece la palabra en ese campo. Se mide POR
  *   CAMPO a propósito: "reportes" sale en el guion de 360 de los 364 videos (el arranque se repite), así
- *   que ahí pesa casi nada, pero en los títulos es rara y quien lo escribe quiere esos títulos. Y se mide
- *   por RAÍZ, no por forma suelta: "factura" y "facturarla" pesan igual.
+ *   que ahí pesa casi nada, pero en los títulos es rara y quien lo escribe quiere esos títulos. Se mide
+ *   por RAÍZ, no por forma suelta ("factura" y "facturarla" pesan igual), salvo la palabra tal cual se
+ *   escribió, que conserva la suya ("cargaron", dicho en un solo video, lo encuentra por encima de los
+ *   200 que dicen "cargar"). Y los sinónimos comparten la rareza de todo su grupo: "producto", que casi
+ *   no se dice, no pesa más que "artículo", que es el mismo tema.
  * - Qué tan directa (`PUNTOS`): la palabra exacta 1, otra forma de la misma palabra 0,85, "empieza
- *   igual" 0,55, un sinónimo 0,5 (y nunca más rara que la palabra que se escribió) y un error de tipeo 0,4.
+ *   igual" 0,55, un sinónimo 0,5 y un error de tipeo 0,4.
  *
  * Después se le suma, por cada campo, un bonus por cercanía (que las palabras estén juntas) y un
  * pequeño premio por repetición en el guion (el video que habla mucho de algo). Nada de esto usa el
  * servidor.
+ *
+ * La cobertura. Cada palabra de la consulta pesa lo rara que es en todo el centro (`ln(1 + N / videos que
+ * la tienen)`), y la cobertura de un video es el peso de las palabras que tiene sobre el peso de todas. Entran
+ * los videos con cobertura de al menos `UMBRAL_DE_COBERTURA` y el puntaje se multiplica por
+ * `cobertura ^ EXPONENTE_DE_COBERTURA`: un video que cubre tres de cuatro palabras, la rara incluida y
+ * con el título cerca, le gana a uno que tiene las cuatro sueltas en el guion. `completo` es true si el
+ * primero cubre todo.
  */
 import { normalizar } from './utiles.js'
 import {
@@ -42,6 +52,7 @@ import {
   NUMEROS_HASTA_30,
   NUMEROS_REDONDOS,
   RAICES_APARTE,
+  RAICES_IRREGULARES,
 } from './sinonimos.js'
 
 /** Índices de los campos en los que se busca. Siempre en este orden: título, carpeta+sección, "para qué", guion y "cuándo no". */
@@ -104,7 +115,43 @@ const LARGO_MINIMO_TIPEO_CON_LETRA_CAMBIADA = 6
 /** Cuántas palabras de la consulta se usan como máximo. */
 const MAXIMO_DE_PALABRAS = 12
 
-/** En una búsqueda sin coincidencia completa, lo que se muestra como máximo y el piso de puntaje (respecto del mejor). */
+/**
+ * Cobertura mínima para que un video entre en los resultados aunque le falten palabras de la consulta: el peso
+ * de las palabras que tiene sobre el peso de todas (ver `buscar`). Con 0,5, entre dos palabras igual de raras
+ * alcanza con una; con tres, con dos.
+ */
+const UMBRAL_DE_COBERTURA = 0.5
+
+/**
+ * El puntaje de un video se multiplica por `cobertura ^ EXPONENTE_DE_COBERTURA`: cubrir 3 de 4 palabras igual de
+ * raras deja el 42 % del puntaje (con 3), 2 de 4 el 12 %. Medido con consultas hechas de 3 palabras del título más
+ * una ajena (sube con exponente 1 o 2) y con palabras sueltas del guion (sube con 4 o más): 3 deja las dos bien.
+ */
+const EXPONENTE_DE_COBERTURA = 3
+
+/**
+ * Cuán pegadas tienen que estar las palabras de una consulta en un texto (palabras de la consulta sobre
+ * largo de la ventana más corta que las tiene) para que la coincidencia no cuente como "de pasada": 0,4 es,
+ * con dos palabras, a lo sumo tres entre medio ("hasta seis páginas").
+ */
+const CERCANIA_MINIMA = 0.4
+
+/**
+ * Cuánta información tienen que sumar las palabras de una consulta de dos o más para que un video que las
+ * tiene solo de pasada en el guion cuente como respuesta completa. Cada palabra suma `ln(1 + N / videos que
+ * la tienen)`: una palabra en 100 de los 364 videos suma 1,5; en 20, 2,9; en uno solo, 5,9. Con 7, dos
+ * palabras de 15 videos cada una (3,3 + 3,3) no alcanzan, y una rara más una común (5,9 + 1,5) sí. No se
+ * aplica si las palabras están pegadas en el guion (`CERCANIA_MINIMA`: "hasta seis páginas" es una frase, no
+ * una coincidencia casual). Medido sobre 150 consultas de dos palabras de entre 8 y 150 videos que solo
+ * coinciden de pasada en uno o dos guiones: 24 siguen "completas" (sin el piso, 92). Y no baja el acierto:
+ * 233 de 246 consultas de dos palabras raras de una misma oración siguen "completas" con su video entre los
+ * 3 primeros (sin piso, 234), y 164 de 239 frases de dos palabras medianas seguidas (sin piso, 165). El
+ * costo: dos palabras medianas dichas lejos una de otra en un guion salen con el aviso de "se parecen" aunque
+ * el video sea el bueno (189 de 322 "completas" en lugar de 248); igual se listan.
+ */
+const INFORMACION_MINIMA = 7
+
+/** De los videos que no cubren todas las palabras: cuántos se muestran como máximo y el piso de puntaje (respecto del mejor). */
 const MAXIMO_PARCIALES = 40
 const PISO_PARCIALES = 0.25
 
@@ -155,14 +202,36 @@ const RE_CODIGO = /^[a-z]?\s*(\d+)\s*[.,]\s*(\d+)$/i
 const VOCALES = 'aeiou'
 
 /**
- * Terminaciones que se pegan a un verbo: "escanear" + "la", "escanea" + "la". Se sacan solo si lo que
- * queda es un infinitivo, un gerundio o una forma del imperativo, y largo (≥ 4 letras), para no
- * partir palabras como "isla" o "nombre".
+ * Pronombre pegado a un infinitivo o a un gerundio: "abrirlo", "pasarla", "escaneandolos". Con "me" y "te"
+ * solo si el infinitivo es largo y de -ar/-er ("llevarte", "quedarte"): "confirme" y "reparte" terminan igual
+ * y no son "confirir" + "me" ni "reparar" + "te".
  */
-const RE_PRONOMBRE_PEGADO = /^(.{4,}(?:ar|er|ir|ando|iendo|yendo|a|e|i))(?:lo|la|los|las|le|les|me|te|se|nos)$/
+const RE_INFINITIVO_CON_PRONOMBRE = /^(?:(.{3,}(?:ar|er|ir)|.{2,}(?:ando|iendo|yendo))(?:lo|la|los|las|le|les|se)|(.{4,}(?:ar|er))(?:me|te))$/
 
-/** Terminaciones de verbo y de sustantivo derivado que se sacan para llegar a la raíz, de la más larga a la más corta. */
-const TERMINACIONES = ['aciones', 'acion', 'iendo', 'yendo', 'ando', 'aste', 'iste', 'ado', 'ido', 'ada', 'ida', 'ar', 'er', 'ir']
+/**
+ * Pronombre pegado a un imperativo: "cargalo", "guardala". Largo (≥ 5 letras antes del pronombre) para no
+ * partir "isla", "nombre" ni "estilo". Es la regla más floja de todas: "cancela" o "escala" se parten mal.
+ */
+const RE_IMPERATIVO_CON_PRONOMBRE = /^(.{4,}[aei])(?:lo|la|los|las|le|les)$/
+
+/**
+ * Terminaciones de una forma conjugada que traen su propia "s" o "n": nosotros (cargamos, vendemos), ellos
+ * en pretérito (cargaron, vendieron) y el imperfecto (cargaba, cargaban, vendían). Se sacan ANTES del
+ * plural, que les arrancaría la "s". "-imos" también termina "últimos", "mínimos", "máximos" y
+ * "próximos": esos cuatro están en `RAICES_APARTE`.
+ */
+const FORMAS_CONJUGADAS = ['ieron', 'aron', 'amos', 'emos', 'imos', 'abas', 'aban', 'aba', 'ian']
+
+/**
+ * Terminaciones de verbo y de sustantivo derivado que se sacan para llegar a la raíz, cada una con
+ * cuántas letras tienen que quedar: infinitivo, participio, gerundio, pretérito de vos ("-aste") y la
+ * tercera del plural ("venden", "cargan"). "orden" y "joven" terminan en "-en" y se arreglan en
+ * `RAICES_APARTE`.
+ */
+const TERMINACIONES = [
+  ['aciones', 3], ['acion', 3], ['iendo', 3], ['yendo', 3], ['ando', 3], ['aste', 3], ['iste', 3],
+  ['ado', 3], ['ido', 3], ['ada', 3], ['ida', 3], ['ar', 3], ['er', 3], ['ir', 3], ['en', 3], ['an', 3],
+]
 
 /**
  * Inicio de cada secuencia dicha (`FORMAS_DICHAS`): primera palabra → secuencias que empiezan así.
@@ -181,14 +250,21 @@ FORMAS_DICHAS.forEach(function (forma) {
 })
 
 /**
- * Detecta de un vistazo si un texto trae alguna palabra con la que empieza una secuencia dicha (la "pe"
- * de "pe de efe"): solo entonces `tokenizar` recorre las palabras buscando la secuencia completa.
- * `null` si no hay secuencias.
+ * Detecta de un vistazo si un texto trae alguna secuencia dicha completa ("pe de efe", "de una vez"): solo
+ * entonces `tokenizar` recorre las palabras buscándola. Las palabras pueden ir separadas por espacios o
+ * guiones ("pe-de-efe"). `null` si no hay secuencias.
  *
  * @type {RegExp|null}
  */
-const RE_COMIENZO_DE_SECUENCIA = INICIOS_DE_FORMAS_DICHAS.size
-  ? new RegExp('\\b(?:' + Array.from(INICIOS_DE_FORMAS_DICHAS.keys()).join('|') + ')\\b', 'i')
+const RE_COMIENZO_DE_SECUENCIA = FORMAS_DICHAS.length
+  ? new RegExp(
+      '\\b(?:' +
+        FORMAS_DICHAS.map(function (forma) {
+          return forma[0].replace(/ /g, '[\\s-]+')
+        }).join('|') +
+        ')\\b',
+      'i'
+    )
   : null
 
 /**
@@ -231,6 +307,9 @@ const LIMITE_DE_RAICES_CALCULADAS = 30000
 /** `RAICES_APARTE` como mapa: con un objeto, "constructor" o "toString" se tomarían por una raíz propia. */
 const MAPA_DE_RAICES_APARTE = new Map(Object.entries(RAICES_APARTE))
 
+/** `RAICES_IRREGULARES` como mapa. */
+const MAPA_DE_RAICES_IRREGULARES = new Map(Object.entries(RAICES_IRREGULARES))
+
 /**
  * Hace el trabajo de `raiz` (sin la memoria).
  *
@@ -246,30 +325,49 @@ function calcular_raiz(palabra) {
   if (r.length <= 3) {
     return r
   }
-  /** Pronombre pegado al final ("escanearla", "cargalo"). */
-  const pegado = RE_PRONOMBRE_PEGADO.exec(r)
+  /** Lo que queda sin el pronombre pegado al final, si lo tiene. */
+  const pegado = RE_INFINITIVO_CON_PRONOMBRE.exec(r) || RE_IMPERATIVO_CON_PRONOMBRE.exec(r)
   if (pegado) {
-    r = pegado[1]
+    r = pegado[1] || pegado[2]
   }
-  // Plural: "-es" detrás de consonante ("dolares", "papeles") o "-s" ("cheques", "ventas").
-  if (r.length > 4 && r.endsWith('es') && VOCALES.indexOf(r[r.length - 3]) === -1) {
-    r = r.slice(0, -2)
-  } else if (r.length > 3 && r.endsWith('s') && !r.endsWith('ss')) {
-    r = r.slice(0, -1)
-  }
-  for (let i = 0; i < TERMINACIONES.length; i++) {
+  /** true si la palabra terminaba en una forma conjugada con "s" o "n" propia, que ya se sacó. */
+  let conjugada = false
+  for (let i = 0; i < FORMAS_CONJUGADAS.length; i++) {
     /** Terminación que se prueba. */
-    const t = TERMINACIONES[i]
-    if (r.endsWith(t) && r.length - t.length >= 3) {
-      r = r.slice(0, -t.length)
+    const f = FORMAS_CONJUGADAS[i]
+    if (r.endsWith(f) && r.length - f.length >= 3) {
+      r = r.slice(0, -f.length)
+      conjugada = true
       break
+    }
+  }
+  if (!conjugada) {
+    // Plural: "-es" detrás de consonante ("dolares", "papeles") o "-s" ("cheques", "ventas").
+    if (r.length > 4 && r.endsWith('es') && VOCALES.indexOf(r[r.length - 3]) === -1) {
+      r = r.slice(0, -2)
+    } else if (r.length > 3 && r.endsWith('s') && !r.endsWith('ss')) {
+      r = r.slice(0, -1)
+    }
+    for (let i = 0; i < TERMINACIONES.length; i++) {
+      /** Terminación que se prueba y cuántas letras tienen que quedar. */
+      const t = TERMINACIONES[i][0]
+      if (r.endsWith(t) && r.length - t.length >= TERMINACIONES[i][1]) {
+        r = r.slice(0, -t.length)
+        break
+      }
     }
   }
   // Las vocales del final ("escane" → "escan"): así "escaneo" y "escanear" llegan al mismo lugar.
   while (r.length > 3 && VOCALES.indexOf(r[r.length - 1]) !== -1) {
     r = r.slice(0, -1)
   }
-  return r
+  // Ortografía: "busque" y "buscar", "empiece" y "empezar" tienen la misma raíz con otra letra al final.
+  if (r.endsWith('q')) {
+    r = r.slice(0, -1) + 'c'
+  } else if (r.endsWith('z') && r.length > 3) {
+    r = r.slice(0, -1) + 'c'
+  }
+  return MAPA_DE_RAICES_IRREGULARES.get(r) || r
 }
 
 /** Grupos de sinónimos indexados por palabra y por raíz: clave → números de grupo. Se arma una vez. */
@@ -566,7 +664,7 @@ export function crear_buscador(videos, carpetas, transcripciones) {
   ;(Array.isArray(carpetas) ? carpetas : []).forEach(function (c) {
     nombres_de_carpeta[c.nro] = c.nombre
   })
-  /** Vocabulario: palabra normalizada → { palabra, raiz, df, idf, docs, masc, sello }. */
+  /** Vocabulario: palabra normalizada → { palabra, raiz, df, idf, idf_exacta, docs, masc, sello }. */
   const vocab = new Map()
   /** Un registro por video con sus textos ya partidos en palabras. */
   const docs = []
@@ -588,7 +686,7 @@ export function crear_buscador(videos, carpetas, transcripciones) {
         /** Entrada del vocabulario, creada la primera vez que aparece la palabra. */
         let e = vocab.get(tk.pal[k])
         if (!e) {
-          e = { palabra: tk.pal[k], raiz: raiz(tk.pal[k]), df: [0, 0, 0, 0, 0], idf: null, docs: [], masc: [], sello: -1 }
+          e = { palabra: tk.pal[k], raiz: raiz(tk.pal[k]), df: [0, 0, 0, 0, 0], idf: null, idf_exacta: null, docs: [], masc: [], sello: -1 }
           vocab.set(tk.pal[k], e)
         }
         // Todos los videos comparten la misma palabra del vocabulario en lugar de una copia cada uno.
@@ -615,6 +713,15 @@ export function crear_buscador(videos, carpetas, transcripciones) {
 
   /** Videos en total. */
   const total = docs.length
+  /**
+   * Lo rara que es una palabra que aparece en `d` videos de un campo: `ln(1 + N / d)`; 0 si no aparece.
+   *
+   * @param {number} d
+   * @returns {number}
+   */
+  const rareza_de = function (d) {
+    return d ? Math.log(1 + total / d) : 0
+  }
   /** Entradas del vocabulario agrupadas por raíz. */
   const por_raiz = new Map()
   vocab.forEach(function (e) {
@@ -625,20 +732,22 @@ export function crear_buscador(videos, carpetas, transcripciones) {
   })
   // Lo rara que es una palabra se mide por su RAÍZ, no por la forma suelta: "factura" y "facturarla" son
   // el mismo tema y tienen que pesar lo mismo. Si no, la forma más rara ("facturarla", en un solo título)
-  // le ganaba a la palabra exacta que se escribió, que es la más común.
+  // le ganaba a la palabra exacta que se escribió, que es la más común. La excepción es la palabra tal cual
+  // se escribió: "cargaron" (dicha en un solo video) encuentra ese video por encima de los otros 200 que
+  // dicen "cargar" o "carga", así que la forma exacta conserva su propia rareza (`idf_exacta`).
   /** Videos donde aparece alguna forma de la raíz, por campo (máscara de bits), para unir las formas. */
   const mascaras = new Uint8Array(total)
   por_raiz.forEach(function (entradas) {
     /** Videos con alguna forma, contados por campo. */
-    const df = entradas[0].df
+    let df = entradas[0].df
     if (entradas.length > 1) {
+      df = [0, 0, 0, 0, 0]
       mascaras.fill(0)
       entradas.forEach(function (e) {
         for (let k = 0; k < e.docs.length; k++) {
           mascaras[e.docs[k]] |= e.masc[k]
         }
       })
-      df.fill(0)
       for (let d = 0; d < total; d++) {
         for (let c = 0; c < CANTIDAD_CAMPOS && mascaras[d]; c++) {
           if (mascaras[d] & (1 << c)) {
@@ -648,11 +757,58 @@ export function crear_buscador(videos, carpetas, transcripciones) {
       }
     }
     /** Rareza por campo, compartida por todas las formas de la raíz. */
-    const idf = df.map(function (d) {
-      return d ? Math.log(1 + total / d) : 0
-    })
+    const idf = df.map(rareza_de)
     entradas.forEach(function (e) {
       e.idf = idf
+      e.idf_exacta = e.df.map(rareza_de)
+    })
+  })
+  // Los sinónimos comparten la rareza del grupo entero. Sin esto, "producto" (que solo dicen 2 títulos) pesaba el
+  // doble que "artículo" (43 títulos) aunque sea el mismo tema, y "productos más vendidos" iba a "Agregar
+  // productos con el lector" en lugar de al reporte de Artículos. El grupo cuenta los videos donde aparece
+  // cualquiera de sus palabras; la rareza de una palabra nunca sube por pertenecer a un grupo.
+  GRUPOS_DE_SINONIMOS.forEach(function (grupo) {
+    /** Entradas del vocabulario de todas las palabras del grupo. */
+    const entradas = []
+    grupo
+      .map(raiz)
+      .filter(function (r, i, todas) {
+        return todas.indexOf(r) === i
+      })
+      .forEach(function (r) {
+        entradas.push.apply(entradas, por_raiz.get(r) || [])
+      })
+    if (!entradas.length) {
+      return
+    }
+    mascaras.fill(0)
+    entradas.forEach(function (e) {
+      for (let k = 0; k < e.docs.length; k++) {
+        mascaras[e.docs[k]] |= e.masc[k]
+      }
+    })
+    /** Videos del grupo por campo y rareza que sale de ahí. */
+    const df = [0, 0, 0, 0, 0]
+    for (let d = 0; d < total; d++) {
+      for (let c = 0; c < CANTIDAD_CAMPOS && mascaras[d]; c++) {
+        if (mascaras[d] & (1 << c)) {
+          df[c]++
+        }
+      }
+    }
+    /** Rareza del grupo por campo, y cada entrada se queda con la menor entre la suya y la del grupo. */
+    const del_grupo = df.map(rareza_de)
+    /**
+     * @param {number} rareza La rareza propia de la entrada en un campo.
+     * @param {number} c Campo.
+     * @returns {number}
+     */
+    const tope = function (rareza, c) {
+      return df[c] ? Math.min(rareza, del_grupo[c]) : rareza
+    }
+    entradas.forEach(function (e) {
+      e.idf = e.idf.map(tope)
+      e.idf_exacta = e.idf_exacta.map(tope)
     })
   })
   return { docs: docs, vocab: vocab, por_raiz: por_raiz, por_numero: por_numero }
@@ -661,54 +817,46 @@ export function crear_buscador(videos, carpetas, transcripciones) {
 /**
  * Suma una entrada del vocabulario al mapa de una palabra con ese puntaje, si es mejor que el que ya tenía.
  *
- * @param {Map<Object, {puntos: number, tope: (number|null)}>} mapa Entradas del vocabulario que valen para la palabra → qué tan directas son y, si es un sinónimo, el tope de rareza.
+ * @param {Map<Object, number>} mapa Entradas del vocabulario que valen para la palabra → qué tan directas son.
  * @param {Object} entrada Entrada del vocabulario.
  * @param {number} puntos Qué tan directa es la coincidencia (`PUNTOS`).
- * @param {number|null} [tope] Rareza máxima que puede valer esta coincidencia (ver `idf_de`).
  * @returns {void}
  */
-function anotar(mapa, entrada, puntos, tope) {
-  /** Lo que ya había anotado para esta entrada. */
-  const actual = mapa.get(entrada)
-  if (!actual || actual.puntos < puntos) {
-    mapa.set(entrada, { puntos: puntos, tope: tope === undefined ? null : tope })
+function anotar(mapa, entrada, puntos) {
+  if ((mapa.get(entrada) || 0) < puntos) {
+    mapa.set(entrada, puntos)
   }
 }
 
 /**
- * Lo rara que es una palabra en un campo, para una coincidencia. Un sinónimo trae un tope: no puede
- * ser más rara que la palabra que se escribió (en su campo donde más rara es). Sin tope, "artículo" (en
- * 43 títulos) perdía contra "mercadería" (en uno solo), que le gana en rareza aunque sea la segunda
- * opción. El tope es un solo número para todos los campos, y no uno por campo, porque la palabra
- * escrita puede no existir en un campo ("fiado" solo está en los guiones) y entonces sus sinónimos no
- * valdrían nada en el título, que es justo donde está la respuesta.
+ * Lo rara que es la palabra de una entrada en un campo, para una coincidencia: la palabra tal cual se
+ * escribió usa su propia rareza; las otras formas, los sinónimos y lo demás, la de su raíz o su grupo.
  *
  * @param {Object} entrada Entrada del vocabulario.
  * @param {number} campo Número de campo.
- * @param {{ tope: (number|null) }} info Lo anotado en el mapa de la palabra.
+ * @param {number} puntos Qué tan directa es la coincidencia (`PUNTOS`).
  * @returns {number}
  */
-function idf_de(entrada, campo, info) {
-  return info.tope === null ? entrada.idf[campo] : Math.min(entrada.idf[campo], info.tope)
+function rareza_de_la_coincidencia(entrada, campo, puntos) {
+  return (puntos >= PUNTOS.directa ? entrada.idf_exacta : entrada.idf)[campo]
 }
 
 /**
  * Suma al mapa la palabra tal cual y las otras formas de su raíz (plural, verbo), si existen en el corpus.
  *
  * @param {Object} b Buscador.
- * @param {Map<Object, {puntos: number, tope: (number|null)}>} mapa
+ * @param {Map<Object, number>} mapa
  * @param {string} palabra Palabra normalizada.
  * @param {number} base Puntos de una coincidencia exacta; las otras formas valen `PUNTOS.raiz` de eso.
- * @param {number|null} [tope] Tope de rareza (para sinónimos).
  * @returns {boolean} true si encontró algo.
  */
-function anotar_formas(b, mapa, palabra, base, tope) {
+function anotar_formas(b, mapa, palabra, base) {
   /** Si encontró alguna. */
   let hallo = false
   /** La palabra misma. */
   const exacta = b.vocab.get(palabra)
   if (exacta) {
-    anotar(mapa, exacta, base, tope)
+    anotar(mapa, exacta, base)
     hallo = true
   }
   /** Las que comparten su raíz. */
@@ -716,7 +864,7 @@ function anotar_formas(b, mapa, palabra, base, tope) {
   if (hermanas) {
     hermanas.forEach(function (e) {
       if (e !== exacta) {
-        anotar(mapa, e, base * PUNTOS.raiz, tope)
+        anotar(mapa, e, base * PUNTOS.raiz)
         hallo = true
       }
     })
@@ -748,7 +896,7 @@ function numero_en_letras(palabra) {
  *
  * @param {Object} b Buscador.
  * @param {string} palabra Palabra de la consulta, normalizada.
- * @returns {Map<Object, {puntos: number, tope: (number|null)}>} Entradas del vocabulario → qué tan directa es cada una. Vacío si no hay nada.
+ * @returns {Map<Object, number>} Entradas del vocabulario → qué tan directa es cada una. Vacío si no hay nada.
  */
 function resolver_palabra(b, palabra) {
   /** Resultado. */
@@ -762,16 +910,12 @@ function resolver_palabra(b, palabra) {
     anotar_formas(b, mapa, dicho, PUNTOS.numero)
   }
 
-  // Sinónimos: los de la palabra y los de su raíz. Ninguno puede pesar más que la palabra escrita (si existe en el corpus).
-  /** Formas de la palabra escrita que existen en los videos. */
-  const propias = b.por_raiz.get(raiz(palabra))
-  /** Rareza de la palabra escrita (la de su campo donde es más rara); null si no existe en ningún video ("afip"). */
-  const tope = propias ? Math.max.apply(null, propias[0].idf) : null
+  // Sinónimos: los de la palabra y los de su raíz. Pesan igual de raros que ella (ver `crear_buscador`).
   ;[palabra, raiz(palabra)].forEach(function (clave) {
     ;(GRUPOS_POR_CLAVE.get(clave) || []).forEach(function (numero) {
       GRUPOS_DE_SINONIMOS[numero].forEach(function (otra) {
         if (otra !== palabra && raiz(otra) !== raiz(palabra)) {
-          anotar_formas(b, mapa, otra, PUNTOS.sinonimo, tope)
+          anotar_formas(b, mapa, otra, PUNTOS.sinonimo)
         }
       })
     })
@@ -983,11 +1127,13 @@ function elegir_fragmento(doc, eventos) {
 /**
  * Busca videos. Devuelve los resultados ordenados por relevancia.
  *
- * - `completo: true`: todos los resultados tienen TODAS las palabras de la consulta (o la consulta es
- *   un código de video).
- * - `completo: false`: ningún video las tiene todas (o alguna palabra no existe en ningún video); se
- *   devuelven los que tienen la mayoría (con 2 palabras, los que tienen una) y la página lo avisa. Con
- *   una sola palabra o hay videos o no hay nada.
+ * - `completo: true`: el mejor resultado tiene TODAS las palabras de la consulta (o la consulta es un
+ *   código de video), y lo que encontró no es solo una mención de pasada en el guion de palabras tan
+ *   comunes que juntas dicen poco (ver `INFORMACION_MINIMA`). Los videos que también las tienen todas
+ *   siempre se listan; los que cubren solo parte, si su puntaje no quedó lejos del mejor.
+ * - `completo: false`: el mejor no cubre todo, o alguna palabra no existe en ningún video, o es una
+ *   coincidencia floja. La página muestra el aviso "los que más se parecen". Los resultados son los que
+ *   cubren la mayor parte de la consulta, con un máximo. Con una sola palabra: o hay videos o no hay nada.
  *
  * @param {Object} buscador Lo que devolvió `crear_buscador`.
  * @param {string} consulta Lo que escribió la persona.
@@ -1068,7 +1214,7 @@ export function buscar(buscador, consulta) {
   /** Mejor valor de cada palabra en cada video: posición `i * total + video`. */
   const valores = new Float64Array(n * total)
   mapas.forEach(function (mapa, i) {
-    mapa.forEach(function (info, e) {
+    mapa.forEach(function (puntos, e) {
       for (let k = 0; k < e.docs.length; k++) {
         /** Video y campos donde está la palabra. */
         const d = e.docs[k]
@@ -1076,7 +1222,7 @@ export function buscar(buscador, consulta) {
         for (let c = 0; c < CANTIDAD_CAMPOS; c++) {
           if (mascara & (1 << c)) {
             /** Valor de esta coincidencia. */
-            const v = PESO_DE_CAMPO[c] * idf_de(e, c, info) * info.puntos
+            const v = PESO_DE_CAMPO[c] * rareza_de_la_coincidencia(e, c, puntos) * puntos
             if (v > valores[i * total + d]) {
               valores[i * total + d] = v
             }
@@ -1085,40 +1231,63 @@ export function buscar(buscador, consulta) {
       }
     })
   })
-  // Una palabra que no está en NINGÚN video ("electrónica" en el centro de recursos) no se puede exigir: se
-  // busca con las demás y se avisa que no todas estuvieron. Si ninguna está, no hay nada que buscar.
-  /** Cuántas palabras de la consulta existen en algún video. */
-  const buscables = mapas.filter(function (mapa) {
-    return mapa.size > 0
-  }).length
+  // Cobertura ponderada por rareza. Cada palabra de la consulta pesa lo rara que es (`ln(1 + N / videos que la
+  // tienen)`): cubrir "escanear" vale más que cubrir "compra". La cobertura de un video es el peso de las
+  // palabras que tiene sobre el peso de todas. Una palabra que no está en NINGÚN video ("electrónica" en el
+  // centro de recursos) no se puede exigir: no pesa, y la respuesta avisa que no todas estuvieron.
+  /** Peso de cada palabra y suma de los pesos; las que no existen en ningún video pesan 0. */
+  const pesos = new Float64Array(n)
+  let suma_de_pesos = 0
+  let buscables = 0
+  for (let i = 0; i < n; i++) {
+    /** En cuántos videos está la palabra (por cualquiera de sus formas). */
+    let en_cuantos = 0
+    for (let d = 0; d < total; d++) {
+      if (valores[i * total + d] > 0) {
+        en_cuantos++
+      }
+    }
+    if (en_cuantos) {
+      pesos[i] = Math.log(1 + total / en_cuantos)
+      suma_de_pesos += pesos[i]
+      buscables++
+    }
+  }
   if (!buscables) {
     return { resultados: [], completo: true, palabras: palabras }
   }
-  /** Videos con todas las palabras que existen, y videos con la mayoría de ellas. */
-  const completos = []
+  /** Cobertura de cada video (0 a 1) y valor previo para quedarse con los mejores parciales. */
+  const cobertura = new Float64Array(total)
+  /** Videos que cubren todo y videos que cubren bastante pero no todo, con su valor previo. */
+  const enteros = []
   const parciales = []
-  /** Mínimo de palabras para "los que más se parecen": más de la mitad (con 2 palabras, una; con 1 no hay parciales). */
-  const minimo = buscables === 2 ? 1 : Math.floor(buscables / 2) + 1
   for (let d = 0; d < total; d++) {
-    /** Cuántas palabras de la consulta tiene el video. */
-    let tiene = 0
+    let cubierto = 0
+    let valor = 0
     for (let i = 0; i < n; i++) {
       if (valores[i * total + d] > 0) {
-        tiene++
+        cubierto += pesos[i]
+        valor += valores[i * total + d]
       }
     }
-    if (tiene === buscables) {
-      completos.push(d)
-    } else if (buscables >= 2 && tiene >= minimo) {
-      parciales.push(d)
+    cobertura[d] = cubierto / suma_de_pesos
+    if (cobertura[d] >= 1 - 1e-9) {
+      enteros.push(d)
+    } else if (cobertura[d] >= UMBRAL_DE_COBERTURA - 1e-9) {
+      parciales.push({ d: d, previo: valor * Math.pow(cobertura[d], EXPONENTE_DE_COBERTURA) })
     }
   }
-  /** true si hay videos con TODAS las palabras de la consulta (no solo con las que existen). */
-  const completo = completos.length > 0 && buscables === n
-  /** Videos que se muestran. */
-  const elegidos = completos.length ? completos : parciales
+  // Los parciales son muchos cuando la consulta es larga: se leen los textos solo de los mejores.
+  parciales.sort(function (a, b) {
+    return b.previo - a.previo
+  })
+  /** Videos que se leen en la etapa 2. */
+  const elegidos = enteros.concat(
+    parciales.slice(0, MAXIMO_PARCIALES + 20).map(function (x) {
+      return x.d
+    })
+  )
   if (!elegidos.length) {
-    // Sin resultados no hay nada que avisar sobre "los que más se parecen": cuenta como completo.
     return { resultados: [], completo: true, palabras: palabras }
   }
 
@@ -1126,11 +1295,11 @@ export function buscar(buscador, consulta) {
   /** Palabra del texto → a qué palabras de la consulta sirve, con su entrada del vocabulario y sus puntos. */
   const por_palabra = new Map()
   mapas.forEach(function (mapa, i) {
-    mapa.forEach(function (info, e) {
+    mapa.forEach(function (puntos, e) {
       if (!por_palabra.has(e.palabra)) {
         por_palabra.set(e.palabra, [])
       }
-      por_palabra.get(e.palabra).push({ i: i, info: info, e: e })
+      por_palabra.get(e.palabra).push({ i: i, puntos: puntos, e: e })
     })
   })
   /** Resultados sin ordenar. */
@@ -1158,7 +1327,7 @@ export function buscar(buscador, consulta) {
         }
         for (let s = 0; s < sirve.length; s++) {
           /** Valor de esta coincidencia. */
-          const valor = PESO_DE_CAMPO[c] * idf_de(sirve[s].e, c, sirve[s].info) * sirve[s].info.puntos
+          const valor = PESO_DE_CAMPO[c] * rareza_de_la_coincidencia(sirve[s].e, c, sirve[s].puntos) * sirve[s].puntos
           evs.push({ k: k, i: sirve[s].i, valor: valor })
           /** Posición en las tablas de mejores valores. */
           const pos = sirve[s].i * CANTIDAD_CAMPOS + c
@@ -1191,6 +1360,8 @@ export function buscar(buscador, consulta) {
       puntaje += mayor + FACTOR_OTROS_CAMPOS * resto
     }
     // Cercanía: por cada campo, cuánto más juntas están las palabras, más suman.
+    /** true si en algún campo hay palabras de la consulta pegadas ("hasta seis páginas"), no desparramadas. */
+    let junto = false
     for (let c = 0; c < CANTIDAD_CAMPOS; c++) {
       /** Cuántas palabras distintas de la consulta hay en el campo y cuánto valen. */
       let presentes = 0
@@ -1205,6 +1376,7 @@ export function buscar(buscador, consulta) {
         /** Largo de la ventana más corta que tiene a todas. */
         const ventana = ventana_minima(eventos[c], presentes, n)
         puntaje += FACTOR_CERCANIA * suma * Math.min(1, presentes / ventana)
+        junto = junto || presentes / ventana >= CERCANIA_MINIMA
       }
     }
     /** Fragmento y título marcados. */
@@ -1212,9 +1384,23 @@ export function buscar(buscador, consulta) {
     /** Título y carpeta con sección, completos, con las palabras encontradas marcadas. */
     const titulo = doc.textos[CAMPO_TITULO]
     const ubicacion = doc.textos[CAMPO_UBICACION]
+    // Un video que cubre casi todo con la palabra rara en el título le gana a uno que cubre todo con menciones sueltas.
+    puntaje *= Math.pow(cobertura[d], EXPONENTE_DE_COBERTURA)
+    // Si alguna palabra está en el título, la carpeta o el "para qué" (y no solo "de pasada" en el guion).
+    let fuerte = false
+    for (let i = 0; i < n; i++) {
+      fuerte =
+        fuerte ||
+        mejor_valor[i * CANTIDAD_CAMPOS + CAMPO_TITULO] > 0 ||
+        mejor_valor[i * CANTIDAD_CAMPOS + CAMPO_UBICACION] > 0 ||
+        mejor_valor[i * CANTIDAD_CAMPOS + CAMPO_PARA_QUE] > 0
+    }
     resultados.push({
       codigo: doc.codigo,
       puntaje: Math.round(puntaje * 100) / 100,
+      cobertura: cobertura[d],
+      fuerte: fuerte,
+      junto: junto,
       titulo_partes: partir_en_marcas(titulo, doc.ini[CAMPO_TITULO], doc.fin[CAMPO_TITULO], eventos[CAMPO_TITULO], 0, titulo.length),
       ubicacion_partes: partir_en_marcas(ubicacion, doc.ini[CAMPO_UBICACION], doc.fin[CAMPO_UBICACION], eventos[CAMPO_UBICACION], 0, ubicacion.length),
       fragmento_partes: fragmento.partes,
@@ -1225,16 +1411,28 @@ export function buscar(buscador, consulta) {
   resultados.sort(function (a, b) {
     return b.puntaje - a.puntaje || a.orden - b.orden
   })
-  /** Con la lista de "los que más se parecen" se corta lo que quedó lejos del mejor y se limita la cantidad. */
-  const lista = completo
-    ? resultados
-    : resultados
-        .filter(function (r) {
-          return r.puntaje >= PISO_PARCIALES * resultados[0].puntaje
-        })
-        .slice(0, MAXIMO_PARCIALES)
-  lista.forEach(function (r) {
-    delete r.orden
+  // Piso de relevancia: con dos palabras o más, si lo que encontró el mejor video está solo de pasada en el guion
+  // y las palabras son tan comunes que todas juntas dicen poco (suman menos de `INFORMACION_MINIMA`), no hay
+  // un video sobre eso: se avisa como "los que más se parecen". Una palabra rara dicha solo en la voz
+  // ("balanza" en un video) pesa más que ese mínimo y sigue siendo un resultado completo.
+  const debil = n >= 2 && !resultados[0].fuerte && !resultados[0].junto && resultados[0].cobertura * suma_de_pesos < INFORMACION_MINIMA
+  /** true si el mejor video cubre todas las palabras de la consulta, ninguna faltó en el centro entero y no es una coincidencia floja. */
+  const completo = buscables === n && resultados[0].cobertura >= 1 - 1e-9 && !debil
+  // Los videos que cubren todo se muestran siempre; los que cubren solo parte, si no quedaron lejos del mejor
+  // y hasta un máximo.
+  /** Cuántos parciales entraron. */
+  let parciales_mostrados = 0
+  const lista = resultados.filter(function (x) {
+    if (x.cobertura >= 1 - 1e-9) {
+      return true
+    }
+    return x.puntaje >= PISO_PARCIALES * resultados[0].puntaje && parciales_mostrados++ < MAXIMO_PARCIALES
+  })
+  lista.forEach(function (x) {
+    delete x.orden
+    delete x.cobertura
+    delete x.fuerte
+    delete x.junto
   })
   return { resultados: lista, completo: completo, palabras: palabras }
 }
