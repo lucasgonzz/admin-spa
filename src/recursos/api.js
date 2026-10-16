@@ -216,3 +216,63 @@ export function pedir(metodo, ruta, cuerpo, opciones) {
       })
     })
 }
+
+/**
+ * true cuando el registro de búsquedas se apagó solo en esta visita: la API no tiene el endpoint (404 o 405, una
+ * API vieja) o no hubo respuesta (status 0: sin conexión, o un preflight de CORS rechazado). Seguir mandando no
+ * serviría de nada y ensuciaría la consola de la persona con un error por cada búsqueda.
+ */
+let registro_de_busquedas_apagado = false
+
+/**
+ * Indica si el registro de búsquedas se apagó solo en esta visita.
+ *
+ * @returns {boolean}
+ */
+export function registro_de_busquedas_esta_apagado() {
+  return registro_de_busquedas_apagado
+}
+
+/**
+ * Vuelve a prender el registro de búsquedas (lo usan las pruebas; en la página dura lo que dure la visita).
+ *
+ * @returns {void}
+ */
+export function reactivar_registro_de_busquedas() {
+  registro_de_busquedas_apagado = false
+}
+
+/**
+ * Manda una búsqueda del buscador a `POST recursos/busquedas` (contrato C-BUSQ-1 de la misión
+ * busquedas-centro-recursos). Es accesorio: NUNCA lanza ni deja una promesa rechazada sin atrapar.
+ *
+ * - Va con `keepalive` para que salga aunque la persona cierre la pestaña al abrir un video.
+ * - Si hay sesión del centro, `pedir` manda el Bearer: así el servidor liga la búsqueda al usuario.
+ * - Un 404, un 405 o un status 0 apagan el registro el resto de la visita. Cualquier otro fallo (422, 429, 500) se
+ *   ignora, pero no apaga: la próxima búsqueda puede salir bien.
+ *
+ * @param {Object} payload Cuerpo del contrato: `{ evento, consulta, resultados, primero, completo, abrio?, posicion? }`.
+ * @returns {Promise<boolean>} true si el servidor lo recibió; false si se descartó o falló.
+ */
+export function enviar_busqueda(payload) {
+  if (registro_de_busquedas_apagado) {
+    return Promise.resolve(false)
+  }
+  /** Pedido en curso. */
+  let pedido
+  try {
+    pedido = pedir('POST', 'recursos/busquedas', payload, { keepalive: true })
+  } catch (e) {
+    return Promise.resolve(false)
+  }
+  return pedido
+    .then(function () {
+      return true
+    })
+    .catch(function (error) {
+      if (error && (error.status === 404 || error.status === 405 || error.status === 0)) {
+        registro_de_busquedas_apagado = true
+      }
+      return false
+    })
+}
