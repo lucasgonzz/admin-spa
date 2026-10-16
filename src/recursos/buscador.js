@@ -569,33 +569,51 @@ export function crear_buscador(videos, carpetas, transcripciones) {
 /**
  * Suma una entrada del vocabulario al mapa de una palabra con ese puntaje, si es mejor que el que ya tenía.
  *
- * @param {Map<Object, number>} mapa Entradas del vocabulario que valen para la palabra → qué tan directas son.
+ * @param {Map<Object, {puntos: number, tope: (Array<number>|null)}>} mapa Entradas del vocabulario que valen para la palabra → qué tan directas son y, si es un sinónimo, el tope de rareza.
  * @param {Object} entrada Entrada del vocabulario.
  * @param {number} puntos Qué tan directa es la coincidencia (`PUNTOS`).
+ * @param {Array<number>|null} [tope] Rareza máxima por campo que puede valer esta coincidencia (ver `idf_de`).
  * @returns {void}
  */
-function anotar(mapa, entrada, puntos) {
-  if ((mapa.get(entrada) || 0) < puntos) {
-    mapa.set(entrada, puntos)
+function anotar(mapa, entrada, puntos, tope) {
+  /** Lo que ya había anotado para esta entrada. */
+  const actual = mapa.get(entrada)
+  if (!actual || actual.puntos < puntos) {
+    mapa.set(entrada, { puntos: puntos, tope: tope || null })
   }
+}
+
+/**
+ * Lo rara que es una palabra en un campo, para una coincidencia. Un sinónimo trae un tope: no puede
+ * pesar más que la palabra que se escribió. Sin tope, "artículo" (en 43 títulos) perdía contra
+ * "mercadería" (en uno solo), que le gana en rareza aunque sea la segunda opción.
+ *
+ * @param {Object} entrada Entrada del vocabulario.
+ * @param {number} campo Número de campo.
+ * @param {{ tope: (Array<number>|null) }} info Lo anotado en el mapa de la palabra.
+ * @returns {number}
+ */
+function idf_de(entrada, campo, info) {
+  return info.tope ? Math.min(entrada.idf[campo], info.tope[campo]) : entrada.idf[campo]
 }
 
 /**
  * Suma al mapa la palabra tal cual y las otras formas de su raíz (plural, verbo), si existen en el corpus.
  *
  * @param {Object} b Buscador.
- * @param {Map<Object, number>} mapa
+ * @param {Map<Object, {puntos: number, tope: (Array<number>|null)}>} mapa
  * @param {string} palabra Palabra normalizada.
  * @param {number} base Puntos de una coincidencia exacta; las otras formas valen `PUNTOS.raiz` de eso.
+ * @param {Array<number>|null} [tope] Tope de rareza (para sinónimos).
  * @returns {boolean} true si encontró algo.
  */
-function anotar_formas(b, mapa, palabra, base) {
+function anotar_formas(b, mapa, palabra, base, tope) {
   /** Si encontró alguna. */
   let hallo = false
   /** La palabra misma. */
   const exacta = b.vocab.get(palabra)
   if (exacta) {
-    anotar(mapa, exacta, base)
+    anotar(mapa, exacta, base, tope)
     hallo = true
   }
   /** Las que comparten su raíz. */
@@ -603,7 +621,7 @@ function anotar_formas(b, mapa, palabra, base) {
   if (hermanas) {
     hermanas.forEach(function (e) {
       if (e !== exacta) {
-        anotar(mapa, e, base * PUNTOS.raiz)
+        anotar(mapa, e, base * PUNTOS.raiz, tope)
         hallo = true
       }
     })
@@ -635,7 +653,7 @@ function numero_en_letras(palabra) {
  *
  * @param {Object} b Buscador.
  * @param {string} palabra Palabra de la consulta, normalizada.
- * @returns {Map<Object, number>} Entradas del vocabulario → qué tan directa es cada una. Vacío si no hay nada.
+ * @returns {Map<Object, {puntos: number, tope: (Array<number>|null)}>} Entradas del vocabulario → qué tan directa es cada una. Vacío si no hay nada.
  */
 function resolver_palabra(b, palabra) {
   /** Resultado. */
@@ -649,12 +667,16 @@ function resolver_palabra(b, palabra) {
     anotar_formas(b, mapa, dicho, PUNTOS.numero)
   }
 
-  // Sinónimos: los de la palabra y los de su raíz.
+  // Sinónimos: los de la palabra y los de su raíz. Ninguno puede pesar más que la palabra escrita (si existe en el corpus).
+  /** Formas de la palabra escrita que existen en los videos. */
+  const propias = b.por_raiz.get(raiz(palabra))
+  /** Rareza de la palabra escrita, por campo; null si no existe en ningún video ("afip"). */
+  const tope = propias ? propias[0].idf : null
   ;[palabra, raiz(palabra)].forEach(function (clave) {
     ;(GRUPOS_POR_CLAVE.get(clave) || []).forEach(function (numero) {
       GRUPOS_DE_SINONIMOS[numero].forEach(function (otra) {
         if (otra !== palabra && raiz(otra) !== raiz(palabra)) {
-          anotar_formas(b, mapa, otra, PUNTOS.sinonimo)
+          anotar_formas(b, mapa, otra, PUNTOS.sinonimo, tope)
         }
       })
     })
@@ -795,8 +817,10 @@ function partir_en_marcas(texto, ini, fin, eventos, s, e) {
 
 /**
  * Elige el fragmento que se muestra debajo del título: el grupo de palabras encontradas más completo
- * del "para qué" o del guion (a igual cantidad de palabras, el "para qué", que está escrito para leerse).
- * Si la coincidencia fue solo en el título o en la carpeta, muestra el comienzo del "para qué" sin marcas.
+ * del "para qué", del guion o del "cuándo no" (a igual cantidad de palabras, gana el que más pesa: el
+ * "para qué", que está escrito para leerse). El guion y el "cuándo no" son parte de la transcripción del
+ * índice, así que se informan como `transcripcion`. Si la coincidencia fue solo en el título o en la
+ * carpeta, muestra el comienzo del "para qué" sin marcas.
  *
  * @param {Object} doc Registro del video.
  * @param {Array<Array<{ k: number, i: number, valor: number }>>} eventos Coincidencias por campo.
@@ -805,7 +829,7 @@ function partir_en_marcas(texto, ini, fin, eventos, s, e) {
 function elegir_fragmento(doc, eventos) {
   /** Mejor candidato: { campo, desde, hasta, palabras, valor }. */
   let mejor = null
-  ;[CAMPO_PARA_QUE, CAMPO_VOZ].forEach(function (c) {
+  ;[CAMPO_PARA_QUE, CAMPO_VOZ, CAMPO_NO_SIRVE].forEach(function (c) {
     /** Coincidencias de este campo. */
     const evs = eventos[c]
     /** Posiciones de cada palabra del campo. */
@@ -843,7 +867,7 @@ function elegir_fragmento(doc, eventos) {
     if (corte[1] < texto.length) {
       partes.push({ texto: '…', marca: false })
     }
-    return { partes: partes, de: mejor.campo === CAMPO_VOZ ? 'transcripcion' : 'para_que' }
+    return { partes: partes, de: mejor.campo === CAMPO_PARA_QUE ? 'para_que' : 'transcripcion' }
   }
   /** Sin coincidencias en el cuerpo: el comienzo del "para qué", si hay. */
   const para_que = doc.textos[CAMPO_PARA_QUE]
@@ -866,8 +890,9 @@ function elegir_fragmento(doc, eventos) {
  *
  * - `completo: true`: todos los resultados tienen TODAS las palabras de la consulta (o la consulta es
  *   un código de video).
- * - `completo: false`: ningún video las tiene todas; se devuelven los que tienen la mayoría (solo si la
- *   consulta tiene 3 palabras o más; con 1 o 2, o está todo o no hay nada) y la página lo avisa.
+ * - `completo: false`: ningún video las tiene todas (o alguna palabra no existe en ningún video); se
+ *   devuelven los que tienen la mayoría (con 2 palabras, los que tienen una) y la página lo avisa. Con
+ *   una sola palabra o hay videos o no hay nada.
  *
  * @param {Object} buscador Lo que devolvió `crear_buscador`.
  * @param {string} consulta Lo que escribió la persona.
@@ -876,6 +901,7 @@ function elegir_fragmento(doc, eventos) {
  *     codigo: string,
  *     puntaje: number,
  *     titulo_partes: Array<{ texto: string, marca: boolean }>,
+ *     ubicacion_partes: Array<{ texto: string, marca: boolean }>,
  *     fragmento_partes: Array<{ texto: string, marca: boolean }>,
  *     fragmento_de: ('transcripcion'|'para_que'|'')
  *   }>,
@@ -909,6 +935,7 @@ export function buscar(buscador, consulta) {
           codigo: doc.codigo,
           puntaje: 1000,
           titulo_partes: doc.textos[CAMPO_TITULO] ? [{ texto: doc.textos[CAMPO_TITULO], marca: false }] : [],
+          ubicacion_partes: doc.textos[CAMPO_UBICACION] ? [{ texto: doc.textos[CAMPO_UBICACION], marca: false }] : [],
           fragmento_partes: fragmento.partes,
           fragmento_de: fragmento.de,
         },
@@ -946,7 +973,7 @@ export function buscar(buscador, consulta) {
   /** Mejor valor de cada palabra en cada video: posición `i * total + video`. */
   const valores = new Float64Array(n * total)
   mapas.forEach(function (mapa, i) {
-    mapa.forEach(function (puntos, e) {
+    mapa.forEach(function (info, e) {
       for (let k = 0; k < e.docs.length; k++) {
         /** Video y campos donde está la palabra. */
         const d = e.docs[k]
@@ -954,7 +981,7 @@ export function buscar(buscador, consulta) {
         for (let c = 0; c < CANTIDAD_CAMPOS; c++) {
           if (mascara & (1 << c)) {
             /** Valor de esta coincidencia. */
-            const v = PESO_DE_CAMPO[c] * e.idf[c] * puntos
+            const v = PESO_DE_CAMPO[c] * idf_de(e, c, info) * info.puntos
             if (v > valores[i * total + d]) {
               valores[i * total + d] = v
             }
@@ -963,11 +990,20 @@ export function buscar(buscador, consulta) {
       }
     })
   })
-  /** Videos con todas las palabras y videos con la mayoría. */
+  // Una palabra que no está en NINGÚN video ("electrónica" en el centro de recursos) no se puede exigir: se
+  // busca con las demás y se avisa que no todas estuvieron. Si ninguna está, no hay nada que buscar.
+  /** Cuántas palabras de la consulta existen en algún video. */
+  const buscables = mapas.filter(function (mapa) {
+    return mapa.size > 0
+  }).length
+  if (!buscables) {
+    return { resultados: [], completo: true, palabras: palabras }
+  }
+  /** Videos con todas las palabras que existen, y videos con la mayoría de ellas. */
   const completos = []
   const parciales = []
-  /** Mínimo de palabras para la lista de "los que más se parecen" (más de la mitad; solo con 3 o más). */
-  const minimo = Math.floor(n / 2) + 1
+  /** Mínimo de palabras para "los que más se parecen": más de la mitad (con 2 palabras, una; con 1 no hay parciales). */
+  const minimo = buscables === 2 ? 1 : Math.floor(buscables / 2) + 1
   for (let d = 0; d < total; d++) {
     /** Cuántas palabras de la consulta tiene el video. */
     let tiene = 0
@@ -976,16 +1012,16 @@ export function buscar(buscador, consulta) {
         tiene++
       }
     }
-    if (tiene === n) {
+    if (tiene === buscables) {
       completos.push(d)
-    } else if (n >= 3 && tiene >= minimo) {
+    } else if (buscables >= 2 && tiene >= minimo) {
       parciales.push(d)
     }
   }
-  /** true si hay videos con todas las palabras. */
-  const completo = completos.length > 0
+  /** true si hay videos con TODAS las palabras de la consulta (no solo con las que existen). */
+  const completo = completos.length > 0 && buscables === n
   /** Videos que se muestran. */
-  const elegidos = completo ? completos : parciales
+  const elegidos = completos.length ? completos : parciales
   if (!elegidos.length) {
     // Sin resultados no hay nada que avisar sobre "los que más se parecen": cuenta como completo.
     return { resultados: [], completo: true, palabras: palabras }
@@ -995,11 +1031,11 @@ export function buscar(buscador, consulta) {
   /** Palabra del texto → a qué palabras de la consulta sirve, con su entrada del vocabulario y sus puntos. */
   const por_palabra = new Map()
   mapas.forEach(function (mapa, i) {
-    mapa.forEach(function (puntos, e) {
+    mapa.forEach(function (info, e) {
       if (!por_palabra.has(e.palabra)) {
         por_palabra.set(e.palabra, [])
       }
-      por_palabra.get(e.palabra).push({ i: i, puntos: puntos, e: e })
+      por_palabra.get(e.palabra).push({ i: i, info: info, e: e })
     })
   })
   /** Resultados sin ordenar. */
@@ -1027,7 +1063,7 @@ export function buscar(buscador, consulta) {
         }
         for (let s = 0; s < sirve.length; s++) {
           /** Valor de esta coincidencia. */
-          const valor = PESO_DE_CAMPO[c] * sirve[s].e.idf[c] * sirve[s].puntos
+          const valor = PESO_DE_CAMPO[c] * idf_de(sirve[s].e, c, sirve[s].info) * sirve[s].info.puntos
           evs.push({ k: k, i: sirve[s].i, valor: valor })
           /** Posición en las tablas de mejores valores. */
           const pos = sirve[s].i * CANTIDAD_CAMPOS + c
@@ -1078,12 +1114,14 @@ export function buscar(buscador, consulta) {
     }
     /** Fragmento y título marcados. */
     const fragmento = elegir_fragmento(doc, eventos)
-    /** Título completo, con las palabras encontradas marcadas. */
+    /** Título y carpeta con sección, completos, con las palabras encontradas marcadas. */
     const titulo = doc.textos[CAMPO_TITULO]
+    const ubicacion = doc.textos[CAMPO_UBICACION]
     resultados.push({
       codigo: doc.codigo,
       puntaje: Math.round(puntaje * 100) / 100,
       titulo_partes: partir_en_marcas(titulo, doc.ini[CAMPO_TITULO], doc.fin[CAMPO_TITULO], eventos[CAMPO_TITULO], 0, titulo.length),
+      ubicacion_partes: partir_en_marcas(ubicacion, doc.ini[CAMPO_UBICACION], doc.fin[CAMPO_UBICACION], eventos[CAMPO_UBICACION], 0, ubicacion.length),
       fragmento_partes: fragmento.partes,
       fragmento_de: fragmento.de,
       orden: d,
@@ -1092,7 +1130,7 @@ export function buscar(buscador, consulta) {
   resultados.sort(function (a, b) {
     return b.puntaje - a.puntaje || a.orden - b.orden
   })
-  /** Con la lista de "los que más se parecen" se corta lo que quedó lejos del mejor. */
+  /** Con la lista de "los que más se parecen" se corta lo que quedó lejos del mejor y se limita la cantidad. */
   const lista = completo
     ? resultados
     : resultados

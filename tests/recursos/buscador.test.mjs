@@ -304,14 +304,39 @@ describe('ninguno tiene todas las palabras', function () {
     assert.equal(r.resultados[0].codigo, 'T5.15')
   })
 
-  test('con 2 palabras: o están las dos o no hay nada', function () {
+  test('una palabra que no existe en ningún video no se exige: se busca con las demás y se avisa', function () {
     const r = buscar(CON_INDICE, 'escanear helicóptero')
-    assert.deepEqual(r.resultados, [])
+    assert.equal(r.completo, false)
+    assert.equal(r.resultados[0].codigo, 'T5.15')
+  })
+
+  test('"factura electrónica": el corpus dice ARCA, nunca "electrónica", y es sinónimo de ARCA', function () {
+    const e = buscar(CON_INDICE, 'factura electronica')
+    assert.equal(e.completo, true)
+    assert.ok(codigos(e).indexOf('T4.1') !== -1, 'T4.1 habla de ARCA y de facturar')
+    assert.ok(codigos(e).indexOf('T3.23') !== -1)
+  })
+
+  test('con 2 palabras que existen pero nunca juntas se muestran los que tienen una', function () {
+    const b = armar([
+      { codigo: 'A', titulo: 'Un gato en el jardín' },
+      { codigo: 'B', titulo: 'Un perro en la plaza' },
+      { codigo: 'C', titulo: 'Nada que ver' },
+    ])
+    const r = buscar(b, 'gato perro')
+    assert.equal(r.completo, false)
+    assert.deepEqual(codigos(r).sort(), ['A', 'B'])
   })
 
   test('una palabra que no existe en ningún video no devuelve nada', function () {
-    const r = buscar(CON_INDICE, 'helicóptero')
-    assert.deepEqual(r.resultados, [])
+    assert.deepEqual(buscar(CON_INDICE, 'helicóptero').resultados, [])
+    assert.deepEqual(buscar(CON_INDICE, 'helicóptero submarino').resultados, [])
+  })
+
+  test('los parecidos son pocos aunque la palabra que existe esté en todos los videos', function () {
+    const r = buscar(CON_INDICE, 'sistema helicóptero')
+    assert.equal(r.completo, false)
+    assert.ok(r.resultados.length <= 40)
   })
 
   test('cuando hay quien las tiene todas, solo salen esos', function () {

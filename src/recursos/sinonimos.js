@@ -68,16 +68,19 @@ export const PALABRAS_DE_RELLENO = new Set(
 export const GRUPOS_DE_SINONIMOS = [
   // El organismo se llama ARCA desde 2024 y los guiones solo dicen "ARCA" (29 videos, "afip" 0); el dueño
   // todavía dice "AFIP" y es lo primero que escribe para buscar facturación electrónica.
-  ['arca', 'afip'],
+  // "Factura electrónica" es como lo dice quien factura; en los guiones es "la factura de ARCA".
+  ['arca', 'afip', 'electronica'],
   // El sistema llama "artículo" a lo que todo el mundo llama "producto" (artículo 118, producto 51) y el
   // guion dice "mercadería" cuando habla del stock que entra (35).
   ['articulo', 'producto', 'mercaderia'],
   // Los guiones hablan de "plata" (51 videos, voz de la casa) y "efectivo" (26); la gente escribe
   // "dinero" (0 en los guiones).
   ['plata', 'dinero', 'efectivo'],
-  // Borrar (32 con sus formas), eliminar (23) y quitar (2) se usan para la misma acción. "Sacar" (18) NO
-  // entra: también es "sacar un reporte" o "sacar plata", y metería ruido.
-  ['borrar', 'eliminar', 'quitar'],
+  // Borrar (32 con sus formas), eliminar (23), quitar (2) y anular (1: "anularlo", un presupuesto) se usan
+  // para la misma acción. "Sacar" (18) NO entra: también es "sacar un reporte" o "sacar plata", y metería ruido.
+  ['borrar', 'eliminar', 'quitar', 'anular'],
+  // "Subir los precios" es el "aumentar" del título T1.44 ("aumentar, bajar o fijar un valor").
+  ['aumentar', 'subir', 'incrementar'],
   // El centro dice "imagen" (26) y "foto" (44) indistintamente; quien busca escribe una u otra.
   ['foto', 'imagen', 'fotografia'],
   // "Excel" (36) y "planilla" (6): el proveedor manda "una planilla" y el sistema importa "un Excel".
@@ -165,7 +168,8 @@ export const NUMEROS_REDONDOS = {
  * `buscador.js` junta "importar", "importa", "importe"…: sirve para los verbos, pero en estos pares el
  * sustantivo es otra cosa y traería videos que no son. Medido en el corpus: "importe" (23 videos, el
  * monto de un gasto o de un pago) contra "importar" (18, cargar un Excel); "correo" (16, el mail) contra
- * "corre" (17, "la lectura corre en segundo plano"); "tipo" (26, el tipo de factura) contra "tipear" (5).
+ * "corre" (17, "la lectura corre en segundo plano"); "tipo" (26, el tipo de factura) contra "tipear" (5); "bloque"
+ * (43, los "bloques" del guion) contra "bloquear"; "listo" (28, "queda listo") contra "lista" y "listado".
  * Cada palabra se queda con su propia raíz.
  *
  * @type {Object<string, string>}
@@ -177,4 +181,8 @@ export const RAICES_APARTE = {
   correos: 'correo',
   tipo: 'tipo',
   tipos: 'tipo',
+  bloque: 'bloque',
+  bloques: 'bloque',
+  listo: 'listo',
+  listos: 'listo',
 }
