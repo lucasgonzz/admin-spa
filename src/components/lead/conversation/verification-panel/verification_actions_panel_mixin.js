@@ -9,22 +9,7 @@
  * Expone el estado de cada control, el payload final `final_actions` (contrato
  * del prompt 320) y la carga de disponibilidad de demos (endpoint del prompt 321).
  */
-
-/**
- * true si el paquete `agendar_demo` viene en la forma «momento concreto» de la demo directa
- * (17/10/2026, misión flujo-lead-landing-closer): trae `dia`, `hora` o `inicio_resuelto`, y no es
- * ni `{ahora: true}` ni la forma de grilla (`demo_id`). Gemela de `es_forma_momento` en
- * `DemoScheduleControl.vue`; las dos tienen que decir lo mismo.
- *
- * @param {Object|null|undefined} obj
- * @returns {boolean}
- */
-function es_agendar_demo_momento(obj) {
-  if (!obj || typeof obj !== 'object' || obj.ahora || obj.demo_id != null) {
-    return false
-  }
-  return obj.dia != null || obj.hora != null || obj.inicio_resuelto != null
-}
+import { es_agendar_demo_momento } from '@/components/lead/conversation/verification-panel/agendar_demo_momento'
 
 export default {
   props: {

@@ -173,6 +173,7 @@
 
 <script>
 import moment from 'moment'
+import { es_agendar_demo_momento } from '@/components/lead/conversation/verification-panel/agendar_demo_momento'
 
 /**
  * Nombres legibles de los valores de `dia` que admite el paquete `agendar_demo` con momento
@@ -365,16 +366,13 @@ export default {
   },
   methods: {
     /**
-     * true si el valor es la forma «momento concreto»: trae `dia`, `hora` o `inicio_resuelto`, y
-     * no es ni «ahora» ni la forma de grilla (`demo_id`).
+     * true si el valor es la forma «momento concreto». La definición es una sola y vive en
+     * `agendar_demo_momento.js`, compartida con el mixin que arma el paquete final.
      * @param {Object|null} value
      * @returns {boolean}
      */
     es_forma_momento(value) {
-      if (!value || value.ahora || value.demo_id != null) {
-        return false
-      }
-      return value.dia != null || value.hora != null || value.inicio_resuelto != null
+      return es_agendar_demo_momento(value)
     },
     /**
      * Texto legible de `dia`: los nombres fijos de la tabla, `<dia>_proximo` → «el lunes que
