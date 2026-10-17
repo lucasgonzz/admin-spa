@@ -552,9 +552,10 @@ export default {
      * la hora que se leía no era la del reloj de quien la mira.
      *
      * `date` lleva hora (es un `datetime` del backend); `day` es solo el día. Va en la zona
-     * horaria del navegador, igual que `DemoAccesoControl.vue`, que es el otro lugar donde se
-     * muestra esta misma fecha. Si el valor no se puede parsear se devuelve tal cual vino, para
-     * no esconder un dato que existe detrás de un guión.
+     * horaria del navegador, igual que la sub-solapa Links de la Demo del lead
+     * (`components/lead/demo/Links.vue`, antes `DemoAccesoControl.vue`), que es el otro lugar
+     * donde se muestra esta misma fecha. Si el valor no se puede parsear se devuelve tal cual
+     * vino, para no esconder un dato que existe detrás de un guión.
      *
      * @param {Object} p definición meta del campo
      * @param {*} raw valor actual en el formulario
