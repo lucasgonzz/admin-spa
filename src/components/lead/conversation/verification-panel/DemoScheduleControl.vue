@@ -33,7 +33,7 @@
          flujo-lead-landing-closer): `{dia, hora, inicio_resuelto}`. Como en «ahora mismo», no
          hay demo ni slot que elegir: la instancia libre para toda la ventana la asigna el backend
          al aprobar. El texto sale de `inicio_resuelto` (lo escribe el servidor al normalizar,
-         `Y-m-d H:i:s`), o de `dia` + `hora` si todavía no vino, o crudo si no se puede leer. -->
+         `Y-m-d H:i`), o de `dia` + `hora` si todavía no vino, o crudo si no se puede leer. -->
     <div v-else-if="momento_form" class="vp-ahora">
       <div class="vp-ahora-text">
         <i class="bi bi-calendar-event me-1" aria-hidden="true" />
@@ -209,7 +209,7 @@ const DIAS_SEMANA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'vier
  *
  * Desde la misión flujo-lead-landing-closer (17/10/2026) hay una TERCERA forma, la demo directa
  * para un momento concreto: `{dia, hora, inicio_resuelto}` (`inicio_resuelto` la escribe el
- * servidor al normalizar, `Y-m-d H:i:s`). Se muestra como la de «ahora», con el momento legible.
+ * servidor al normalizar, `Y-m-d H:i`). Se muestra como la de «ahora», con el momento legible.
  * 🔴 Al emitirla se devuelve el objeto TAL CUAL llegó, sin agregarle `ahora` ni pisarle nada: el
  * servidor preserva `dia`/`hora`/`inicio_resuelto` solo si el panel no manda `ahora` ni fecha de
  * grilla. Por eso el switch alterna entre `null` y la referencia original, nunca arma un objeto.
@@ -283,7 +283,12 @@ export default {
       if (!v) {
         return ''
       }
-      const resuelto = v.inicio_resuelto ? moment(String(v.inicio_resuelto), 'YYYY-MM-DD HH:mm:ss', true) : null
+      /* El servidor escribe `inicio_resuelto` como `Y-m-d H:i` (`format('Y-m-d H:i')` al
+         normalizar); se acepta también con segundos por si algún día los trae. Estricto, para
+         que un valor raro caiga a `dia` + `hora` y no a un "Invalid date". */
+      const resuelto = v.inicio_resuelto
+        ? moment(String(v.inicio_resuelto), ['YYYY-MM-DD HH:mm', 'YYYY-MM-DD HH:mm:ss'], true)
+        : null
       if (resuelto && resuelto.isValid()) {
         return 'el ' + DIAS_SEMANA[resuelto.day()] + ' ' + resuelto.format('DD/MM') + ' a las ' + resuelto.format('HH:mm')
       }
