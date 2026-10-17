@@ -16,6 +16,41 @@
       />
     </div>
 
+    <!-- URL de Google Meet (`meet_url`): estaba readonly en el grupo Demo del meta y se había
+         quedado afuera de la solapa nueva (hallazgo del chequeo, 17/10/2026). Solo cuando tiene
+         valor: la escribe el backend al crear el evento del closer, acá no se edita. -->
+    <div v-if="meet_url" class="mb-3">
+      <label class="form-label mb-0" for="lead_demo_links_meet">URL Google Meet</label>
+      <small class="form-text text-muted d-block mt-1 mb-2">
+        El link de la videollamada con el closer, si ya se creó el evento. Solo lectura.
+      </small>
+      <div class="input-group">
+        <input
+          id="lead_demo_links_meet"
+          :value="meet_url"
+          type="text"
+          class="form-control"
+          readonly
+          aria-label="URL Google Meet"
+          @focus="on_focus"
+        />
+        <button
+          type="button"
+          class="btn"
+          :class="copied_meet_feedback ? 'btn-success' : 'btn-outline-secondary'"
+          :title="copied_meet_feedback ? 'Link copiado' : 'Copiar el link al portapapeles'"
+          @click="on_copy_meet"
+        >
+          <i class="bi" :class="copied_meet_feedback ? 'bi-check-lg' : 'bi-clipboard'" aria-hidden="true" />
+          {{ copied_meet_feedback ? 'Copiado' : 'Copiar' }}
+        </button>
+        <a :href="meet_url" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Abrir el Meet en una pestaña nueva">
+          <i class="bi bi-box-arrow-up-right" aria-hidden="true" />
+          Abrir
+        </a>
+      </div>
+    </div>
+
     <!-- Token de ingreso: estado, vencimiento y las acciones rescatadas de DemoAccesoControl. -->
     <div class="lead-demo-links__token">
       <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
@@ -157,12 +192,23 @@ export default {
       confirming_action: '',
       copied_feedback: false,
       copied_feedback_timer: null,
+      /** Feedback «Copiado» del link de Meet, independiente del del token. */
+      copied_meet_feedback: false,
+      copied_meet_timer: null,
       /** Se incrementa cada minuto para que `token_state` y `expira_display` se recalculen. */
       now_tick: 0,
       now_tick_interval: null,
     }
   },
   computed: {
+    /**
+     * URL de Google Meet del lead, o '' si todavía no hay evento.
+     * @returns {string}
+     */
+    meet_url() {
+      const r = this.record
+      return r && r.meet_url ? String(r.meet_url).trim() : ''
+    },
     /**
      * 'sin_token' | 'vigente' | 'revocado' | 'vencido'
      * @returns {string}
@@ -220,8 +266,34 @@ export default {
     if (this.copied_feedback_timer) {
       clearTimeout(this.copied_feedback_timer)
     }
+    if (this.copied_meet_timer) {
+      clearTimeout(this.copied_meet_timer)
+    }
   },
   methods: {
+    /**
+     * Copia el link de Meet al portapapeles con feedback de 2 segundos.
+     */
+    on_copy_meet() {
+      if (!this.meet_url) {
+        return
+      }
+      const self = this
+      copy_text_to_clipboard(this.meet_url)
+        .then(function () {
+          self.copied_meet_feedback = true
+          if (self.copied_meet_timer) {
+            clearTimeout(self.copied_meet_timer)
+          }
+          self.copied_meet_timer = setTimeout(function () {
+            self.copied_meet_feedback = false
+            self.copied_meet_timer = null
+          }, 2000)
+        })
+        .catch(function () {
+          self.toast('No se pudo copiar el link al portapapeles.')
+        })
+    },
     /**
      * @param {FocusEvent} event
      */
