@@ -53,6 +53,15 @@ export function useLeadSocket(options) {
   let list_row_refetch_pendientes = new Set()
   /** Momento del primer pedido de refresco de fila de la ráfaga actual (null si no hay ráfaga). */
   let list_row_refetch_primer_pedido_at = null
+  /**
+   * Ids de lead esperando su GET /lead/chats/{id} (la fila de la lista de chats, 17/10/2026).
+   * Cola aparte de la de GET /lead/{id} porque también se alimenta de eventos que a esa no le
+   * importan: un cambio de estado de entrega (entregado, leído) no toca el lead pero sí la tilde
+   * de la fila. Mismo debounce y mismo tope de espera.
+   */
+  let chat_row_refetch_pendientes = new Set()
+  let chat_row_refetch_debounce_timer = null
+  let chat_row_refetch_primer_pedido_at = null
   /** Debounce del POST mark-whatsapp-messages-read mientras el operador mira el hilo. */
   let mark_read_if_viewing_debounce_timer = null
   /** Debounce del GET /lead/status-cards (tarjetas de estado arriba de la grilla). */
@@ -151,6 +160,9 @@ export function useLeadSocket(options) {
       return
     }
     schedule_refresh_status_cards()
+    /* La fila de la lista de chats va por su propia cola (ver schedule_chat_row_refetch): todo
+       lo que refresca el lead refresca también su fila de chat. */
+    schedule_chat_row_refetch(lead_id)
     list_row_refetch_pendientes.add(String(lead_id))
     if (list_row_refetch_primer_pedido_at == null) {
       list_row_refetch_primer_pedido_at = Date.now()
@@ -186,6 +198,64 @@ export function useLeadSocket(options) {
     let i = 0
     for (i = 0; i < ids.length; i = i + 1) {
       fetch_list_row(ids[i])
+    }
+  }
+
+  /**
+   * Programa el GET /lead/chats/{id} que refresca la fila del lead en la lista de chats
+   * (misión flujo-lead-landing-closer, 17/10/2026). Solo si el admin está parado en /leads: en
+   * cualquier otra vista la lista no se ve, y al volver `Leads.vue` la vuelve a pedir entera.
+   *
+   * Mismo esquema que schedule_list_row_refetch: un Set de ids (varios leads a la vez son lo
+   * normal), debounce para agrupar la ráfaga de eventos de un mismo lead y tope de espera para que
+   * la lista no se congele en el momento de mayor movimiento. Si la API todavía no tiene la ruta,
+   * el action devuelve null en silencio.
+   *
+   * @param {number|string} lead_id
+   * @returns {void}
+   */
+  function schedule_chat_row_refetch(lead_id) {
+    if (lead_id == null || lead_id === '') {
+      return
+    }
+    if (!is_admin_viewing_leads_grid()) {
+      return
+    }
+    chat_row_refetch_pendientes.add(String(lead_id))
+    if (chat_row_refetch_primer_pedido_at == null) {
+      chat_row_refetch_primer_pedido_at = Date.now()
+    }
+    if (Date.now() - chat_row_refetch_primer_pedido_at >= LIST_ROW_REFETCH_MAX_ESPERA_MS) {
+      if (chat_row_refetch_debounce_timer) {
+        clearTimeout(chat_row_refetch_debounce_timer)
+        chat_row_refetch_debounce_timer = null
+      }
+      flush_chat_row_refetch()
+      return
+    }
+    if (chat_row_refetch_debounce_timer) {
+      clearTimeout(chat_row_refetch_debounce_timer)
+    }
+    chat_row_refetch_debounce_timer = setTimeout(function () {
+      chat_row_refetch_debounce_timer = null
+      flush_chat_row_refetch()
+    }, LIST_ROW_REFETCH_DEBOUNCE_MS)
+  }
+
+  /**
+   * Dispara el GET de la fila de chat de todos los leads pendientes y vacía la cola.
+   *
+   * @returns {void}
+   */
+  function flush_chat_row_refetch() {
+    chat_row_refetch_primer_pedido_at = null
+    const ids = Array.from(chat_row_refetch_pendientes)
+    chat_row_refetch_pendientes.clear()
+    let i = 0
+    for (i = 0; i < ids.length; i = i + 1) {
+      store.dispatch('lead/fetch_chat_row', ids[i]).catch(function () {
+        return null
+      })
     }
   }
 
@@ -440,6 +510,10 @@ export function useLeadSocket(options) {
         schedule_conversation_refetch(lead_id)
         if (event_data.delivery_status === 'fallido' && is_admin_viewing_leads_grid()) {
           schedule_list_row_refetch(lead_id)
+        } else {
+          /* Entregado o leído no cambian el lead, pero sí la tilde del último mensaje en la fila
+             de la lista de chats: solo esa fila, sin el GET /lead/{id}. */
+          schedule_chat_row_refetch(lead_id)
         }
       }
       return
@@ -555,6 +629,12 @@ export function useLeadSocket(options) {
       }
       list_row_refetch_pendientes.clear()
       list_row_refetch_primer_pedido_at = null
+      if (chat_row_refetch_debounce_timer) {
+        clearTimeout(chat_row_refetch_debounce_timer)
+        chat_row_refetch_debounce_timer = null
+      }
+      chat_row_refetch_pendientes.clear()
+      chat_row_refetch_primer_pedido_at = null
       if (mark_read_if_viewing_debounce_timer) {
         clearTimeout(mark_read_if_viewing_debounce_timer)
         mark_read_if_viewing_debounce_timer = null
