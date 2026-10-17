@@ -1,112 +1,50 @@
 <template>
-  <div class="lead-module">
-    <resource-view
-      ref="lead_resource_view"
-      :key="'lead-resource-view-' + resource_view_reload_key"
-      model_name="lead"
-      :model_extra_tabs="model_extra_tabs"
-      :model_properties_nav_order="model_properties_nav_order"
-      :highlighted_row_id="sidebar_lead ? sidebar_lead.id : null"
-      :danger_row_ids="danger_row_ids"
-      :show_paginator="true"
-      @extra-record-updated="on_record_updated"
-      @open-conversation="on_open_conversation"
-    >
-      <!-- Acciones rápidas por fila: respuesta automática Claude, fijar/desfijar y WhatsApp. -->
-      <template #row-actions="{ row }">
-        <!-- Botón activar/desactivar respuesta automática de Claude (cloud) para el lead -->
+  <div class="lead-module leads-view">
+    <!--
+      Fila superior: los filtros activos como chips (para que la lista corta tenga explicación) y,
+      a la derecha, el panel de demos agendadas y el catálogo. Es todo lo que quedó de la barra de
+      acciones del ResourceView (decisión D5, 17/10/2026): sin orden, sin "Solo calificados", sin
+      filtro por fecha, sin selección ni "Actuar".
+    -->
+    <div class="leads-toolbar d-flex align-items-center flex-wrap gap-2 mb-3">
+      <!-- Deep link desde el panel de inicio (?filtro=sin-responder): solo los que piden atención. -->
+      <span
+        v-if="solo_atencion_activo"
+        class="badge rounded-pill text-bg-primary d-inline-flex align-items-center"
+        title="Solo los chats con un mensaje sin responder, esperando confirmación o con error de envío"
+      >
+        Solo con atención pendiente
         <button
           type="button"
-          class="btn btn-sm me-1 d-inline-flex align-items-center justify-content-center"
-          :class="is_claude_auto_reply_enabled(row) ? 'btn-primary' : 'btn-outline-primary'"
-          :title="is_claude_auto_reply_enabled(row)
-            ? 'Claude responde automáticamente. Clic para desactivar.'
-            : 'Claude desactivado. Clic para reactivar.'"
-          :aria-label="is_claude_auto_reply_enabled(row)
-            ? 'Desactivar respuesta automática de Claude'
-            : 'Activar respuesta automática de Claude'"
-          :disabled="is_claude_auto_reply_toggling(row)"
-          @click.stop="on_toggle_claude_auto_reply(row)"
+          class="btn btn-sm btn-link p-0 ms-2 text-white lh-1 text-decoration-none"
+          title="Quitar el filtro"
+          aria-label="Quitar el filtro de atención pendiente"
+          @click="quitar_filtro_sin_responder"
         >
-          <span
-            v-if="is_claude_auto_reply_toggling(row)"
-            class="spinner-border spinner-border-sm"
-            role="status"
-            aria-hidden="true"
-          />
-          <i v-else class="bi bi-stars" :class="is_claude_auto_reply_enabled(row) ? '' : 'opacity-50'" aria-hidden="true" />
+          <i class="bi bi-x-lg" aria-hidden="true" />
         </button>
-        <!-- Grupo: fijar/desfijar chat + marcar/desmarcar como no leído (igual a WhatsApp) -->
-        <div class="btn-group btn-group-sm me-1" role="group" aria-label="Acciones de chat">
-          <button
-            type="button"
-            class="btn"
-            :class="row.pinned_at ? 'btn-warning' : 'btn-outline-secondary'"
-            :title="row.pinned_at ? 'Desfijar lead' : 'Fijar lead'"
-            :aria-label="row.pinned_at ? 'Desfijar lead' : 'Fijar lead'"
-            @click.stop="on_toggle_pinned(row)"
-          >
-            <i class="bi bi-pin-fill" :class="row.pinned_at ? '' : 'opacity-50'" aria-hidden="true" />
-          </button>
-          <!-- Botón marcar/desmarcar conversación como no leída (marca manual per-admin, igual a WhatsApp) -->
-          <button
-            type="button"
-            class="btn"
-            :class="row.manually_marked_unread ? 'btn-danger' : 'btn-outline-secondary'"
-            :title="row.manually_marked_unread ? 'Marcar como leído' : 'Marcar como no leído'"
-            :aria-label="row.manually_marked_unread ? 'Marcar como leído' : 'Marcar como no leído'"
-            @click.stop="on_toggle_manual_unread(row)"
-          >
-            <i class="bi" :class="row.manually_marked_unread ? 'bi-envelope-fill' : 'bi-envelope'" aria-hidden="true" />
-          </button>
-        </div>
-        <!-- Botón abrir conversación WhatsApp del lead -->
+      </span>
+      <!-- Tarjeta de estado activa. La misma tarjeta se destilda clickeándola de nuevo. -->
+      <span
+        v-if="status_filtro_activo_texto"
+        class="badge rounded-pill text-bg-secondary d-inline-flex align-items-center"
+        :title="'Mostrando solo leads en ' + status_filtro_activo_texto"
+      >
+        {{ status_filtro_activo_texto }}
         <button
           type="button"
-          class="btn btn-outline-success btn-sm"
-          title="Abrir conversación de WhatsApp"
-          aria-label="Abrir conversación de WhatsApp"
-          @click="on_open_conversation(row)"
+          class="btn btn-sm btn-link p-0 ms-2 text-white lh-1 text-decoration-none"
+          title="Quitar el filtro de estado"
+          aria-label="Quitar el filtro de estado"
+          @click="limpiar_filtro_de_estado"
         >
-          <i class="bi bi-whatsapp" aria-hidden="true" />
+          <i class="bi bi-x-lg" aria-hidden="true" />
         </button>
-      </template>
+      </span>
+      <span v-if="chats_total_texto" class="small text-muted">{{ chats_total_texto }}</span>
 
-      <template #toolbar-right>
-        <!-- Selector de orden: último mensaje (WhatsApp) vs leads más nuevos por created_at vs leads que necesitan atención -->
-        <div class="btn-group btn-sm">
-          <button
-            type="button"
-            class="btn btn-sm"
-            :class="lead_sort_by === 'last_message' ? 'btn-secondary' : 'btn-outline-secondary'"
-            title="Ordenar por último mensaje de WhatsApp"
-            aria-label="Ordenar por último mensaje de WhatsApp"
-            @click="on_sort_change('last_message')"
-          >
-            <i class="bi bi-chat-dots" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            class="btn btn-sm"
-            :class="lead_sort_by === 'created_at' ? 'btn-secondary' : 'btn-outline-secondary'"
-            title="Ordenar por leads más nuevos"
-            aria-label="Ordenar por leads más nuevos"
-            @click="on_sort_change('created_at')"
-          >
-            <i class="bi bi-sort-down" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            class="btn btn-sm"
-            :class="lead_sort_by === 'atencion' ? 'btn-secondary' : 'btn-outline-secondary'"
-            title="Ordenar por leads que necesitan atención (mensajes por confirmar o con error de envío)"
-            aria-label="Ordenar por leads que necesitan atención (mensajes por confirmar o con error de envío)"
-            @click="on_sort_change('atencion')"
-          >
-            <i class="bi bi-exclamation-triangle" aria-hidden="true" />
-          </button>
-        </div>
-        <!-- Botón toggle para el panel de demos agendadas (próximas y realizadas) -->
+      <div class="ms-auto d-flex align-items-center gap-2">
+        <!-- Botón toggle para el panel de demos agendadas (próximas, en curso y realizadas) -->
         <button
           type="button"
           class="btn btn-sm"
@@ -131,434 +69,313 @@
         >
           <i class="bi bi-window-sidebar" aria-hidden="true" />
         </router-link>
-        <!-- Filtro rápido: ver solo leads calificados (separarlos visualmente de nuevo/contactado/etc.) -->
-        <button
-          type="button"
-          class="btn btn-sm me-2"
-          :class="only_calificados_active ? 'btn-primary' : 'btn-outline-primary'"
-          title="Ver solo leads en estado Calificado"
-          @click="on_toggle_only_calificados"
-        >
-          <i class="bi bi-funnel" aria-hidden="true" />
-          Solo calificados
-        </button>
+      </div>
+    </div>
 
-        <!-- Filtro por inicio de conversación: misma fila que los botones en escritorio. -->
-        <div class="d-flex align-items-center leads-conversation-date-filter">
-          <label class="small text-muted mb-0 me-1 text-nowrap" for="lead_conversation_started_date">
-            Inicio conv.
-          </label>
-          <input
-            id="lead_conversation_started_date"
-            v-model="conversation_started_date"
-            type="date"
-            class="form-control form-control-sm leads-conversation-date-input"
-            title="Filtrar leads que iniciaron conversación en esta fecha"
-            @change="on_conversation_started_date_change"
-          />
+    <!-- Tarjetas de estado: cuántos leads hay en cada estado clave y cuántos necesitan respuesta.
+         Los conteos son GLOBALES (no aplican el texto buscado ni el filtro de atención). Son el
+         único filtro por estado que quedó: clic filtra la lista, otro clic lo saca. -->
+    <lead-status-cards
+      :cards="lead_status_cards"
+      :active_status_slug="active_status_slug"
+      :loading="loading_status_cards"
+      @select="on_select_status_card"
+    />
+
+    <!-- Panel de demos agendadas: visible solo cuando el toggle está activo -->
+    <div v-if="show_demos_agendadas" class="card mt-3 mb-3">
+      <div class="card-body">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <h6 class="card-title mb-0">
+            <i class="bi bi-calendar-check me-1" />
+            Demos agendadas
+          </h6>
+          <!-- Botón para refrescar la lista manualmente -->
           <button
-            v-if="conversation_started_date"
             type="button"
-            class="btn btn-outline-secondary btn-sm ms-1"
-            title="Quitar filtro de inicio de conversación"
-            aria-label="Quitar filtro de inicio de conversación"
-            @click="on_clear_conversation_started_date"
+            class="btn btn-outline-secondary btn-sm"
+            title="Actualizar lista de demos agendadas"
+            aria-label="Actualizar lista de demos agendadas"
+            :disabled="loading_demos_agendadas"
+            @click="load_demos_agendadas"
           >
-            <i class="bi bi-x-lg" aria-hidden="true" />
+            <i class="bi bi-arrow-clockwise" aria-hidden="true" />
           </button>
         </div>
-      </template>
 
-      <template #header>
-        <!--
-          Chip del deep link "solo sin responder" que llega desde el panel de inicio. Sin él el
-          operador ve una bandeja corta y no sabe por qué.
-        -->
-        <div v-if="solo_sin_responder_activo" class="mb-3">
-          <span class="badge rounded-pill text-bg-primary d-inline-flex align-items-center">
-            Solo sin responder
-            <button
-              type="button"
-              class="btn btn-sm btn-link p-0 ms-2 text-white lh-1 text-decoration-none"
-              title="Quitar el filtro"
-              aria-label="Quitar el filtro"
-              @click="quitar_filtro_sin_responder"
-            >
-              <i class="bi bi-x-lg" aria-hidden="true" />
-            </button>
-          </span>
-        </div>
+        <!-- Estado de carga -->
+        <p v-if="loading_demos_agendadas" class="text-muted small mb-0">Cargando demos...</p>
 
-        <!-- Barra de navegación por grupo/estado del pipeline de leads -->
-        <div v-if="lead_status_groups.length" class="lead-status-nav mb-3">
-          <!-- Fila 1: grupos del pipeline (Todos, Calificación, Demo, …) -->
-          <div class="lead-status-nav__row">
-            <div class="btn-group btn-group-sm" role="group" aria-label="Filtrar por grupo de estado">
-              <button
-                type="button"
-                class="btn"
-                :class="active_status_group == null ? 'btn-secondary' : 'btn-outline-secondary'"
-                title="Ver todos los leads, sin filtrar por estado"
-                @click="on_select_status_all"
-              >
-                Todos
-              </button>
-              <button
-                v-for="group in lead_status_groups"
-                :key="'status-group-' + group.name"
-                type="button"
-                class="btn d-inline-flex align-items-center"
-                :class="active_status_group === group.name ? 'btn-secondary' : 'btn-outline-secondary'"
-                :title="status_group_nav_title(group.name)"
-                @click="on_select_status_group(group)"
-              >
-                {{ group.name }}
-                <span
-                  v-if="status_group_unread_count(group.name) > 0"
-                  class="badge bg-danger rounded-pill lead-status-nav__badge ms-1"
-                  :title="'Mensajes sin leer en ' + group.name + ': ' + status_group_unread_count(group.name)"
-                >{{ format_status_nav_unread_count(status_group_unread_count(group.name)) }}</span>
-              </button>
-            </div>
+        <!-- Sin demos en ninguno de los tres grupos -->
+        <p
+          v-else-if="!demos_por_dia.length && !demos_en_curso_por_dia.length && !demos_pasadas_por_dia.length"
+          class="text-muted small mb-0"
+        >
+          No hay demos agendadas.
+        </p>
 
-            <!--
-              Referencia de los colores de la fila. Va acá, a la derecha de los grupos, porque es
-              la primera fila que se mira al entrar y el color de la grilla es lo primero que se ve.
-              El detalle sale al pasar el mouse (y al enfocar con teclado): en reposo son dos
-              cuadraditos y una palabra, para no competir con los filtros.
-            -->
-            <div class="lead-color-legend ms-auto d-flex align-items-center gap-2">
-              <span
-                v-for="ref in row_color_legend"
-                :key="'legend-' + ref.key"
-                class="lead-color-legend__item d-inline-flex align-items-center"
-                tabindex="0"
-                role="note"
-                :aria-label="ref.label + ': ' + ref.detail"
-              >
-                <span class="lead-color-legend__swatch" :class="ref.swatch_class" aria-hidden="true" />
-                <span class="lead-color-legend__label">{{ ref.label }}</span>
-                <span class="lead-color-legend__popup" role="tooltip">
-                  <strong>{{ ref.label }}</strong>
-                  <span>{{ ref.detail }}</span>
-                </span>
-              </span>
-            </div>
-          </div>
-
-          <!-- Fila 2: estados del grupo activo (scroll horizontal si no entran en una línea) -->
-          <div
-            v-if="active_status_group_options.length"
-            class="lead-status-nav__row lead-status-nav__row--sub"
-          >
-            <div
-              class="btn-group btn-group-sm"
-              role="group"
-              aria-label="Filtrar por estado dentro del grupo"
-            >
-            <button
-              v-for="opt in active_status_group_options"
-              :key="'status-opt-' + opt.value"
-              type="button"
-              class="btn d-inline-flex align-items-center"
-              :class="active_status_slug === opt.value ? 'btn-secondary' : 'btn-outline-secondary'"
-              :title="status_nav_title(opt)"
-              @click="on_select_status(opt)"
-            >
-              <span
-                class="lead-status-nav-dot me-1"
-                :style="{ backgroundColor: opt.color || '#ced4da' }"
-                aria-hidden="true"
-              />
-              {{ opt.text }}
-              <span
-                v-if="status_unread_count(opt.value) > 0"
-                class="badge bg-danger rounded-pill lead-status-nav__badge ms-1"
-                :title="'Mensajes sin leer en ' + opt.text + ': ' + status_unread_count(opt.value)"
-              >{{ format_status_nav_unread_count(status_unread_count(opt.value)) }}</span>
-            </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Tarjetas de estado: cuántos leads hay en cada estado clave y cuántos necesitan
-             respuesta. Los conteos son GLOBALES (no aplican los filtros de columna/fecha),
-             mismo criterio que los badges de no leídos de la barra de arriba. -->
-        <lead-status-cards
-          :cards="lead_status_cards"
-          :active_status_slug="active_status_slug"
-          :loading="loading_status_cards"
-          @select="on_select_status_card"
-        />
-
-        <!-- Panel de demos agendadas: visible solo cuando el toggle está activo -->
-        <div v-if="show_demos_agendadas" class="card mt-3 mb-3">
-          <div class="card-body">
-            <div class="d-flex align-items-center justify-content-between mb-3">
-              <h6 class="card-title mb-0">
-                <i class="bi bi-calendar-check me-1" />
-                Demos agendadas
-              </h6>
-              <!-- Botón para refrescar la lista manualmente -->
-              <button
-                type="button"
-                class="btn btn-outline-secondary btn-sm"
-                title="Actualizar lista de demos agendadas"
-                aria-label="Actualizar lista de demos agendadas"
-                :disabled="loading_demos_agendadas"
-                @click="load_demos_agendadas"
-              >
-                <i class="bi bi-arrow-clockwise" aria-hidden="true" />
-              </button>
-            </div>
-
-            <!-- Estado de carga -->
-            <p v-if="loading_demos_agendadas" class="text-muted small mb-0">Cargando demos...</p>
-
-            <!-- Sin demos en ninguno de los tres grupos -->
+        <!-- Tres columnas en desktop; apilado en móvil -->
+        <div v-else class="demos-grupos-grid">
+          <!-- Grupo: demos pendientes (fecha futura o hoy antes del inicio) -->
+          <div class="demos-grupo-column">
+            <h6 class="small fw-semibold text-primary mb-3">
+              <i class="bi bi-clock me-1" />
+              Próximas
+            </h6>
             <p
-              v-else-if="!demos_por_dia.length && !demos_en_curso_por_dia.length && !demos_pasadas_por_dia.length"
+              v-if="!demos_por_dia.length"
               class="text-muted small mb-0"
             >
-              No hay demos agendadas.
+              Sin demos próximas.
             </p>
-
-            <!-- Tres columnas en desktop; apilado en móvil -->
-            <div v-else class="demos-grupos-grid">
-              <!-- Grupo: demos pendientes (fecha futura o hoy antes del inicio) -->
-              <div class="demos-grupo-column">
-                <h6 class="small fw-semibold text-primary mb-3">
-                  <i class="bi bi-clock me-1" />
-                  Próximas
-                </h6>
-                <p
-                  v-if="!demos_por_dia.length"
-                  class="text-muted small mb-0"
-                >
-                  Sin demos próximas.
-                </p>
-                <div
-                  v-for="day_group in demos_por_dia"
-                  :key="'proxima-' + day_group.date_key"
-                  class="mb-4"
-                >
-                  <div class="d-flex align-items-center flex-wrap gap-1 mb-2 demos-agendadas-day-heading">
-                    <span class="badge bg-primary me-2">
-                      {{ day_group.is_today ? 'Hoy' : 'Próximo' }}
-                    </span>
-                    <h6 class="mb-0 small fw-semibold">{{ day_group.heading }}</h6>
-                    <span class="text-muted small ms-2">({{ day_group.leads.length }})</span>
-                  </div>
-
-                  <div class="table-responsive demos-agendadas-table-wrap">
-                    <table class="table table-sm table-hover mb-0 demos-agendadas-table">
-                      <thead class="table-light">
-                        <tr>
-                          <th class="small">Etapa</th>
-                          <th class="small">Hora inicio</th>
-                          <th class="small">Llamar a las</th>
-                          <th class="small">Cliente (demo)</th>
-                          <th class="small">Lead</th>
-                          <th class="small">Empresa</th>
-                          <th class="small">Estado setup</th>
-                          <th class="small">Resumen IA</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr
-                          v-for="lead in day_group.leads"
-                          :key="lead.id"
-                          class="demos-agendadas-row"
-                          role="button"
-                          tabindex="0"
-                          @click="on_demo_row_click(lead)"
-                          @keydown.enter="on_demo_row_click(lead)"
-                        >
-                          <td class="small">
-                            <span class="badge" :class="demo_lifecycle_badge(lead).class">{{ demo_lifecycle_badge(lead).label }}</span>
-                          </td>
-                          <td class="small">{{ lead.demo_start_time || '—' }}</td>
-                          <td class="small fw-semibold text-primary">{{ calc_llamar_a_las(lead) }}</td>
-                          <td class="small">{{ demo_client_label(lead) }}</td>
-                          <td class="small">{{ lead.contact_name || '(sin nombre)' }}</td>
-                          <td class="small">{{ lead.company_name || '—' }}</td>
-                          <td class="small">
-                            <span
-                              class="badge"
-                              :class="demo_setup_badge_class(lead.demo_setup_status)"
-                            >{{ lead.demo_setup_status || '—' }}</span>
-                          </td>
-                          <td class="small">
-                            <span v-if="lead.demo_summary" class="badge bg-success">
-                              <i class="bi bi-stars me-1" /> Disponible
-                            </span>
-                            <span v-else class="text-muted">Pendiente</span>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+            <div
+              v-for="day_group in demos_por_dia"
+              :key="'proxima-' + day_group.date_key"
+              class="mb-4"
+            >
+              <div class="d-flex align-items-center flex-wrap gap-1 mb-2 demos-agendadas-day-heading">
+                <span class="badge bg-primary me-2">
+                  {{ day_group.is_today ? 'Hoy' : 'Próximo' }}
+                </span>
+                <h6 class="mb-0 small fw-semibold">{{ day_group.heading }}</h6>
+                <span class="text-muted small ms-2">({{ day_group.leads.length }})</span>
               </div>
 
-              <!-- Grupo: demos en curso (hoy, entre inicio y fin estimado) -->
-              <div class="demos-grupo-column">
-                <h6 class="small fw-semibold text-success mb-3">
-                  <i class="bi bi-play-circle me-1" />
-                  En curso
-                </h6>
-                <p
-                  v-if="!demos_en_curso_por_dia.length"
-                  class="text-muted small mb-0"
-                >
-                  Sin demos en curso.
-                </p>
-                <div
-                  v-for="day_group in demos_en_curso_por_dia"
-                  :key="'curso-' + day_group.date_key"
-                  class="mb-4"
-                >
-                  <div class="d-flex align-items-center flex-wrap gap-1 mb-2 demos-agendadas-day-heading">
-                    <span class="badge bg-success me-2">En curso</span>
-                    <h6 class="mb-0 small fw-semibold">{{ day_group.heading }}</h6>
-                    <span class="text-muted small ms-2">({{ day_group.leads.length }})</span>
-                  </div>
+              <div class="table-responsive demos-agendadas-table-wrap">
+                <table class="table table-sm table-hover mb-0 demos-agendadas-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th class="small">Etapa</th>
+                      <th class="small">Hora inicio</th>
+                      <th class="small">Llamar a las</th>
+                      <th class="small">Cliente (demo)</th>
+                      <th class="small">Lead</th>
+                      <th class="small">Empresa</th>
+                      <th class="small">Estado setup</th>
+                      <th class="small">Resumen IA</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="lead in day_group.leads"
+                      :key="lead.id"
+                      class="demos-agendadas-row"
+                      role="button"
+                      tabindex="0"
+                      @click="on_demo_row_click(lead)"
+                      @keydown.enter="on_demo_row_click(lead)"
+                    >
+                      <td class="small">
+                        <span class="badge" :class="demo_lifecycle_badge(lead).class">{{ demo_lifecycle_badge(lead).label }}</span>
+                      </td>
+                      <td class="small">{{ lead.demo_start_time || '—' }}</td>
+                      <td class="small fw-semibold text-primary">{{ calc_llamar_a_las(lead) }}</td>
+                      <td class="small">{{ demo_client_label(lead) }}</td>
+                      <td class="small">{{ lead.contact_name || '(sin nombre)' }}</td>
+                      <td class="small">{{ lead.company_name || '—' }}</td>
+                      <td class="small">
+                        <span
+                          class="badge"
+                          :class="demo_setup_badge_class(lead.demo_setup_status)"
+                        >{{ lead.demo_setup_status || '—' }}</span>
+                      </td>
+                      <td class="small">
+                        <span v-if="lead.demo_summary" class="badge bg-success">
+                          <i class="bi bi-stars me-1" /> Disponible
+                        </span>
+                        <span v-else class="text-muted">Pendiente</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
 
-                  <div class="table-responsive demos-agendadas-table-wrap">
-                    <table class="table table-sm table-hover mb-0 demos-agendadas-table">
-                      <thead class="table-light">
-                        <tr>
-                          <th class="small">Etapa</th>
-                          <th class="small">Hora inicio</th>
-                          <th class="small">Llamar a las</th>
-                          <th class="small">Cliente (demo)</th>
-                          <th class="small">Lead</th>
-                          <th class="small">Empresa</th>
-                          <th class="small">Estado setup</th>
-                          <th class="small">Resumen IA</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr
-                          v-for="lead in day_group.leads"
-                          :key="lead.id"
-                          class="demos-agendadas-row"
-                          role="button"
-                          tabindex="0"
-                          @click="on_demo_row_click(lead)"
-                          @keydown.enter="on_demo_row_click(lead)"
-                        >
-                          <td class="small">
-                            <span class="badge" :class="demo_lifecycle_badge(lead).class">{{ demo_lifecycle_badge(lead).label }}</span>
-                          </td>
-                          <td class="small">{{ lead.demo_start_time || '—' }}</td>
-                          <td class="small fw-semibold text-primary">{{ calc_llamar_a_las(lead) }}</td>
-                          <td class="small">{{ demo_client_label(lead) }}</td>
-                          <td class="small">{{ lead.contact_name || '(sin nombre)' }}</td>
-                          <td class="small">{{ lead.company_name || '—' }}</td>
-                          <td class="small">
-                            <span
-                              class="badge"
-                              :class="demo_setup_badge_class(lead.demo_setup_status)"
-                            >{{ lead.demo_setup_status || '—' }}</span>
-                          </td>
-                          <td class="small">
-                            <span v-if="lead.demo_summary" class="badge bg-success">
-                              <i class="bi bi-stars me-1" /> Disponible
-                            </span>
-                            <span v-else class="text-muted">Pendiente</span>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+          <!-- Grupo: demos en curso (hoy, entre inicio y fin estimado) -->
+          <div class="demos-grupo-column">
+            <h6 class="small fw-semibold text-success mb-3">
+              <i class="bi bi-play-circle me-1" />
+              En curso
+            </h6>
+            <p
+              v-if="!demos_en_curso_por_dia.length"
+              class="text-muted small mb-0"
+            >
+              Sin demos en curso.
+            </p>
+            <div
+              v-for="day_group in demos_en_curso_por_dia"
+              :key="'curso-' + day_group.date_key"
+              class="mb-4"
+            >
+              <div class="d-flex align-items-center flex-wrap gap-1 mb-2 demos-agendadas-day-heading">
+                <span class="badge bg-success me-2">En curso</span>
+                <h6 class="mb-0 small fw-semibold">{{ day_group.heading }}</h6>
+                <span class="text-muted small ms-2">({{ day_group.leads.length }})</span>
               </div>
 
-              <!-- Grupo: demos ya realizadas (fecha pasada o hoy con fin superado) -->
-              <div class="demos-grupo-column">
-                <h6 class="small fw-semibold text-muted mb-3">
-                  <i class="bi bi-clock-history me-1" />
-                  Realizadas
-                </h6>
-                <p
-                  v-if="!demos_pasadas_por_dia.length"
-                  class="text-muted small mb-0"
-                >
-                  Sin demos realizadas.
-                </p>
-                <div
-                  v-for="day_group in demos_pasadas_por_dia"
-                  :key="'pasada-' + day_group.date_key"
-                  class="mb-4"
-                >
-                  <div class="d-flex align-items-center flex-wrap gap-1 mb-2 demos-agendadas-day-heading">
-                    <span class="badge bg-light text-secondary border me-2">Realizada</span>
-                    <h6 class="mb-0 small fw-semibold">{{ day_group.heading }}</h6>
-                    <span class="text-muted small ms-2">({{ day_group.leads.length }})</span>
-                  </div>
+              <div class="table-responsive demos-agendadas-table-wrap">
+                <table class="table table-sm table-hover mb-0 demos-agendadas-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th class="small">Etapa</th>
+                      <th class="small">Hora inicio</th>
+                      <th class="small">Llamar a las</th>
+                      <th class="small">Cliente (demo)</th>
+                      <th class="small">Lead</th>
+                      <th class="small">Empresa</th>
+                      <th class="small">Estado setup</th>
+                      <th class="small">Resumen IA</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="lead in day_group.leads"
+                      :key="lead.id"
+                      class="demos-agendadas-row"
+                      role="button"
+                      tabindex="0"
+                      @click="on_demo_row_click(lead)"
+                      @keydown.enter="on_demo_row_click(lead)"
+                    >
+                      <td class="small">
+                        <span class="badge" :class="demo_lifecycle_badge(lead).class">{{ demo_lifecycle_badge(lead).label }}</span>
+                      </td>
+                      <td class="small">{{ lead.demo_start_time || '—' }}</td>
+                      <td class="small fw-semibold text-primary">{{ calc_llamar_a_las(lead) }}</td>
+                      <td class="small">{{ demo_client_label(lead) }}</td>
+                      <td class="small">{{ lead.contact_name || '(sin nombre)' }}</td>
+                      <td class="small">{{ lead.company_name || '—' }}</td>
+                      <td class="small">
+                        <span
+                          class="badge"
+                          :class="demo_setup_badge_class(lead.demo_setup_status)"
+                        >{{ lead.demo_setup_status || '—' }}</span>
+                      </td>
+                      <td class="small">
+                        <span v-if="lead.demo_summary" class="badge bg-success">
+                          <i class="bi bi-stars me-1" /> Disponible
+                        </span>
+                        <span v-else class="text-muted">Pendiente</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
 
-                  <div class="table-responsive demos-agendadas-table-wrap">
-                    <table class="table table-sm table-hover mb-0 demos-agendadas-table">
-                      <thead class="table-light">
-                        <tr>
-                          <th class="small">Etapa</th>
-                          <th class="small">Hora inicio</th>
-                          <th class="small">Llamar a las</th>
-                          <th class="small">Cliente (demo)</th>
-                          <th class="small">Lead</th>
-                          <th class="small">Empresa</th>
-                          <th class="small">Estado setup</th>
-                          <th class="small">Resumen IA</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr
-                          v-for="lead in day_group.leads"
-                          :key="lead.id"
-                          class="demos-agendadas-row"
-                          role="button"
-                          tabindex="0"
-                          @click="on_demo_row_click(lead)"
-                          @keydown.enter="on_demo_row_click(lead)"
-                        >
-                          <td class="small">
-                            <span class="badge" :class="demo_lifecycle_badge(lead).class">{{ demo_lifecycle_badge(lead).label }}</span>
-                          </td>
-                          <td class="small">{{ lead.demo_start_time || '—' }}</td>
-                          <td class="small fw-semibold text-primary">{{ calc_llamar_a_las(lead) }}</td>
-                          <td class="small">{{ demo_client_label(lead) }}</td>
-                          <td class="small">{{ lead.contact_name || '(sin nombre)' }}</td>
-                          <td class="small">{{ lead.company_name || '—' }}</td>
-                          <td class="small">
-                            <span
-                              class="badge"
-                              :class="demo_setup_badge_class(lead.demo_setup_status)"
-                            >{{ lead.demo_setup_status || '—' }}</span>
-                          </td>
-                          <td class="small">
-                            <span v-if="lead.demo_summary" class="badge bg-success">
-                              <i class="bi bi-stars me-1" /> Disponible
-                            </span>
-                            <span v-else class="text-muted">Pendiente</span>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+          <!-- Grupo: demos ya realizadas (fecha pasada o hoy con fin superado) -->
+          <div class="demos-grupo-column">
+            <h6 class="small fw-semibold text-muted mb-3">
+              <i class="bi bi-clock-history me-1" />
+              Realizadas
+            </h6>
+            <p
+              v-if="!demos_pasadas_por_dia.length"
+              class="text-muted small mb-0"
+            >
+              Sin demos realizadas.
+            </p>
+            <div
+              v-for="day_group in demos_pasadas_por_dia"
+              :key="'pasada-' + day_group.date_key"
+              class="mb-4"
+            >
+              <div class="d-flex align-items-center flex-wrap gap-1 mb-2 demos-agendadas-day-heading">
+                <span class="badge bg-light text-secondary border me-2">Realizada</span>
+                <h6 class="mb-0 small fw-semibold">{{ day_group.heading }}</h6>
+                <span class="text-muted small ms-2">({{ day_group.leads.length }})</span>
+              </div>
+
+              <div class="table-responsive demos-agendadas-table-wrap">
+                <table class="table table-sm table-hover mb-0 demos-agendadas-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th class="small">Etapa</th>
+                      <th class="small">Hora inicio</th>
+                      <th class="small">Llamar a las</th>
+                      <th class="small">Cliente (demo)</th>
+                      <th class="small">Lead</th>
+                      <th class="small">Empresa</th>
+                      <th class="small">Estado setup</th>
+                      <th class="small">Resumen IA</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="lead in day_group.leads"
+                      :key="lead.id"
+                      class="demos-agendadas-row"
+                      role="button"
+                      tabindex="0"
+                      @click="on_demo_row_click(lead)"
+                      @keydown.enter="on_demo_row_click(lead)"
+                    >
+                      <td class="small">
+                        <span class="badge" :class="demo_lifecycle_badge(lead).class">{{ demo_lifecycle_badge(lead).label }}</span>
+                      </td>
+                      <td class="small">{{ lead.demo_start_time || '—' }}</td>
+                      <td class="small fw-semibold text-primary">{{ calc_llamar_a_las(lead) }}</td>
+                      <td class="small">{{ demo_client_label(lead) }}</td>
+                      <td class="small">{{ lead.contact_name || '(sin nombre)' }}</td>
+                      <td class="small">{{ lead.company_name || '—' }}</td>
+                      <td class="small">
+                        <span
+                          class="badge"
+                          :class="demo_setup_badge_class(lead.demo_setup_status)"
+                        >{{ lead.demo_setup_status || '—' }}</span>
+                      </td>
+                      <td class="small">
+                        <span v-if="lead.demo_summary" class="badge bg-success">
+                          <i class="bi bi-stars me-1" /> Disponible
+                        </span>
+                        <span v-else class="text-muted">Pendiente</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
         </div>
-      </template>
-    </resource-view>
+      </div>
+    </div>
+
+    <!-- La bandeja: buscador + lista de chats (reemplaza a la tabla desde el 17/10/2026). -->
+    <lead-chats-list
+      ref="chats_list"
+      :active_lead_id="sidebar_lead ? sidebar_lead.id : null"
+      @open-conversation="on_open_conversation"
+      @open-modal="on_open_lead_modal"
+    />
 
     <!-- Sidebar lateral de conversación WhatsApp (solo desktop; en mobile se navega a ruta) -->
     <lead-conversation-sidebar
       :lead="sidebar_lead"
       @close="on_sidebar_close"
       @record-updated="on_sidebar_record_updated"
+      @open-lead-modal="on_open_lead_modal"
+    />
+
+    <!--
+      Modal del lead: el mismo ModelModal genérico de siempre, montado acá directo (como hace
+      CloserPanel.vue) porque ya no hay ResourceView que lo monte. Las solapas extra y su orden son
+      los de siempre, con la Demo propia en lugar del grupo del meta.
+    -->
+    <model-modal
+      model_name="lead"
+      :show="modal_lead !== null"
+      :all_properties="lead_modal_properties"
+      :record="modal_lead"
+      :extra_tabs="model_extra_tabs"
+      :properties_nav_order="model_properties_nav_order"
+      @update:show="on_lead_modal_show"
+      @close="on_close_lead_modal"
+      @saved="on_lead_modal_saved"
+      @extra-record-updated="on_record_updated"
+      @open-conversation="on_open_conversation"
     />
   </div>
 </template>
@@ -567,12 +384,14 @@
 import { markRaw } from 'vue'
 import api from '@/utils/axios'
 import { cached_get, MAX_AGE_SETTINGS } from '@/common-vue/helpers/request_cache_helper'
-import ResourceView from '@/common-vue/components/view/Index.vue'
+import ModelModal from '@/common-vue/components/model/Index.vue'
 import LeadExtraProps from '@/components/lead/extra-props/Index.vue'
 import LeadResumenTab from '@/components/lead/resumen/Index.vue'
 import LeadContractTab from '@/components/lead/contract/Index.vue'
+import LeadDemoTab from '@/components/lead/demo/Index.vue'
 import LeadConversationSidebar from '@/components/lead/LeadConversationSidebar.vue'
 import LeadStatusCards from '@/components/lead/LeadStatusCards.vue'
+import LeadChatsList from '@/components/lead/chats/Index.vue'
 import SubjectPipelinesTab from '@/components/pipeline/SubjectPipelinesTab.vue'
 
 /**
@@ -592,6 +411,14 @@ const lead_model_extra_tabs = [
     component: markRaw(LeadExtraProps),
   },
   {
+    /* Solapa Demo propia (misión flujo-lead-landing-closer, 17/10/2026): Configuración, Videos,
+       Links y Formulario en sub-solapas. Reemplaza al grupo "Demo" del meta, que el form genérico
+       dibujaba como una sola grilla de campos; ese grupo se oculta en `lead_modal_properties`. */
+    key: 'demo',
+    label: 'Demo',
+    component: markRaw(LeadDemoTab),
+  },
+  {
     key: 'contract',
     label: 'Contrato',
     component: markRaw(LeadContractTab),
@@ -606,13 +433,13 @@ const lead_model_extra_tabs = [
 ]
 
 /**
- * Orden de pestañas del modal de lead: extras intercalados con grupos del meta (Demo, Basico).
+ * Orden de pestañas del modal de lead: extras intercalados con el grupo Basico del meta.
  * Pipelines va al final: es la mirada comercial de campañas, no el día a día del lead.
  */
 const lead_model_properties_nav_order = [
   'extra:resumen',
   'extra:extra',
-  'group:Demo',
+  'extra:demo',
   'group:Basico',
   'extra:contract',
   'extra:pipelines',
@@ -646,27 +473,29 @@ const EN_CURSO_LIFECYCLE_STATUSES = [
 ]
 
 /**
- * Vista principal del módulo de leads.
+ * Vista principal del módulo de leads (misión flujo-lead-landing-closer, 17/10/2026).
  *
- * Incluye el ResourceView estándar y el panel opcional "Demos agendadas" que
- * lista los leads con demo: primero las que aún no ocurrieron (agrupadas por día
- * ascendente) y debajo las ya realizadas (agrupadas por día descendente).
+ * Dejó de ser una tabla sobre ResourceView: ahora son las tarjetas de estado (que filtran), el
+ * buscador y una lista de chats estilo WhatsApp (`components/lead/chats`), más el panel opcional
+ * "Demos agendadas", el sidebar de conversación (≥768 px; en teléfono se navega a la ruta) y el
+ * modal genérico del lead. Los datos de la lista viven en `store/lead.js` (`chats*`).
+ *
+ * Sigue en keep-alive (`App.vue`): volver a clickear Leads en el menú incrementa
+ * `leads_reload_version` y acá se recarga como una primera entrada.
  */
 export default {
   name: 'ViewLeads',
   components: {
-    ResourceView,
-    LeadExtraProps,
-    LeadResumenTab,
-    LeadContractTab,
+    ModelModal,
     LeadConversationSidebar,
     LeadStatusCards,
+    LeadChatsList,
   },
   data() {
     return {
-      /** Pestañas extra del modal de leads usando la API nueva `model_extra_tabs`. */
+      /** Pestañas extra del modal de leads. */
       model_extra_tabs: lead_model_extra_tabs,
-      /** Orden de la barra de pestañas del modal (Resumen → Operaciones → Demo → Basico → Contrato → WhatsApp). */
+      /** Orden de la barra de pestañas del modal (Resumen → Operaciones → Demo → Basico → Contrato → Pipelines). */
       model_properties_nav_order: lead_model_properties_nav_order,
       /** Controla visibilidad del panel de demos agendadas. */
       show_demos_agendadas: false,
@@ -680,113 +509,22 @@ export default {
       loading_demos_agendadas: false,
       /** Duración de la demo en minutos (leída desde settings al abrir el panel). */
       duracion_minutos: 60,
-      /** Fecha YYYY-MM-DD para filtrar leads por inicio de conversación WhatsApp. */
-      conversation_started_date: '',
-      /** true mientras el filtro rápido "solo calificados" está activo (toggle del botón). */
-      only_calificados_active: false,
-      /** Indica si el marcado de leads pendientes de revisión está en curso. */
       /** Lead actualmente abierto en el sidebar lateral de conversación (null = cerrado). */
       sidebar_lead: null,
-      /** Ids de leads con toggle de respuesta automática Claude en curso (evita doble clic). */
-      claude_auto_reply_toggling_ids: [],
-      /**
-       * Incrementa al recargar el módulo desde el menú para remontar ResourceView
-       * (meta + listado) como en la primera entrada.
-       */
-      resource_view_reload_key: 0,
-      /** Grupo de estado activo en la barra de navegación de leads (null = "Todos"). */
-      active_status_group: null,
-      /** Estado puntual activo dentro del grupo seleccionado (null = todo el grupo). */
+      /** Lead abierto en el modal de detalle (null = cerrado). Alcanza con que traiga `id`. */
+      modal_lead: null,
+      /** `value` de la tarjeta de estado que está filtrando la lista (null = ninguna). */
       active_status_slug: null,
     }
   },
   computed: {
     /**
-     * Criterio de orden activo en el store de leads.
-     * @returns {'last_message'|'created_at'|'atencion'}
-     */
-    lead_sort_by() {
-      return this.$store.state.lead.sort_by
-    },
-
-    /**
-     * Definición meta del campo `status` del recurso lead (viene de options_for_meta() en
-     * admin-api, incluye `options` con `{ value, text, color, group }` por cada estado no
-     * oculto). null hasta que resource-view termine de cargar el meta.
-     * @returns {Object|null}
-     */
-    lead_status_field() {
-      var props = this.$store.getters['meta/properties']('lead') || []
-      var i = 0
-      for (i = 0; i < props.length; i = i + 1) {
-        if (props[i] && props[i].key === 'status') {
-          return props[i]
-        }
-      }
-      return null
-    },
-    /**
-     * Opciones de estado tal cual las expone el meta (sin agrupar).
-     * @returns {Array<{ value: string, text: string, color: string, group: string|null }>}
-     */
-    lead_status_options() {
-      return (this.lead_status_field && this.lead_status_field.options) || []
-    },
-    /**
-     * Opciones de estado agrupadas por `group`, preservando el orden de aparición (mismo
-     * criterio que grouped_resolved_options en FilterSelect.vue). Los estados sin grupo no
-     * se muestran en la barra de navegación (no tienen un botón de nivel 1 al que pertenecer).
-     * @returns {Array<{ name: string, options: Array }>}
-     */
-    lead_status_groups() {
-      var order = []
-      var map = {}
-      this.lead_status_options.forEach(function (o) {
-        if (!o.group) {
-          return
-        }
-        if (!map[o.group]) {
-          map[o.group] = []
-          order.push(o.group)
-        }
-        map[o.group].push(o)
-      })
-      return order.map(function (name) {
-        return { name: name, options: map[name] }
-      })
-    },
-    /**
-     * Opciones (nivel 2) del grupo actualmente activo en la barra de navegación.
-     * Array vacío si no hay grupo seleccionado (vista "Todos").
-     * @returns {Array<{ value: string, text: string, color: string, group: string }>}
-     */
-    active_status_group_options() {
-      var active = this.active_status_group
-      var found = null
-      this.lead_status_groups.forEach(function (g) {
-        if (g.name === active) {
-          found = g
-        }
-      })
-      return found ? found.options : []
-    },
-
-    /**
-     * Mapa slug de estado => cantidad de mensajes sin leer (API /lead/unread-badges).
-     * @returns {Record<string, number>}
-     */
-    lead_unread_by_status() {
-      return this.$store.state.lead.unread_by_status || {}
-    },
-
-    /**
      * Tarjetas de estado tal cual las devuelve GET /lead/status-cards (orden y colores incluidos).
-     * @returns {Array<{ value: string, text: string, color: string, group: string|null, total: number, sin_responder: number }>}
+     * @returns {Array<{ value: string, text: string, color: string, group: string|null, total: number, sin_responder: number, slugs?: string[] }>}
      */
     lead_status_cards() {
       return this.$store.state.lead.status_cards || []
     },
-
     /**
      * true mientras el GET de tarjetas de estado está en vuelo.
      * @returns {boolean}
@@ -794,99 +532,80 @@ export default {
     loading_status_cards() {
       return this.$store.state.lead.loading_status_cards
     },
-
     /**
-     * true si el viewport es desktop (≥768px).
-     * Se evalúa en runtime; en contextos sin window devuelve true por defecto.
+     * Filtros vivos de la lista de chats.
+     * @returns {{ q: string, status: string|null, solo_atencion: boolean }}
+     */
+    chats_filtros() {
+      return this.$store.state.lead.chats_filtros || { q: '', status: null, solo_atencion: false }
+    },
+    /**
      * @returns {boolean}
      */
-    is_desktop() {
-      if (typeof window === 'undefined') {
-        return true
-      }
-      return window.innerWidth >= 768
+    solo_atencion_activo() {
+      return Boolean(this.chats_filtros.solo_atencion)
     },
-
     /**
-     * Referencia de los colores de la fila, para la leyenda de la barra de grupos.
+     * Texto de la tarjeta que está filtrando, para el chip. Vacío si no hay filtro de estado.
+     * @returns {string}
+     */
+    status_filtro_activo_texto() {
+      if (!this.active_status_slug) {
+        return ''
+      }
+      const slug = String(this.active_status_slug)
+      let texto = ''
+      this.lead_status_cards.forEach(function (card) {
+        if (card && String(card.value) === slug) {
+          texto = card.text || ''
+        }
+      })
+      return texto || slug
+    },
+    /**
+     * "N chats" al lado de los chips, cuando la lista cargó bien.
+     * @returns {string}
+     */
+    chats_total_texto() {
+      const st = this.$store.state.lead
+      if (st.chats_error || !st.chats_meta) {
+        return ''
+      }
+      const total = parseInt(st.chats_meta.total, 10)
+      if (isNaN(total) || (total === 0 && st.loading_chats)) {
+        return ''
+      }
+      return total === 1 ? '1 chat' : total + ' chats'
+    },
+    /**
+     * Meta del lead para el modal, con el grupo "Demo" OCULTO.
      *
-     * El texto describe la condición REAL que evalúa el backend, no una aproximación: amarillo es
-     * `row_warning` (Lead::scopeWithUnreadLeadMessagesCount) y rojo es `failed_send_count`
-     * descontando los marcados como inalcanzables (ver danger_row_ids). Si alguna de las dos
-     * definiciones cambia, este texto cambia con ella.
+     * La solapa Demo ahora es un componente propio (`extra:demo`), pero el meta sigue declarando
+     * el grupo con sus campos, y el modal genérico pinta una pestaña por cada grupo con campos
+     * visibles: sin esto habría dos pestañas "Demo", la nueva y la grilla vieja al final. Se les
+     * pone `show: false` en vez de sacarlos del array a propósito: `build_draft()` recorre
+     * `all_properties` para normalizar fechas (`demo_date` es `day`) y asegurar cada clave en el
+     * borrador, y eso tiene que seguir pasando para que la solapa nueva escriba en `draft` y el
+     * Guardar del modal lo mande igual que antes.
      *
      * @returns {Array<Object>}
      */
-    row_color_legend() {
-      return [
-        {
-          key: 'warning',
-          label: 'Sin responder',
-          swatch_class: 'lead-color-legend__swatch--warning',
-          detail: 'El lead escribió último y todavía no le salió ninguna respuesta, o hay un mensaje '
-            + 'de la IA esperando que lo verifiques antes de enviarse. Hay alguien esperando.',
-        },
-        {
-          key: 'danger',
-          label: 'Error de entrega',
-          swatch_class: 'lead-color-legend__swatch--danger',
-          detail: 'Se le respondió, pero el mensaje falló al enviarse — por el sistema o porque Meta '
-            + 'lo rechazó. Se puede reintentar. Los leads marcados como "ya no recibe mensajes" no '
-            + 'aparecen acá: eso no se reintenta.',
-        },
-      ]
-    },
-    /**
-     * Ids de los leads visibles que deben pintarse en ROJO.
-     *
-     * Definición de Lucas (2/9/2026): rojo = hubo un error de entrega, del sistema o de Meta, y por
-     * lo tanto se puede REINTENTAR. Es `failed_send_count > 0`, o sea un error de envío o una
-     * entrega rechazada por Meta sin actividad real posterior.
-     *
-     * 🔴 Dos cosas que cambiaron acá:
-     *
-     * - Sale `pendiente_revision_at` de la condición. Esa marca la pone el botón de revisión y se
-     *   borra al abrir la conversación, así que pintaba de rojo cosas que hoy son amarillas (un
-     *   lead sin responder) y dejaba de pintarlas apenas se miraba la conversación. Con el amarillo
-     *   calculado en vivo por el backend, la marca ya no aporta color.
-     * - Los leads marcados como "ya no recibe mensajes" quedan afuera: el número bloqueó o no
-     *   existe más, no hay nada que reintentar, y pintarlos sería ruido permanente sobre una fila
-     *   que nunca se va a poder resolver.
-     *
-     * El rojo tiene precedencia sobre el amarillo por diseño en row_highlight_classes.
-     * @returns {Array<number>}
-     */
-    danger_row_ids() {
-      var rows = this.$store.state.lead.is_filtered
-        ? (this.$store.state.lead.filtered || [])
-        : (this.$store.state.lead.models || [])
-      var ids = []
-      var self = this
-      rows.forEach(function (row) {
-        if (!row || row.no_recibe_mensajes_at) {
-          return
+    lead_modal_properties() {
+      const props = this.$store.getters['meta/properties']('lead') || []
+      let grupo_actual = null
+      return props.map(function (p) {
+        if (!p) {
+          return p
         }
-        if (self.failed_send_count_of(row) > 0) {
-          ids.push(row.id)
+        if (p.group_title && !p.key) {
+          grupo_actual = p.group_title
+          return p
         }
+        if (grupo_actual === 'Demo' && p.show !== false) {
+          return Object.assign({}, p, { show: false })
+        }
+        return p
       })
-      return ids
-    },
-
-    /**
-     * Indica si el chip "Solo sin responder" tiene que estar a la vista.
-     *
-     * Pide las dos cosas: el flag prendido y la grilla mostrando el LISTADO BASE. Con un filtro
-     * de columna o de estado aplicado, la grilla muestra `filtered` (otra ruta de la API, que no
-     * conoce `sin_responder`) y el chip estaría mintiendo.
-     *
-     * @returns {boolean}
-     */
-    solo_sin_responder_activo() {
-      return (
-        this.$store.state.lead.solo_sin_responder === true &&
-        this.$store.state.lead.is_filtered !== true
-      )
     },
   },
   watch: {
@@ -902,73 +621,43 @@ export default {
       }
       this.reload_module_from_nav()
     },
-    /**
-     * Mantiene el input de fecha alineado si se resetean filtros desde la tabla o el header.
-     * @returns {void}
-     */
-    '$store.state.lead.filters': {
-      handler() {
-        this.sync_conversation_started_date_from_store()
-        this.sync_only_calificados_from_store()
-        this.sync_status_nav_from_store()
-      },
-      deep: true,
-    },
-    /**
-     * El chip "Solo sin responder" vale SOLO sobre el listado base. Al aplicar un filtro de
-     * columna o de estado la grilla pasa a mostrar `filtered` (otra ruta, otro contrato) y el
-     * flag ya no aplica: se apaga y el chip se esconde, para que no mienta.
-     *
-     * @param {boolean} nuevo
-     * @returns {void}
-     */
-    '$store.state.lead.is_filtered'(nuevo) {
-      if (!nuevo || !this.$store.state.lead.solo_sin_responder) {
-        return
-      }
-      this.$store.commit('lead/set_solo_sin_responder', false)
-      this.limpiar_filtro_de_la_query()
-    },
   },
   /**
-   * 🔴 Va en `created()` y NO en `mounted()`: el que dispara el primer GET /lead es el
-   * ResourceView hijo, en SU `mounted()`, que corre ANTES del `mounted()` del padre. El flag
-   * tiene que estar puesto antes del request, o la primera carga sale sin acotar y el listado
-   * mostraría más filas que lo que dice la tarjeta del panel de inicio.
-   *
-   * Se commitea `false` cuando no hay deep link a propósito: el estado del store sobrevive a la
-   * navegación, así que entrar a /leads sin el parámetro tiene que mostrar la bandeja completa.
+   * El deep link del panel de inicio (`?filtro=sin-responder`) se aplica ANTES del primer GET, que
+   * sale en `mounted()`. Sin el parámetro se commitea `false` a propósito: el estado del store
+   * sobrevive a la navegación y entrar a /leads a secas tiene que mostrar la bandeja completa.
    *
    * @returns {void}
    */
   created() {
-    var pide_sin_responder = this.$route.query.filtro === 'sin-responder'
-    this.$store.commit('lead/set_solo_sin_responder', pide_sin_responder)
+    this.$store.commit('lead/set_chats_filtros', {
+      solo_atencion: this.$route.query.filtro === 'sin-responder',
+    })
   },
 
   mounted() {
     /* Guardar la versión de recarga inicial para comparar en activated() */
     this._last_leads_reload_version = this.$store.state.lead.leads_reload_version
+    /* Meta del modelo `lead`: la necesita el ModelModal para armar sus grupos/campos. Antes la
+       precargaba ResourceView; ahora nadie más la pide en esta vista. */
+    this.$store.dispatch('meta/fetch_meta', 'lead').catch(function () {
+      return null
+    })
+    /* La lista, desde la primera página. */
+    this.$store.dispatch('lead/fetch_chats', { page: 1 })
     /* Al montar la vista, verificar si la URL trae ?lead_id para abrir el modal directo. */
     this.open_lead_from_query_param()
-    /* Sincronizar el input de fecha con un filtro activo previo en el store. */
-    this.sync_conversation_started_date_from_store()
-    this.sync_only_calificados_from_store()
-    /* Sincronizar la barra de navegación de estados con un filtro activo previo en el store. */
-    this.sync_status_nav_from_store()
-    /* Totales de no leídos por estado para los badges de la barra de navegación.
-       `ensure_*`: el Nav pide lo mismo en este mismo tick (y lo repite cada vez que se remonta,
-       que es cada vez que se sale de la conversación de un lead). */
+    /* Totales de no leídos por estado (badge del menú). `ensure_*`: el Nav pide lo mismo en este
+       mismo tick (y lo repite cada vez que se remonta, que es cada vez que se sale de la
+       conversación de un lead). */
     this.$store.dispatch('lead/ensure_unread_badges_fresh')
-    /* Conteos globales por estado para las tarjetas de arriba de la grilla. */
+    /* Conteos globales por estado para las tarjetas. */
     this.$store.dispatch('lead/fetch_status_cards')
-    /* Restaurar scroll si el usuario volvió desde la conversación WhatsApp de un lead (primera carga). */
+    /* Restaurar scroll si el usuario volvió desde la conversación WhatsApp de un lead. */
     this.restore_scroll_position()
     /* keep-alive: activated() corre INMEDIATAMENTE después de este mounted() en el primer
-       montaje, y su rama "vengo de otro módulo" repite todo lo de acá arriba más un _get_models
-       que ResourceView ya está haciendo por su cuenta. Medido: entrar a /leads salían dos
-       GET /lead, dos /lead/status-cards y dos /lead/unread-badges. Esta bandera hace que la
-       primera activación no haga nada: no hay nada que refrescar, se acaba de cargar todo. */
+       montaje, y su rama "vengo de otro módulo" repite todo lo de acá arriba. Esta bandera hace
+       que la primera activación no haga nada: se acaba de cargar todo. */
     this._primera_activacion_pendiente = true
   },
 
@@ -976,75 +665,89 @@ export default {
    * keep-alive: se llama cada vez que Leads vuelve a ser la vista activa.
    * Detecta si el usuario clickeó Leads en el menú (reload solicitado) comparando
    * leads_reload_version. En ese caso recarga la lista y resetea filtros, igual que un remount.
-   * Si viene de otro módulo o de la conversación, refresca datos respetando filtros/paginación
+   * Si viene de otro módulo o de la conversación, refresca la lista respetando los filtros
    * y restaura el scroll guardado.
    * @returns {void}
    */
   activated() {
-    /* Primer montaje: mounted() acaba de cargar todo hace un instante (ver el comentario de la
-       bandera allá). Refrescarlo acá sería pedir de nuevo lo mismo en el mismo tick. */
     if (this._primera_activacion_pendiente) {
       this._primera_activacion_pendiente = false
       return
     }
-    var current_version = this.$store.state.lead.leads_reload_version
+    const current_version = this.$store.state.lead.leads_reload_version
     if (current_version !== this._last_leads_reload_version) {
       this.reload_module_from_nav()
-      /* Los conteos de las tarjetas también se refrescan al volver desde el menú. */
       this.$store.dispatch('lead/fetch_status_cards')
-      /* Fix keep-alive: si venimos de una navegación con ?lead_id (ej. desde el panel
-         del closer), activated() también tiene que revisar el query param, igual que
-         mounted() — antes solo se revisaba acá si era el primer montaje del componente. */
+      /* Si venimos de una navegación con ?lead_id (ej. desde el panel del closer), activated()
+         también tiene que revisar el query param, igual que mounted(). */
       this.open_lead_from_query_param()
       return
     }
-    /* Venimos de otro módulo o de la conversación: la grilla no se actualizó en
-       segundo plano (ver useLeadSocket.js), así que hay que refrescarla acá,
-       sin tocar filtros/paginación/scroll. */
-    if (this.$store.state.lead.is_filtered) {
-      this.$store.dispatch('lead/run_filter', { page: this.$store.state.lead.filter_page })
-    } else {
-      /* 🔴 `_get_models` y no `get_models`: este último commitea set_page(1), así que volver
-         de la conversación de un lead estando en la página 4 te tiraría siempre a la 1.
-         Lo único que hay que replicar a mano de `get_models` es el limpiado de la selección:
-         si no, las filas tildadas sobreviven a la ida y vuelta a la conversación y el operador
-         puede accionar en masa sobre filas que ya no cree tener elegidas. */
-      this.$store.commit('lead/set_selected', [])
-      this.$store.dispatch('lead/_get_models')
+    /* Deep link desde Inicio con la vista ya en caché: el parámetro llega acá y no a created(). */
+    if (this.$route.query.filtro === 'sin-responder' && !this.solo_atencion_activo) {
+      this.$store.commit('lead/set_chats_filtros', { solo_atencion: true })
     }
-    /* `ensure_*`: volver de la conversación remonta también el Nav, que pide este mismo badge en
-       el mismo tick. Uno de los dos sobra. */
+    /* Venimos de otro módulo o de la conversación: la lista no se actualizó en segundo plano
+       (el socket solo refresca filas estando en esta ruta), así que se vuelve a pedir la primera
+       página con los mismos filtros. */
+    this.$store.dispatch('lead/fetch_chats', { page: 1 })
     this.$store.dispatch('lead/ensure_unread_badges_fresh')
     this.$store.dispatch('lead/fetch_status_cards')
     this.restore_scroll_position()
-    /* Fix keep-alive: revisar ?lead_id también en esta rama (ver comentario arriba). */
     this.open_lead_from_query_param()
   },
 
-  /**
-   * keep-alive: se llama cuando Leads deja de ser la vista activa (antes de navegar).
-   * No hace nada; el scroll se guarda en on_open_conversation() antes de navegar en mobile.
-   * @returns {void}
-   */
-  deactivated() {
-    /* Sin acción al salir: el scroll ya fue guardado en on_open_conversation si aplica. */
-  },
   methods: {
     /**
-     * Parsea y devuelve el contador de mensajes con error de envío sin resolver.
-     * Si el valor no es un número válido (o viene como string), parsea con parseInt.
-     * Si el resultado es NaN, retorna 0.
-     *
-     * @param {Object} row - Fila del lead
-     * @returns {number} Cantidad de mensajes con error de envío sin resolver (0 si sin errores)
+     * Contenedor que scrollea de verdad: el documento tiene `overflow: hidden` y el scroll vive en
+     * `<main.app-main-scroll>` (ver `_app.sass`). `window.scrollTo` acá no mueve nada.
+     * @returns {Element}
      */
-    failed_send_count_of(row) {
-      var count = parseInt(row.failed_send_count, 10)
-      return isNaN(count) ? 0 : count
+    scroll_container() {
+      const main = this.$el && this.$el.closest ? this.$el.closest('.app-main-scroll') : null
+      return main || document.scrollingElement || document.documentElement
+    },
+    /**
+     * Guarda la posición de scroll antes de navegar a la conversación en teléfono.
+     * @returns {void}
+     */
+    save_scroll_position() {
+      const el = this.scroll_container()
+      this.$store.commit('lead/set_scroll_y', el ? (el.scrollTop || 0) : 0)
+    },
+    /**
+     * Restaura la posición de scroll guardada al volver desde la conversación de un lead.
+     * Doble nextTick para esperar a que la lista termine de pintar.
+     * @returns {void}
+     */
+    restore_scroll_position() {
+      const saved_y = this.$store.state.lead.scroll_y
+      if (!saved_y || saved_y <= 0) {
+        return
+      }
+      const self = this
+      this.$nextTick(function () {
+        self.$nextTick(function () {
+          const el = self.scroll_container()
+          if (el) {
+            el.scrollTop = saved_y
+          }
+          self.$store.commit('lead/set_scroll_y', 0)
+        })
+      })
+    },
+    /**
+     * @returns {void}
+     */
+    scroll_to_top() {
+      const el = this.scroll_container()
+      if (el) {
+        el.scrollTop = 0
+      }
     },
 
     /**
-     * Recarga Leads como primera entrada: resetea filtros/UI local y remonta ResourceView.
+     * Recarga Leads como primera entrada: resetea filtros y UI local y pide la lista de nuevo.
      * Invocado desde activated() (keep-alive) o desde el watcher de leads_reload_version.
      *
      * @returns {void}
@@ -1053,25 +756,15 @@ export default {
       this._last_leads_reload_version = this.$store.state.lead.leads_reload_version
       /* Volver a Leads desde el menú es una entrada limpia: también se cae el deep link de
          "solo sin responder", chip y query incluidos. */
-      this.$store.commit('lead/set_solo_sin_responder', false)
       this.limpiar_filtro_de_la_query()
-      this.$store.commit('lead/set_filters', [])
-      this.$store.commit('lead/set_filter_page', 1)
-      /* Volver a Leads desde el menú también vuelve a la primera página del listado base. */
-      this.$store.commit('lead/set_page', 1)
-      this.$store.commit('lead/set_filtered', [])
-      this.$store.commit('lead/set_is_filtered', false)
-      this.$store.commit('lead/set_total_filter_results', 0)
-      this.$store.commit('lead/set_selected', [])
+      this.$store.commit('lead/set_chats_filtros', { q: '', status: null, solo_atencion: false })
       this.$store.commit('lead/set_scroll_y', 0)
-      this.conversation_started_date = ''
-      this.only_calificados_active = false
-      this.active_status_group = null
       this.active_status_slug = null
       this.sidebar_lead = null
+      this.modal_lead = null
       this.show_demos_agendadas = false
-      this.resource_view_reload_key = this.resource_view_reload_key + 1
-      window.scrollTo(0, 0)
+      this.$store.dispatch('lead/fetch_chats', { page: 1 })
+      this.scroll_to_top()
     },
     /**
      * Saca `filtro` de la query sin recargar la vista, dejando el resto de los parámetros.
@@ -1086,226 +779,137 @@ export default {
       if (!this.$route.query.filtro) {
         return
       }
-      var query = Object.assign({}, this.$route.query)
+      const query = Object.assign({}, this.$route.query)
       delete query.filtro
       this.$router.replace({ query: query }).catch(function () {})
     },
-
     /**
-     * ✕ del chip: apaga el flag, saca `filtro` de la query y recarga el listado base completo.
+     * ✕ del chip: apaga el filtro de atención, saca `filtro` de la query y recarga la lista.
      *
      * @returns {void}
      */
     quitar_filtro_sin_responder() {
-      this.$store.commit('lead/set_solo_sin_responder', false)
+      this.$store.commit('lead/set_chats_filtros', { solo_atencion: false })
       this.limpiar_filtro_de_la_query()
-      /* Mismo criterio que el resto de los caminos que cambian el listado: las filas tildadas
-         no pueden sobrevivir a un cambio de lo que se está mostrando. */
-      this.$store.commit('lead/set_selected', [])
-      this.$store.dispatch('lead/get_models')
+      this.$store.dispatch('lead/fetch_chats', { page: 1 })
     },
 
     /**
-     * Si la URL trae ?lead_id=N (ej. al entrar desde un link de notificación WhatsApp),
-     * busca ese lead completo y abre su modal automáticamente. Limpia el query param
-     * después de abrir para que un refresh posterior no lo vuelva a disparar.
+     * Si la URL trae ?lead_id=N (ej. al entrar desde un link de notificación WhatsApp, desde el
+     * closer o desde el header de la conversación en teléfono), busca ese lead y abre su modal.
+     * Limpia el query param después para que un refresh no lo vuelva a disparar.
      * @returns {void}
      */
     open_lead_from_query_param() {
-      /* Leer el query param lead_id de la URL actual. */
-      var lead_id = this.$route.query.lead_id
+      const lead_id = this.$route.query.lead_id
       if (!lead_id) {
         return
       }
-      var self = this
-      /* Pedir el lead completo (con mensajes y relaciones) al store. */
+      const self = this
       this.$store.dispatch('lead/fetch_full_model', lead_id).then(function (lead) {
         if (!lead) {
           self.$root.$emit('open_toast', 'No se encontró el lead solicitado.')
           return
         }
-        /* Esperar a que el ResourceView esté listo antes de abrir el modal. */
-        self.wait_for_resource_view_and_open(lead)
+        self.on_open_lead_modal(lead)
       }).catch(function () {
         self.$root.$emit('open_toast', 'Error al cargar el lead solicitado.')
       }).then(function () {
-        /* Limpiar el query param sin recargar, para que un refresh no reabra el modal. */
-        var query = Object.assign({}, self.$route.query)
+        const query = Object.assign({}, self.$route.query)
         delete query.lead_id
-        self.$router.replace({ query: query })
+        self.$router.replace({ query: query }).catch(function () {})
       })
     },
+
     /**
-     * Espera (con reintentos cortos) a que el ref del ResourceView esté disponible
-     * antes de abrir el modal, evitando la carrera con el montaje inicial del componente.
-     * @param {Object} lead Objeto lead completo a abrir en el modal.
-     * @param {number} [attempts] Reintentos restantes (default 10, ~1s total).
+     * Abre el modal de detalle del lead. Alcanza con un objeto con `id`: el ModelModal pide el
+     * registro completo por su cuenta al abrirse.
+     * @param {Object} lead
      * @returns {void}
      */
-    wait_for_resource_view_and_open(lead, attempts) {
-      var self = this
-      /* Cantidad máxima de reintentos, cada uno espera 100ms → 1s total. */
-      var remaining = attempts == null ? 10 : attempts
-      var resource_view = this.$refs.lead_resource_view
-      if (resource_view && typeof resource_view.on_row === 'function') {
-        /* El ResourceView ya está montado y listo: abrir el modal. */
-        self.on_demo_row_click(lead)
-        return
-      }
-      if (remaining <= 0) {
-        return
-      }
-      /* Reintentar en 100ms si el ref todavía no está disponible. */
-      setTimeout(function () {
-        self.wait_for_resource_view_and_open(lead, remaining - 1)
-      }, 100)
-    },
-    /**
-     * Fija o desfija un lead en la tabla (pin global: todos los admins ven el mismo estado).
-     *
-     * Si el lead no está fijado, se setea pinned_at en el backend y aparece con ícono amarillo.
-     * Si ya está fijado, se limpia pinned_at y vuelve a estado normal.
-     * El último en ser fijado aparece primero entre los fijados (igual que WhatsApp).
-     *
-     * @param {Object} lead Lead de la fila clickeada.
-     * @returns {void}
-     */
-    on_toggle_pinned(lead) {
+    on_open_lead_modal(lead) {
       if (!lead || !lead.id) {
         return
       }
-      var self = this
-      api.post('/lead/' + lead.id + '/toggle-pinned').then(function (res) {
-        if (res.data && res.data.model) {
-          self.$store.dispatch('lead/upsert_model_in_lists', res.data.model)
-        }
-      }).catch(function () {
-        self.$root.$emit('open_toast', 'No se pudo cambiar el estado del pin.')
-      })
+      this.modal_lead = lead
     },
     /**
-     * Marca o desmarca manualmente un lead como "no leído" para el admin logueado (estilo WhatsApp).
-     *
-     * Es per-admin: no afecta lo que ven los demás admins. Se muestra en la columna "Sin leer" como
-     * un punto rojo sin número, solo mientras no haya nada real pendiente (unread_count,
-     * pending_verification_count y failed_send_count en 0 — ver CellRenderer). Se limpia sola la
-     * próxima vez que se abra la conversación.
-     *
-     * @param {Object} lead Lead de la fila clickeada.
+     * Sincroniza el cierre del modal disparado desde adentro (BaseModal: Escape/backdrop/botón).
+     * @param {boolean} value
      * @returns {void}
      */
-    on_toggle_manual_unread(lead) {
-      if (!lead || !lead.id) {
-        return
+    on_lead_modal_show(value) {
+      if (!value) {
+        this.modal_lead = null
       }
-      var self = this
-      api.post('/lead/' + lead.id + '/toggle-manual-unread').then(function (res) {
-        if (res.data && res.data.model) {
-          self.$store.dispatch('lead/upsert_model_in_lists', res.data.model)
-        }
-      }).catch(function () {
-        self.$root.$emit('open_toast', 'No se pudo cambiar el estado de no leído.')
-      })
     },
     /**
-     * Indica si Claude tiene respuesta automática activa para el lead de la fila.
-     * Por defecto true cuando el backend no envió el campo (leads legacy en caché).
-     *
-     * @param {Object} lead Lead de la fila.
-     * @returns {boolean}
-     */
-    is_claude_auto_reply_enabled(lead) {
-      if (!lead) {
-        return true
-      }
-      if (lead.claude_auto_reply === undefined || lead.claude_auto_reply === null) {
-        return true
-      }
-      return Boolean(lead.claude_auto_reply)
-    },
-    /**
-     * true si el toggle de respuesta automática Claude está en curso para ese lead.
-     *
-     * @param {Object} lead Lead de la fila.
-     * @returns {boolean}
-     */
-    is_claude_auto_reply_toggling(lead) {
-      if (!lead || !lead.id) {
-        return false
-      }
-      return this.claude_auto_reply_toggling_ids.indexOf(lead.id) >= 0
-    },
-    /**
-     * Registra o libera el id del lead mientras corre el POST toggle-claude-auto-reply.
-     *
-     * @param {number} lead_id Id del lead.
-     * @param {boolean} toggling true para marcar en curso, false para liberar.
      * @returns {void}
      */
-    set_claude_auto_reply_toggling(lead_id, toggling) {
-      if (!lead_id) {
-        return
-      }
-      var ids = this.claude_auto_reply_toggling_ids.slice()
-      var idx = ids.indexOf(lead_id)
-      if (toggling) {
-        if (idx < 0) {
-          ids.push(lead_id)
-        }
-      } else if (idx >= 0) {
-        ids.splice(idx, 1)
-      }
-      this.claude_auto_reply_toggling_ids = ids
+    on_close_lead_modal() {
+      this.modal_lead = null
     },
     /**
-     * Activa o desactiva la respuesta automática de Claude (cloud) para el lead de la fila.
-     * Reutiliza la acción del store que ya sincroniza listas y conversación abierta.
-     *
-     * @param {Object} lead Lead de la fila clickeada.
+     * Guardar del modal: el lead vuelve actualizado; se refresca su fila y las tarjetas (pudo
+     * cambiar de estado a mano).
+     * @param {Object} model
      * @returns {void}
      */
-    on_toggle_claude_auto_reply(lead) {
-      if (!lead || !lead.id || this.is_claude_auto_reply_toggling(lead)) {
+    on_lead_modal_saved(model) {
+      this.on_record_updated(model)
+    },
+    /**
+     * Sincroniza en la lista, la conversación y las tarjetas los cambios que llegan desde el
+     * modal (Guardar o acciones de las solapas extra) o desde el sidebar.
+     * @param {Object} model lead actualizado en backend.
+     * @returns {void}
+     */
+    on_record_updated(model) {
+      if (!model || !model.id) {
         return
       }
-      var self = this
-      this.set_claude_auto_reply_toggling(lead.id, true)
-      this.$store.dispatch('lead/toggle_claude_auto_reply', lead.id).then(function () {
-        self.set_claude_auto_reply_toggling(lead.id, false)
-      }).catch(function () {
-        self.set_claude_auto_reply_toggling(lead.id, false)
-        self.$root.$emit('open_toast', 'No se pudo cambiar la respuesta automática de Claude.')
-      })
+      this.$store.dispatch('lead/upsert_model_in_lists', model)
+      const conv = this.$store.state.lead.lead_en_conversacion
+      if (conv && conv.id == model.id) {
+        this.$store.commit('lead/update_lead_en_conversacion', model)
+      }
+      /* La fila de chat tiene otra forma que el lead (texto del último mensaje, semáforo): se
+         vuelve a pedir en vez de armarla acá. */
+      this.$store.dispatch('lead/fetch_chat_row', model.id)
+      /* Editar el lead a mano puede haberle cambiado el estado, y ese es el único camino de
+         cambio de estado que no pasa por el socket. */
+      this.$store.dispatch('lead/fetch_status_cards')
     },
+
     /**
      * Abre la conversación WhatsApp del lead.
      * En desktop (≥768px): abre el sidebar lateral sin navegar.
-     * En mobile (<768px): navega a la ruta de pantalla completa (comportamiento anterior).
-     * @param {Object} lead Lead de la fila clickeada en la tabla.
+     * En mobile (<768px): navega a la ruta de pantalla completa.
+     * Si venía del modal (botón de la solapa Resumen), el modal se cierra antes: quedaría por
+     * encima del sidebar.
+     * @param {Object} lead Lead de la fila o del modal.
      * @returns {void}
      */
     on_open_conversation(lead) {
       if (!lead || !lead.id) {
         return
       }
-      /* Desktop: mostrar sidebar; mobile: navegar a ruta de pantalla completa. */
+      if (this.modal_lead) {
+        this.modal_lead = null
+      }
       if (window.innerWidth >= 768) {
         this.sidebar_lead = lead
       } else {
-        /* Guardar scroll actual para restaurarlo al volver desde LeadConversationView. */
-        this.$store.commit('lead/set_scroll_y', window.scrollY || 0)
+        this.save_scroll_position()
         this.$router.push({ name: 'lead_conversation', params: { lead_id: lead.id } })
       }
     },
-
     /**
-     * Cierra el sidebar lateral de conversación limpiando el lead activo.
      * @returns {void}
      */
     on_sidebar_close() {
       this.sidebar_lead = null
     },
-
     /**
      * Propaga la actualización del lead recibida desde el sidebar.
      * Si el lead actualizado es el que está abierto, refresca la referencia local
@@ -1315,457 +919,48 @@ export default {
      */
     on_sidebar_record_updated(model) {
       this.on_record_updated(model)
-      /* Actualizar la referencia del sidebar si el modelo coincide con el lead activo. */
       if (this.sidebar_lead && model && model.id && this.sidebar_lead.id === model.id) {
         this.sidebar_lead = Object.assign({}, this.sidebar_lead, model)
       }
     },
-    /**
-     * Restaura la posición de scroll guardada en el store después de volver
-     * desde la vista de conversación de un lead.
-     * Usa doble nextTick para esperar a que ResourceView termine de pintar la tabla.
-     * @returns {void}
-     */
-    restore_scroll_position() {
-      var saved_y = this.$store.state.lead.scroll_y
-      if (!saved_y || saved_y <= 0) {
-        return
-      }
-      var self = this
-      this.$nextTick(function () {
-        self.$nextTick(function () {
-          window.scrollTo(0, saved_y)
-          self.$store.commit('lead/set_scroll_y', 0)
-        })
-      })
-    },
-    /**
-     * Cambia el orden del listado base y recarga desde la API.
-     * @param {'last_message'|'created_at'|'atencion'} sort_by
-     * @returns {void}
-     */
-    on_sort_change(sort_by) {
-      this.$store.dispatch('lead/change_sort_by', sort_by)
-    },
-    /**
-     * Lee del store el filtro activo sobre first_message_at para reflejarlo en el input de fecha.
-     * @returns {void}
-     */
-    sync_conversation_started_date_from_store() {
-      var filters = this.$store.state.lead.filters || []
-      var i = 0
-      for (i = 0; i < filters.length; i = i + 1) {
-        var filter_row = filters[i]
-        if (
-          filter_row
-          && filter_row.key === 'first_message_at'
-          && filter_row.type === 'date'
-          && filter_row.igual_que
-        ) {
-          this.conversation_started_date = filter_row.igual_que
-          return
-        }
-      }
-      this.conversation_started_date = ''
-    },
-    /**
-     * Aplica o quita el filtro rápido "solo calificados" (igual_que en status).
-     * Mismo patrón que on_conversation_started_date_change, pero como toggle on/off en vez de
-     * un valor libre: un solo click activa, otro click lo saca.
-     * @returns {void}
-     */
-    on_toggle_only_calificados() {
-      if (this.only_calificados_active) {
-        this.$store.commit('lead/remove_filter_by_key', 'status')
-        this.only_calificados_active = false
-      } else {
-        var payload = {
-          type: 'text',
-          key: 'status',
-          igual_que: 'calificado',
-        }
-        this.$store.commit('lead/add_filter', payload)
-        this.only_calificados_active = true
-      }
-      this.$store.commit('lead/set_filter_page', 1)
-      this.$store.dispatch('lead/run_filter', { page: 1 })
-    },
-    /**
-     * Lee del store el filtro activo sobre status=calificado para reflejarlo en el botón toggle.
-     * @returns {void}
-     */
-    sync_only_calificados_from_store() {
-      var filters = this.$store.state.lead.filters || []
-      var i = 0
-      for (i = 0; i < filters.length; i = i + 1) {
-        var filter_row = filters[i]
-        if (
-          filter_row
-          && filter_row.key === 'status'
-          && filter_row.igual_que === 'calificado'
-        ) {
-          this.only_calificados_active = true
-          return
-        }
-      }
-      this.only_calificados_active = false
-    },
-    /**
-     * Aplica o quita el filtro por fecha de inicio de conversación (igual_que en first_message_at).
-     * @returns {void}
-     */
-    on_conversation_started_date_change() {
-      var self = this
-      var date_value = (this.conversation_started_date || '').trim()
-      if (!date_value) {
-        this.on_clear_conversation_started_date()
-        return
-      }
 
-      var payload = {
-        type: 'date',
-        key: 'first_message_at',
-        igual_que: date_value,
-        menor_que: '',
-        mayor_que: '',
-      }
-
-      this.$store.commit('lead/add_filter', payload)
-      this.$store.commit('lead/set_filter_page', 1)
-      this.$store.dispatch('lead/run_filter', { page: 1 }).then(function () {
-        self.sync_conversation_started_date_from_store()
-      })
-    },
     /**
-     * Limpia el filtro de inicio de conversación y vuelve al listado base si no quedan filtros.
-     * @returns {void}
-     */
-    on_clear_conversation_started_date() {
-      var self = this
-      this.conversation_started_date = ''
-      this.$store.commit('lead/remove_filter_by_key', 'first_message_at')
-
-      if (!this.$store.state.lead.is_filtered) {
-        return
-      }
-
-      var remaining_filters = this.$store.state.lead.filters || []
-      if (remaining_filters.length > 0) {
-        this.$store.commit('lead/set_filter_page', 1)
-        this.$store.dispatch('lead/run_filter', { page: 1 })
-        return
-      }
-
-      this.$store.commit('lead/set_filter_page', 1)
-      this.$store.commit('lead/set_filtered', [])
-      this.$store.commit('lead/set_is_filtered', false)
-      this.$store.dispatch('lead/get_models').then(function () {
-        self.sync_conversation_started_date_from_store()
-      })
-    },
-    /**
-     * Cantidad de mensajes sin leer en un estado puntual del pipeline.
+     * Clic en una tarjeta de estado: filtra la lista por ese estado (o por los slugs de una
+     * tarjeta agrupada, como "Demo" u "Otros"). Volver a clickear la misma tarjeta saca el filtro:
+     * sin la barra de grupos ya no hay botón "Todos".
      *
-     * @param {string} status_slug slug del estado (ej. `calificado`).
-     * @returns {number}
-     */
-    status_unread_count(status_slug) {
-      var by_status = this.lead_unread_by_status
-      var n = parseInt(by_status[status_slug], 10)
-      return isNaN(n) ? 0 : n
-    },
-    /**
-     * Suma de mensajes sin leer de todos los estados que pertenecen a un grupo.
-     *
-     * @param {string} group_name nombre visible del grupo (ej. `Calificación`).
-     * @returns {number}
-     */
-    status_group_unread_count(group_name) {
-      var total = 0
-      var by_status = this.lead_unread_by_status
-      this.lead_status_groups.forEach(function (g) {
-        if (g.name !== group_name) {
-          return
-        }
-        g.options.forEach(function (o) {
-          var n = parseInt(by_status[o.value], 10)
-          if (!isNaN(n)) {
-            total = total + n
-          }
-        })
-      })
-      return total
-    },
-    /**
-     * Formatea el número del badge de la barra de estados (tope visual 99+).
-     *
-     * @param {number} count
-     * @returns {string}
-     */
-    format_status_nav_unread_count(count) {
-      var n = parseInt(count, 10)
-      if (isNaN(n) || n < 1) {
-        return '0'
-      }
-      return n > 99 ? '99+' : String(n)
-    },
-    /**
-     * Título del botón de grupo con hint de no leídos si aplica.
-     *
-     * @param {string} group_name
-     * @returns {string}
-     */
-    status_group_nav_title(group_name) {
-      var unread = this.status_group_unread_count(group_name)
-      if (unread > 0) {
-        return 'Ver leads del grupo ' + group_name + ' (' + unread + ' sin leer)'
-      }
-      return 'Ver leads del grupo ' + group_name
-    },
-    /**
-     * Título del botón de estado puntual con hint de no leídos si aplica.
-     *
-     * @param {{ text: string, value: string }} opt
-     * @returns {string}
-     */
-    status_nav_title(opt) {
-      if (!opt) {
-        return ''
-      }
-      var unread = this.status_unread_count(opt.value)
-      if (unread > 0) {
-        return 'Ver solo leads en ' + opt.text + ' (' + unread + ' sin leer)'
-      }
-      return 'Ver solo leads en ' + opt.text
-    },
-    /**
-     * Busca, entre `lead_status_cards`, una tarjeta AGRUPADA (con `.slugs`, ej. "Demo": 3 estados)
-     * cuyo conjunto de slugs sea EXACTAMENTE el mismo que `value` -- comparando como sets, sin
-     * importar orden ni tamaño relativo a los grupos reales del catálogo. Devuelve la tarjeta o
-     * `null`.
-     * @param {Array<string>} value
-     * @returns {Object|null}
-     */
-    find_status_card_by_slugs(value) {
-      var cards = this.lead_status_cards
-      var found = null
-      cards.forEach(function (card) {
-        if (!card || !Array.isArray(card.slugs) || !card.slugs.length) {
-          return
-        }
-        var same_set = card.slugs.length === value.length && card.slugs.every(function (s) {
-          return value.indexOf(s) !== -1
-        })
-        if (same_set) {
-          found = card
-        }
-      })
-      return found
-    },
-    /**
-     * Reconstruye la selección activa de la barra de navegación de estados a partir del
-     * filtro `status` en el store (si existe) — sin importar si lo generó esta barra, el
-     * modal de filtro por columna "Estado" de la tabla, u otro control. Mismo patrón que
-     * sync_conversation_started_date_from_store.
-     * @returns {void}
-     */
-    sync_status_nav_from_store() {
-      var filters = this.$store.state.lead.filters || []
-      var status_filter = null
-      var i = 0
-      for (i = 0; i < filters.length; i = i + 1) {
-        if (filters[i] && filters[i].key === 'status') {
-          status_filter = filters[i]
-          break
-        }
-      }
-
-      if (!status_filter || status_filter.igual_que == null || status_filter.igual_que === '') {
-        this.active_status_group = null
-        this.active_status_slug = null
-        return
-      }
-
-      var value = status_filter.igual_que
-
-      if (Array.isArray(value)) {
-        // Antes de intentar matchear contra un grupo REAL del catálogo (lead_status_groups), hay
-        // que descartar el caso de una tarjeta agrupada (ej. "Demo": 3 slugs) -- su `.group` no es
-        // ninguno de esos grupos reales aunque comparta label con uno (el grupo real "Demo" del
-        // catálogo tiene 5 slugs, no 3). Sin este chequeo, ninguna igualdad de tamaño matchea,
-        // sync_status_nav_from_store() termina en null/null, y la tarjeta pierde el resaltado
-        // apenas se la clickea.
-        var matched_card = this.find_status_card_by_slugs(value)
-        if (matched_card) {
-          this.active_status_group = null
-          this.active_status_slug = matched_card.value
-          return
-        }
-
-        var matched_group = null
-        this.lead_status_groups.forEach(function (g) {
-          var slugs = g.options.map(function (o) { return o.value })
-          var same_set = slugs.length === value.length && slugs.every(function (s) {
-            return value.indexOf(s) !== -1
-          })
-          if (same_set) {
-            matched_group = g.name
-          }
-        })
-        this.active_status_group = matched_group
-        this.active_status_slug = null
-        return
-      }
-
-      var matched_group_for_value = null
-      this.lead_status_groups.forEach(function (g) {
-        g.options.forEach(function (o) {
-          if (o.value === value) {
-            matched_group_for_value = g.name
-          }
-        })
-      })
-      this.active_status_group = matched_group_for_value
-      this.active_status_slug = matched_group_for_value ? value : null
-    },
-    /**
-     * Botón "Todos": quita el filtro de estado sin tocar otros filtros activos (nombre,
-     * teléfono, fecha de inicio de conversación, etc.). Mismo patrón que
-     * on_clear_conversation_started_date.
-     * @returns {void}
-     */
-    on_select_status_all() {
-      var self = this
-      this.active_status_group = null
-      this.active_status_slug = null
-      this.$store.commit('lead/remove_filter_by_key', 'status')
-
-      if (!this.$store.state.lead.is_filtered) {
-        return
-      }
-
-      var remaining_filters = this.$store.state.lead.filters || []
-      if (remaining_filters.length > 0) {
-        this.$store.commit('lead/set_filter_page', 1)
-        this.$store.dispatch('lead/run_filter', { page: 1 })
-        return
-      }
-
-      this.$store.commit('lead/set_filter_page', 1)
-      this.$store.commit('lead/set_filtered', [])
-      this.$store.commit('lead/set_is_filtered', false)
-      this.$store.dispatch('lead/get_models').then(function () {
-        self.sync_status_nav_from_store()
-      })
-    },
-    /**
-     * Selecciona un grupo completo (ej. "Demo"): filtra por todos los slugs del grupo a la
-     * vez (whereIn en el backend — ver prompt 238, dependencia dura de este botón).
-     * @param {{ name: string, options: Array }} group
-     * @returns {void}
-     */
-    on_select_status_group(group) {
-      if (!group || !group.options || !group.options.length) {
-        return
-      }
-      var slugs = group.options.map(function (o) { return o.value })
-
-      this.active_status_group = group.name
-      this.active_status_slug = null
-      this.$store.commit('lead/add_filter', { type: 'select', key: 'status', igual_que: slugs })
-      this.$store.commit('lead/set_filter_page', 1)
-      this.$store.dispatch('lead/run_filter', { page: 1 })
-    },
-    /**
-     * Selecciona un estado puntual dentro del grupo activo (igualdad simple, mecanismo ya
-     * existente — no depende del prompt 238).
-     * @param {{ value: string, text: string, color: string, group: string }} opt
-     * @returns {void}
-     */
-    on_select_status(opt) {
-      if (!opt) {
-        return
-      }
-
-      this.active_status_group = opt.group
-      this.active_status_slug = opt.value
-      this.$store.commit('lead/add_filter', { type: 'select', key: 'status', igual_que: opt.value })
-      this.$store.commit('lead/set_filter_page', 1)
-      this.$store.dispatch('lead/run_filter', { page: 1 })
-    },
-    /**
-     * Clic en una tarjeta de estado: filtra la grilla por ese estado reusando el mismo camino
-     * que el botón de la barra de navegación, para que las dos queden sincronizadas.
-     *
-     * Busca la opción del meta por slug porque `on_select_status` necesita `opt.group` para
-     * prender también el botón de grupo (fila 1). Si el meta todavía no cargó, usa la propia
-     * tarjeta, que trae `group` del backend con el mismo criterio.
-     *
-     * Volver a clickear la misma tarjeta re-ejecuta el filtro, no lo apaga: idéntico al botón
-     * de estado de la barra. Para sacar el filtro está "Todos".
-     *
-     * La tarjeta "Demo" (misión demo-v2-estados-automaticos, 4/9/2026) es agrupada: su `value`
-     * ("demo") no es un slug real de `lead_status_options`, así que buscarla ahí no matchea nada
-     * y el fallback de abajo filtraría por `status = 'demo'` (roto: ningún lead tiene ese status).
-     * Cuando la tarjeta trae `slugs`, se reusa el mismo mecanismo de filtro por array que ya usa
-     * `on_select_status_group()` — no hay que inventar nada nuevo.
-     *
-     * @param {{ value: string, text: string, color: string, group: string|null, slugs?: string[] }} card
+     * @param {{ value: string, text: string, slugs?: string[] }} card
      * @returns {void}
      */
     on_select_status_card(card) {
       if (!card || !card.value) {
         return
       }
-      if (Array.isArray(card.slugs) && card.slugs.length) {
-        this.active_status_group = card.group || null
-        this.active_status_slug = card.value
-        this.$store.commit('lead/add_filter', { type: 'select', key: 'status', igual_que: card.slugs })
-        this.$store.commit('lead/set_filter_page', 1)
-        this.$store.dispatch('lead/run_filter', { page: 1 })
+      if (this.active_status_slug === card.value) {
+        this.limpiar_filtro_de_estado()
         return
       }
-      var opciones = this.lead_status_options
-      var opt = null
-      var i = 0
-      for (i = 0; i < opciones.length; i = i + 1) {
-        if (opciones[i] && opciones[i].value === card.value) {
-          opt = opciones[i]
-          break
-        }
-      }
-      this.on_select_status(opt || card)
+      this.active_status_slug = card.value
+      const status = Array.isArray(card.slugs) && card.slugs.length ? card.slugs.join(',') : card.value
+      this.$store.commit('lead/set_chats_filtros', { status: status })
+      this.$store.dispatch('lead/fetch_chats', { page: 1 })
     },
     /**
-     * Sincroniza en la tabla los cambios recibidos desde acciones extra del modal.
-     * @param {Object} model lead actualizado en backend.
      * @returns {void}
      */
-    on_record_updated(model) {
-      this.$store.dispatch('lead/upsert_model_in_lists', model)
-      const conv = this.$store.state.lead.lead_en_conversacion
-      if (conv && model && model.id && conv.id == model.id) {
-        this.$store.commit('lead/update_lead_en_conversacion', model)
-      }
-      /* Editar el lead a mano puede haberle cambiado el estado, y ese es el único camino de
-         cambio de estado que no pasa por el socket. Sin esto, mover un lead de Calificado a
-         Demo agendada desde el modal deja las dos tarjetas con el número viejo hasta que algo
-         más dispare un refresco. */
-      this.$store.dispatch('lead/fetch_status_cards')
+    limpiar_filtro_de_estado() {
+      this.active_status_slug = null
+      this.$store.commit('lead/set_chats_filtros', { status: null })
+      this.$store.dispatch('lead/fetch_chats', { page: 1 })
     },
+
     /**
-     * Abre el modal del lead reutilizando el handler de fila del ResourceView principal.
-     * @param {Object} lead Lead de la fila clickeada en el panel de demos.
+     * Fila del panel de demos: abre el modal del lead.
+     * @param {Object} lead
      * @returns {void}
      */
     on_demo_row_click(lead) {
-      if (!lead || !lead.id) {
-        return
-      }
-      var resource_view = this.$refs.lead_resource_view
-      if (resource_view && typeof resource_view.on_row === 'function') {
-        resource_view.on_row(lead)
-      }
+      this.on_open_lead_modal(lead)
     },
     /**
      * Alterna la visibilidad del panel de demos agendadas.
@@ -1788,7 +983,7 @@ export default {
      * @returns {void}
      */
     load_demos_settings_and_leads() {
-      var self = this
+      const self = this
       /* GET duración configurada para calcular "Llamar a las". Cacheado: acá solo se lee, y el
          PUT de /cuenta#lead-demo-settings invalida la entrada. */
       cached_get('/settings/lead-demo', { max_age_ms: MAX_AGE_SETTINGS }).then(function (data) {
@@ -1806,7 +1001,7 @@ export default {
      * @returns {string}
      */
     get_today_str() {
-      var today = new Date()
+      const today = new Date()
       return today.getFullYear()
         + '-' + String(today.getMonth() + 1).padStart(2, '0')
         + '-' + String(today.getDate()).padStart(2, '0')
@@ -1829,13 +1024,12 @@ export default {
      * @returns {Array} Grupos { date_key, heading, is_today, leads }.
      */
     build_demos_day_groups(leads, sort_dates_asc) {
-      var self = this
-      var today_str = self.get_today_str()
-      var groups_map = {}
+      const self = this
+      const today_str = self.get_today_str()
+      const groups_map = {}
 
-      /* Agrupar leads por demo_date. */
       leads.forEach(function (lead) {
-        var date_key = self.parse_demo_date_key(lead)
+        const date_key = self.parse_demo_date_key(lead)
         if (!date_key) {
           return
         }
@@ -1845,8 +1039,7 @@ export default {
         groups_map[date_key].push(lead)
       })
 
-      /* Ordenar fechas según criterio (ascendente para próximas, descendente para realizadas). */
-      var date_keys = Object.keys(groups_map)
+      const date_keys = Object.keys(groups_map)
       date_keys.sort(function (a, b) {
         if (sort_dates_asc) {
           return a.localeCompare(b)
@@ -1854,13 +1047,13 @@ export default {
         return b.localeCompare(a)
       })
 
-      var grouped = []
+      const grouped = []
       date_keys.forEach(function (date_key) {
-        var day_leads = groups_map[date_key].slice()
+        const day_leads = groups_map[date_key].slice()
         /* Dentro del día: próximas por hora ascendente; realizadas por hora descendente. */
         day_leads.sort(function (a, b) {
-          var ta = a.demo_start_time || ''
-          var tb = b.demo_start_time || ''
+          const ta = a.demo_start_time || ''
+          const tb = b.demo_start_time || ''
           if (sort_dates_asc) {
             return ta.localeCompare(tb)
           }
@@ -1884,12 +1077,12 @@ export default {
      * @returns {void}
      */
     load_demos_agendadas() {
-      var self = this
+      const self = this
       self.loading_demos_agendadas = true
       api
         .get('/lead', { params: { status: DEMO_LIFECYCLE_STATUSES.join(',') } })
         .then(function (res) {
-          var leads = (res.data && res.data.models)
+          let leads = (res.data && res.data.models)
             ? res.data.models
             : (Array.isArray(res.data) ? res.data : [])
 
@@ -1898,11 +1091,10 @@ export default {
             return !!self.parse_demo_date_key(l)
           })
 
-          var today_str = self.get_today_str()
+          const today_str = self.get_today_str()
 
           /*
-           * Clasificación en tres grupos, basada en demo_date + status real del lead (ya no en
-           * cálculo de horas estimadas):
+           * Clasificación en tres grupos, basada en demo_date + status real del lead:
            * - Próximas: hoy (CUALQUIER status, para que una demo en curso o recién realizada nunca
            *   "desaparezca") + días futuros.
            * - En curso: días anteriores a hoy cuyo status sigue en un estado intermedio sin
@@ -1910,12 +1102,12 @@ export default {
            * - Realizadas: días anteriores a hoy con status demo_realizada, o cualquier otro status
            *   viejo no resuelto (el día ya pasó, no tiene sentido seguir mostrándolo como pendiente).
            */
-          var proximas_leads = []
-          var en_curso_leads = []
-          var realizadas_leads = []
+          const proximas_leads = []
+          const en_curso_leads = []
+          const realizadas_leads = []
 
           leads.forEach(function (lead) {
-            var date_key = self.parse_demo_date_key(lead)
+            const date_key = self.parse_demo_date_key(lead)
 
             if (date_key >= today_str) {
               proximas_leads.push(lead)
@@ -1952,14 +1144,14 @@ export default {
       if (!date_key) {
         return '—'
       }
-      var parts = date_key.split('-')
+      const parts = date_key.split('-')
       if (parts.length !== 3) {
         return date_key
       }
-      var weekdays = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
-      var local_date = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10))
-      var weekday = weekdays[local_date.getDay()] || ''
-      var label = parts[2] + '/' + parts[1] + '/' + parts[0]
+      const weekdays = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+      const local_date = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10))
+      const weekday = weekdays[local_date.getDay()] || ''
+      const label = parts[2] + '/' + parts[1] + '/' + parts[0]
       return weekday + ' ' + label
     },
     /**
@@ -1972,13 +1164,13 @@ export default {
       if (!lead) {
         return '—'
       }
-      var target_client = lead.target_client
+      const target_client = lead.target_client
       if (target_client) {
-        var company_name = (target_client.company_name || '').trim()
+        const company_name = (target_client.company_name || '').trim()
         if (company_name) {
           return company_name
         }
-        var client_name = (target_client.name || '').trim()
+        const client_name = (target_client.name || '').trim()
         if (client_name) {
           return client_name
         }
@@ -1997,15 +1189,13 @@ export default {
       if (!lead.demo_start_time) {
         return '—'
       }
-      /* Parsear hora de inicio en formato HH:MM. */
-      var match = (lead.demo_start_time + '').match(/(\d{1,2}):(\d{2})/)
+      const match = (lead.demo_start_time + '').match(/(\d{1,2}):(\d{2})/)
       if (!match) {
         return '—'
       }
-      /* Sumar duración en minutos y convertir de vuelta a HH:MM. */
-      var total_minutes = parseInt(match[1], 10) * 60 + parseInt(match[2], 10) + this.duracion_minutos
-      var hours = Math.floor(total_minutes / 60)
-      var mins = total_minutes % 60
+      const total_minutes = parseInt(match[1], 10) * 60 + parseInt(match[2], 10) + this.duracion_minutos
+      const hours = Math.floor(total_minutes / 60)
+      const mins = total_minutes % 60
       return String(hours).padStart(2, '0') + ':' + String(mins).padStart(2, '0')
     },
     /**
@@ -2015,7 +1205,7 @@ export default {
      * @returns {{label: string, class: string}}
      */
     demo_lifecycle_badge(lead) {
-      var status = lead && lead.status
+      const status = lead && lead.status
       if (status === 'demo_realizada') {
         return { label: 'Realizada', class: 'bg-light text-secondary border' }
       }
@@ -2048,22 +1238,7 @@ export default {
 </script>
 
 <style scoped>
-/* Input compacto del filtro por inicio de conversación en la barra superior. */
-.leads-conversation-date-input {
-  width: 10.5rem;
-  min-width: 10.5rem;
-}
-
-/* En móvil el filtro de fecha usa todo el ancho de la fila secundaria. */
-@media (max-width: 767.98px) {
-  .leads-conversation-date-input {
-    width: auto;
-    min-width: 0;
-    flex: 1 1 auto;
-  }
-}
-
-/* Filas clickeables del panel de demos agendadas (misma UX que la tabla principal). */
+/* Filas clickeables del panel de demos agendadas (misma UX que la lista de chats). */
 .demos-agendadas-row {
   cursor: pointer;
 }
@@ -2074,8 +1249,7 @@ export default {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Ancho mínimo para mantener columnas legibles y forzar scroll horizontal en móvil.
-   Subido de 44rem a 48rem por la columna nueva de Etapa. */
+/* Ancho mínimo para mantener columnas legibles y forzar scroll horizontal en móvil. */
 .demos-agendadas-table {
   min-width: 48rem;
   white-space: nowrap;
@@ -2094,101 +1268,13 @@ export default {
   }
 }
 
-/* Fila de grupos: flex para poder empujar la leyenda de colores contra el borde derecho.
-   `width: 100%` es lo que hace que el `ms-auto` de la leyenda tenga a dónde empujar: `.lead-status-nav`
-   es flex, así que sin ancho explícito esta fila se encoge al contenido y el margen automático
-   resuelve en cero (medido: la fila quedaba en 564px de 1352 y la leyenda pegada a los botones).
-   Con wrap, en pantallas angostas la leyenda baja sola debajo de los botones en vez de comprimirlos
-   o empujar scroll horizontal. */
-.lead-status-nav__row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  width: 100%;
-}
-
-/* Referencia de colores: discreta en reposo, el detalle sale al pasar el mouse. */
-.lead-color-legend {
-  font-size: 0.78rem;
-  color: #6c757d;
-}
-
-.lead-color-legend__item {
-  position: relative;
-  gap: 0.3rem;
-  cursor: help;
-}
-
-.lead-color-legend__swatch {
-  width: 0.85rem;
-  height: 0.85rem;
-  border-radius: 0.2rem;
-  border: 1px solid rgba(0, 0, 0, 0.18);
-  flex: 0 0 auto;
-}
-
-/* Los mismos amarillo y rojo que pinta la grilla (ver table/body/Index.vue). */
-.lead-color-legend__swatch--warning {
-  background-color: #ffe08a;
-}
-
-.lead-color-legend__swatch--danger {
-  background-color: #f5b7b7;
-}
-
-/* Globo explicativo. Sale con hover y también con foco de teclado, para que se pueda leer
-   sin mouse. `pointer-events: none` para que no se interponga con los botones de abajo. */
-.lead-color-legend__popup {
-  position: absolute;
-  top: calc(100% + 0.35rem);
-  right: 0;
-  z-index: 20;
-  display: none;
-  width: 17rem;
-  padding: 0.5rem 0.6rem;
-  border: 1px solid #dee2e6;
-  border-radius: 0.375rem;
-  background-color: #fff;
-  box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.12);
-  color: #212529;
-  font-size: 0.78rem;
-  line-height: 1.35;
-  text-align: left;
-  white-space: normal;
-  pointer-events: none;
-}
-
-.lead-color-legend__popup strong {
-  display: block;
-  margin-bottom: 0.15rem;
-}
-
-.lead-color-legend__item:hover .lead-color-legend__popup,
-.lead-color-legend__item:focus .lead-color-legend__popup,
-.lead-color-legend__item:focus-visible .lead-color-legend__popup {
-  display: block;
-}
-
-/* En teléfono la leyenda arranca a la izquierda (el ms-auto no tiene a dónde empujar) y el globo
-   se ancla al BORDE IZQUIERDO DE LA LEYENDA, no al del ítem.
-   Anclarlo al ítem no alcanza: el segundo ítem empieza pasada la mitad de la pantalla, así que un
-   globo de 17rem que arranca ahí se sale por la derecha (medido a 360px: llegaba a 399). Poniendo
-   el ítem en `static`, el `absolute` del globo resuelve contra `.lead-color-legend`. */
+/* En teléfono los chips y los botones de la derecha comparten una sola fila angosta: los botones
+   no se encogen y los chips se truncan antes de romper la fila. */
 @media (max-width: 575.98px) {
-  .lead-color-legend {
-    position: relative;
-    margin-left: 0 !important;
-  }
-
-  .lead-color-legend__item {
-    position: static;
-  }
-
-  .lead-color-legend__popup {
-    right: auto;
-    left: 0;
-    width: min(17rem, calc(100vw - 2.5rem));
+  .leads-toolbar .badge {
+    max-width: 70vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 </style>

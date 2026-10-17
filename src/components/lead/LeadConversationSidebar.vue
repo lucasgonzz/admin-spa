@@ -44,6 +44,7 @@
           v-if="lead"
           :lead_record_prop="lead"
           @record-updated="on_record_updated"
+          @open-lead-modal="$emit('open-lead-modal', $event)"
         />
       </div>
     </div>
@@ -64,8 +65,10 @@ import LeadConversationView from '@/views/LeadConversationView.vue'
  *   lead {Object|null} - Lead a mostrar. null cierra el sidebar.
  *
  * Eventos:
- *   close          - El usuario hizo clic en el botón ×.
- *   record-updated - LeadConversationView actualizó el lead; propaga el modelo.
+ *   close           - El usuario hizo clic en el botón ×.
+ *   record-updated  - LeadConversationView actualizó el lead; propaga el modelo.
+ *   open-lead-modal - Clic en el nombre del lead en el header de la conversación (17/10/2026):
+ *                     el padre abre el modal del lead. Acá solo se reenvía.
  */
 export default {
   name: 'LeadConversationSidebar',
@@ -84,7 +87,7 @@ export default {
     },
   },
 
-  emits: ['close', 'record-updated'],
+  emits: ['close', 'record-updated', 'open-lead-modal'],
 
   data() {
     /* Leer el ancho persistido en localStorage; si no existe o no es válido, usar 440px. */
