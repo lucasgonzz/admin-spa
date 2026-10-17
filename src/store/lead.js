@@ -631,7 +631,9 @@ export default __base_store({
     /**
      * Actualiza una fila de chat en el lugar y reordena con el criterio del servidor. Si la fila
      * no estaba, entra solo cuando corresponde a los filtros puestos y no hay texto buscado (ver
-     * `chat_row_matches_filtros`); si estaba y dejó de corresponder, sale.
+     * `chat_row_matches_filtros`); si estaba y dejó de corresponder, sale. Al entrar o salir se
+     * ajusta `chats_meta.total` (+1 / −1) para que «N chats» y el «(X de Y)» de «Cargar más» no
+     * queden desfasados hasta la próxima carga; es una cuenta local que el próximo GET corrige.
      *
      * @param {Object} state
      * @param {Object} row Fila de GET /lead/chats/{id}.
@@ -643,10 +645,12 @@ export default __base_store({
       const idx = state.chats.findIndex(function (r) { return String(r.id) === String(row.id) })
       const matchea = chat_row_matches_filtros(state.chats_filtros, row)
       const lista = state.chats.slice()
+      const total = parseInt(state.chats_meta.total, 10) || 0
       if (idx !== -1) {
         if (!matchea) {
           lista.splice(idx, 1)
           state.chats = lista
+          state.chats_meta = Object.assign({}, state.chats_meta, { total: Math.max(0, total - 1) })
           return
         }
         lista.splice(idx, 1, Object.assign({}, lista[idx], row))
@@ -658,13 +662,7 @@ export default __base_store({
       }
       lista.push(row)
       state.chats = ordenar_chats(lista)
-    },
-    /**
-     * @param {Object} state
-     * @param {number|string} lead_id
-     */
-    remove_chat_row(state, lead_id) {
-      state.chats = state.chats.filter(function (r) { return String(r.id) !== String(lead_id) })
+      state.chats_meta = Object.assign({}, state.chats_meta, { total: total + 1 })
     },
     /**
      * Incrementa la versión de recarga de leads para que el hook activated() de Leads.vue

@@ -345,7 +345,6 @@
 
     <!-- La bandeja: buscador + lista de chats (reemplaza a la tabla desde el 17/10/2026). -->
     <lead-chats-list
-      ref="chats_list"
       :active_lead_id="sidebar_lead ? sidebar_lead.id : null"
       @open-conversation="on_open_conversation"
       @open-modal="on_open_lead_modal"
