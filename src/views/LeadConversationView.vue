@@ -1794,10 +1794,7 @@ export default {
           const hasta = row && row.atendido_hasta_message_id != null
             ? row.atendido_hasta_message_id
             : message_id
-          self.on_record_updated(Object.assign({}, self.lead_record || {}, {
-            id: rec.id,
-            atendido_hasta_message_id: hasta,
-          }))
+          self.aplicar_marca_atendido(rec.id, hasta)
           /* El botón se va solo (el computed ya no encuentra nada sin responder); en su lugar
              queda el chip con Deshacer bajo el mismo mensaje. */
           self.atendido_chip_message_id = message_id
@@ -1808,6 +1805,31 @@ export default {
         .then(function () {
           self.marcando_respondido = false
         })
+    },
+
+    /**
+     * Escribe `atendido_hasta_message_id` en el registro local y en la conversación del store
+     * SIN tocar el hilo.
+     *
+     * 🔴 No pasa por `on_record_updated` con una copia de `lead_record`: esa copia trae
+     * `messages` y `messages_scope: 'full'`, y con esa marca `update_lead_en_conversacion` toma
+     * la rama de REEMPLAZO del hilo, pisando los mensajes que entraron por Pusher después con una
+     * lista que puede estar vieja (hallazgo del chequeo, 17/10/2026). Al store va solo
+     * `{ id, atendido_hasta_message_id }`: sin `messages` la mutación fusiona y deja el hilo como
+     * estaba, igual que hace `useLeadSocket.js` con el refetch de fila.
+     *
+     * @param {number|string} lead_id
+     * @param {number|null} hasta
+     * @returns {void}
+     */
+    aplicar_marca_atendido(lead_id, hasta) {
+      if (this.lead_record && String(this.lead_record.id) === String(lead_id)) {
+        this.lead_record = Object.assign({}, this.lead_record, { atendido_hasta_message_id: hasta })
+      }
+      this.$store.commit('lead/update_lead_en_conversacion', {
+        id: lead_id,
+        atendido_hasta_message_id: hasta,
+      })
     },
 
     /**
@@ -1826,12 +1848,10 @@ export default {
       this.deshaciendo_marca = true
       this.$store.dispatch('lead/marcar_respondido', { lead_id: rec.id, deshacer: true })
         .then(function (row) {
-          self.on_record_updated(Object.assign({}, self.lead_record || {}, {
-            id: rec.id,
-            atendido_hasta_message_id: row && row.atendido_hasta_message_id != null
-              ? row.atendido_hasta_message_id
-              : null,
-          }))
+          self.aplicar_marca_atendido(
+            rec.id,
+            row && row.atendido_hasta_message_id != null ? row.atendido_hasta_message_id : null
+          )
           self.atendido_chip_message_id = null
         })
         .catch(function () {
