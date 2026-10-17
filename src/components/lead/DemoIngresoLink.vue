@@ -98,11 +98,10 @@ const TEXTOS_POR_CAMPO = {
  *
  * No persiste nada: los campos están declarados `not_persisted_on_model` + `exclude_on_update`.
  *
- * Es un bloque distinto de `DemoAccesoControl.vue`, que vive en el panel lateral de WhatsApp:
- * aquel opera sobre el token (reemitir, revocar) y solo ofrece copiar; este muestra el link en
- * claro dentro del modal, que es lo que Lucas pidió el 25/8/2026. Y distinto también de
- * `DemoExperienciaControl.vue`, que elige la dinámica de demo (`actual`/`nueva`) y no muestra
- * ningún link.
+ * Es un bloque distinto del token: reemitir y revocar el acceso viven en la sub-solapa Links de
+ * la Demo (`components/lead/demo/Links.vue`, 17/10/2026, rescatados del viejo
+ * `DemoAccesoControl.vue`); este solo muestra el link en claro con copiar / abrir, que es lo que
+ * Lucas pidió el 25/8/2026.
  */
 export default {
   name: 'DemoIngresoLink',
@@ -141,8 +140,9 @@ export default {
      *
      * A propósito NO se arma acá un fallback concatenando `record.demo.erp_spa_url` con el
      * token: esa fórmula ya vive en un solo lugar (el accesor del modelo, que además normaliza
-     * el esquema), y una segunda copia en el front es exactamente la deuda que dejó anotada
-     * `DemoAccesoControl.vue`. Si el campo no viene, se muestra el estado vacío.
+     * el esquema), y una segunda copia en el front es exactamente la deuda que dejó anotada el
+     * viejo `DemoAccesoControl.vue` (borrado el 17/10/2026). Si el campo no viene, se muestra el
+     * estado vacío.
      *
      * @returns {string}
      */
@@ -176,7 +176,7 @@ export default {
 
     /**
      * Copia el link al portapapeles y muestra feedback por 2 segundos.
-     * Reutiliza el mismo helper que usa `DemoAccesoControl.vue`.
+     * Reutiliza el mismo helper que usa la sub-solapa Links de la Demo.
      *
      * @returns {void}
      */

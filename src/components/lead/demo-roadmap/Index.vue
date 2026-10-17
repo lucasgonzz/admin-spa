@@ -107,8 +107,8 @@
                 <div class="flex-grow-1 min-width-0">
                   <!-- El parcial usa `demo-roadmap-parcial` y no `text-warning` a secas: el
                        amarillo de Bootstrap sobre fondo blanco no llega a contraste AA, y
-                       justamente éste es el estado que más se lee. Mismo criterio que
-                       DemoExperienciaControl, que ya usa la variable de énfasis. -->
+                       justamente éste es el estado que más se lee. Se usa la variable de
+                       énfasis de Bootstrap, no el amarillo pelado. -->
                   <div
                     class="small fw-semibold demo-roadmap-titulo"
                     :class="{
@@ -859,7 +859,7 @@ export default {
 
 // Ámbar oscuro en vez del `text-warning` de Bootstrap (#ffc107), que sobre el fondo blanco de la
 // tarjeta da ~1.6:1 y no llega a AA. `parcial` es el estado que más se lee de los tres: es el que
-// dice dónde se trabó el lead. Misma variable que usa DemoExperienciaControl.
+// dice dónde se trabó el lead. Variable de énfasis de Bootstrap, no el amarillo pelado.
 .demo-roadmap-parcial
 	color: var(--bs-warning-text-emphasis, #997404)
 
