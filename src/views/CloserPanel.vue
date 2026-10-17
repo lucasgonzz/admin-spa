@@ -105,15 +105,21 @@
     />
 
     <!-- Modal de detalle del lead: el mismo ModelModal genérico que usa el módulo de Leads,
-         montado acá directo para que el panel del closer no navegue a otra vista. -->
+         montado acá directo para que el panel del closer no navegue a otra vista. Las pestañas
+         extra, su orden y el meta con el grupo Demo oculto salen de la misma definición que usa
+         Leads.vue (`components/lead/modal-definicion.js`, 17/10/2026): desde los dos lugares se
+         tiene que ver el mismo modal. -->
     <ModelModal
       model_name="lead"
       :show="modal_lead !== null"
       :all_properties="lead_all_properties"
       :record="modal_lead"
+      :extra_tabs="lead_model_extra_tabs"
+      :properties_nav_order="lead_model_properties_nav_order"
       @update:show="on_lead_modal_show"
       @close="on_close_lead_modal"
       @saved="on_lead_modal_saved"
+      @extra-record-updated="on_lead_modal_saved"
       @open-conversation="on_open_conversation"
     />
   </div>
@@ -124,6 +130,11 @@ import CloserLeadCard from '@/components/closer/CloserLeadCard.vue'
 import LeadConversationSidebar from '@/components/lead/LeadConversationSidebar.vue'
 import LeadStatusCards from '@/components/lead/LeadStatusCards.vue'
 import ModelModal from '@/common-vue/components/model/Index.vue'
+import {
+  lead_model_extra_tabs,
+  lead_model_properties_nav_order,
+  ocultar_grupo_demo_del_meta,
+} from '@/components/lead/modal-definicion'
 
 /** Intervalo de polling silencioso en milisegundos. */
 const PANEL_POLL_MS = 60000
@@ -226,6 +237,10 @@ export default {
 
   data() {
     return {
+      /** Pestañas extra y orden del modal del lead: la misma definición que usa Leads.vue. */
+      lead_model_extra_tabs: lead_model_extra_tabs,
+      lead_model_properties_nav_order: lead_model_properties_nav_order,
+
       /** Referencia al setInterval de polling. */
       poll_interval_id: null,
 
@@ -296,14 +311,15 @@ export default {
       return this.$store.state.closer.active_section
     },
     /**
-     * Meta de propiedades del modelo `lead` (grupos del formulario del modal de detalle).
+     * Meta de propiedades del modelo `lead` (grupos del formulario del modal de detalle), con el
+     * grupo "Demo" oculto detrás de la solapa Demo propia, igual que en Leads.vue.
      * Se carga en `mounted()` vía `meta/fetch_meta` porque este panel no pasa por ResourceView,
      * que es quien normalmente la precarga para el módulo de Leads.
      *
      * @returns {Array<Object>}
      */
     lead_all_properties() {
-      return this.$store.getters['meta/properties']('lead') || []
+      return ocultar_grupo_demo_del_meta(this.$store.getters['meta/properties']('lead') || [])
     },
     /**
      * Mail de la cuenta de Google conectada del closer (la que crea los eventos y los Meet).
