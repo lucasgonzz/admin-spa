@@ -26,9 +26,19 @@
         >
           <i class="bi bi-arrow-left" aria-hidden="true" />
         </button>
-        <span class="fw-semibold text-truncate conversation-lead-name">
+        <!-- El nombre abre la ficha del lead (misión flujo-lead-landing-closer, 17/10/2026): en el
+             sidebar se lo pide a Leads.vue con `open-lead-modal`; en la ruta de teléfono navega a
+             /leads?lead_id=, que es el deep link que ya abre el modal. Reemplaza al botón "Ver
+             resumen del lead" y a su overlay propio. -->
+        <button
+          type="button"
+          class="fw-semibold text-truncate conversation-lead-name conversation-lead-name--btn"
+          :title="effective_record ? 'Abrir la ficha de ' + lead_name : ''"
+          :disabled="!effective_record"
+          @click="on_open_lead_modal"
+        >
           {{ lead_name }}
-        </span>
+        </button>
       </div>
 
       <!-- Centro: badge de fecha/hora de demo (solo cuando el lead tiene demo agendada) -->
@@ -48,20 +58,9 @@
         </span>
       </div>
 
-      <!-- Derecha: 8 botones de acción (solo ícono) -->
+      <!-- Derecha: 7 botones de acción (solo ícono). "Ver resumen del lead" se fue el 17/10/2026:
+           el resumen vive en la ficha, que ahora abre el nombre. -->
       <div class="d-flex align-items-center gap-1 flex-shrink-0 conversation-header-actions">
-
-        <!-- Resumen del lead -->
-        <button
-          type="button"
-          class="icon-btn text-muted"
-          title="Ver resumen del lead"
-          aria-label="Ver resumen del lead"
-          :disabled="!effective_record"
-          @click="show_resumen_modal = true"
-        >
-          <i class="bi bi-person-lines-fill" aria-hidden="true" />
-        </button>
 
         <!-- Notificar mensajes: campana l͏͏͏͏ si activo, vacía si no -->
         <button
@@ -264,25 +263,44 @@
           <div v-if="section.date_label" class="wa-date-divider">
             <span class="wa-date-divider-label">{{ section.date_label }}</span>
           </div>
-          <message-bubble
-            v-for="msg in section.messages"
-            :key="msg.id"
-            :message="msg"
-            :busy="busy_message_id === msg.id"
-            :now_tick="now_tick"
-            :auto_send_delay_seconds="ai_suggestion_auto_send_delay_seconds"
-            :lead_status="effective_record ? effective_record.status : ''"
-            :whatsapp_window_open="whatsapp_window_open"
-            @enviar="on_enviar_sugerencia(msg.id)"
-            @guardar_y_enviar="on_guardar_y_enviar_sugerencia(msg.id, $event)"
-            @aprobar_con_acciones="on_aprobar_con_acciones(msg.id, $event)"
-            @cancelar_envio_automatico="on_cancelar_envio_automatico(msg.id)"
-            :lead_no_recibe_mensajes="Boolean(effective_record && effective_record.no_recibe_mensajes_at)"
-            @descartar_sugerencia="on_descartar_sugerencia(msg.id)"
-            @toggle_no_recibe_mensajes="on_toggle_no_recibe_mensajes(msg.id)"
-            @toggle_deleted_from_context="on_toggle_deleted_from_context(msg.id)"
-            @reaccionar="on_reaccionar_mensaje(msg.id, $event)"
-          />
+          <template v-for="msg in section.messages" :key="msg.id">
+            <message-bubble
+              :message="msg"
+              :busy="busy_message_id === msg.id"
+              :now_tick="now_tick"
+              :auto_send_delay_seconds="ai_suggestion_auto_send_delay_seconds"
+              :lead_status="effective_record ? effective_record.status : ''"
+              :whatsapp_window_open="whatsapp_window_open"
+              @enviar="on_enviar_sugerencia(msg.id)"
+              @guardar_y_enviar="on_guardar_y_enviar_sugerencia(msg.id, $event)"
+              @aprobar_con_acciones="on_aprobar_con_acciones(msg.id, $event)"
+              @cancelar_envio_automatico="on_cancelar_envio_automatico(msg.id)"
+              :lead_no_recibe_mensajes="Boolean(effective_record && effective_record.no_recibe_mensajes_at)"
+              @descartar_sugerencia="on_descartar_sugerencia(msg.id)"
+              @toggle_no_recibe_mensajes="on_toggle_no_recibe_mensajes(msg.id)"
+              @toggle_deleted_from_context="on_toggle_deleted_from_context(msg.id)"
+              @reaccionar="on_reaccionar_mensaje(msg.id, $event)"
+            />
+            <!-- "No necesita respuesta" (decisión D6, 17/10/2026): debajo del ÚLTIMO mensaje del
+                 lead que todavía cuenta como sin responder. Marca atendido hasta ese mensaje y la
+                 fila deja de estar en amarillo sin mandar nada; desaparece al confirmarse. -->
+            <div
+              v-if="msg.id === mensaje_sin_responder_id"
+              class="wa-no-necesita-respuesta"
+            >
+              <button
+                type="button"
+                class="btn btn-link btn-sm wa-no-necesita-respuesta__btn"
+                :disabled="marcando_respondido"
+                title="Dejar de contar este mensaje como sin responder, sin mandarle nada al lead"
+                @click="on_marcar_respondido(msg.id)"
+              >
+                <span v-if="marcando_respondido" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" />
+                <i v-else class="bi bi-check2-circle me-1" aria-hidden="true" />
+                No necesita respuesta
+              </button>
+            </div>
+          </template>
         </div>
         <!-- Mensajes salientes todavía no confirmados por el backend (envío optimista) -->
         <pending-outgoing-bubble
@@ -534,44 +552,6 @@
       </div>
     </div>
 
-    <!-- ====================================================
-         MODAL: Resumen del lead
-         ==================================================== -->
-    <div
-      v-if="show_resumen_modal"
-      class="resumen-modal-overlay"
-      @click.self="show_resumen_modal = false"
-    >
-      <div class="resumen-modal-panel">
-
-        <!-- Header del modal -->
-        <div class="d-flex align-items-center justify-content-between px-4 py-3 border-bottom">
-          <span class="fw-semibold">
-            <i class="bi bi-person-lines-fill me-2 text-primary" aria-hidden="true" />
-            Resumen del lead
-          </span>
-          <button
-            type="button"
-            class="icon-btn text-muted"
-            title="Cerrar"
-            aria-label="Cerrar resumen del lead"
-            @click="show_resumen_modal = false"
-          >
-            <i class="bi bi-x-lg" aria-hidden="true" />
-          </button>
-        </div>
-
-        <!-- Cuerpo: reutiliza LeadResumenTab -->
-        <div class="resumen-modal-body">
-          <lead-resumen-tab
-            :record="effective_record"
-            @record-updated="on_record_updated"
-          />
-        </div>
-
-      </div>
-    </div>
-
   </div>
 
   <!-- Modal para enviar plantillas Meta manualmente cuando la ventana de 24hs está cerrada -->
@@ -605,7 +585,6 @@
 import MessageBubble from '@/components/lead/conversation/MessageBubble.vue'
 import PendingOutgoingBubble from '@/components/lead/conversation/PendingOutgoingBubble.vue'
 import ScheduledMessageBubble from '@/components/lead/conversation/ScheduledMessageBubble.vue'
-import LeadResumenTab from '@/components/lead/resumen/Index.vue'
 import TemplatePickerModal from '@/components/lead/conversation/TemplatePickerModal.vue'
 import ScheduleMessageModal from '@/components/lead/conversation/ScheduleMessageModal.vue'
 import ImageAnnotationEditor from '@/components/common/ImageAnnotationEditor.vue'
@@ -653,12 +632,17 @@ export default {
     MessageBubble,
     PendingOutgoingBubble,
     ScheduledMessageBubble,
-    LeadResumenTab,
     TemplatePickerModal,
     ScheduleMessageModal,
     ImageAnnotationEditor,
   },
   mixins: [lead_conversation_date_dividers, conversation_scroll_behavior, audio_recorder_button],
+
+  /**
+   * open-lead-modal: clic en el nombre del header, en modo sidebar. El padre (el sidebar, y de ahí
+   * Leads.vue) abre el modal del lead. En modo ruta no se emite: se navega a /leads?lead_id=.
+   */
+  emits: ['open-lead-modal'],
 
   props: {
     /**
@@ -782,8 +766,8 @@ export default {
       /** true mientras se envía el audio al backend. */
       enviando_audio: false,
 
-      /** Controla la visibilidad del modal de resumen del lead. */
-      show_resumen_modal: false,
+      /** true mientras el POST marcar-respondido ("No necesita respuesta") está en vuelo. */
+      marcando_respondido: false,
 
       /** true cuando el texto del badge desborda el wrapper y se activa el scroll. */
       demo_badge_scrolling: false,
@@ -962,6 +946,57 @@ export default {
       return copy.filter(function (msg) {
         return !self.is_legacy_whatsapp_reaction_message(msg)
       })
+    },
+
+    /**
+     * Id del ÚLTIMO mensaje del lead que todavía cuenta como "sin responder", o null si no hay
+     * ninguno. Debajo de ese va el botón "No necesita respuesta".
+     *
+     * Es el gemelo en JS de `LeadConversationAiState::has_unanswered_lead_messages()` y de
+     * `Lead::apply_condicion_mensaje_sin_responder()` de admin-api, con la exclusión de
+     * `atendido_hasta_message_id` (decisión D6, 17/10/2026): se busca la última respuesta que
+     * efectivamente le llegó al lead (`es_respuesta_al_lead`) y, de ahí en adelante, el último
+     * mensaje suyo con `status = enviado` que no sea una reacción, que no tenga una reacción
+     * nuestra desde el panel (eso ya cuenta como respuesta) y cuyo id sea mayor que la marca de
+     * atendido. Si el criterio del backend cambia, este cambia con él.
+     *
+     * @returns {number|null}
+     */
+    mensaje_sin_responder_id() {
+      const rec = this.effective_record
+      if (!rec || !rec.id) {
+        return null
+      }
+      const list = this.sorted_messages
+      if (!list.length) {
+        return null
+      }
+      let last_reply_idx = -1
+      let i = 0
+      for (i = 0; i < list.length; i++) {
+        if (this.es_respuesta_al_lead(list[i])) {
+          last_reply_idx = i
+        }
+      }
+      const atendido_hasta = parseInt(rec.atendido_hasta_message_id, 10) || 0
+      let encontrado = null
+      for (i = last_reply_idx + 1; i < list.length; i++) {
+        const m = list[i]
+        if (!m || m.sender !== 'lead' || m.status !== 'enviado') {
+          continue
+        }
+        if (m.kind === 'reaction' || this.is_legacy_whatsapp_reaction_message(m)) {
+          continue
+        }
+        if (((m.admin_reaction_emoji || '') + '').trim() !== '') {
+          continue
+        }
+        if ((parseInt(m.id, 10) || 0) <= atendido_hasta) {
+          continue
+        }
+        encontrado = m.id
+      }
+      return encontrado
     },
 
     /**
@@ -1646,6 +1681,79 @@ export default {
       }
       this.lead_record = model
       this.merge_lead_into_conversation_store(model)
+    },
+
+    /**
+     * Gemelo en JS de `LeadMessage::is_reply_to_lead()` (admin-api): una respuesta que
+     * efectivamente le llegó al lead, del setter o del agente. No es evento de estado, es nuestra,
+     * está `enviado` o `aprobado` y tiene id de WhatsApp (sin id no se despachó).
+     *
+     * @param {Object} m
+     * @returns {boolean}
+     */
+    es_respuesta_al_lead(m) {
+      if (!m || m.is_status_event) {
+        return false
+      }
+      if (m.sender !== 'setter' && m.sender !== 'sistema') {
+        return false
+      }
+      if (m.status !== 'enviado' && m.status !== 'aprobado') {
+        return false
+      }
+      return ((m.whatsapp_message_id || '') + '').trim() !== ''
+    },
+
+    /**
+     * "No necesita respuesta": POST /lead/{id}/marcar-respondido hasta ese mensaje. El servidor
+     * devuelve la fila de chat (no el lead); acá alcanza con pisar `atendido_hasta_message_id` en
+     * el registro local y en el store, sin tocar el hilo, y el botón desaparece solo porque el
+     * computed deja de encontrar un mensaje sin responder.
+     *
+     * @param {number} message_id
+     * @returns {void}
+     */
+    on_marcar_respondido(message_id) {
+      const rec = this.effective_record
+      if (!rec || !rec.id || this.marcando_respondido) {
+        return
+      }
+      const self = this
+      this.marcando_respondido = true
+      this.$store.dispatch('lead/marcar_respondido', { lead_id: rec.id, message_id: message_id })
+        .then(function (row) {
+          const hasta = row && row.atendido_hasta_message_id != null
+            ? row.atendido_hasta_message_id
+            : message_id
+          self.on_record_updated(Object.assign({}, self.lead_record || {}, {
+            id: rec.id,
+            atendido_hasta_message_id: hasta,
+          }))
+        })
+        .catch(function () {
+          /* El toast de error ya lo da el interceptor de axios (incluido el 404 de una API vieja). */
+        })
+        .then(function () {
+          self.marcando_respondido = false
+        })
+    },
+
+    /**
+     * Clic en el nombre del header: abrir la ficha del lead. En el sidebar lo resuelve Leads.vue;
+     * en la ruta de teléfono se vuelve a /leads con el deep link que ya abre el modal.
+     *
+     * @returns {void}
+     */
+    on_open_lead_modal() {
+      const rec = this.effective_record
+      if (!rec || !rec.id) {
+        return
+      }
+      if (this.is_sidebar_mode) {
+        this.$emit('open-lead-modal', rec)
+        return
+      }
+      this.$router.push({ name: 'leads', query: { lead_id: rec.id } })
     },
 
     /**
@@ -2961,6 +3069,57 @@ export default {
   max-width: 60vw;
 }
 
+/* El nombre es un botón sin cromo (abre la ficha): se ve como el texto de antes y subraya al pasar. */
+.conversation-lead-name--btn {
+  display: inline-block;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.conversation-lead-name--btn:hover:not(:disabled) {
+  color: var(--bs-primary);
+  text-decoration: underline;
+}
+
+.conversation-lead-name--btn:focus-visible {
+  outline: 2px solid var(--bs-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.conversation-lead-name--btn:disabled {
+  cursor: default;
+}
+
+/* "No necesita respuesta": debajo de la burbuja del lead, a la izquierda como ella, discreto. */
+.wa-no-necesita-respuesta {
+  display: flex;
+  justify-content: flex-start;
+  margin: -0.15rem 0 0.35rem 0.25rem;
+}
+
+.wa-no-necesita-respuesta__btn {
+  font-size: 0.75rem;
+  color: #54656f;
+  text-decoration: none;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.wa-no-necesita-respuesta__btn:hover:not(:disabled) {
+  color: var(--bs-primary);
+  background: #fff;
+  text-decoration: none;
+}
+
 /* Área de mensajes ocupa el espacio restante y scrollea internamente. */
 .conversation-messages {
   flex: 1;
@@ -3047,36 +3206,6 @@ export default {
   height: 8px;
   border-radius: 50%;
   background-color: var(--bs-danger);
-}
-
-/* Overlay del modal de resumen */
-.resumen-modal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1060;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-}
-
-/* Panel del modal: sube desde abajo, ocupa hasta 80% del alto de pantalla */
-.resumen-modal-panel {
-  background: var(--bs-body-bg);
-  border-radius: 1rem 1rem 0 0;
-  width: 100%;
-  max-width: 640px;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* Cuerpo scrolleable */
-.resumen-modal-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 1.25rem 1.5rem;
 }
 
 /* Limita el ancho de la sección izquierda del header (nombre del lead) para dejar espacio al
