@@ -29,6 +29,34 @@
       </div>
     </div>
 
+    <!-- Demo directa para un MOMENTO CONCRETO (tercera forma del paquete, 17/10/2026, misión
+         flujo-lead-landing-closer): `{dia, hora, inicio_resuelto}`. Como en «ahora mismo», no
+         hay demo ni slot que elegir: la instancia libre para toda la ventana la asigna el backend
+         al aprobar. El texto sale de `inicio_resuelto` (lo escribe el servidor al normalizar,
+         `Y-m-d H:i:s`), o de `dia` + `hora` si todavía no vino, o crudo si no se puede leer. -->
+    <div v-else-if="momento_form" class="vp-ahora">
+      <div class="vp-ahora-text">
+        <i class="bi bi-calendar-event me-1" aria-hidden="true" />
+        Demo para {{ momento_texto }} — la instancia libre se asigna al aprobar.
+      </div>
+      <!-- Mismo switch que «ahora»: apagarlo saca la acción (value = null); prenderlo restituye el
+           objeto TAL CUAL llegó. -->
+      <div class="form-check form-switch vp-mail-toggle">
+        <input
+          id="vp_asignar_demo_momento"
+          class="form-check-input"
+          type="checkbox"
+          role="switch"
+          :checked="is_momento"
+          :disabled="disabled"
+          @change="on_toggle_momento($event.target.checked)"
+        />
+        <label class="form-check-label vp-label" for="vp_asignar_demo_momento">
+          Asignar la demo al aprobar
+        </label>
+      </div>
+    </div>
+
     <!-- Sin demos disponibles: control deshabilitado con aviso breve. -->
     <div v-else-if="!demos.length" class="vp-empty-hint">Sin demos disponibles.</div>
 
@@ -87,10 +115,11 @@
     </template>
 
     <!-- Los tres toggles de abajo acompañan al control cuando está operativo: con demos
-         publicadas (forma con horario) o con el paquete en forma directa, que no depende de la
-         disponibilidad. Cuando no hay demos y el paquete no es directo, quedan ocultos junto con
-         el resto (mismo comportamiento de siempre). -->
-    <template v-if="ahora_form || demos.length">
+         publicadas (forma con horario) o con el paquete en alguna de las dos formas directas
+         (ahora / momento concreto), que no dependen de la disponibilidad. Cuando no hay demos y
+         el paquete no es directo, quedan ocultos junto con el resto (mismo comportamiento de
+         siempre). -->
+    <template v-if="ahora_form || momento_form || demos.length">
       <!-- Mail de acceso a la demo: solo tiene sentido si hay demo en el paquete (con horario o directa). -->
       <div v-if="has_demo_in_package" class="form-check form-switch vp-mail-toggle">
         <input
@@ -143,6 +172,28 @@
 </template>
 
 <script>
+import moment from 'moment'
+
+/**
+ * Nombres legibles de los valores de `dia` que admite el paquete `agendar_demo` con momento
+ * concreto (`resolve_dia_solicitado()` en admin-api). `<dia>_proximo` y `+N` se resuelven aparte.
+ */
+const DIAS_LEGIBLES = {
+  hoy: 'hoy',
+  manana: 'mañana',
+  pasado_manana: 'pasado mañana',
+  lunes: 'el lunes',
+  martes: 'el martes',
+  miercoles: 'el miércoles',
+  jueves: 'el jueves',
+  viernes: 'el viernes',
+  sabado: 'el sábado',
+  domingo: 'el domingo',
+}
+
+/** Días de la semana para leer `inicio_resuelto` sin tocar el locale global de moment. */
+const DIAS_SEMANA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+
 /**
  * Control de agendamiento de demo dentro del panel de verificación (prompt 323).
  *
@@ -155,6 +206,13 @@
  * (demo directa): no hay demo, fecha ni hora que elegir, la instancia libre la asigna el backend
  * al aprobar y la demo arranca 10 minutos después. En esa forma los tres selects se reemplazan
  * por un bloque compacto con un único switch que prende/apaga la acción.
+ *
+ * Desde la misión flujo-lead-landing-closer (17/10/2026) hay una TERCERA forma, la demo directa
+ * para un momento concreto: `{dia, hora, inicio_resuelto}` (`inicio_resuelto` la escribe el
+ * servidor al normalizar, `Y-m-d H:i:s`). Se muestra como la de «ahora», con el momento legible.
+ * 🔴 Al emitirla se devuelve el objeto TAL CUAL llegó, sin agregarle `ahora` ni pisarle nada: el
+ * servidor preserva `dia`/`hora`/`inicio_resuelto` solo si el panel no manda `ahora` ni fecha de
+ * grilla. Por eso el switch alterna entre `null` y la referencia original, nunca arma un objeto.
  */
 export default {
   name: 'VerificationDemoScheduleControl',
@@ -163,7 +221,11 @@ export default {
     demos: { type: Array, default: () => [] },
     /** Slots libres por demo: { [demo_id]: { 'Y-m-d': ['HH:MM', ...] } }. */
     slots: { type: Object, default: () => ({}) },
-    /** Selección actual: { demo_id, demo_date, demo_start_time } (con horario), { ahora: true } (demo directa) o null. */
+    /**
+     * Selección actual: { demo_id, demo_date, demo_start_time } (con horario), { ahora: true }
+     * (demo directa ya), { dia, hora, inicio_resuelto } (demo directa para un momento concreto) o
+     * null (acción desactivada).
+     */
     value: { type: Object, default: null },
     /** true si el admin marcó forzar el horario elegido aunque figure ocupado. */
     forzar_slot: { type: Boolean, default: false },
@@ -186,6 +248,19 @@ export default {
        * volver a prenderlo. Un `value` con `demo_id` la vuelve a apagar: el paquete cambió de forma.
        */
       ahora_form: false,
+      /**
+       * true una vez que el paquete llegó con un momento concreto (`dia`/`hora`/`inicio_resuelto`).
+       * Misma razón que `ahora_form`: el switch apagado emite `null` y el bloque tiene que seguir
+       * visible para poder volver a prenderlo.
+       */
+      momento_form: false,
+      /**
+       * El objeto del momento concreto tal cual llegó. Es lo que se vuelve a emitir al prender el
+       * switch: no se reconstruye, para que `dia`, `hora` e `inicio_resuelto` lleguen al servidor
+       * exactamente como los mandó el agente (17/10/2026).
+       * @type {Object|null}
+       */
+      momento_original: null,
     }
   },
   computed: {
@@ -193,9 +268,41 @@ export default {
     is_ahora() {
       return Boolean(this.value && this.value.ahora)
     },
-    /** true si hay demo en el paquete, en cualquiera de las dos formas (demo_id elegido o demo directa). */
+    /** true si la acción de demo directa para un momento concreto está activa. */
+    is_momento() {
+      return this.es_forma_momento(this.value)
+    },
+    /**
+     * Momento legible para el bloque: «el domingo 18/10 a las 10:00» desde `inicio_resuelto`;
+     * si falta o no se puede leer, «mañana a las 10:00» desde `dia` + `hora`; y si tampoco, el
+     * JSON crudo, que es mejor que un bloque mudo.
+     * @returns {string}
+     */
+    momento_texto() {
+      const v = this.value || this.momento_original
+      if (!v) {
+        return ''
+      }
+      const resuelto = v.inicio_resuelto ? moment(String(v.inicio_resuelto), 'YYYY-MM-DD HH:mm:ss', true) : null
+      if (resuelto && resuelto.isValid()) {
+        return 'el ' + DIAS_SEMANA[resuelto.day()] + ' ' + resuelto.format('DD/MM') + ' a las ' + resuelto.format('HH:mm')
+      }
+      const dia_texto = this.texto_dia(v.dia)
+      const hora_texto = v.hora != null && String(v.hora).trim() !== '' ? String(v.hora).trim() : ''
+      if (dia_texto && hora_texto) {
+        return dia_texto + ' a las ' + hora_texto
+      }
+      if (dia_texto) {
+        return dia_texto
+      }
+      if (hora_texto) {
+        return 'las ' + hora_texto
+      }
+      return JSON.stringify(v)
+    },
+    /** true si hay demo en el paquete, en cualquiera de sus formas (demo_id elegido, ahora o momento). */
     has_demo_in_package() {
-      return Boolean(this.demo_id) || this.is_ahora
+      return Boolean(this.demo_id) || this.is_ahora || this.is_momento
     },
     /** Id de demo actualmente elegido (string para <select>, '' si ninguno). */
     demo_id() {
@@ -239,13 +346,55 @@ export default {
       handler(value) {
         if (value && value.ahora) {
           this.ahora_form = true
+          this.momento_form = false
+        } else if (this.es_forma_momento(value)) {
+          this.momento_form = true
+          this.momento_original = value
+          this.ahora_form = false
         } else if (value && value.demo_id != null) {
           this.ahora_form = false
+          this.momento_form = false
         }
       },
     },
   },
   methods: {
+    /**
+     * true si el valor es la forma «momento concreto»: trae `dia`, `hora` o `inicio_resuelto`, y
+     * no es ni «ahora» ni la forma de grilla (`demo_id`).
+     * @param {Object|null} value
+     * @returns {boolean}
+     */
+    es_forma_momento(value) {
+      if (!value || value.ahora || value.demo_id != null) {
+        return false
+      }
+      return value.dia != null || value.hora != null || value.inicio_resuelto != null
+    },
+    /**
+     * Texto legible de `dia`: los nombres fijos de la tabla, `<dia>_proximo` → «el lunes que
+     * viene», `+N` → «en N días». Vacío si no hay nada que leer.
+     * @param {string|null|undefined} dia
+     * @returns {string}
+     */
+    texto_dia(dia) {
+      if (dia == null || String(dia).trim() === '') {
+        return ''
+      }
+      const clave = String(dia).trim().toLowerCase()
+      if (DIAS_LEGIBLES[clave]) {
+        return DIAS_LEGIBLES[clave]
+      }
+      const proximo = clave.match(/^([a-z]+)_proximo$/)
+      if (proximo && DIAS_LEGIBLES[proximo[1]]) {
+        return DIAS_LEGIBLES[proximo[1]] + ' que viene'
+      }
+      const mas = clave.match(/^\+(\d+)$/)
+      if (mas) {
+        return mas[1] === '1' ? 'en 1 día' : 'en ' + mas[1] + ' días'
+      }
+      return clave
+    },
     /**
      * Prende o apaga la demo directa. Apagarla emite `null` (la acción se desactiva en el
      * paquete final); volver a prenderla restituye `{ ahora: true }`.
@@ -254,6 +403,15 @@ export default {
      */
     on_toggle_ahora(checked) {
       this.$emit('update:value', checked ? { ahora: true } : null)
+    },
+    /**
+     * Prende o apaga la demo directa para un momento concreto. Apagarla emite `null`; volver a
+     * prenderla restituye EL MISMO objeto que llegó (`momento_original`), sin tocarlo.
+     * @param {boolean} checked estado nuevo del switch.
+     * @returns {void}
+     */
+    on_toggle_momento(checked) {
+      this.$emit('update:value', checked ? this.momento_original : null)
     },
     /**
      * Cambia la demo elegida; resetea fecha/hora porque pertenecían a la demo anterior.

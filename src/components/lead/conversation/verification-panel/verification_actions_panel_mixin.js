@@ -9,6 +9,23 @@
  * Expone el estado de cada control, el payload final `final_actions` (contrato
  * del prompt 320) y la carga de disponibilidad de demos (endpoint del prompt 321).
  */
+
+/**
+ * true si el paquete `agendar_demo` viene en la forma «momento concreto» de la demo directa
+ * (17/10/2026, misión flujo-lead-landing-closer): trae `dia`, `hora` o `inicio_resuelto`, y no es
+ * ni `{ahora: true}` ni la forma de grilla (`demo_id`). Gemela de `es_forma_momento` en
+ * `DemoScheduleControl.vue`; las dos tienen que decir lo mismo.
+ *
+ * @param {Object|null|undefined} obj
+ * @returns {boolean}
+ */
+function es_agendar_demo_momento(obj) {
+  if (!obj || typeof obj !== 'object' || obj.ahora || obj.demo_id != null) {
+    return false
+  }
+  return obj.dia != null || obj.hora != null || obj.inicio_resuelto != null
+}
+
 export default {
   props: {
     /** Fila lead_messages con pending_actions a precargar. */
@@ -24,10 +41,13 @@ export default {
       /** Slug del estado sugerido a aplicar al aprobar (null = sin cambio). */
       estado_sugerido: null,
       /**
-       * Selección de demo a agendar, en una de dos formas (o null):
+       * Selección de demo a agendar, en una de tres formas (o null):
        *  - { demo_id, demo_date, demo_start_time, ... }: demo con horario elegido.
        *  - { ahora: true }: demo directa — la instancia libre se asigna al aprobar y arranca
        *    10 minutos después; no hay fecha ni hora que elegir.
+       *  - { dia, hora, inicio_resuelto }: demo directa para un momento concreto (17/10/2026,
+       *    misión flujo-lead-landing-closer). Se guarda y se manda TAL CUAL llegó: ver
+       *    `es_agendar_demo_momento`.
        */
       agendar_demo: null,
       /** true si se debe agendar aunque el horario elegido no figure libre. */
@@ -98,9 +118,16 @@ export default {
            minutos. Se manda pelada: `demo_id_previsto` y `url_tienda_prevista` son informativas,
            las escribe el servidor, y el backend las conserva del paquete original cuando el panel
            no las manda. */
+        /* 🔴 Momento concreto (17/10/2026): `{dia, hora, inicio_resuelto}` es la TERCERA forma, y
+           va tal cual llegó, sin reconstruir. El servidor preserva `dia`/`hora`/`inicio_resuelto`
+           solo si el panel no manda `ahora` ni fecha de grilla; armar acá un objeto nuevo (o caer
+           en la rama de `demo_id`, que daría `null`) desactivaría la demo en silencio, con el lead
+           ya avisado del turno. */
         agendar_demo: this.agendar_demo && this.agendar_demo.ahora
           ? { ahora: true }
-          : this.agendar_demo && this.agendar_demo.demo_id
+          : es_agendar_demo_momento(this.agendar_demo)
+            ? this.agendar_demo
+            : this.agendar_demo && this.agendar_demo.demo_id
             ? {
               demo_id: this.agendar_demo.demo_id,
               demo_date: this.agendar_demo.demo_date || '',
@@ -191,6 +218,11 @@ export default {
            que escribe el servidor (`demo_id_previsto`, `url_tienda_prevista`) no se copian porque
            el backend las conserva del paquete original cuando el panel no las manda. */
         this.agendar_demo = { ahora: true }
+      } else if (es_agendar_demo_momento(pending.agendar_demo)) {
+        /* Momento concreto (17/10/2026): la referencia misma, sin copiar clave por clave, para que
+           `dia`, `hora` e `inicio_resuelto` vuelvan al servidor exactamente como los mandó el
+           agente. Precargarla con la rama de abajo la dejaría como `{demo_id: undefined, ...}`. */
+        this.agendar_demo = pending.agendar_demo
       } else {
         this.agendar_demo = pending.agendar_demo
           ? {
