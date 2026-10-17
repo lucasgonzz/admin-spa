@@ -308,23 +308,60 @@ function chats_status_slugs(filtros) {
 }
 
 /**
+ * Slugs de estado filtrados, con los valores AGRUPADOS de las tarjetas ya expandidos.
+ *
+ * El servidor entiende tanto un slug como el `value` de una tarjeta agrupada (`demo`, `otros`),
+ * así que el filtro puede llegar de las dos formas. Para decidir acá si una fila corresponde hay
+ * que compararla contra slugs reales: con el valor agrupado sin expandir, cada fila refrescada
+ * por Pusher se iría de la lista por no matchear (hallazgo del chequeo, 17/10/2026). La
+ * expansión sale de `state.status_cards`, que trae `slugs` por tarjeta agrupada; un valor que no
+ * es de ninguna tarjeta se deja como está.
+ *
+ * @param {Object} state Estado del módulo lead.
+ * @returns {Array<string>|null} null = sin filtro de estado.
+ */
+function chats_status_slugs_expandidos(state) {
+  const valores = chats_status_slugs(state.chats_filtros)
+  if (!valores) {
+    return null
+  }
+  const cards = state.status_cards || []
+  const expandidos = []
+  valores.forEach(function (valor) {
+    let card = null
+    cards.forEach(function (c) {
+      if (c && String(c.value) === valor && Array.isArray(c.slugs) && c.slugs.length) {
+        card = c
+      }
+    })
+    if (card) {
+      card.slugs.forEach(function (s) { expandidos.push(String(s)) })
+    } else {
+      expandidos.push(valor)
+    }
+  })
+  return expandidos
+}
+
+/**
  * true si la fila corresponde a los filtros de estado y de atención que hay puestos. El texto
  * buscado (`q`) no se evalúa acá: no se puede reproducir del lado del cliente qué devolvería
  * `LIKE %q%` sobre tres columnas, así que con `q` cargado una fila nueva no se inserta (ver
  * `upsert_chat_row`) y una existente no se saca por ese motivo.
  *
- * @param {Object} filtros `state.chats_filtros`
+ * @param {Object} state Estado del módulo lead (filtros y tarjetas, para expandir los grupos).
  * @param {Object} row
  * @returns {boolean}
  */
-function chat_row_matches_filtros(filtros, row) {
+function chat_row_matches_filtros(state, row) {
   if (!row) {
     return false
   }
-  const slugs = chats_status_slugs(filtros)
+  const slugs = chats_status_slugs_expandidos(state)
   if (slugs && slugs.indexOf(String(row.status)) === -1) {
     return false
   }
+  const filtros = state.chats_filtros
   if (filtros && filtros.solo_atencion && !row.atencion) {
     return false
   }
@@ -643,7 +680,7 @@ export default __base_store({
         return
       }
       const idx = state.chats.findIndex(function (r) { return String(r.id) === String(row.id) })
-      const matchea = chat_row_matches_filtros(state.chats_filtros, row)
+      const matchea = chat_row_matches_filtros(state, row)
       const lista = state.chats.slice()
       const total = parseInt(state.chats_meta.total, 10) || 0
       if (idx !== -1) {
