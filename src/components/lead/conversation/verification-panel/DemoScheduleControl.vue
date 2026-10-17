@@ -34,10 +34,18 @@
          hay demo ni slot que elegir: la instancia libre para toda la ventana la asigna el backend
          al aprobar. El texto sale de `inicio_resuelto` (lo escribe el servidor al normalizar,
          `Y-m-d H:i`), o de `dia` + `hora` si todavía no vino, o crudo si no se puede leer. -->
-    <div v-else-if="momento_form" class="vp-ahora">
+    <div v-else-if="momento_form" class="vp-ahora" :class="{ 'vp-ahora--ilegible': momento_ilegible }">
       <div class="vp-ahora-text">
-        <i class="bi bi-calendar-event me-1" aria-hidden="true" />
-        Demo para {{ momento_texto }} — la instancia libre se asigna al aprobar.
+        <i class="bi me-1" :class="momento_ilegible ? 'bi-exclamation-triangle-fill' : 'bi-calendar-event'" aria-hidden="true" />
+        <!-- `inicio_ilegible: true`: el servidor no pudo leer el momento y ya decidió no asignar
+             nada al aprobar; prometer la asignación acá sería mentirle al operador. -->
+        <template v-if="momento_ilegible">
+          Demo para {{ momento_texto }} — el sistema no pudo leer el momento; no se va a asignar
+          ninguna demo al aprobar.
+        </template>
+        <template v-else>
+          Demo para {{ momento_texto }} — la instancia libre se asigna al aprobar.
+        </template>
       </div>
       <!-- Mismo switch que «ahora»: apagarlo saca la acción (value = null); prenderlo restituye el
            objeto TAL CUAL llegó. -->
@@ -272,6 +280,16 @@ export default {
     /** true si la acción de demo directa para un momento concreto está activa. */
     is_momento() {
       return this.es_forma_momento(this.value)
+    },
+    /**
+     * true si el servidor marcó el momento como ilegible (`inicio_ilegible: true`): no hay
+     * `inicio_resuelto` y al aprobar no se asigna ninguna demo. Se lee del valor activo o del
+     * original guardado, para que la nota siga con el switch apagado.
+     * @returns {boolean}
+     */
+    momento_ilegible() {
+      const v = this.value || this.momento_original
+      return Boolean(v && v.inicio_ilegible === true)
     },
     /**
      * Momento legible para el bloque: «el domingo 18/10 a las 10:00» desde `inicio_resuelto`;
@@ -511,6 +529,13 @@ export default {
 .vp-ahora-text {
   font-size: 0.75rem;
   color: rgba(17, 27, 33, 0.7);
+}
+/* Momento ilegible: el bloque pasa a ámbar (mismo tono que "forzar horario") porque avisa, no promete. */
+.vp-ahora--ilegible {
+  background: rgba(255, 193, 7, 0.12);
+}
+.vp-ahora--ilegible .vp-ahora-text {
+  color: #7a5c00;
 }
 .vp-mail-toggle {
   display: flex;
