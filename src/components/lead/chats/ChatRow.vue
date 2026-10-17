@@ -73,6 +73,9 @@ const COLOR_FALLBACK = '#ced4da'
 /** Milisegundos que hay que mantener apretado para abrir el menú contextual en touch. */
 const LONG_PRESS_MS = 500
 
+/** Ventana en la que se ignora el clic de eco que sigue a un long-press; después se olvida. */
+const IGNORAR_CLICK_ECO_MS = 700
+
 /**
  * Texto legible (negro o blanco) sobre un fondo hex, por luminancia. Es la misma cuenta que hace
  * el renderizador `pipeline_status` de la grilla (`table/body/cell/Index.vue`), que no la exporta.
@@ -124,6 +127,13 @@ export default {
       long_press_timer: null,
       /** true cuando el long-press ya abrió el menú: el clic que sigue al soltar se ignora. */
       ignorar_proximo_click: false,
+      /**
+       * Timer que apaga `ignorar_proximo_click` solo (~700 ms). El clic de eco del long-press
+       * casi siempre cae sobre la capa fija del menú (teleportada a body) y no sobre la fila,
+       * así que la bandera no se consumiría nunca y el siguiente toque legítimo sobre esta fila
+       * se perdería (hallazgo del chequeo, 17/10/2026). Se vuelve a limpiar también en touchstart.
+       */
+      ignorar_click_timer: null,
     }
   },
   computed: {
@@ -329,15 +339,26 @@ export default {
   },
   beforeUnmount() {
     this.cancelar_long_press()
+    this.limpiar_ignorar_click()
   },
   methods: {
+    /**
+     * Apaga la bandera del clic de eco y su timer.
+     */
+    limpiar_ignorar_click() {
+      this.ignorar_proximo_click = false
+      if (this.ignorar_click_timer) {
+        clearTimeout(this.ignorar_click_timer)
+        this.ignorar_click_timer = null
+      }
+    },
     /**
      * Clic sobre la fila: abre la conversación, salvo que venga de soltar un long-press (en ese
      * caso el menú ya está abierto y el clic es el eco del touchend).
      */
     on_click() {
       if (this.ignorar_proximo_click) {
-        this.ignorar_proximo_click = false
+        this.limpiar_ignorar_click()
         return
       }
       this.$emit('open', this.row)
@@ -349,7 +370,7 @@ export default {
      */
     on_name_click() {
       if (this.ignorar_proximo_click) {
-        this.ignorar_proximo_click = false
+        this.limpiar_ignorar_click()
         return
       }
       this.$emit('open-modal', this.row)
@@ -367,6 +388,9 @@ export default {
      */
     on_touchstart(event) {
       this.cancelar_long_press()
+      /* Un toque nuevo arranca limpio: si quedó una bandera de un long-press anterior cuyo eco
+         nunca llegó a la fila, no tiene que comerse este toque. */
+      this.limpiar_ignorar_click()
       const touch = event.touches && event.touches[0]
       if (!touch) {
         return
@@ -377,6 +401,12 @@ export default {
       this.long_press_timer = setTimeout(function () {
         self.long_press_timer = null
         self.ignorar_proximo_click = true
+        /* Y si el eco no cae acá (lo normal: cae sobre la capa del menú), la bandera se apaga
+           sola enseguida. */
+        self.ignorar_click_timer = setTimeout(function () {
+          self.ignorar_proximo_click = false
+          self.ignorar_click_timer = null
+        }, IGNORAR_CLICK_ECO_MS)
         self.$emit('context', { row: self.row, x: x, y: y })
       }, LONG_PRESS_MS)
     },
