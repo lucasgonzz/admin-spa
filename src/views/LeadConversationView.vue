@@ -300,6 +300,29 @@
                 No necesita respuesta
               </button>
             </div>
+            <!-- Recién marcado: chip con Deshacer en el lugar del botón. «Pedir sugerencia» da 422
+                 mientras la marca esté puesta (entra en la definición de «sin responder» que ese
+                 botón consulta), así que acá se puede volver atrás sin esperar al lead. -->
+            <div
+              v-else-if="msg.id === atendido_chip_message_id"
+              class="wa-no-necesita-respuesta"
+            >
+              <span class="wa-atendido-chip">
+                <i class="bi bi-check2-all me-1" aria-hidden="true" />
+                Marcado como atendido
+                <span class="wa-atendido-chip__sep" aria-hidden="true">·</span>
+                <button
+                  type="button"
+                  class="btn btn-link btn-sm wa-atendido-chip__deshacer"
+                  :disabled="deshaciendo_marca"
+                  title="Volver a contar este mensaje como sin responder"
+                  @click="on_deshacer_marca"
+                >
+                  <span v-if="deshaciendo_marca" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" />
+                  Deshacer
+                </button>
+              </span>
+            </div>
           </template>
         </div>
         <!-- Mensajes salientes todavía no confirmados por el backend (envío optimista) -->
@@ -773,6 +796,16 @@ export default {
 
       /** true mientras el POST marcar-respondido ("No necesita respuesta") está en vuelo. */
       marcando_respondido: false,
+      /**
+       * Id del mensaje bajo el que se muestra el chip «Marcado como atendido · Deshacer», justo
+       * después de confirmar la marca (17/10/2026). Existe porque «Pedir sugerencia» devuelve 422
+       * mientras la marca esté puesta y el lead no haya vuelto a escribir: Lucas tiene que poder
+       * volver atrás sin esperar. Se limpia al deshacer, cuando llega un mensaje nuevo del lead
+       * (vuelve a aparecer el botón) o al cambiar de lead en el sidebar.
+       */
+      atendido_chip_message_id: null,
+      /** true mientras el POST de deshacer la marca está en vuelo. */
+      deshaciendo_marca: false,
 
       /** true cuando el texto del badge desborda el wrapper y se activa el scroll. */
       demo_badge_scrolling: false,
@@ -1477,6 +1510,18 @@ export default {
 
   watch: {
     /**
+     * Si vuelve a haber un mensaje del lead sin responder (escribió de nuevo), el botón reaparece
+     * bajo ese mensaje y el chip «Marcado como atendido» del anterior ya no tiene sentido.
+     *
+     * @param {number|null} nuevo
+     * @returns {void}
+     */
+    mensaje_sin_responder_id(nuevo) {
+      if (nuevo != null && this.atendido_chip_message_id != null) {
+        this.atendido_chip_message_id = null
+      }
+    },
+    /**
      * Cuando el texto del badge cambia (lead cargado o fecha actualizada), mide si
      * desborda el wrapper para activar o desactivar la animación de scroll.
      */
@@ -1534,6 +1579,8 @@ export default {
       }
       /* Un "Enviando..." de la conversación anterior no debe verse en la del lead nuevo. */
       this.outgoing_pending_messages = []
+      /* Ni el chip «Marcado como atendido» del lead anterior. */
+      this.atendido_chip_message_id = null
       const self = this
       const lead_id = new_val.id
       this.$store.commit('lead/set_lead_conversation_visible_id', lead_id)
@@ -1734,12 +1781,47 @@ export default {
             id: rec.id,
             atendido_hasta_message_id: hasta,
           }))
+          /* El botón se va solo (el computed ya no encuentra nada sin responder); en su lugar
+             queda el chip con Deshacer bajo el mismo mensaje. */
+          self.atendido_chip_message_id = message_id
         })
         .catch(function () {
           /* El toast de error ya lo da el interceptor de axios (incluido el 404 de una API vieja). */
         })
         .then(function () {
           self.marcando_respondido = false
+        })
+    },
+
+    /**
+     * Deshacer de «No necesita respuesta»: POST marcar-respondido con `deshacer: true`, que
+     * limpia `atendido_hasta_message_id`. Al pisar la marca en el registro local, el computed
+     * vuelve a encontrar el mensaje sin responder y el botón reaparece en el lugar del chip.
+     *
+     * @returns {void}
+     */
+    on_deshacer_marca() {
+      const rec = this.effective_record
+      if (!rec || !rec.id || this.deshaciendo_marca) {
+        return
+      }
+      const self = this
+      this.deshaciendo_marca = true
+      this.$store.dispatch('lead/marcar_respondido', { lead_id: rec.id, deshacer: true })
+        .then(function (row) {
+          self.on_record_updated(Object.assign({}, self.lead_record || {}, {
+            id: rec.id,
+            atendido_hasta_message_id: row && row.atendido_hasta_message_id != null
+              ? row.atendido_hasta_message_id
+              : null,
+          }))
+          self.atendido_chip_message_id = null
+        })
+        .catch(function () {
+          /* Idem: el interceptor ya avisó. */
+        })
+        .then(function () {
+          self.deshaciendo_marca = false
         })
     },
 
@@ -3123,6 +3205,34 @@ export default {
   color: var(--bs-primary);
   background: #fff;
   text-decoration: none;
+}
+
+/* Chip de "recién marcado" con Deshacer: mismo lugar y mismo tamaño que el botón al que reemplaza. */
+.wa-atendido-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: #54656f;
+  padding: 0.1rem 0.4rem 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.wa-atendido-chip__sep {
+  opacity: 0.6;
+}
+
+.wa-atendido-chip__deshacer {
+  font-size: 0.75rem;
+  padding: 0 0.15rem;
+  color: var(--bs-primary);
+  text-decoration: none;
+  line-height: 1.2;
+}
+
+.wa-atendido-chip__deshacer:hover:not(:disabled) {
+  text-decoration: underline;
 }
 
 /* Área de mensajes ocupa el espacio restante y scrollea internamente. */

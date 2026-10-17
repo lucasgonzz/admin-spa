@@ -268,6 +268,13 @@ export default {
      * ✓✓ azul leído, ⚠ fallido. Y además ⏳ para un `sugerido`: es un mensaje de la IA esperando
      * que alguien lo confirme, que es justo lo que el admin tiene que ver en la lista.
      *
+     * 🔴 Dos cosas que NO se miran acá, a propósito (chequeo de la API, 17/10/2026):
+     * - `ultimo_mensaje.is_error`: viene siempre `false`, porque los errores son eventos de estado
+     *   y la lista los excluye del último mensaje. El rojo de la fila sale solo de `atencion`.
+     * - `ultimo_mensaje.kind`: el servidor ya pone la etiqueta del adjunto adelante del `texto`
+     *   («📷 Foto», «🎤 Audio …», «📄 Documento», «🎥 Video»), también cuando además hay texto;
+     *   dibujar otro ícono acá a partir de `kind` lo mostraría doble.
+     *
      * @returns {{ clase: string, titulo: string }|null}
      */
     tick() {
@@ -278,7 +285,7 @@ export default {
       if (m.status === 'sugerido') {
         return { clase: 'bi-hourglass-split lead-chat-tick--pendiente', titulo: 'Esperando confirmación' }
       }
-      if (m.is_error || m.whatsapp_delivery_status === 'fallido') {
+      if (m.whatsapp_delivery_status === 'fallido') {
         return { clase: 'bi-exclamation-circle lead-chat-tick--fallido', titulo: 'Falló el envío' }
       }
       if (m.whatsapp_delivery_status === 'leido') {
