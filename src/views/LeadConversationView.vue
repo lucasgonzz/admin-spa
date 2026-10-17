@@ -641,8 +641,13 @@ export default {
   /**
    * open-lead-modal: clic en el nombre del header, en modo sidebar. El padre (el sidebar, y de ahí
    * Leads.vue) abre el modal del lead. En modo ruta no se emite: se navega a /leads?lead_id=.
+   *
+   * record-updated: lo escucha `LeadConversationSidebar` desde siempre, pero esta vista escribe
+   * directo al store y hoy no lo emite. Se declara igual (17/10/2026) porque la raíz del template
+   * es un fragmento (la vista más los modales hermanos) y un listener no declarado sobre un
+   * fragmento hace que Vue avise en consola en cada render del sidebar.
    */
-  emits: ['open-lead-modal'],
+  emits: ['open-lead-modal', 'record-updated'],
 
   props: {
     /**
