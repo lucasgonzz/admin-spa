@@ -102,6 +102,7 @@
       :lead="sidebar_lead"
       @close="on_sidebar_close"
       @record-updated="on_sidebar_record_updated"
+      @open-lead-modal="on_open_lead_modal"
     />
 
     <!-- Modal de detalle del lead: el mismo ModelModal genérico que usa el módulo de Leads,
