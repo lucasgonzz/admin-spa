@@ -74,11 +74,17 @@ function hex_a_rgba(hex, alfa) {
 }
 
 /**
- * Grilla de tarjetas de estado arriba de la grilla de leads.
+ * Tarjetas de estado arriba de la lista de chats de leads.
  *
  * No inventa tarjetas, no las ordena y no hardcodea ningún color: todo eso llega tal cual del
  * endpoint GET /lead/status-cards, que lo saca del catálogo LeadPipelineStatus. Lo único propio
  * es el gris de fallback cuando un estado no tiene color cargado.
+ *
+ * Desde el 17/10/2026 (misión flujo-lead-landing-closer) son el único filtro por estado del módulo:
+ * clic filtra la lista, otro clic sobre la misma tarjeta lo saca (lo decide `Leads.vue`). En
+ * escritorio y tablet siguen en grilla; en teléfono (<576 px) van en un carrusel horizontal con
+ * snap, de 140 px de ancho cada una, con el título y el total en una línea (ver `_lead-module.sass`,
+ * que es donde vive todo el layout: este archivo solo pinta el markup).
  *
  * 🔴 El color del estado va SOLO al borde izquierdo, al puntito y al lavado de fondo. El número
  * grande queda con el color de texto del tema: el catálogo puede traer amarillos o grises claros,

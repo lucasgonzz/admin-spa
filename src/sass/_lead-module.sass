@@ -223,7 +223,7 @@
 		line-height: 1
 		flex: none
 
-	/* Tarjetas de estado arriba de la grilla: conteos globales por estado del pipeline. */
+	/* Tarjetas de estado arriba de la lista de chats: conteos globales por estado del pipeline. */
 	.lead-status-cards
 		display: grid
 		grid-template-columns: 1fr
@@ -275,6 +275,62 @@
 		font-size: 0.72rem
 		line-height: 1.1
 
+	// Teléfono (<576): carrusel horizontal con snap, tarjetas de 140px de ancho y ~56px de alto,
+	// con el título y el total en una sola línea y el "N sin responder" chico debajo.
+	// Hasta el 17/10/2026 acá decía "nunca en carrusel": la barra de grupos de estado ya scrolleaba
+	// horizontal justo arriba y dos scrollers apilados eran imposibles de operar con el pulgar. Esa
+	// barra se fue con la tabla (misión flujo-lead-landing-closer, decisión D5): las tarjetas son
+	// ahora el único filtro por estado y el único scroller horizontal de la pantalla, y cinco
+	// tarjetas apiladas a lo alto empujaban la lista de chats fuera de la primera pantalla.
+	// `scroll-snap-align: start` para que el dedo deje siempre una tarjeta entera al borde.
+	@media (max-width: 575.98px)
+		.lead-status-cards
+			display: flex
+			flex-wrap: nowrap
+			gap: 0.5rem
+			overflow-x: auto
+			overflow-y: hidden
+			scroll-snap-type: x mandatory
+			-webkit-overflow-scrolling: touch
+			scroll-padding-left: 0.25rem
+			padding-bottom: 0.35rem
+			scrollbar-width: thin
+
+		.lead-status-card
+			flex: 0 0 140px
+			width: 140px
+			min-height: 56px
+			scroll-snap-align: start
+			display: grid
+			grid-template-columns: minmax(0, 1fr) auto
+			grid-template-areas: "head total" "sub sub"
+			align-items: center
+			column-gap: 0.4rem
+			row-gap: 0.1rem
+			padding: 0.45rem 0.6rem
+
+		.lead-status-card__head
+			grid-area: head
+			min-width: 0
+
+		.lead-status-card__title
+			min-width: 0
+			overflow: hidden
+			text-overflow: ellipsis
+			white-space: nowrap
+			font-size: 0.74rem
+
+		.lead-status-card__total
+			grid-area: total
+			font-size: 1.15rem
+
+		.lead-status-card__sub
+			grid-area: sub
+			font-size: 0.68rem
+			white-space: nowrap
+			overflow: hidden
+			text-overflow: ellipsis
+
 	// Tablet (576-1199): tres columnas. Con las 5 tarjetas de hoy da 3+2 -- la última fila queda
 	// con un hueco de UN carril, no el resto de la fila vacío.
 	// 🔴 Se probó "repeat(auto-fit, minmax(200px, 1fr))" (ancho fluido, sin hardcodear cantidad)
@@ -284,8 +340,6 @@
 	// Angostar el mínimo para esquivar el "4" en un tramo lo vuelve a tocar en otro: no hay un
 	// solo ancho mínimo de tarjeta que evite el 4 en TODO el rango 576-1365px. Con columnas fijas
 	// el "4" no aparece nunca, a costa de no ser 100% fluido.
-	// En telefono quedan apiladas (grid de 1fr), nunca en carrusel: la barra de estados ya
-	// scrollea horizontal y dos scrollers apilados son imposibles de operar con el pulgar.
 	@media (min-width: 576px)
 		.lead-status-cards
 			grid-template-columns: repeat(3, minmax(0, 1fr))
