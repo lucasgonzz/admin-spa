@@ -304,7 +304,7 @@
                  mientras la marca esté puesta (entra en la definición de «sin responder» que ese
                  botón consulta), así que acá se puede volver atrás sin esperar al lead. -->
             <div
-              v-else-if="msg.id === atendido_chip_message_id"
+              v-else-if="msg.id === atendido_chip_message_id && !lead_no_recibe_mensajes"
               class="wa-no-necesita-respuesta"
             >
               <span class="wa-atendido-chip">
@@ -1005,6 +1005,12 @@ export default {
       if (!rec || !rec.id) {
         return null
       }
+      /* Un lead marcado como "ya no recibe mensajes" no cuenta como sin responder para el
+         servidor desde `7587037` (ni en la fila ni en las tarjetas): no hay nada que contestar a
+         un número que bloqueó o no existe más. El botón acá tiene que decir lo mismo. */
+      if (this.lead_no_recibe_mensajes) {
+        return null
+      }
       const list = this.sorted_messages
       if (!list.length) {
         return null
@@ -1035,6 +1041,17 @@ export default {
         encontrado = m.id
       }
       return encontrado
+    },
+
+    /**
+     * true si el lead está marcado como "ya no recibe mensajes" (`no_recibe_mensajes_at`).
+     * Apaga el botón «No necesita respuesta» y su chip: el servidor tampoco lo cuenta.
+     *
+     * @returns {boolean}
+     */
+    lead_no_recibe_mensajes() {
+      const rec = this.effective_record
+      return Boolean(rec && rec.no_recibe_mensajes_at)
     },
 
     /**
