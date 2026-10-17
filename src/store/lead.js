@@ -238,6 +238,106 @@ function total_pages_for(total, per_page) {
   return Math.max(1, Math.ceil((total || 0) / per))
 }
 
+/**
+ * Peso del semáforo de atención de una fila de chat, para ordenar: rojo antes que amarillo,
+ * amarillo antes que nada.
+ *
+ * @param {Object} row Fila de GET /lead/chats.
+ * @returns {number}
+ */
+function peso_atencion(row) {
+  if (!row || !row.atencion) {
+    return 2
+  }
+  return row.atencion === 'rojo' ? 0 : 1
+}
+
+/**
+ * Ordena las filas de chat con EL MISMO criterio que el servidor (plan §4.1, 17/10/2026):
+ * fijados primero (el fijado más reciente arriba), después rojos, después amarillos, y el
+ * desempate por último mensaje descendente.
+ *
+ * Existe para que un refresco puntual de UNA fila (Pusher, fijar, marcar leído) la acomode donde
+ * corresponde en vez de dejarla donde estaba hasta la próxima carga completa. No inventa un orden
+ * propio: si el del servidor cambia, este cambia con él.
+ *
+ * @param {Array<Object>} rows
+ * @returns {Array<Object>} copia ordenada
+ */
+function ordenar_chats(rows) {
+  const copia = (rows || []).slice()
+  copia.sort(function (a, b) {
+    const a_pin = a.pinned_at ? 1 : 0
+    const b_pin = b.pinned_at ? 1 : 0
+    if (a_pin !== b_pin) {
+      return b_pin - a_pin
+    }
+    if (a_pin && b_pin && a.pinned_at !== b.pinned_at) {
+      return String(b.pinned_at).localeCompare(String(a.pinned_at))
+    }
+    const pa = peso_atencion(a)
+    const pb = peso_atencion(b)
+    if (pa !== pb) {
+      return pa - pb
+    }
+    const a_last = a.last_message_at ? String(a.last_message_at) : ''
+    const b_last = b.last_message_at ? String(b.last_message_at) : ''
+    if (a_last !== b_last) {
+      return b_last.localeCompare(a_last)
+    }
+    return (b.id || 0) - (a.id || 0)
+  })
+  return copia
+}
+
+/**
+ * Slugs de estado filtrados en la lista de chats, o null si no hay filtro.
+ *
+ * @param {Object} filtros `state.chats_filtros`
+ * @returns {Array<string>|null}
+ */
+function chats_status_slugs(filtros) {
+  const status = filtros ? filtros.status : null
+  if (status == null || status === '') {
+    return null
+  }
+  if (Array.isArray(status)) {
+    return status.length ? status.map(String) : null
+  }
+  return String(status).split(',').map(function (s) { return s.trim() }).filter(Boolean)
+}
+
+/**
+ * true si la fila corresponde a los filtros de estado y de atención que hay puestos. El texto
+ * buscado (`q`) no se evalúa acá: no se puede reproducir del lado del cliente qué devolvería
+ * `LIKE %q%` sobre tres columnas, así que con `q` cargado una fila nueva no se inserta (ver
+ * `upsert_chat_row`) y una existente no se saca por ese motivo.
+ *
+ * @param {Object} filtros `state.chats_filtros`
+ * @param {Object} row
+ * @returns {boolean}
+ */
+function chat_row_matches_filtros(filtros, row) {
+  if (!row) {
+    return false
+  }
+  const slugs = chats_status_slugs(filtros)
+  if (slugs && slugs.indexOf(String(row.status)) === -1) {
+    return false
+  }
+  if (filtros && filtros.solo_atencion && !row.atencion) {
+    return false
+  }
+  return true
+}
+
+/**
+ * Secuencia de los GET /lead/chats que salieron. Cuando el operador tipea rápido en el buscador
+ * pueden quedar dos en vuelo, y gana el que llegó último, no el que VOLVIÓ último: una respuesta
+ * vieja que llegue después pisaría la lista con los resultados de la búsqueda anterior.
+ */
+let chats_request_seq = 0
+
 export default __base_store({
   state: {
     model_name: 'lead',
@@ -299,6 +399,30 @@ export default __base_store({
      * Aplica SOLO al listado base (`_get_models`), no a la búsqueda filtrada.
      */
     solo_sin_responder: false,
+    /**
+     * Lista de chats estilo WhatsApp (misión flujo-lead-landing-closer, 17/10/2026). Filas tal
+     * cual las devuelve GET /lead/chats (plan §4.1): el texto del último mensaje, el semáforo
+     * `atencion` y el badge del estado ya vienen resueltos del servidor. Reemplaza a la grilla de
+     * `models`/`filtered` en la vista de Leads; esos dos siguen existiendo porque los usan la
+     * conversación, el closer y el modal.
+     * @type {Array<Object>}
+     */
+    chats: [],
+    /** Paginación de GET /lead/chats. `per_page` es lo que se pide; el servidor clampea a 200. */
+    chats_meta: { current_page: 1, last_page: 1, per_page: 50, total: 0 },
+    /**
+     * Filtros vivos de la lista: texto del buscador, estado (slug, o slugs separados por coma
+     * para las tarjetas agrupadas) y "solo atención" (rojo o amarillo).
+     */
+    chats_filtros: { q: '', status: null, solo_atencion: false },
+    /** true mientras hay un GET /lead/chats en vuelo (primera página o "cargar más"). */
+    loading_chats: false,
+    /**
+     * null | 'api_vieja' | 'error'. `api_vieja` es el 404 de un admin-api que todavía no tiene
+     * la ruta: el SPA y la API no llegan juntos a producción y la lista tiene que decirlo sin
+     * romper el resto de la vista.
+     */
+    chats_error: null,
   },
   mutations: {
     /**
@@ -450,6 +574,97 @@ export default __base_store({
      */
     set_scroll_y(state, value) {
       state.scroll_y = value || 0
+    },
+    /**
+     * Reemplaza la lista de chats (primera página de una carga nueva).
+     *
+     * @param {Object} state
+     * @param {Array<Object>} rows
+     */
+    set_chats(state, rows) {
+      state.chats = Array.isArray(rows) ? rows : []
+    },
+    /**
+     * Agrega una página más al final ("Cargar más"), sin duplicar una fila que ya esté: entre
+     * una página y la siguiente la lista pudo moverse (un lead que subió al tope aparece de
+     * nuevo en la página 2).
+     *
+     * @param {Object} state
+     * @param {Array<Object>} rows
+     */
+    append_chats(state, rows) {
+      const ids = {}
+      state.chats.forEach(function (r) { ids[r.id] = true })
+      const nuevas = (rows || []).filter(function (r) { return r && !ids[r.id] })
+      state.chats = state.chats.concat(nuevas)
+    },
+    /**
+     * @param {Object} state
+     * @param {{ current_page: number, last_page: number, per_page: number, total: number }} meta
+     */
+    set_chats_meta(state, meta) {
+      state.chats_meta = Object.assign({}, state.chats_meta, meta || {})
+    },
+    /**
+     * Pisa solo las claves que vienen; lo demás queda como estaba.
+     *
+     * @param {Object} state
+     * @param {{ q?: string, status?: string|Array|null, solo_atencion?: boolean }} filtros
+     */
+    set_chats_filtros(state, filtros) {
+      state.chats_filtros = Object.assign({}, state.chats_filtros, filtros || {})
+    },
+    /**
+     * @param {Object} state
+     * @param {boolean} value
+     */
+    set_loading_chats(state, value) {
+      state.loading_chats = Boolean(value)
+    },
+    /**
+     * @param {Object} state
+     * @param {null|'api_vieja'|'error'} value
+     */
+    set_chats_error(state, value) {
+      state.chats_error = value || null
+    },
+    /**
+     * Actualiza una fila de chat en el lugar y reordena con el criterio del servidor. Si la fila
+     * no estaba, entra solo cuando corresponde a los filtros puestos y no hay texto buscado (ver
+     * `chat_row_matches_filtros`); si estaba y dejó de corresponder, sale.
+     *
+     * @param {Object} state
+     * @param {Object} row Fila de GET /lead/chats/{id}.
+     */
+    upsert_chat_row(state, row) {
+      if (!row || row.id == null) {
+        return
+      }
+      const idx = state.chats.findIndex(function (r) { return String(r.id) === String(row.id) })
+      const matchea = chat_row_matches_filtros(state.chats_filtros, row)
+      const lista = state.chats.slice()
+      if (idx !== -1) {
+        if (!matchea) {
+          lista.splice(idx, 1)
+          state.chats = lista
+          return
+        }
+        lista.splice(idx, 1, Object.assign({}, lista[idx], row))
+        state.chats = ordenar_chats(lista)
+        return
+      }
+      if (!matchea || (state.chats_filtros.q || '').trim() !== '') {
+        return
+      }
+      lista.push(row)
+      state.chats = ordenar_chats(lista)
+    },
+    /**
+     * @param {Object} state
+     * @param {number|string} lead_id
+     */
+    remove_chat_row(state, lead_id) {
+      state.chats = state.chats.filter(function (r) { return String(r.id) !== String(lead_id) })
     },
     /**
      * Incrementa la versión de recarga de leads para que el hook activated() de Leads.vue
@@ -1529,6 +1744,166 @@ export default __base_store({
      */
     fetch_lead_for_conversation(context, lead_id) {
       return context.dispatch('fetch_full_model', lead_id)
+    },
+    /**
+     * GET /lead/chats con los filtros vivos del store (plan §4.1, 17/10/2026).
+     *
+     * `page` 1 reemplaza la lista; con `append` la página se agrega al final ("Cargar más").
+     * El 404 va silenciado en el interceptor (`silent_error_statuses`) y se traduce a
+     * `chats_error = 'api_vieja'`: es el admin-api de antes de esta misión, no un error del
+     * operador. Cualquier otro error sí avisa con el toast de siempre y deja `chats_error = 'error'`.
+     *
+     * Nunca rechaza: la vista decide qué mostrar mirando `chats_error`.
+     *
+     * @param {Object} context
+     * @param {{ page?: number, append?: boolean }} [payload]
+     * @returns {Promise<Array<Object>>} filas que llegaron (vacío si hubo error o la respuesta quedó vieja)
+     */
+    fetch_chats(context, payload) {
+      const commit = context.commit
+      const state = context.state
+      const page = payload && payload.page ? payload.page : 1
+      const append = Boolean(payload && payload.append)
+      const filtros = state.chats_filtros || {}
+      const params = { page: page, per_page: state.chats_meta.per_page || 50 }
+      if ((filtros.q || '').trim() !== '') {
+        params.q = filtros.q.trim()
+      }
+      const slugs = chats_status_slugs(filtros)
+      if (slugs) {
+        params.status = slugs.join(',')
+      }
+      if (filtros.solo_atencion) {
+        params.solo_atencion = 1
+      }
+      chats_request_seq = chats_request_seq + 1
+      const mi_seq = chats_request_seq
+      commit('set_loading_chats', true)
+      return api
+        .get('/lead/chats', { params: params, silent_error_statuses: [404] })
+        .then(function (res) {
+          if (mi_seq !== chats_request_seq) {
+            return []
+          }
+          const body = res.data || {}
+          const rows = Array.isArray(body.data) ? body.data : []
+          const meta = body.meta || {}
+          if (append) {
+            commit('append_chats', rows)
+          } else {
+            commit('set_chats', rows)
+          }
+          commit('set_chats_meta', {
+            current_page: meta.current_page != null ? meta.current_page : page,
+            last_page: meta.last_page != null ? meta.last_page : page,
+            per_page: meta.per_page != null ? meta.per_page : params.per_page,
+            total: meta.total != null ? meta.total : rows.length,
+          })
+          commit('set_chats_error', null)
+          commit('set_loading_chats', false)
+          return rows
+        })
+        .catch(function (err) {
+          if (mi_seq !== chats_request_seq) {
+            return []
+          }
+          const status = err && err.response ? err.response.status : null
+          commit('set_chats_error', status === 404 ? 'api_vieja' : 'error')
+          commit('set_loading_chats', false)
+          return []
+        })
+    },
+    /**
+     * GET /lead/chats/{id}: refresca UNA fila (Pusher, fijar, marcar leído, marcar respondido).
+     * El 404 va en silencio: puede ser la API vieja o un lead que ya no existe, y en los dos casos
+     * no hay nada que decirle al operador desde acá.
+     *
+     * @param {Object} context
+     * @param {number|string} lead_id
+     * @returns {Promise<Object|null>} la fila, o null si no se pudo
+     */
+    fetch_chat_row(context, lead_id) {
+      if (lead_id == null || lead_id === '') {
+        return Promise.resolve(null)
+      }
+      return api
+        .get('/lead/chats/' + lead_id, { silent_error_statuses: [404] })
+        .then(function (res) {
+          const row = res.data && res.data.data ? res.data.data : null
+          if (row && row.id != null) {
+            context.commit('upsert_chat_row', row)
+          }
+          return row
+        })
+        .catch(function () {
+          return null
+        })
+    },
+    /**
+     * POST /lead/{id}/marcar-respondido: "No necesita respuesta" (decisión D6, 17/10/2026). Marca
+     * atendido hasta `message_id` (o hasta el último mensaje del lead si no viene) y con
+     * `deshacer` limpia la marca. El servidor devuelve la fila de chat, no el lead: se vuelca a la
+     * lista, y a la conversación abierta se le pasa solo `atendido_hasta_message_id` (sin
+     * `messages`, así la mutación toma la rama de fusión y no toca el hilo).
+     *
+     * @param {Object} context
+     * @param {{ lead_id: number, message_id?: number, deshacer?: boolean }} payload
+     * @returns {Promise<Object>} fila de chat actualizada
+     */
+    marcar_respondido(context, payload) {
+      const body = {}
+      if (payload.message_id != null) {
+        body.message_id = payload.message_id
+      }
+      if (payload.deshacer) {
+        body.deshacer = true
+      }
+      return api.post('/lead/' + payload.lead_id + '/marcar-respondido', body).then(function (res) {
+        const row = res.data && res.data.data ? res.data.data : null
+        if (row && row.id != null) {
+          context.commit('upsert_chat_row', row)
+          context.commit('update_lead_en_conversacion', {
+            id: row.id,
+            atendido_hasta_message_id: row.atendido_hasta_message_id,
+          })
+        }
+        /* Dejó de contar en "sin responder": la tarjeta de su estado baja uno. */
+        context.dispatch('fetch_status_cards')
+        return row
+      })
+    },
+    /**
+     * Fijar / desfijar desde el menú contextual de la lista. El endpoint devuelve el lead (forma
+     * de GET /lead/{id}), que sirve para las listas viejas; la fila de chat se vuelve a pedir
+     * porque tiene otra forma y la ordena el servidor.
+     *
+     * @param {Object} context
+     * @param {number|string} lead_id
+     * @returns {Promise<Object|null>}
+     */
+    toggle_chat_pinned(context, lead_id) {
+      return api.post('/lead/' + lead_id + '/toggle-pinned').then(function (res) {
+        if (res.data && res.data.model) {
+          context.dispatch('upsert_model_in_lists', res.data.model)
+        }
+        return context.dispatch('fetch_chat_row', lead_id)
+      })
+    },
+    /**
+     * Marcar como no leído / leído a mano (marca per-admin, estilo WhatsApp) desde el menú
+     * contextual de la lista. Mismo esquema que `toggle_chat_pinned`.
+     *
+     * @param {Object} context
+     * @param {number|string} lead_id
+     * @returns {Promise<Object|null>}
+     */
+    toggle_chat_manual_unread(context, lead_id) {
+      return api.post('/lead/' + lead_id + '/toggle-manual-unread').then(function (res) {
+        if (res.data && res.data.model) {
+          context.dispatch('upsert_model_in_lists', res.data.model)
+        }
+        return context.dispatch('fetch_chat_row', lead_id)
+      })
     },
   },
 })
