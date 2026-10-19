@@ -156,6 +156,13 @@ const routes_def = [
     meta: { requiresAuth: true, nav: true, icon: 'cpu' },
   },
   {
+    path: '/serper',
+    name: 'serper',
+    text: 'Serper',
+    component: () => import('@/views/Serper.vue'),
+    meta: { requiresAuth: true, nav: true, icon: 'search' },
+  },
+  {
     /**
      * Módulo Cobranzas (misión modulo-cobranzas, 18/9/2026): la planilla de administración de
      * Lucas adentro del admin. Mensualidades (una fila por cliente, una columna por mes, con
