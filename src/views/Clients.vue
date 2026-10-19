@@ -15,6 +15,7 @@ import ContratoTab from '@/components/client/ContratoTab.vue'
 import LicenciasTab from '@/components/client/LicenciasTab.vue'
 import ClientScheduleTab from '@/components/client/ScheduleTab.vue'
 import ClientTokensTab from '@/components/client/TokensTab.vue'
+import ClientSerperTab from '@/components/client/SerperTab.vue'
 import ClientImagenesTab from '@/components/client/imagenes/Index.vue'
 import ClientCandadoSesionTab from '@/components/client/CandadoSesionTab.vue'
 import ClientExtensionesTab from '@/components/client/ExtensionesTab.vue'
@@ -77,6 +78,11 @@ export default {
           key: 'tokens',
           label: 'Tokens',
           component: markRaw(ClientTokensTab),
+        },
+        {
+          key: 'serper',
+          label: 'Serper',
+          component: markRaw(ClientSerperTab),
         },
         {
           /* Registro de las consultas de imágenes de este cliente (misión
