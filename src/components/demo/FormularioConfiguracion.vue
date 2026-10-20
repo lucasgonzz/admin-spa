@@ -31,7 +31,18 @@
            Cada mitad sigue siendo un <button> y no un checkbox oculto, porque son dos
            valores con etiqueta y no un booleano: en tipo_precios valen 'unico' y
            'listas'. -->
+      <select
+        v-if="pregunta.control === 'select'"
+        class="demo-formulario__rubro"
+        :aria-label="pregunta.pregunta"
+        :value="local_respuestas[pregunta.clave]"
+        :disabled="enviando"
+        @change="seleccionar(pregunta.clave, $event.target.value)"
+      >
+        <option v-for="opcion in pregunta.opciones" :key="opcion.valor" :value="opcion.valor">{{ opcion.texto }}</option>
+      </select>
       <div
+        v-else
         class="demo-formulario__opciones"
         :class="{
           'demo-formulario__opciones--sin-transicion': sin_transicion,
@@ -389,6 +400,19 @@ export default {
 </script>
 
 <style scoped>
+.demo-formulario__rubro {
+  display: block;
+  width: 100%;
+  min-height: 56px;
+  border: 1px solid rgba(140, 150, 170, .4);
+  border-radius: 16px;
+  background: var(--demo-fondo, #fff);
+  color: var(--demo-texto, #172033);
+  padding: 12px 16px;
+  font: inherit;
+  font-size: 16px;
+}
+.demo-formulario__rubro:focus-visible { outline: 3px solid #8d7df4; outline-offset: 3px; }
 .demo-formulario {
   max-width: 640px;
   margin: 0 auto;

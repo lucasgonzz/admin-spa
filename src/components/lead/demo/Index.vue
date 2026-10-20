@@ -38,9 +38,11 @@ import Configuracion from './Configuracion.vue'
 import Videos from './Videos.vue'
 import Links from './Links.vue'
 import Formulario from './Formulario.vue'
+import Chat from './Chat.vue'
 
 /** Sub-solapas, fuera de `data()` para no recrear el array por instancia (ver `Leads.vue`). */
 const SUB_SOLAPAS = [
+  { key: 'chat', label: 'Conversación', component: markRaw(Chat) },
   { key: 'configuracion', label: 'Configuración', component: markRaw(Configuracion) },
   { key: 'videos', label: 'Videos personalizados', component: markRaw(Videos) },
   { key: 'links', label: 'Links', component: markRaw(Links) },

@@ -64,7 +64,18 @@
             </p>
             <!-- Dos opciones, un solo control: mismo par de botones que ve el lead, con la
                  lengua del admin (Bootstrap) en vez del diseño de la página pública. -->
+            <select
+              v-if="pregunta.control === 'select'"
+              class="form-select"
+              :aria-label="pregunta.pregunta"
+              :value="local_respuestas[pregunta.clave]"
+              :disabled="guardando"
+              @change="seleccionar(pregunta.clave, $event.target.value)"
+            >
+              <option v-for="opcion in pregunta.opciones" :key="opcion.valor" :value="opcion.valor">{{ opcion.texto }}</option>
+            </select>
             <div
+              v-else
               class="btn-group w-100 ldf-pregunta__opciones"
               role="group"
               :aria-label="pregunta.pregunta"
@@ -151,6 +162,7 @@ import { PREGUNTAS, DEFAULTS } from '@/components/demo/preguntas-formulario'
  * reusan columnas viejas, y una de ellas está invertida).
  */
 const CLAVES_A_REFRESCAR = [
+  'demo_industria',
   /* El bloque del panel: es lo que alimenta esta misma tarjeta (avisos, fechas y origen). */
   'demo_form_panel',
   /* Las columnas que escribe LeadDemoFormMapper::to_lead(). */

@@ -57,6 +57,28 @@ export const OPCIONES_TIPO_PRECIOS = [
  */
 export const PREGUNTAS = [
   {
+    clave: 'demo_industria',
+    pregunta: '¿Cuál es el rubro de tu negocio?',
+    descripcion: 'Preparamos los productos, las categorías y la tienda de la demo para tu rubro.',
+    control: 'select',
+    opciones: [
+      { valor: 'ferreteria', texto: 'Ferretería y herrajes' },
+      { valor: 'indumentaria', texto: 'Indumentaria y accesorios' },
+      { valor: 'autopartes', texto: 'Autopartes y repuestos' },
+      { valor: 'jugueteria', texto: 'Juguetería' },
+      { valor: 'construccion', texto: 'Materiales de construcción' },
+      { valor: 'bebidas', texto: 'Bebidas y vinoteca' },
+      { valor: 'mascotas', texto: 'Mascotas' },
+      { valor: 'limpieza', texto: 'Limpieza y descartables' },
+      { valor: 'belleza', texto: 'Belleza y productos capilares' },
+      { valor: 'almacen', texto: 'Almacén, kiosco y dietética' },
+      { valor: 'pesca', texto: 'Pesca y aire libre' },
+      { valor: 'hogar', texto: 'Hogar y electrodomésticos' },
+      { valor: 'tecnologia', texto: 'Tecnología e impresión 3D' },
+      { valor: 'distribuidora', texto: 'Distribuidora y comercio general' },
+    ],
+  },
+  {
     clave: 'tipo_precios',
     pregunta: '¿Tenés un precio por producto, o distintas listas según el cliente?',
     descripcion: null,
@@ -121,6 +143,7 @@ export const PREGUNTAS = [
  * `tipo_precios` sigue siendo string.
  */
 export const DEFAULTS = {
+  demo_industria: 'ferreteria',
   tipo_precios: 'unico',
   costos_en_dolares: false,
   descuentos_por_metodo_pago: true,
