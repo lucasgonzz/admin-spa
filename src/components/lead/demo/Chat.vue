@@ -10,6 +10,13 @@
         <span>Respuesta automática</span>
       </label>
     </header>
+    <form class="demo-chat-operador__espera" @submit.prevent="guardar_espera">
+      <label :for="'demo-espera-' + lead_id">Espera antes de responder (segundos)</label>
+      <input :id="'demo-espera-' + lead_id" v-model="espera" type="number" min="0" max="120" step="1" required :disabled="ocupado || !lead_id" :aria-describedby="'demo-espera-ayuda-' + lead_id" />
+      <button type="submit" :disabled="ocupado || !lead_id">Guardar espera</button>
+      <small :id="'demo-espera-ayuda-' + lead_id">De 0 a 120 s desde el último mensaje. Se aplica también a la espera pendiente; si ya está pensando, rige para la próxima respuesta.</small>
+      <span role="status" aria-live="polite">{{ espera_aviso }}</span>
+    </form>
 
     <p class="demo-chat-operador__nota">Los mensajes que mandes aparecen como respuestas del asistente. Podés corregirlos o eliminarlos sin avisos en la demo.</p>
     <div v-if="error" class="demo-chat-operador__error" role="alert">{{ error }}</div>
@@ -60,20 +67,20 @@
 <script>
 import api from '@/utils/axios'
 
-const vacio = () => ({ conversacion: { auto_responder: true, estado: 'inactivo', revision: -1 }, mensajes: [] })
+const vacio = () => ({ conversacion: { auto_responder: true, espera_segundos: 10, estado: 'inactivo', revision: -1 }, mensajes: [] })
 
 export default {
   name: 'LeadDemoChat',
   props: { draft: { type: Object, default: null }, record: { type: Object, default: null }, all_properties: { type: Array, default: () => [] } },
-  data() { return { snapshot: vacio(), texto: '', editando: null, error: '', cargando: false, ocupado: false, intervalo: null, montado: false, vista: 0 } },
+  data() { return { snapshot: vacio(), espera: 10, espera_aviso: '', texto: '', editando: null, error: '', cargando: false, ocupado: false, intervalo: null, montado: false, vista: 0 } },
   computed: {
     lead_id() { return (this.draft || this.record || {}).id || null },
     nombre_lead() { return (this.draft || this.record || {}).contact_name || 'Lead' },
     automatico() { return this.snapshot.conversacion.auto_responder },
     procesando() { return ['esperando', 'pensando'].includes(this.snapshot.conversacion.estado) },
-    estado_texto() { return ({ inactivo: 'Conversación en vivo', esperando: 'Esperando el último mensaje · 10 s', pensando: 'Pensando la respuesta', listo: 'Borrador listo para revisar', error: 'Necesita tu atención' })[this.snapshot.conversacion.estado] || 'Conversación en vivo' },
+    estado_texto() { return ({ inactivo: 'Conversación en vivo', esperando: 'Agrupando mensajes · ' + (this.snapshot.conversacion.espera_segundos ?? 10) + ' s', pensando: 'Pensando la respuesta', listo: 'Borrador listo para revisar', error: 'Necesita tu atención' })[this.snapshot.conversacion.estado] || 'Conversación en vivo' },
   },
-  watch: { lead_id() { this.vista++; this.snapshot = vacio(); this.cancelar_edicion(); this.error = ''; this.cargando = false; this.ocupado = false; this.cargar() } },
+  watch: { lead_id() { this.vista++; this.espera = 10; this.espera_aviso = ''; this.snapshot = vacio(); this.cancelar_edicion(); this.error = ''; this.cargando = false; this.ocupado = false; this.cargar() } },
   mounted() {
     this.montado = true
     this.cargar()
@@ -88,6 +95,8 @@ export default {
       if (datos.conversacion.revision < this.snapshot.conversacion.revision) return
       const hilo = this.$refs.hilo
       const al_final = !hilo || hilo.scrollHeight - hilo.scrollTop - hilo.clientHeight < 100
+      const anterior = this.snapshot.conversacion.espera_segundos ?? 10
+      if (Number(this.espera) === anterior || this.snapshot.conversacion.revision === -1) this.espera = datos.conversacion.espera_segundos ?? 10
       this.snapshot = datos
       if (al_final) this.$nextTick(() => { if (this.$refs.hilo) this.$refs.hilo.scrollTop = this.$refs.hilo.scrollHeight })
     },
@@ -109,6 +118,12 @@ export default {
         .then(r => { if (!this.vigente(lead, vista)) return false; this.aplicar(r.data, lead); return true })
         .catch(e => { if (this.vigente(lead, vista)) this.error = (e.response && e.response.data && e.response.data.message) || 'No se pudo guardar. Tu texto sigue acá para reintentar.'; return false })
         .finally(() => { if (this.vigente(lead, vista)) this.ocupado = false })
+    },
+    guardar_espera() {
+      const segundos = Number(this.espera)
+      if (this.espera === '' || !Number.isInteger(segundos) || segundos < 0 || segundos > 120) { this.error = 'Elegí una cantidad entera entre 0 y 120 segundos.'; return }
+      this.espera_aviso = ''
+      this.accion('put', '/configuracion', { espera_segundos: segundos }).then(ok => { if (ok) this.espera_aviso = 'Espera guardada: ' + segundos + ' s.' })
     },
     configurar(valor) { this.accion('put', '/configuracion', { auto_responder: valor }) },
     editar(mensaje) { this.editando = mensaje.id; this.texto = mensaje.contenido },
@@ -132,6 +147,9 @@ export default {
 .demo-chat-operador__orbe { background: linear-gradient(130deg,#80e5f8,#9d87fa); color: #111a37; width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; font-size: 25px; flex-shrink: 0; box-shadow: 0 0 24px #8475ff45; }
 .demo-chat-operador__switch { display: flex; gap: 8px; align-items: center; font-size: 12px; cursor: pointer; }
 .demo-chat-operador__switch input { accent-color: #a291ff; width: 17px; height: 17px; }
+.demo-chat-operador__espera { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 24px; font-size: 12px; }
+.demo-chat-operador__espera input { width: 75px; padding: 6px; color: var(--dc-texto); background: #172136; border: 1px solid #7785b3; border-radius: 6px; }
+.demo-chat-operador__espera small { flex-basis: 100%; color: var(--dc-tenue); }
 .demo-chat-operador__nota { padding: 12px 24px 0; color: var(--dc-tenue); font-size: 12px; line-height: 1.5; }
 .demo-chat-operador__error { color: #ffd7b7; border: 1px solid #e6a36550; background: #78521e30; padding: 10px 15px; margin: 12px 20px; border-radius: 10px; font-size: 13px; }
 .demo-chat-operador__hilo { min-height: 300px; height: min(58vh, 610px); overflow: auto; padding: 18px 24px; display: flex; flex-direction: column; gap: 18px; scroll-behavior: smooth; }
@@ -168,6 +186,9 @@ export default {
 .demo-chat-operador__entrada textarea::placeholder { color: #8090ad; }
 .demo-chat-operador__entrada button { padding: 9px 13px; background: #a998f5; border-radius: 9px; color: #11172c; font-weight: 700; flex-shrink: 0; }
 @keyframes demo-orbita { to { transform: rotate(360deg); } }
-@media (max-width: 600px) { .demo-chat-operador__cabecera { flex-direction: column; align-items: flex-start; padding: 16px; } .demo-chat-operador__hilo { padding: 14px; } .demo-chat-operador__mensaje { width: 96%; } .demo-chat-operador__compositor { padding: 12px 14px; } .demo-chat-operador__nota { padding-left: 16px; padding-right: 16px; } }
+@media (max-width: 600px) { .demo-chat-operador__cabecera { flex-direction: column; align-items: flex-start; padding: 16px; } .demo-chat-operador__hilo { padding: 14px; } .demo-chat-operador__mensaje { width: 96%; } .demo-chat-operador__compositor { padding: 12px 14px; } .demo-chat-operador__espera { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 24px; font-size: 12px; }
+.demo-chat-operador__espera input { width: 75px; padding: 6px; color: var(--dc-texto); background: #172136; border: 1px solid #7785b3; border-radius: 6px; }
+.demo-chat-operador__espera small { flex-basis: 100%; color: var(--dc-tenue); }
+.demo-chat-operador__nota { padding-left: 16px; padding-right: 16px; } }
 @media (prefers-reduced-motion: reduce) { .demo-chat-operador__orbita { animation: none; } .demo-chat-operador__hilo { scroll-behavior: auto; } }
 </style>
