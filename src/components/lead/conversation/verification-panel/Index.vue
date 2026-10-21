@@ -26,6 +26,11 @@
 
     <div class="vp-separator" />
 
+    <label v-if="puede_confirmar_fin_demo" class="d-flex align-items-center gap-2 small">
+      <input v-model="confirmar_fin_demo" type="checkbox" :disabled="disabled">
+      Confirmar que terminó la demo
+    </label>
+
     <contact-fields-control
       v-model:nombre="guardar_nombre"
       v-model:email="guardar_email"

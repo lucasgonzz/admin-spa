@@ -45,6 +45,8 @@ export default {
       guardar_email: '',
       /** true si el paquete debe cancelar/reagendar una demo ya existente. */
       cancelar_demo: false,
+      /** Decisión del operador; se ejecuta únicamente al aprobar el mensaje. */
+      confirmar_fin_demo: false,
       /** true si se debe reenviar el mail de acceso a un lead que ya tiene demo agendada (no intenta nueva agenda). */
       reenviar_mail_demo: false,
       /** true si el lead necesita intervención humana antes de seguir. */
@@ -58,6 +60,10 @@ export default {
     }
   },
   computed: {
+    puede_confirmar_fin_demo() {
+      return ['demo_en_curso', 'demo_pendiente_de_terminar'].indexOf(this.lead_status) !== -1
+        && !(this.message.is_followup && this.message.followup_template_id)
+    },
     /**
      * Catálogo de estados del pipeline de leads, mismo origen que el badge de la burbuja
      * (meta/properties('lead'), campo status). Evita duplicar un catálogo hardcodeado.
@@ -135,6 +141,7 @@ export default {
         guardar_nombre: (this.guardar_nombre || '').trim() || null,
         guardar_email: (this.guardar_email || '').trim() || null,
         cancelar_demo: Boolean(this.cancelar_demo),
+        confirmar_fin_demo: this.puede_confirmar_fin_demo && Boolean(this.confirmar_fin_demo),
         requiere_intervencion_humana: Boolean(this.requiere_intervencion_humana),
         motivo_intervencion: (this.motivo_intervencion || '').trim() || null,
       }
@@ -232,6 +239,7 @@ export default {
       this.guardar_nombre = pending.guardar_nombre || ''
       this.guardar_email = pending.guardar_email || ''
       this.cancelar_demo = Boolean(pending.cancelar_demo)
+      this.confirmar_fin_demo = pending.confirmar_fin_demo === true
       this.requiere_intervencion_humana = Boolean(pending.requiere_intervencion_humana)
       this.motivo_intervencion = pending.motivo_intervencion || ''
     },
