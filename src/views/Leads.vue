@@ -75,6 +75,7 @@
     <!-- Tarjetas de estado: cuántos leads hay en cada estado clave y cuántos necesitan respuesta.
          Los conteos son GLOBALES (no aplican el texto buscado ni el filtro de atención). Son el
          único filtro por estado que quedó: clic filtra la lista, otro clic lo saca. -->
+    <atribucion-metricas />
     <lead-status-cards
       :cards="lead_status_cards"
       :active_status_slug="active_status_slug"
@@ -385,6 +386,7 @@ import { cached_get, MAX_AGE_SETTINGS } from '@/common-vue/helpers/request_cache
 import ModelModal from '@/common-vue/components/model/Index.vue'
 import LeadConversationSidebar from '@/components/lead/LeadConversationSidebar.vue'
 import LeadStatusCards from '@/components/lead/LeadStatusCards.vue'
+import AtribucionMetricas from '@/components/lead/AtribucionMetricas.vue'
 import LeadChatsList from '@/components/lead/chats/Index.vue'
 import {
   lead_model_extra_tabs,
@@ -433,6 +435,7 @@ const EN_CURSO_LIFECYCLE_STATUSES = [
 export default {
   name: 'ViewLeads',
   components: {
+    AtribucionMetricas,
     ModelModal,
     LeadConversationSidebar,
     LeadStatusCards,

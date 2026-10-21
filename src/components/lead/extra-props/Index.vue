@@ -1,5 +1,6 @@
 <template>
   <div v-if="record && record.id" class="lead-pipeline-panel">
+    <atribucion-card :lead-id="record.id" />
 
     <!-- Switch maestro: apaga toda la automatización del ciclo de demo para este lead -->
     <div class="card border-secondary border-opacity-25 mb-3">
@@ -299,6 +300,7 @@
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
 import DemoRoadmap from '@/components/lead/demo-roadmap/Index.vue'
+import AtribucionCard from '@/components/lead/AtribucionCard.vue'
 
 /**
  * Panel de pipeline del lead en el tab Operaciones.
@@ -309,7 +311,7 @@ import DemoRoadmap from '@/components/lead/demo-roadmap/Index.vue'
  */
 export default {
   name: 'LeadExtraProps',
-  components: { DemoRoadmap },
+  components: { DemoRoadmap, AtribucionCard },
   props: {
     /**
      * Lead en edición: en el modal CRUD es el borrador (`draft`) del ModelModal,
