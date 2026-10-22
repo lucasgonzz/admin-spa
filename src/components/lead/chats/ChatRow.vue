@@ -285,6 +285,14 @@ export default {
      *   («📷 Foto», «🎤 Audio …», «📄 Documento», «🎥 Video»), también cuando además hay texto;
      *   dibujar otro ícono acá a partir de `kind` lo mostraría doble.
      *
+     * 🔴 El `fallido` de una campaña masiva NO va en rojo (misión campana-masiva-sin-rojo, 22/10/2026).
+     * La API manda `ultimo_mensaje.entrega_fallida_cuenta`: en `false` es un rechazo de Meta de una
+     * plantilla con `no_marca_error_de_entrega` (leads fríos, esperable, nada que hacer), y ahí va un
+     * ícono neutro gris, igual que ya no lo pintan el badge ni `atencion`. Se compara con `=== false`
+     * estricto a propósito: contra una API vieja el campo no viene (`undefined`) y tiene que quedar el
+     * rojo de siempre. El banner y el tick rojos de adentro de la conversación (`MessageBubble`) siguen
+     * igual: informan la entrega real con el hilo abierto y traen la acción «ya no recibe mensajes».
+     *
      * @returns {{ clase: string, titulo: string }|null}
      */
     tick() {
@@ -296,6 +304,9 @@ export default {
         return { clase: 'bi-hourglass-split lead-chat-tick--pendiente', titulo: 'Esperando confirmación' }
       }
       if (m.whatsapp_delivery_status === 'fallido') {
+        if (m.entrega_fallida_cuenta === false) {
+          return { clase: 'bi-dash-circle lead-chat-tick--enviado', titulo: 'No se entregó (envío masivo)' }
+        }
         return { clase: 'bi-exclamation-circle lead-chat-tick--fallido', titulo: 'Falló el envío' }
       }
       if (m.whatsapp_delivery_status === 'leido') {
