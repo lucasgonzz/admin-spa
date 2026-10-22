@@ -6,6 +6,9 @@
     </p>
 
     <div v-else>
+      <!-- Extensión única «Agentes de IA» (misión agentes-ia-extension-unica, 22/10/2026): estado y activar/quitar. -->
+      <ClientAgentesIaCard :client_id="record.id" />
+
       <div class="card mb-3">
         <div class="card-body">
           <p class="mb-2">
@@ -45,6 +48,7 @@
 
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
+import ClientAgentesIaCard from '@/components/client/AgentesIaCard.vue'
 
 /**
  * Pestaña "Extensiones" del detalle del cliente (admin-spa).
@@ -59,6 +63,7 @@ import api, { resolve_error_message } from '@/utils/axios'
  */
 export default {
   name: 'ClientExtensionesTab',
+  components: { ClientAgentesIaCard },
   props: {
     /** Cliente actualmente abierto en el modal de detalle de ResourceView. */
     record: { type: Object, default: null },

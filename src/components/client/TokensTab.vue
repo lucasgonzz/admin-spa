@@ -76,6 +76,31 @@
               <div v-else-if="plan_sync_status === 'failed'" class="alert alert-danger py-2 small mb-0">
                 {{ plan_sync_message || 'La última sincronización del plan falló.' }}
               </div>
+
+              <!-- Activación automática de Agentes de IA al asignar el paquete: se activó, o el motivo de que no -->
+              <div
+                v-if="agentes_ia_resultado"
+                class="alert py-2 small mb-0"
+                :class="[
+                  agentes_ia_resultado.estado === 'ok' ? 'alert-success' : 'alert-warning',
+                  plan_sync_status === 'no_soportado' || plan_sync_status === 'failed' ? 'mt-2' : '',
+                ]"
+                role="status"
+              >
+                <template v-if="agentes_ia_resultado.estado === 'ok'">
+                  <strong>Se activó Agentes de IA</strong> en el sistema del cliente junto con el paquete.
+                </template>
+                <template v-else-if="agentes_ia_resultado.estado === 'version_vieja'">
+                  <strong>El paquete quedó asignado, pero Agentes de IA no se activó.</strong>
+                  {{ agentes_ia_resultado.mensaje }}
+                  Primero hay que actualizar el sistema del cliente; después se activa desde la solapa Extensiones.
+                </template>
+                <template v-else>
+                  <strong>El paquete quedó asignado, pero Agentes de IA no se activó.</strong>
+                  {{ agentes_ia_resultado.mensaje }}
+                  Cuando se resuelva, se activa con el botón de la solapa Extensiones.
+                </template>
+              </div>
             </div>
           </template>
         </div>
@@ -583,6 +608,9 @@ export default {
       plan_sync_status: null,
       plan_sync_message: '',
       plan_synced_at: null,
+      // Resultado de la activación automática de «Agentes de IA» de la ÚLTIMA asignación de un paquete
+      // ({ estado, mensaje, activa }); null = esa asignación no intentó activarla (quitó el paquete o dejó el mismo).
+      agentes_ia_resultado: null,
       // Atajos de período. Tres alcanzan: el mes es el corte natural del gasto.
       atajos: [
         { dias: 7, label: '7 días' },
@@ -1119,6 +1147,8 @@ export default {
      * @returns {void}
      */
     inicializar_plan() {
+      // El aviso de la activación automática es de la última asignación de ESTE cliente: no se arrastra al siguiente.
+      this.agentes_ia_resultado = null
       this.aplicar_estado_plan(this.record || {})
       this.cargar_paquetes()
     },
@@ -1182,8 +1212,11 @@ export default {
         .then(function (res) {
           const cuerpo = res.data || {}
           self.aplicar_estado_plan(cuerpo)
+          // El backend manda `agentes_ia` solo si esta asignación pasó a tener un paquete (si no, viene null).
+          self.agentes_ia_resultado = cuerpo.agentes_ia || null
           self.sincronizando = false
           self.avisar_sync_plan()
+          self.avisar_agentes_ia()
         })
         .catch(function (error) {
           self.sincronizando = false
@@ -1211,6 +1244,23 @@ export default {
       if (Object.prototype.hasOwnProperty.call(f, 'ai_plan_id')) {
         this.ai_plan_id_elegido = f.ai_plan_id !== undefined ? f.ai_plan_id : null
       }
+    },
+    /**
+     * Toast de éxito de la activación automática de Agentes de IA (misión agentes-ia-extension-unica,
+     * 22/10/2026). No hace nada si la asignación no intentó activarla o si no se pudo.
+     * @returns {void}
+     */
+    avisar_agentes_ia() {
+      const resultado = this.agentes_ia_resultado
+      // Solo si se activó: cuando no, el motivo queda a la vista en el aviso del panel y no se repite en un toast.
+      if (!resultado || resultado.estado !== 'ok') {
+        return
+      }
+      window.dispatchEvent(
+        new CustomEvent('admin-spa-toast', {
+          detail: { message: 'Se activó Agentes de IA en el sistema del cliente.', variant: 'success' },
+        })
+      )
     },
     /**
      * Toast según el desenlace de la sincronización del plan.
