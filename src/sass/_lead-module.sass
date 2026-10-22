@@ -233,6 +233,16 @@
 	.lead-status-cards--loading
 		opacity: 0.6
 
+	// Una tarjeta y, abajo, su botoncito «N sin responder».
+	.lead-status-card-wrap
+		display: flex
+		flex-direction: column
+		gap: 0.3rem
+		min-width: 0
+
+		.lead-status-card
+			flex: 1 1 auto
+
 	.lead-status-card
 		display: flex
 		flex-direction: column
@@ -271,9 +281,58 @@
 		line-height: 1
 		color: var(--bs-body-color)
 
+	// Botoncito «N sin responder». Ámbar = el mismo amarillo del borde de las filas de la lista que esperan
+	// respuesta. Apagado (gris, no clickeable) cuando no hay ninguno; relleno ámbar cuando está filtrando.
 	.lead-status-card__sub
 		font-size: 0.72rem
 		line-height: 1.1
+
+	.lead-status-card__pending
+		display: inline-flex
+		align-items: center
+		justify-content: center
+		gap: 0.35rem
+		width: 100%
+		padding: 0.28rem 0.5rem
+		border: 1px solid #ffc107
+		border-radius: 999px
+		background: #fff8e1
+		color: #664d03
+		font-size: 0.72rem
+		font-weight: 600
+		line-height: 1.2
+		white-space: nowrap
+		cursor: pointer
+		transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease
+
+		&:hover:not(:disabled)
+			background: #ffecb5
+			border-color: #e0a800
+
+		&:focus-visible
+			outline: 2px solid var(--bs-primary)
+			outline-offset: 2px
+
+	.lead-status-card__pending-num
+		font-weight: 800
+		font-size: 0.8rem
+
+	.lead-status-card__pending--active
+		background: #ffc107
+		border-color: #cc9a06
+		color: #000
+		box-shadow: 0 1px 3px rgba(102, 77, 3, 0.35)
+
+		&:hover:not(:disabled)
+			background: #ffca2c
+
+	// Sin :not(--active): si el filtro está prendido y el último se marca como leído (N pasa a 0), el
+	// botón tiene que seguir viéndose activo para que se entienda por qué la lista quedó vacía.
+	.lead-status-card__pending--empty:not(.lead-status-card__pending--active)
+		background: #f1f3f5
+		border-color: #ced4da
+		color: #6c757d
+		cursor: default
 
 	// Teléfono (<576): carrusel horizontal con snap, tarjetas de 140px de ancho y ~56px de alto,
 	// con el título y el total en una sola línea y el "N sin responder" chico debajo.
@@ -296,11 +355,13 @@
 			padding-bottom: 0.35rem
 			scrollbar-width: thin
 
-		.lead-status-card
+		.lead-status-card-wrap
 			flex: 0 0 140px
 			width: 140px
-			min-height: 56px
 			scroll-snap-align: start
+
+		.lead-status-card
+			min-height: 56px
 			display: grid
 			grid-template-columns: minmax(0, 1fr) auto
 			grid-template-areas: "head total" "sub sub"
@@ -308,6 +369,11 @@
 			column-gap: 0.4rem
 			row-gap: 0.1rem
 			padding: 0.45rem 0.6rem
+
+		// Con el botón «sin responder» debajo la tarjeta es de una sola línea (título y total).
+		.lead-status-cards--with-pending .lead-status-card
+			min-height: 40px
+			grid-template-areas: "head total"
 
 		.lead-status-card__head
 			grid-area: head
@@ -330,6 +396,10 @@
 			white-space: nowrap
 			overflow: hidden
 			text-overflow: ellipsis
+
+		.lead-status-card__pending
+			font-size: 0.68rem
+			padding: 0.3rem 0.4rem
 
 	// Tablet (576-1199): tres columnas. Con las 5 tarjetas de hoy da 3+2 -- la última fila queda
 	// con un hueco de UN carril, no el resto de la fila vacío.
