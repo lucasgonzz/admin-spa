@@ -90,10 +90,15 @@
                 <template v-if="agentes_ia_resultado.estado === 'ok'">
                   <strong>Se activó Agentes de IA</strong> en el sistema del cliente junto con el paquete.
                 </template>
+                <template v-else-if="agentes_ia_resultado.estado === 'version_vieja'">
+                  <strong>El paquete quedó asignado, pero Agentes de IA no se activó.</strong>
+                  {{ agentes_ia_resultado.mensaje }}
+                  Primero hay que actualizar el sistema del cliente; después se activa desde la solapa Extensiones.
+                </template>
                 <template v-else>
                   <strong>El paquete quedó asignado, pero Agentes de IA no se activó.</strong>
                   {{ agentes_ia_resultado.mensaje }}
-                  Se puede activar a mano en la solapa Extensiones.
+                  Cuando se resuelva, se activa con el botón de la solapa Extensiones.
                 </template>
               </div>
             </div>
@@ -1142,6 +1147,8 @@ export default {
      * @returns {void}
      */
     inicializar_plan() {
+      // El aviso de la activación automática es de la última asignación de ESTE cliente: no se arrastra al siguiente.
+      this.agentes_ia_resultado = null
       this.aplicar_estado_plan(this.record || {})
       this.cargar_paquetes()
     },
@@ -1239,24 +1246,19 @@ export default {
       }
     },
     /**
-     * Toast con el desenlace de la activación automática de Agentes de IA (misión agentes-ia-extension-unica,
-     * 22/10/2026). No hace nada si la asignación no intentó activarla.
+     * Toast de éxito de la activación automática de Agentes de IA (misión agentes-ia-extension-unica,
+     * 22/10/2026). No hace nada si la asignación no intentó activarla o si no se pudo.
      * @returns {void}
      */
     avisar_agentes_ia() {
       const resultado = this.agentes_ia_resultado
-      if (!resultado) {
+      // Solo si se activó: cuando no, el motivo queda a la vista en el aviso del panel y no se repite en un toast.
+      if (!resultado || resultado.estado !== 'ok') {
         return
       }
-      const ok = resultado.estado === 'ok'
       window.dispatchEvent(
         new CustomEvent('admin-spa-toast', {
-          detail: {
-            message: ok
-              ? 'Se activó Agentes de IA en el sistema del cliente.'
-              : 'Agentes de IA no se activó: ' + (resultado.mensaje || 'no se pudo contactar al cliente.'),
-            variant: ok ? 'success' : 'warning',
-          },
+          detail: { message: 'Se activó Agentes de IA en el sistema del cliente.', variant: 'success' },
         })
       )
     },
