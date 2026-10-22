@@ -326,7 +326,9 @@
 		&:hover:not(:disabled)
 			background: #ffca2c
 
-	.lead-status-card__pending--empty
+	// Sin :not(--active): si el filtro está prendido y el último se marca como leído (N pasa a 0), el
+	// botón tiene que seguir viéndose activo para que se entienda por qué la lista quedó vacía.
+	.lead-status-card__pending--empty:not(.lead-status-card__pending--active)
 		background: #f1f3f5
 		border-color: #ced4da
 		color: #6c757d

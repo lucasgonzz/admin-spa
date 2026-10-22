@@ -55,6 +55,7 @@
         }"
         :disabled="!(card.sin_responder > 0) && !is_pending_active(card)"
         :aria-pressed="is_pending_active(card) ? 'true' : 'false'"
+        :aria-label="pending_title(card)"
         :title="pending_title(card)"
         @click="$emit('select-pending', card)"
       >

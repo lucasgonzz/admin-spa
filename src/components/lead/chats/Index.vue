@@ -277,12 +277,13 @@ export default {
       }
       const self = this
       const lead_id = row.id
-      const tenia_marca_manual = Boolean(row.manually_marked_unread)
       this.accion_en_vuelo_id = lead_id
       this.cerrar_menu()
       this.$store.dispatch('lead/marcar_respondido', { lead_id: lead_id })
-        .then(function () {
-          if (tenia_marca_manual) {
+        .then(function (fila) {
+          /* La marca manual se mira en la fila fresca que devuelve el servidor, no en la que había
+             al abrir el menú: si cambió en el medio, el toggle la invertiría en vez de limpiarla. */
+          if (fila && fila.manually_marked_unread) {
             return self.$store.dispatch('lead/toggle_chat_manual_unread', lead_id)
           }
           return null

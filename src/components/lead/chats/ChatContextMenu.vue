@@ -31,6 +31,7 @@
           type="button"
           class="lead-chat-menu__item"
           role="menuitem"
+          title="Da por atendido el último mensaje del lead, sin mandarle nada. Vale para todos los admins y la IA deja de sugerir respuesta a ese mensaje. Se deshace desde la conversación."
           @click="$emit('leido', row)"
         >
           <i class="bi bi-check2-all" aria-hidden="true" />
