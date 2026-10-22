@@ -98,6 +98,9 @@ export default {
       aviso: null,
       // Estado del último resultado (para el color del aviso).
       estado: null,
+      // Número del último pedido hecho: una respuesta con otro número es de un pedido viejo (cambió el cliente o se
+      // pidió otra cosa después) y se descarta sin tocar el estado.
+      pedido_actual: 0,
     }
   },
   computed: {
@@ -118,7 +121,17 @@ export default {
     },
   },
   watch: {
+    /**
+     * Cambió el cliente abierto: se invalida cualquier pedido en vuelo del anterior y se limpia TODO el estado
+     * (incluido `cambiando`, para que un pedido pendiente de un cliente no deje bloqueado el botón del siguiente).
+     */
     client_id() {
+      this.pedido_actual += 1
+      this.cargando = false
+      this.cambiando = false
+      this.activa = null
+      this.aviso = null
+      this.estado = null
       this.consultar()
     },
   },
@@ -132,6 +145,8 @@ export default {
      */
     consultar() {
       const self = this
+      self.pedido_actual += 1
+      const pedido = self.pedido_actual
       self.cargando = true
       self.aviso = null
       // Se borra el valor viejo: si la consulta falla tiene que decir "Sin dato", no un estado desactualizado.
@@ -139,10 +154,16 @@ export default {
       api
         .get('/client/' + this.client_id + '/agentes-ia', { silent_error: true })
         .then(function (res) {
+          if (pedido !== self.pedido_actual) {
+            return
+          }
           self.aplicar_resultado(res.data || {})
           self.cargando = false
         })
         .catch(function (error) {
+          if (pedido !== self.pedido_actual) {
+            return
+          }
           self.estado = 'sin_conexion'
           self.aviso = resolve_error_message(error)
           self.cargando = false
@@ -170,17 +191,26 @@ export default {
      */
     cambiar(activa) {
       const self = this
+      self.pedido_actual += 1
+      const pedido = self.pedido_actual
       self.cambiando = true
       self.aviso = null
       api
         .post('/client/' + this.client_id + '/agentes-ia', { activa: activa }, { silent_error: true })
         .then(function (res) {
+          // Respuesta de un pedido viejo (se cambió de cliente mientras tanto): no se toca nada.
+          if (pedido !== self.pedido_actual) {
+            return
+          }
           const cuerpo = res.data || {}
           self.aplicar_resultado(cuerpo)
           self.cambiando = false
           self.avisar(cuerpo, activa)
         })
         .catch(function (error) {
+          if (pedido !== self.pedido_actual) {
+            return
+          }
           self.cambiando = false
           self.aviso = resolve_error_message(error)
           self.estado = 'sin_conexion'
@@ -204,20 +234,21 @@ export default {
       this.aviso = cuerpo.mensaje || 'No se pudo consultar el estado de Agentes de IA.'
     },
     /**
-     * Toast con el desenlace de activar o quitar.
+     * Toast con el desenlace de activar o quitar. Solo cuando salió bien: si no, el motivo ya queda a la vista en el
+     * aviso de la tarjeta y repetirlo en un toast sería mostrar dos veces lo mismo.
      * @param {Object}  cuerpo  Respuesta del backend.
      * @param {boolean} activa  Lo que se pidió.
      * @returns {void}
      */
     avisar(cuerpo, activa) {
-      const ok = cuerpo.estado === 'ok'
+      if (cuerpo.estado !== 'ok') {
+        return
+      }
       window.dispatchEvent(
         new CustomEvent('admin-spa-toast', {
           detail: {
-            message: ok
-              ? (activa ? 'Agentes de IA activada.' : 'Agentes de IA quitada.')
-              : cuerpo.mensaje || 'No se pudo cambiar Agentes de IA.',
-            variant: ok ? 'success' : 'warning',
+            message: activa ? 'Agentes de IA activada.' : 'Agentes de IA quitada.',
+            variant: 'success',
           },
         })
       )
