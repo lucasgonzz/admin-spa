@@ -20,7 +20,23 @@
           <i class="bi" :class="row.pinned_at ? 'bi-pin-angle' : 'bi-pin-angle-fill'" aria-hidden="true" />
           {{ row.pinned_at ? 'Desfijar' : 'Fijar' }}
         </button>
-        <button type="button" class="lead-chat-menu__item" role="menuitem" @click="$emit('unread', row)">
+        <!--
+          «Marcar como leído» (22/10/2026): solo en los chats con un mensaje del lead sin responder
+          (los del borde amarillo). Da el mensaje por atendido, o sea que deja de estar amarillo y de
+          contar en «sin responder», hasta que el lead escriba de nuevo. En esos chats reemplaza al
+          «no leído» manual de abajo: los dos se llamarían igual y este también limpia aquella marca.
+        -->
+        <button
+          v-if="puede_marcar_leido"
+          type="button"
+          class="lead-chat-menu__item"
+          role="menuitem"
+          @click="$emit('leido', row)"
+        >
+          <i class="bi bi-check2-all" aria-hidden="true" />
+          Marcar como leído
+        </button>
+        <button v-else type="button" class="lead-chat-menu__item" role="menuitem" @click="$emit('unread', row)">
           <i class="bi" :class="row.manually_marked_unread ? 'bi-envelope-open' : 'bi-envelope'" aria-hidden="true" />
           {{ row.manually_marked_unread ? 'Marcar como leído' : 'Marcar como no leído' }}
         </button>
@@ -62,7 +78,7 @@ export default {
     /** Fila sobre la que se opera. */
     row: { type: Object, default: null },
   },
-  emits: ['close', 'pin', 'unread', 'perfil'],
+  emits: ['close', 'pin', 'unread', 'leido', 'perfil'],
   data() {
     return {
       /** Posición ya acotada al viewport (se recalcula al abrir, midiendo el menú real). */
@@ -73,6 +89,20 @@ export default {
     }
   },
   computed: {
+    /**
+     * true si el chat tiene un mensaje del lead sin responder que «Marcar como leído» puede dar por
+     * atendido. Usa `mensaje_sin_responder` del servidor; con un admin-api anterior al 22/10/2026
+     * (sin esa clave) cae al amarillo de la fila.
+     *
+     * @returns {boolean}
+     */
+    puede_marcar_leido() {
+      const r = this.row || {}
+      if (typeof r.mensaje_sin_responder === 'boolean') {
+        return r.mensaje_sin_responder
+      }
+      return r.atencion === 'amarillo' && r.atencion_motivo === 'sin_responder'
+    },
     /**
      * @returns {string}
      */

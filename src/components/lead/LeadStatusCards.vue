@@ -2,40 +2,67 @@
   <div
     v-if="cards.length"
     class="lead-status-cards mb-3"
-    :class="{ 'lead-status-cards--loading': loading }"
+    :class="{ 'lead-status-cards--loading': loading, 'lead-status-cards--with-pending': pending_filter }"
   >
     <!--
       Cada tarjeta es un <button>, no un <div @click>: es un control, así que tiene que ser
       tabulable y responder a Enter/Espacio sin código extra.
+
+      Debajo de cada una va un segundo botón, «N sin responder» (22/10/2026): filtra la lista a los
+      leads de esa tarjeta que esperan respuesta. Son dos botones hermanos dentro de un contenedor y
+      no uno adentro del otro, porque un <button> anidado es HTML inválido y el clic se ambigua.
     -->
-    <button
+    <div
       v-for="card in cards"
       :key="'lead-status-card-' + card.value"
-      type="button"
-      class="lead-status-card"
-      :class="{ 'lead-status-card--active': is_active(card) }"
-      :style="card_style(card)"
-      :aria-pressed="is_active(card) ? 'true' : 'false'"
-      :title="card_title(card)"
-      @click="$emit('select', card)"
+      class="lead-status-card-wrap"
     >
-      <span class="lead-status-card__head">
-        <span
-          class="lead-status-nav-dot"
-          aria-hidden="true"
-          :style="{ backgroundColor: card_color(card) }"
-        />
-        <span class="lead-status-card__title">{{ card.text }}</span>
-      </span>
-      <span class="lead-status-card__total">{{ card.total }}</span>
-      <span
-        class="lead-status-card__sub"
-        :class="card.sin_responder > 0 ? 'text-danger fw-semibold' : 'text-muted'"
+      <button
+        type="button"
+        class="lead-status-card"
+        :class="{ 'lead-status-card--active': is_active(card) }"
+        :style="card_style(card)"
+        :aria-pressed="is_active(card) ? 'true' : 'false'"
+        :title="card_title(card)"
+        @click="$emit('select', card)"
       >
-        <i class="bi bi-exclamation-circle-fill me-1" aria-hidden="true" />
-        {{ card.sin_responder }} sin responder
-      </span>
-    </button>
+        <span class="lead-status-card__head">
+          <span
+            class="lead-status-nav-dot"
+            aria-hidden="true"
+            :style="{ backgroundColor: card_color(card) }"
+          />
+          <span class="lead-status-card__title">{{ card.text }}</span>
+        </span>
+        <span class="lead-status-card__total">{{ card.total }}</span>
+        <!-- Sin el botón de abajo (panel del closer) el «sin responder» sigue siendo esta línea. -->
+        <span
+          v-if="!pending_filter"
+          class="lead-status-card__sub"
+          :class="card.sin_responder > 0 ? 'text-danger fw-semibold' : 'text-muted'"
+        >
+          <i class="bi bi-exclamation-circle-fill me-1" aria-hidden="true" />
+          {{ card.sin_responder }} sin responder
+        </span>
+      </button>
+      <button
+        v-if="pending_filter"
+        type="button"
+        class="lead-status-card__pending"
+        :class="{
+          'lead-status-card__pending--active': is_pending_active(card),
+          'lead-status-card__pending--empty': !(card.sin_responder > 0),
+        }"
+        :disabled="!(card.sin_responder > 0) && !is_pending_active(card)"
+        :aria-pressed="is_pending_active(card) ? 'true' : 'false'"
+        :title="pending_title(card)"
+        @click="$emit('select-pending', card)"
+      >
+        <i class="bi bi-chat-left-dots-fill" aria-hidden="true" />
+        <span class="lead-status-card__pending-num">{{ card.sin_responder }}</span>
+        sin responder
+      </button>
+    </div>
   </div>
 </template>
 
@@ -92,7 +119,7 @@ function hex_a_rgba(hex, alfa) {
  */
 export default {
   name: 'LeadStatusCards',
-  emits: ['select'],
+  emits: ['select', 'select-pending'],
   props: {
     /**
      * Tarjetas tal cual las devuelve GET /lead/status-cards.
@@ -112,6 +139,23 @@ export default {
       type: Boolean,
       default: false,
     },
+    /**
+     * true si el filtro «solo sin responder» está puesto. Marca el botón de la tarjeta activa
+     * (`active_status_slug`): el filtro siempre va atado a una tarjeta.
+     */
+    active_sin_responder: {
+      type: Boolean,
+      default: false,
+    },
+    /**
+     * true = muestra debajo de cada tarjeta el botón «N sin responder» (emite `select-pending`).
+     * Solo lo prende la bandeja de Leads. El panel del closer reusa estas tarjetas con otras
+     * secciones y no maneja ese evento: sin el botón sigue viendo la línea «N sin responder» de siempre.
+     */
+    pending_filter: {
+      type: Boolean,
+      default: false,
+    },
   },
   methods: {
     /**
@@ -128,6 +172,34 @@ export default {
         return false
       }
       return String(this.active_status_slug) === String(card.value)
+    },
+    /**
+     * true si el botón «sin responder» de esta tarjeta es el que está filtrando la lista.
+     *
+     * @param {{ value: string }} card
+     * @returns {boolean}
+     */
+    is_pending_active(card) {
+      return this.active_sin_responder && this.is_active(card)
+    },
+    /**
+     * Tooltip del botón «sin responder». El número es el MISMO de `card.sin_responder` que cuenta
+     * el servidor con el scope de la lista, así que lo que dice acá es lo que va a mostrar.
+     *
+     * @param {{ text: string, sin_responder: number }} card
+     * @returns {string}
+     */
+    pending_title(card) {
+      if (!card) {
+        return ''
+      }
+      if (this.is_pending_active(card)) {
+        return 'Mostrando solo los de ' + card.text + ' sin responder. Tocá para volver a verlos todos'
+      }
+      if (!(card.sin_responder > 0)) {
+        return 'No hay leads de ' + card.text + ' esperando respuesta'
+      }
+      return 'Ver solo los ' + card.sin_responder + ' leads de ' + card.text + ' sin responder'
     },
     /**
      * Color del estado, con el gris de fallback si el catálogo no trajo ninguno.

@@ -41,6 +41,23 @@
           <i class="bi bi-x-lg" aria-hidden="true" />
         </button>
       </span>
+      <!-- «Solo sin responder»: lo prende el botoncito de la tarjeta; la ✕ saca solo este filtro. -->
+      <span
+        v-if="solo_sin_responder_activo"
+        class="badge rounded-pill text-bg-warning d-inline-flex align-items-center"
+        title="Mostrando solo los leads que esperan respuesta"
+      >
+        Sin responder
+        <button
+          type="button"
+          class="btn btn-sm btn-link p-0 ms-2 text-dark lh-1 text-decoration-none"
+          title="Quitar el filtro de sin responder"
+          aria-label="Quitar el filtro de sin responder"
+          @click="quitar_filtro_sin_responder_de_tarjeta"
+        >
+          <i class="bi bi-x-lg" aria-hidden="true" />
+        </button>
+      </span>
       <span v-if="chats_total_texto" class="small text-muted">{{ chats_total_texto }}</span>
 
       <div class="ms-auto d-flex align-items-center gap-2">
@@ -79,8 +96,11 @@
     <lead-status-cards
       :cards="lead_status_cards"
       :active_status_slug="active_status_slug"
+      :pending_filter="true"
+      :active_sin_responder="solo_sin_responder_activo"
       :loading="loading_status_cards"
       @select="on_select_status_card"
+      @select-pending="on_select_pending_card"
     />
 
     <!-- Panel de demos agendadas: visible solo cuando el toggle está activo -->
@@ -484,10 +504,17 @@ export default {
     },
     /**
      * Filtros vivos de la lista de chats.
-     * @returns {{ q: string, status: string|null, solo_atencion: boolean }}
+     * @returns {{ q: string, status: string|null, solo_atencion: boolean, solo_sin_responder: boolean }}
      */
     chats_filtros() {
-      return this.$store.state.lead.chats_filtros || { q: '', status: null, solo_atencion: false }
+      return this.$store.state.lead.chats_filtros || { q: '', status: null, solo_atencion: false, solo_sin_responder: false }
+    },
+    /**
+     * true si el botoncito «sin responder» de alguna tarjeta está filtrando la lista.
+     * @returns {boolean}
+     */
+    solo_sin_responder_activo() {
+      return Boolean(this.chats_filtros.solo_sin_responder)
     },
     /**
      * @returns {boolean}
@@ -562,6 +589,7 @@ export default {
   created() {
     this.$store.commit('lead/set_chats_filtros', {
       solo_atencion: this.$route.query.filtro === 'sin-responder',
+      solo_sin_responder: false,
     })
   },
 
@@ -687,7 +715,7 @@ export default {
       /* Volver a Leads desde el menú es una entrada limpia: también se cae el deep link de
          "solo sin responder", chip y query incluidos. */
       this.limpiar_filtro_de_la_query()
-      this.$store.commit('lead/set_chats_filtros', { q: '', status: null, solo_atencion: false })
+      this.$store.commit('lead/set_chats_filtros', { q: '', status: null, solo_atencion: false, solo_sin_responder: false })
       this.$store.commit('lead/set_scroll_y', 0)
       this.active_status_slug = null
       this.sidebar_lead = null
@@ -857,7 +885,8 @@ export default {
     /**
      * Clic en una tarjeta de estado: filtra la lista por ese estado (o por los slugs de una
      * tarjeta agrupada, como "Demo" u "Otros"). Volver a clickear la misma tarjeta saca el filtro:
-     * sin la barra de grupos ya no hay botón "Todos".
+     * sin la barra de grupos ya no hay botón "Todos". Cambiar de tarjeta apaga «sin responder»: ese
+     * filtro va atado a la tarjeta cuyo botón lo prendió.
      *
      * @param {{ value: string, text: string, slugs?: string[] }} card
      * @returns {void}
@@ -872,15 +901,48 @@ export default {
       }
       this.active_status_slug = card.value
       const status = Array.isArray(card.slugs) && card.slugs.length ? card.slugs.join(',') : card.value
-      this.$store.commit('lead/set_chats_filtros', { status: status })
+      this.$store.commit('lead/set_chats_filtros', { status: status, solo_sin_responder: false })
       this.$store.dispatch('lead/fetch_chats', { page: 1 })
     },
     /**
+     * Clic en el botoncito «N sin responder» de una tarjeta (22/10/2026): deja en la lista solo los
+     * leads de ESA tarjeta que esperan respuesta. Si la tarjeta no estaba activa, la activa; si ya
+     * estaba filtrando por «sin responder», lo saca y deja la tarjeta (se vuelven a ver todos los de
+     * su estado). El número del botón y las filas salen del mismo scope en el servidor.
+     *
+     * @param {{ value: string, text: string, slugs?: string[] }} card
+     * @returns {void}
+     */
+    on_select_pending_card(card) {
+      if (!card || !card.value) {
+        return
+      }
+      if (this.active_status_slug === card.value && this.solo_sin_responder_activo) {
+        this.quitar_filtro_sin_responder_de_tarjeta()
+        return
+      }
+      this.active_status_slug = card.value
+      const status = Array.isArray(card.slugs) && card.slugs.length ? card.slugs.join(',') : card.value
+      this.$store.commit('lead/set_chats_filtros', { status: status, solo_sin_responder: true })
+      this.$store.dispatch('lead/fetch_chats', { page: 1 })
+    },
+    /**
+     * Apaga solo «sin responder»; la tarjeta de estado sigue filtrando.
+     *
+     * @returns {void}
+     */
+    quitar_filtro_sin_responder_de_tarjeta() {
+      this.$store.commit('lead/set_chats_filtros', { solo_sin_responder: false })
+      this.$store.dispatch('lead/fetch_chats', { page: 1 })
+    },
+    /**
+     * Saca el filtro de estado y, con él, «sin responder» (que va atado a una tarjeta).
+     *
      * @returns {void}
      */
     limpiar_filtro_de_estado() {
       this.active_status_slug = null
-      this.$store.commit('lead/set_chats_filtros', { status: null })
+      this.$store.commit('lead/set_chats_filtros', { status: null, solo_sin_responder: false })
       this.$store.dispatch('lead/fetch_chats', { page: 1 })
     },
 

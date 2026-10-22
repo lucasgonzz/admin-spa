@@ -37,7 +37,7 @@
     <div v-else-if="!chats.length" class="lead-chats__estado">
       <i class="bi bi-chat-left-dots lead-chats__estado-icon" aria-hidden="true" />
       <p class="lead-chats__estado-title">Sin leads para este filtro</p>
-      <p v-if="hay_filtros" class="lead-chats__estado-text">Probá con otro texto o sacá el filtro de estado.</p>
+      <p v-if="hay_filtros" class="lead-chats__estado-text">Probá con otro texto o sacá los filtros.</p>
     </div>
 
     <div v-else class="lead-chats__list" role="list" :class="{ 'lead-chats__list--loading': loading_chats }">
@@ -69,6 +69,7 @@
       @close="cerrar_menu"
       @pin="on_menu_pin"
       @unread="on_menu_unread"
+      @leido="on_menu_leido"
       @perfil="on_menu_perfil"
     />
   </section>
@@ -149,7 +150,7 @@ export default {
      */
     hay_filtros() {
       const f = this.$store.state.lead.chats_filtros || {}
-      return Boolean((f.q || '').trim() || f.status || f.solo_atencion)
+      return Boolean((f.q || '').trim() || f.status || f.solo_atencion || f.solo_sin_responder)
     },
     /**
      * @returns {boolean}
@@ -261,6 +262,37 @@ export default {
      */
     on_menu_unread(row) {
       this.correr_accion(row, 'toggle_chat_manual_unread')
+    },
+    /**
+     * «Marcar como leído» sobre un chat con mensaje sin responder: lo da por atendido hasta el último
+     * mensaje del lead (POST marcar-respondido, el mismo de «No necesita respuesta» de la
+     * conversación). Si además tenía la marca manual de «no leído», también se la saca. No manda nada
+     * al lead. Un mensaje nuevo del lead lo vuelve a poner en amarillo solo.
+     *
+     * @param {Object} row
+     */
+    on_menu_leido(row) {
+      if (!row || !row.id || this.accion_en_vuelo_id != null) {
+        return
+      }
+      const self = this
+      const lead_id = row.id
+      const tenia_marca_manual = Boolean(row.manually_marked_unread)
+      this.accion_en_vuelo_id = lead_id
+      this.cerrar_menu()
+      this.$store.dispatch('lead/marcar_respondido', { lead_id: lead_id })
+        .then(function () {
+          if (tenia_marca_manual) {
+            return self.$store.dispatch('lead/toggle_chat_manual_unread', lead_id)
+          }
+          return null
+        })
+        .catch(function () {
+          return null
+        })
+        .then(function () {
+          self.accion_en_vuelo_id = null
+        })
     },
     /**
      * @param {Object} row

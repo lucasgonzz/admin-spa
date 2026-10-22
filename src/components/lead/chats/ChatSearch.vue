@@ -132,24 +132,34 @@ export default {
 .lead-chat-search__icon {
   position: absolute;
   left: 0.75rem;
-  color: var(--bs-secondary-color);
+  color: #495057;
   pointer-events: none;
   font-size: 0.9rem;
 }
 
-/* Pastilla redondeada estilo WhatsApp; el padding izquierdo deja lugar a la lupa y el derecho a la cruz. */
+/* Pastilla redondeada estilo WhatsApp; el padding izquierdo deja lugar a la lupa y el derecho a la cruz.
+   Contraste (22/10/2026): la página es #f8f9fa y la pastilla era #f0f2f5 sin borde, o sea casi el mismo
+   gris y se perdía. Ahora es blanca con borde #868e96 (≈3,3:1 contra el fondo, el mínimo de WCAG para
+   un control) y el texto y el placeholder salen oscuros sobre blanco. */
 .lead-chat-search__input {
   padding-left: 2.2rem;
   padding-right: 2.2rem;
   border-radius: 999px;
-  background-color: var(--bs-tertiary-bg, #f0f2f5);
-  border-color: transparent;
+  background-color: #fff;
+  border: 1px solid #868e96;
+  color: #212529;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+}
+
+.lead-chat-search__input::placeholder {
+  color: #5c636a;
+  opacity: 1;
 }
 
 .lead-chat-search__input:focus {
   background-color: #fff;
-  border-color: rgba(13, 110, 253, 0.45);
-  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.12);
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.2);
 }
 
 /* El navegador ya dibuja su propia cruz en type="search"; se saca para no tener dos. */
