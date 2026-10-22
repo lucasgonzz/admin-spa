@@ -5,9 +5,10 @@
       inmediata) y, tras la demora configurada, el mensaje de bienvenida con la presentación de ComercioCity.
       Tras la segunda respuesta del lead, la sugerencia de Claude se pide tras la demora de sugerencia IA
       (cada mensaje nuevo reinicia el contador; 0 = consulta inmediata). Esa sugerencia se envía por WhatsApp
-      automáticamente y al instante, salvo que el mensaje quede marcado para verificación —solo, por el
-      interruptor de abajo, o porque le activaste la verificación de mensajes desde la conversación—, en
-      cuyo caso espera tu aprobación y usa como respaldo la demora de auto-envío de abajo.
+      automáticamente y al instante, salvo que el lead tenga activada la verificación de mensajes —sola,
+      por el interruptor de abajo al entrar al tramo de agenda, o porque la activaste vos desde la
+      conversación—, en cuyo caso espera tu aprobación y usa como respaldo la demora de auto-envío de abajo.
+      Con la verificación apagada en el lead, todo lo que sugiere Claude sale solo.
       Usá <code>{{ placeholder_nombre }}</code> en las variantes «con nombre» para personalizar el saludo.
     </p>
 
@@ -74,9 +75,10 @@
         />
         <p class="form-text small text-muted mb-0">
           Es el único control de demora del sistema. Cuando un mensaje que arma Claude queda marcado para
-          verificación —porque le activaste la verificación de mensajes desde la conversación, porque el
-          lead está en el tramo de agenda con el interruptor de abajo activado, o porque Claude mismo pidió
-          revisión— queda esperando tu aprobación en el panel. Si nadie lo aprueba dentro de estos minutos,
+          verificación —porque el lead tiene activada la verificación de mensajes (la prendió sola el
+          interruptor de abajo al entrar al tramo de agenda, o la activaste vos desde la conversación), o
+          porque el sistema detectó un problema en ese mensaje— queda esperando tu aprobación en el panel.
+          Que Claude se muestre inseguro ya no alcanza: con la verificación apagada en el lead, sale solo. Si nadie lo aprueba dentro de estos minutos,
           se envía solo, como red de seguridad para que el lead no se enfríe. Los mensajes que NO quedan
           marcados se envían al instante, sin esperar: eso incluye los que agendan o cancelan una demo,
           confirman ingreso o marcan no ingreso, si el lead no tiene la verificación activada (ni por el
@@ -104,11 +106,12 @@
           </label>
         </div>
         <p class="form-text small text-muted mb-0">
-          Si está activado (por defecto), todo lead que pasa a «Solicita disponibilidad» —y hasta «Closer
-          activo»— queda marcado solo para verificación: desde ese momento, cada mensaje que arma Claude para
-          ese lead espera tu aprobación, y las acciones que agendan o cancelan la demo, confirman ingreso o
-          marcan no ingreso también esperan tu OK antes de aplicarse. Se marca una sola vez, al entrar; si
-          después lo apagás desde la conversación, queda apagado. Si está desactivado, ningún lead se marca
+          Si está activado (por defecto), todo lead que pasa a «Solicita disponibilidad» —o entra directo a un estado posterior del tramo— queda marcado solo
+          para verificación: desde ese momento, cada mensaje que arma Claude para ese lead espera tu
+          aprobación, y las acciones que agendan o cancelan la demo, confirman ingreso o marcan no ingreso
+          también esperan tu OK antes de aplicarse. Es el único momento en que se activa sola, y una sola
+          vez, al entrar; si después lo apagás desde la conversación, queda apagado y todo lo que sugiere
+          Claude para ese lead sale solo, aunque el lead siga en el tramo de agenda. Si está desactivado, ningún lead se marca
           solo, y esas acciones se aplican en el momento —incluido el efecto real sobre el calendario del
           closer— sin que las revises antes. En los dos casos podés activar o desactivar la verificación
           lead por lead desde el botón del escudo en su conversación: eso no depende de esta opción, y
