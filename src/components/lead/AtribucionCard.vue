@@ -61,7 +61,7 @@ export default {
         if (self.leadId === id) self.error = 'No se pudo cargar la atribución.'
       })
     },
-    evidencia(valor) { return valor === 'meta_ctwa' ? 'Referral nativo de Meta' : 'Referencia de landing · URL declarada' },
+    evidencia(valor) { return ({ meta_ctwa: 'Referral nativo de Meta', referencia_landing: 'Referencia de landing · URL declarada', reserva_landing: 'Reservó la demo desde la landing · URL declarada' })[valor] || 'Referencia de landing · URL declarada' },
     anuncio(datos) {
       if (!datos) return 'Sin atribución'
       if (datos.ad_id) return (datos.ad_name ? datos.ad_name + ' · ' : '') + datos.ad_id

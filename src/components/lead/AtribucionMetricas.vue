@@ -57,7 +57,7 @@ export default {
       }).finally(function () { self.cargando = false })
     },
     etiqueta(fila) { return fila.evidencia === 'sin_atribucion' ? 'Sin atribución acreditada' : fila.ad_name || fila.ad_id || 'Sin ID de anuncio' },
-    evidencia(valor) { return ({ meta_ctwa: 'Referral nativo de Meta', referencia_landing: 'Landing · parámetros declarados en URL', sin_atribucion: 'No se asigna anuncio sin evidencia' })[valor] || valor },
+    evidencia(valor) { return ({ meta_ctwa: 'Referral nativo de Meta', referencia_landing: 'Landing · parámetros declarados en URL', reserva_landing: 'Reserva desde la landing · parámetros declarados en URL', sin_atribucion: 'No se asigna anuncio sin evidencia' })[valor] || valor },
     tasa(fila) { return fila.leads ? (fila.reservas * 100 / fila.leads).toFixed(1) + '%' : '—' },
   },
 }
