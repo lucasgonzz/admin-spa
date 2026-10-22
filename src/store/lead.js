@@ -239,23 +239,31 @@ function total_pages_for(total, per_page) {
 }
 
 /**
- * Peso del semáforo de atención de una fila de chat, para ordenar: rojo antes que amarillo,
- * amarillo antes que nada.
+ * true si la fila entra en el «N sin responder» de su tarjeta (el filtro `solo_sin_responder`).
+ *
+ * Usa `row.sin_responder`, que calcula el servidor con el mismo scope que cuenta la tarjeta. Si la
+ * fila no lo trae (admin-api anterior al 22/10/2026) cae a lo que se puede deducir del semáforo:
+ * amarillo, o rojo por error de envío. Es una aproximación —no ve el caso «rojo por confirmación
+ * pendiente con un mensaje del lead sin responder»— y solo existe para que una API vieja no deje el
+ * botón mostrando todos los chats.
  *
  * @param {Object} row Fila de GET /lead/chats.
- * @returns {number}
+ * @returns {boolean}
  */
-function peso_atencion(row) {
-  if (!row || !row.atencion) {
-    return 2
+function fila_cuenta_sin_responder(row) {
+  if (!row) {
+    return false
   }
-  return row.atencion === 'rojo' ? 0 : 1
+  if (typeof row.sin_responder === 'boolean') {
+    return row.sin_responder
+  }
+  return row.atencion === 'amarillo' || row.atencion_motivo === 'error_envio'
 }
 
 /**
- * Ordena las filas de chat con EL MISMO criterio que el servidor (plan §4.1, 17/10/2026):
- * fijados primero (el fijado más reciente arriba), después rojos, después amarillos, y el
- * desempate por último mensaje descendente.
+ * Ordena las filas de chat con EL MISMO criterio que el servidor, como WhatsApp (22/10/2026):
+ * fijados primero (el fijado más reciente arriba) y después por último mensaje descendente. El rojo
+ * y el amarillo se pintan pero NO reordenan (hasta el 21/10 los chats con atención flotaban arriba).
  *
  * Existe para que un refresco puntual de UNA fila (Pusher, fijar, marcar leído) la acomode donde
  * corresponde en vez de dejarla donde estaba hasta la próxima carga completa. No inventa un orden
@@ -274,11 +282,6 @@ function ordenar_chats(rows) {
     }
     if (a_pin && b_pin && a.pinned_at !== b.pinned_at) {
       return String(b.pinned_at).localeCompare(String(a.pinned_at))
-    }
-    const pa = peso_atencion(a)
-    const pb = peso_atencion(b)
-    if (pa !== pb) {
-      return pa - pb
     }
     const a_last = a.last_message_at ? String(a.last_message_at) : ''
     const b_last = b.last_message_at ? String(b.last_message_at) : ''
@@ -363,6 +366,11 @@ function chat_row_matches_filtros(state, row) {
   }
   const filtros = state.chats_filtros
   if (filtros && filtros.solo_atencion && !row.atencion) {
+    return false
+  }
+  /* «Solo sin responder» (22/10/2026): al marcar un chat como leído la fila deja de contar y tiene
+     que salir de la lista en el acto, igual que baja el número del botón. */
+  if (filtros && filtros.solo_sin_responder && !fila_cuenta_sin_responder(row)) {
     return false
   }
   return true
@@ -451,7 +459,7 @@ export default __base_store({
      * Filtros vivos de la lista: texto del buscador, estado (slug, o slugs separados por coma
      * para las tarjetas agrupadas) y "solo atención" (rojo o amarillo).
      */
-    chats_filtros: { q: '', status: null, solo_atencion: false },
+    chats_filtros: { q: '', status: null, solo_atencion: false, solo_sin_responder: false },
     /** true mientras hay un GET /lead/chats en vuelo (primera página o "cargar más"). */
     loading_chats: false,
     /**
@@ -1811,6 +1819,9 @@ export default __base_store({
       if (filtros.solo_atencion) {
         params.solo_atencion = 1
       }
+      if (filtros.solo_sin_responder) {
+        params.sin_responder = 1
+      }
       chats_request_seq = chats_request_seq + 1
       const mi_seq = chats_request_seq
       commit('set_loading_chats', true)
@@ -1821,8 +1832,14 @@ export default __base_store({
             return []
           }
           const body = res.data || {}
-          const rows = Array.isArray(body.data) ? body.data : []
+          let rows = Array.isArray(body.data) ? body.data : []
           const meta = body.meta || {}
+          /* Con un admin-api anterior al 22/10/2026 el servidor ignora `sin_responder=1` y manda todos
+             los chats: se descartan acá los que no cuentan (ver fila_cuenta_sin_responder). Con el
+             servidor nuevo no descarta nada: ya vienen filtrados. */
+          if (filtros.solo_sin_responder) {
+            rows = rows.filter(fila_cuenta_sin_responder)
+          }
           if (append) {
             commit('append_chats', rows)
           } else {
