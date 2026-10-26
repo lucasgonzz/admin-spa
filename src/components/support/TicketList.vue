@@ -444,7 +444,7 @@ export default {
       }
       let snippet = ''
       if (lm.body && String(lm.body).trim()) {
-        snippet = String(lm.body).trim().replace(/s+/g, ' ')
+        snippet = String(lm.body).trim().replace(/\s+/g, ' ')
         if (snippet.length > 72) {
           snippet = snippet.slice(0, 69) + '…'
         }
