@@ -35,14 +35,15 @@
                 <div
                   :class="[
                     'support-message-bubble',
+                    bubble_has_wide_media(message) ? 'support-message-bubble--media' : '',
                     has_delivery_error(message) ? 'support-message-bubble--error' : '',
                     is_ai_draft_message(message) ? 'support-message-bubble--ai-draft' : '',
                   ]"
                   :title="message_sent_at_tooltip(message)">
                   <div
-                    v-if="message.body && !should_hide_body_for_remote_image(message)"
+                    v-if="visible_body(message)"
                     class="support-message-text">
-                    {{ message.body }}
+                    {{ visible_body(message) }}
                   </div>
                 <!-- Imagen remota (Kapso) cuando no hay adjunto local -->
                 <template
@@ -66,41 +67,105 @@
                     Abrir imagen
                   </a>
                 </template>
-                <!-- Renderizado diferenciado según tipo de adjunto -->
+                <!-- Adjuntos guardados: se renderiza cada uno según su tipo real (mime, extensión o kind) -->
                 <template v-if="has_local_attachment(message)">
-                  <!-- Reproductor inline para mensajes de audio -->
-                  <audio
-                    v-if="message.kind === 'audio'"
-                    controls
-                    :src="attachment_url(message.attachments[0])"
-                    class="support-message-audio"
-                    preload="metadata">
-                    Tu navegador no soporta reproducción de audio.
-                  </audio>
-                  <!-- Miniatura: abre visor en la misma página -->
-                  <button
-                    v-else-if="message.kind === 'image'"
-                    type="button"
-                    class="support-message-image-btn"
-                    title="Ver imagen en grande"
-                    @click="open_image_preview(attachment_url(message.attachments[0]))">
-                    <img
-                      :src="attachment_url(message.attachments[0])"
-                      class="support-message-image"
-                      alt="Imagen adjunta" />
-                  </button>
-                  <!-- Fallback genérico para otros tipos de adjunto -->
-                  <a
-                    v-else
-                    :href="attachment_url(message.attachments[0])"
-                    target="_blank">
-                    Ver adjunto
-                  </a>
+                  <div
+                    v-for="(attachment, attachment_index) in message.attachments"
+                    :key="attachment_key(attachment, attachment_index)"
+                    class="support-media">
+                    <!-- Imagen: miniatura que abre el visor; si no carga, aviso con descarga -->
+                    <template v-if="attachment_media_type(message, attachment) === 'image'">
+                      <button
+                        v-if="!has_media_error(attachment)"
+                        type="button"
+                        class="support-message-image-btn"
+                        title="Ver imagen en grande"
+                        @click="open_image_preview(attachment_open_url(attachment))">
+                        <img
+                          :src="attachment_open_url(attachment)"
+                          class="support-message-image"
+                          alt="Imagen adjunta"
+                          @error="on_media_error(attachment)" />
+                      </button>
+                      <div v-else class="support-media-error">
+                        <i class="bi bi-image" aria-hidden="true" />
+                        <span>No se pudo cargar la imagen</span>
+                        <span aria-hidden="true">·</span>
+                        <a
+                          :href="attachment_download_url(attachment)"
+                          :download="attachment_display_name(attachment)"
+                          target="_blank"
+                          rel="noopener noreferrer">Descargar</a>
+                      </div>
+                    </template>
+                    <!-- Audio: el mismo reproductor que la conversación de leads -->
+                    <template v-else-if="attachment_media_type(message, attachment) === 'audio'">
+                      <audio-player
+                        v-if="!has_media_error(attachment)"
+                        :src="audio_src(attachment)"
+                        :is_outgoing="is_mine(message)"
+                        @error="on_media_error(attachment)" />
+                      <div v-else class="support-media-error">
+                        <i class="bi bi-mic-mute" aria-hidden="true" />
+                        <span>No se pudo reproducir acá</span>
+                        <span aria-hidden="true">·</span>
+                        <a
+                          :href="attachment_download_url(attachment)"
+                          :download="attachment_display_name(attachment)"
+                          target="_blank"
+                          rel="noopener noreferrer">Descargar audio</a>
+                      </div>
+                    </template>
+                    <!-- Video: #t=0.001 hace que iOS muestre el primer cuadro con preload="metadata" -->
+                    <template v-else-if="attachment_media_type(message, attachment) === 'video'">
+                      <video
+                        v-if="!has_media_error(attachment)"
+                        controls
+                        playsinline
+                        preload="metadata"
+                        class="support-message-video"
+                        :src="attachment_open_url(attachment) + '#t=0.001'"
+                        @error="on_media_error(attachment)">
+                        Tu navegador no soporta la reproducción de video.
+                      </video>
+                      <div v-else class="support-media-error">
+                        <i class="bi bi-camera-video-off" aria-hidden="true" />
+                        <span>No se pudo reproducir el video</span>
+                        <span aria-hidden="true">·</span>
+                        <a
+                          :href="attachment_download_url(attachment)"
+                          :download="attachment_display_name(attachment)"
+                          target="_blank"
+                          rel="noopener noreferrer">Descargar video</a>
+                      </div>
+                    </template>
+                    <!-- Documento, sticker sin tipo claro y cualquier otro archivo: tarjeta con descarga -->
+                    <a
+                      v-else
+                      :href="attachment_download_url(attachment)"
+                      :download="attachment_display_name(attachment)"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="support-file-card"
+                      :title="'Descargar ' + attachment_display_name(attachment)">
+                      <i class="bi support-file-card-icon" :class="attachment_icon_class(attachment)" aria-hidden="true" />
+                      <span class="support-file-card-name">{{ attachment_display_name(attachment) }}</span>
+                      <i class="bi bi-download support-file-card-download" aria-hidden="true" />
+                    </a>
+                  </div>
                 </template>
+                <!-- Transcripción del audio entrante (el body del mensaje), debajo del reproductor -->
                 <div
-                  v-if="message.kind === 'image' && !has_local_attachment(message) && !remote_image_url_from_message(message) && !message.body"
+                  v-if="transcription_text(message)"
+                  class="support-message-transcription">
+                  <span class="support-message-transcription-label">Transcripción</span>
+                  <span class="support-message-transcription-text">{{ transcription_text(message) }}</span>
+                </div>
+                <!-- Placeholder cuando el mensaje es multimedia pero el archivo no se guardó -->
+                <div
+                  v-if="media_placeholder(message)"
                   class="support-message-placeholder text-muted">
-                  [Imagen]
+                  {{ media_placeholder(message) }}
                 </div>
                 </div>
               </border-progress-wrap>
@@ -247,9 +312,19 @@
 <script>
 import api from '@/utils/axios'
 import ImageLightbox from '@/components/common/ImageLightbox.vue'
+import AudioPlayer from '@/components/lead/conversation/AudioPlayer.vue'
 import BorderProgressWrap from '@/components/support/BorderProgressWrap.vue'
 import SupportTemplatePickerModal from '@/components/support/SupportTemplatePickerModal.vue'
 import lead_conversation_date_dividers from '@/mixins/lead_conversation_date_dividers'
+import {
+  media_type_of,
+  attachment_open_url,
+  attachment_download_url,
+  attachment_display_name,
+  attachment_audio_src,
+  attachment_icon_class,
+  browser_can_play_ogg_opus,
+} from '@/utils/support_media'
 import '@/styles/whatsapp-conversation-wallpaper.css'
 import '@/styles/whatsapp-date-divider.css'
 
@@ -257,6 +332,7 @@ export default {
   name: 'SupportConversation',
   components: {
     ImageLightbox,
+    AudioPlayer,
     BorderProgressWrap,
     SupportTemplatePickerModal,
   },
@@ -298,6 +374,10 @@ export default {
       window_last_inbound_id: null,
       /** Selector de plantillas abierto. */
       template_modal_visible: false,
+      /** Adjuntos que el navegador no pudo cargar o reproducir: clave (ver media_error_key) -> true. */
+      media_errors: {},
+      /** true si el navegador reproduce Ogg/Opus de forma nativa (Safari/iOS viejo: false). */
+      can_play_ogg_opus: browser_can_play_ogg_opus(),
     }
   },
   computed: {
@@ -840,22 +920,207 @@ export default {
       return 'Enviado el ' + formatted
     },
     /**
-     * URL pública del adjunto en admin-api (/storage/...).
-     * No usar el origen del dev server (Vite :8002): sin base correcta el navegador recibe index.html (text/html).
-     * Prioridad: VITE_BACKEND_BASE_URL; si no está, se deriva de VITE_API_URL quitando /api/admin.
+     * Tipo de media de un adjunto (image | audio | video | file), decidido por mime, extensión y kind.
      *
-     * @param {Object} attachment Fila support_message_attachments con path relativo al disco public.
+     * @param {Object} message Mensaje del hilo.
+     * @param {Object} attachment Adjunto del mensaje.
      * @returns {string}
      */
-    attachment_url(attachment) {
-      let base_url = import.meta.env.VITE_BACKEND_BASE_URL || ''
-      if (!base_url) {
-        const api_url = import.meta.env.VITE_API_URL || ''
-        if (api_url) {
-          base_url = api_url.replace(/\/api\/admin\/?$/i, '')
-        }
+    attachment_media_type(message, attachment) {
+      return media_type_of(message, attachment)
+    },
+    /**
+     * URL para mostrar el adjunto inline: la firmada de la API o, si no vino, /storage/<path>.
+     * La base del backend (VITE_BACKEND_BASE_URL o derivada de VITE_API_URL) la resuelve la utilidad.
+     *
+     * @param {Object} attachment Adjunto del mensaje.
+     * @returns {string}
+     */
+    attachment_open_url(attachment) {
+      return attachment_open_url(attachment)
+    },
+    /**
+     * URL para descargar el adjunto (con la API vieja, la misma que la de apertura).
+     *
+     * @param {Object} attachment Adjunto del mensaje.
+     * @returns {string}
+     */
+    attachment_download_url(attachment) {
+      return attachment_download_url(attachment)
+    },
+    /**
+     * Nombre legible del adjunto.
+     *
+     * @param {Object} attachment Adjunto del mensaje.
+     * @returns {string}
+     */
+    attachment_display_name(attachment) {
+      return attachment_display_name(attachment)
+    },
+    /**
+     * Clase de ícono Bootstrap de la tarjeta de archivo.
+     *
+     * @param {Object} attachment Adjunto del mensaje.
+     * @returns {string}
+     */
+    attachment_icon_class(attachment) {
+      return attachment_icon_class(attachment)
+    },
+    /**
+     * Fuente del reproductor de audio: la versión de reproducción (AAC) solo si el navegador no
+     * reproduce Ogg/Opus y la API la mandó; en el resto, la URL normal.
+     *
+     * @param {Object} attachment Adjunto de audio.
+     * @returns {string}
+     */
+    audio_src(attachment) {
+      return attachment_audio_src(attachment, this.can_play_ogg_opus)
+    },
+    /**
+     * Clave estable de un adjunto en el v-for. Usa el índice si faltara el id.
+     *
+     * @param {Object} attachment Adjunto del mensaje.
+     * @param {number} attachment_index Posición en message.attachments.
+     * @returns {string}
+     */
+    attachment_key(attachment, attachment_index) {
+      return 'att-' + (attachment && attachment.id != null ? attachment.id : 'i' + attachment_index)
+    },
+    /**
+     * Clave con la que se recuerda que un adjunto falló. Lleva la URL: cuando la firma cambia
+     * (otro día) o llega la URL nueva de la API, el adjunto se vuelve a intentar solo.
+     *
+     * @param {Object} attachment Adjunto del mensaje.
+     * @returns {string}
+     */
+    media_error_key(attachment) {
+      return String(attachment && attachment.id != null ? attachment.id : '') + '|' + attachment_open_url(attachment)
+    },
+    /**
+     * @param {Object} attachment Adjunto del mensaje.
+     * @returns {boolean} true si el navegador ya falló al cargarlo o reproducirlo.
+     */
+    has_media_error(attachment) {
+      return !!this.media_errors[this.media_error_key(attachment)]
+    },
+    /**
+     * Marca el adjunto como fallido: la burbuja muestra el aviso con el enlace de descarga.
+     * Se reasigna el objeto completo para que la vista reaccione.
+     *
+     * @param {Object} attachment Adjunto del mensaje.
+     * @returns {void}
+     */
+    on_media_error(attachment) {
+      const next_errors = Object.assign({}, this.media_errors)
+      next_errors[this.media_error_key(attachment)] = true
+      this.media_errors = next_errors
+    },
+    /**
+     * true si el mensaje es una nota de voz o audio: por sus adjuntos o, sin adjuntos, por el kind.
+     *
+     * @param {Object} message Mensaje del hilo.
+     * @returns {boolean}
+     */
+    message_is_audio(message) {
+      const self = this
+      if (this.has_local_attachment(message)) {
+        return message.attachments.filter(function (attachment) {
+          return self.attachment_media_type(message, attachment) === 'audio'
+        }).length > 0
       }
-      return base_url.replace(/\/$/, '') + '/storage/' + attachment.path
+      const kind = String((message && message.kind) || '').toLowerCase()
+      return kind === 'audio' || kind === 'ptt' || kind === 'voice'
+    },
+    /**
+     * Ancho de burbuja fijo para video y audio: sin eso la burbuja se encoge al texto y el
+     * reproductor queda aplastado. Con max-width 100% sigue respetando el ancho de la columna.
+     *
+     * @param {Object} message Mensaje del hilo.
+     * @returns {boolean}
+     */
+    bubble_has_wide_media(message) {
+      const self = this
+      if (!this.has_local_attachment(message)) {
+        return false
+      }
+      return message.attachments.filter(function (attachment) {
+        const type = self.attachment_media_type(message, attachment)
+        return type === 'audio' || type === 'video'
+      }).length > 0
+    },
+    /**
+     * Texto del cuerpo que va ARRIBA de los adjuntos. Se omite cuando:
+     * - hay imagen remota de Kapso (el body es el texto largo con la URL);
+     * - el mensaje es un audio entrante (su body es la transcripción y va debajo del reproductor);
+     * - el body repite el placeholder que la burbuja ya muestra ("[Audio]", "[Video]"...).
+     *
+     * @param {Object} message Mensaje del hilo.
+     * @returns {string} Texto a mostrar o cadena vacía.
+     */
+    visible_body(message) {
+      if (!message || !message.body || this.should_hide_body_for_remote_image(message)) {
+        return ''
+      }
+      if (!this.is_mine(message) && this.message_is_audio(message)) {
+        return ''
+      }
+      const placeholder = this.media_placeholder(message)
+      if (placeholder && String(message.body).trim().toLowerCase() === placeholder.toLowerCase()) {
+        return ''
+      }
+      return message.body
+    },
+    /**
+     * Transcripción de un audio entrante (message.body), o cadena vacía. Un body que es solo un
+     * placeholder entre corchetes ("[Audio]") no es una transcripción y no se muestra.
+     *
+     * @param {Object} message Mensaje del hilo.
+     * @returns {string}
+     */
+    transcription_text(message) {
+      if (!message || !message.body || this.is_mine(message) || !this.message_is_audio(message)) {
+        return ''
+      }
+      const text = String(message.body).trim()
+      if (!text || /^\[[^\]]*\]$/.test(text)) {
+        return ''
+      }
+      return text
+    },
+    /**
+     * Placeholder de un mensaje multimedia cuyo archivo no está guardado (y, si es imagen, sin
+     * imagen remota de Kapso ni texto). Cadena vacía si no corresponde.
+     *
+     * @param {Object} message Mensaje del hilo.
+     * @returns {string} '[Imagen]' | '[Audio]' | '[Video]' | '[Documento]' | '[Sticker]' | '[Archivo]' | ''
+     */
+    media_placeholder(message) {
+      if (!message || this.has_local_attachment(message)) {
+        return ''
+      }
+      const kind = String(message.kind || '').toLowerCase()
+      if (kind === 'image') {
+        if (this.remote_image_url_from_message(message) || message.body) {
+          return ''
+        }
+        return '[Imagen]'
+      }
+      if (kind === 'audio' || kind === 'ptt' || kind === 'voice') {
+        return '[Audio]'
+      }
+      if (kind === 'video') {
+        return '[Video]'
+      }
+      if (kind === 'document') {
+        return '[Documento]'
+      }
+      if (kind === 'sticker') {
+        return '[Sticker]'
+      }
+      if (kind === 'file') {
+        return '[Archivo]'
+      }
+      return ''
     },
     /**
      * Abre el visor de imagen en la misma página.
@@ -1080,13 +1345,108 @@ export default {
   line-height: 1.4;
 }
 
-/* Reproductor de audio compacto dentro de la burbuja */
-.support-message-audio {
+/* Burbuja con audio o video: ancho propio (no se encoge al texto) pero nunca más que la columna
+   (80% del hilo), así que en teléfono ocupa todo lo que le deja la fila. */
+.support-message-bubble--media {
+  width: 300px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Cada adjunto de la burbuja; los que siguen al primero se separan un poco. */
+.support-media {
+  max-width: 100%;
+}
+
+.support-media + .support-media {
+  margin-top: 4px;
+}
+
+/* El reproductor de leads trae su propio margen inferior y un ancho máximo de 320px. */
+.support-media :deep(.wa-audio-player) {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Video: ocupa el ancho de la burbuja y mantiene la proporción; el alto tope evita que un video
+   vertical se coma la pantalla del teléfono. */
+.support-message-video {
   display: block;
-  max-width: 260px;
   width: 100%;
-  height: 36px;
+  height: auto;
+  max-height: 320px;
+  border-radius: 6px;
+  background: #000;
+}
+
+/* Aviso cuando una imagen, audio o video no se pudo cargar: una línea con el enlace de descarga. */
+.support-media-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: #6c757d;
+}
+
+/* Tarjeta de documento: ícono, nombre (parte palabras largas) y flecha de descarga. */
+.support-file-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.05);
+  color: inherit;
+  text-decoration: none;
+}
+
+.support-file-card:hover {
+  background: rgba(0, 0, 0, 0.09);
+  color: inherit;
+  text-decoration: none;
+}
+
+.support-file-card-icon {
+  flex-shrink: 0;
+  font-size: 1.35rem;
+}
+
+.support-file-card-name {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+.support-file-card-download {
+  flex-shrink: 0;
+  font-size: 1rem;
+  opacity: 0.65;
+}
+
+/* Transcripción del audio: chica y atenuada, con rótulo, debajo del reproductor. */
+.support-message-transcription {
+  display: flex;
+  flex-direction: column;
   margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #6c757d;
+}
+
+.support-message-transcription-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.support-message-transcription-text {
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Botón sin estilo que envuelve la miniatura */
