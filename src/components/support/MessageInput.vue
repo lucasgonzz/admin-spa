@@ -54,7 +54,7 @@
         @input="ajustar_alto"
         @paste="on_paste"
         @keydown.enter.exact.prevent="emit_send" />
-      <input ref="file_input" class="d-none" type="file" accept="audio/*,image/*" @change="on_file_change" />
+      <input ref="file_input" class="d-none" type="file" accept="audio/*,image/*,.m4a,.mp3,.ogg,.oga,.opus,.aac,.amr,.webm,.jpg,.jpeg,.png,.webp,.gif,.heic" @change="on_file_change" />
       <!-- Botón de grabación: rojo mientras graba; muestra tiempo en tooltip -->
       <button
         type="button"
@@ -136,6 +136,12 @@
 import ImageAnnotationEditor from '@/components/common/ImageAnnotationEditor.vue'
 import { OggOpusRecorder } from '@/utils/oggOpusRecorder'
 import audio_recorder_button from '@/mixins/audio_recorder_button'
+import { extension_of } from '@/utils/support_media'
+
+/* Extensiones de audio que se reconocen cuando el navegador no informa `File.type` (iPhone con notas de voz .m4a). */
+const AUDIO_FILE_EXTENSIONS = ['m4a', 'mp3', 'ogg', 'oga', 'opus', 'aac', 'amr', 'webm']
+/* Extensiones de imagen que se reconocen cuando `File.type` viene vacío (HEIC del iPhone). */
+const IMAGE_FILE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic']
 
 export default {
   name: 'SupportMessageInput',
@@ -179,7 +185,7 @@ export default {
      * @returns {boolean}
      */
     attachment_is_audio() {
-      return this.attachment && this.attachment.type.indexOf('audio') === 0
+      return !!this.attachment && this.file_media_kind(this.attachment) === 'audio'
     },
     /**
      * Indica si el adjunto pendiente es imagen.
@@ -432,7 +438,34 @@ export default {
         : 'Sin acceso al micrófono. Verificá los permisos del navegador o usá Adjuntar.'
     },
     /**
-     * Emite mensaje al padre con tipo detectado por mime.
+     * Deriva si un archivo es audio o imagen: primero por `File.type` y, si viene vacío o genérico
+     * (el iPhone no informa el tipo de las notas de voz .m4a), por la extensión del nombre.
+     *
+     * @param {File} file Archivo elegido o grabado.
+     * @returns {string} 'audio' | 'image' | 'other'
+     */
+    file_media_kind(file) {
+      const mime = String((file && file.type) || '').split(';')[0].trim().toLowerCase()
+      if (mime.indexOf('audio/') === 0) {
+        return 'audio'
+      }
+      if (mime.indexOf('image/') === 0) {
+        return 'image'
+      }
+      if (mime !== '' && mime !== 'application/octet-stream') {
+        return 'other'
+      }
+      const extension = extension_of(file && file.name)
+      if (AUDIO_FILE_EXTENSIONS.indexOf(extension) !== -1) {
+        return 'audio'
+      }
+      if (IMAGE_FILE_EXTENSIONS.indexOf(extension) !== -1) {
+        return 'image'
+      }
+      return 'other'
+    },
+    /**
+     * Emite mensaje al padre con tipo detectado por mime (o por extensión si el mime viene vacío).
      */
     emit_send() {
       if (!this.body && !this.attachment) {
@@ -440,11 +473,11 @@ export default {
       }
       const self = this
       let kind = 'text'
-      if (this.attachment && this.attachment.type.indexOf('audio') == 0) {
-        kind = 'audio'
-      }
-      if (this.attachment && this.attachment.type.indexOf('image') == 0) {
-        kind = 'image'
+      if (this.attachment) {
+        const detected_kind = this.file_media_kind(this.attachment)
+        if (detected_kind === 'audio' || detected_kind === 'image') {
+          kind = detected_kind
+        }
       }
       this.$emit('send-message', {
         body: this.body,
