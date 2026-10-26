@@ -215,23 +215,43 @@ export function unread_total_from_response(data) {
   return null
 }
 
-/** Campos del evento `.support.message.status` que se mezclan en el mensaje. */
-const STATUS_FIELDS = [
-  'whatsapp_message_id',
-  'whatsapp_delivery_status',
-  'whatsapp_delivered_at',
-  'whatsapp_seen_at',
-  'admin_reaction_emoji',
-  'admin_reaction_at',
-]
+/** Campos de entrega que SOLO avanzan: un valor vacío del evento nunca borra uno que ya había. */
+const DELIVERY_FIELDS = ['whatsapp_delivered_at', 'whatsapp_seen_at']
+
+/** Campos que el evento copia tal cual cuando vienen definidos (null incluido: reacción quitada). */
+const COPY_FIELDS = ['whatsapp_message_id', 'admin_reaction_emoji', 'admin_reaction_at']
 
 /**
- * Mezcla el payload del evento de estado sobre un mensaje y devuelve un objeto NUEVO.
+ * Peso de cada estado de entrega para no retroceder: vacío < fallido < entregado < leído.
  *
- * Solo copia los campos que el payload trae definidos: si el evento llega sin
- * `admin_reaction_emoji` (formato que no lo incluye) no se borra la reacción que ya había. Una
- * reacción quitada llega como `null` y sí se aplica. Nunca retrocede un 'leido' a 'entregado' si
- * los eventos llegan desordenados.
+ * @param {*} status Valor de `whatsapp_delivery_status`.
+ * @returns {number}
+ */
+function delivery_rank(status) {
+  const value = String(status || '').trim().toLowerCase()
+  if (value === 'leido') {
+    return 3
+  }
+  if (value === 'entregado') {
+    return 2
+  }
+  if (value === 'fallido') {
+    return 1
+  }
+  return 0
+}
+
+/**
+ * Mezcla el payload del evento de estado (o un snapshot del mensaje) sobre un mensaje y devuelve
+ * un objeto NUEVO.
+ *
+ * Reglas:
+ *  - Solo copia los campos que el payload trae definidos: un evento sin `admin_reaction_emoji`
+ *    (formato que no lo incluye) no borra la reacción que ya había. Una reacción quitada llega
+ *    como `null` y sí se aplica.
+ *  - El estado de entrega nunca retrocede: un 'leido' no vuelve a 'entregado' si los eventos
+ *    llegan desordenados, y un snapshot viejo del mensaje (sin estado) no lo resetea.
+ *  - Las fechas de entrega/lectura solo se pisan con un valor.
  *
  * @param {Object} message Mensaje actual (no se muta).
  * @param {Object} payload Payload del evento.
@@ -242,15 +262,46 @@ export function merge_status_payload(message, payload) {
   if (!payload) {
     return merged
   }
-  STATUS_FIELDS.forEach(function (field) {
+  COPY_FIELDS.forEach(function (field) {
     if (payload[field] !== undefined) {
       merged[field] = payload[field]
     }
   })
-  if (message && message.whatsapp_delivery_status === 'leido' && payload.whatsapp_delivery_status === 'entregado') {
-    merged.whatsapp_delivery_status = 'leido'
+  DELIVERY_FIELDS.forEach(function (field) {
+    if (has_text(payload[field])) {
+      merged[field] = payload[field]
+    }
+  })
+  if (payload.whatsapp_delivery_status !== undefined) {
+    const current = message ? message.whatsapp_delivery_status : null
+    if (delivery_rank(payload.whatsapp_delivery_status) >= delivery_rank(current)) {
+      merged.whatsapp_delivery_status = payload.whatsapp_delivery_status
+    }
   }
   return merged
+}
+
+/**
+ * Devuelve una copia de `incoming` (snapshot del mismo mensaje) conservando el progreso de
+ * entrega de `previous` si éste va más adelantado. Es para cuando llega un snapshot viejo del
+ * mensaje (p. ej. el que viajó con un evento de lectura del cliente) DESPUÉS de que el evento en
+ * vivo ya marcó 'entregado' o 'leido': el snapshot no debe devolver los ticks a un check.
+ *
+ * @param {Object} incoming Mensaje que llega (no se muta).
+ * @param {Object} previous Mensaje que ya teníamos.
+ * @returns {Object}
+ */
+export function keep_best_delivery(incoming, previous) {
+  const result = Object.assign({}, incoming)
+  if (!previous) {
+    return result
+  }
+  if (delivery_rank(previous.whatsapp_delivery_status) > delivery_rank(incoming ? incoming.whatsapp_delivery_status : null)) {
+    result.whatsapp_delivery_status = previous.whatsapp_delivery_status
+    result.whatsapp_delivered_at = previous.whatsapp_delivered_at
+    result.whatsapp_seen_at = previous.whatsapp_seen_at
+  }
+  return result
 }
 
 /**

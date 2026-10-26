@@ -6,7 +6,7 @@ import store from '@/store'
  * admin-api emite cada mensaje/lectura también aquí además de support.client.* y support.admin.*.
  * También SupportTicketUpdated (reasignación, nombre, cierre) para que otras sesiones alineen la bandeja.
  * Así cualquier operador conectado actualiza en tiempo real: bandeja (apply_ticket), UserTicketsNav
- * (inbox_nav via fetch_unread_badges) y badge del nav (unread_totals.mine del usuario logeado).
+ * (inbox_nav via fetch_unread_badges) y badge del nav (unread_total de toda la bandeja).
  *
  * @param {Object} options
  * @param {number|string} options.admin_id Id del operador (evita suscripción sin sesión válida).
@@ -79,6 +79,18 @@ export function useSupportBadgeSocket(options) {
       store.dispatch('support_ticket/apply_ticket_from_message', event_data.message)
     }
     schedule_refresh_unread_badges()
+  }
+
+  /**
+   * Cambió el estado de entrega de un mensaje saliente (ticks de WhatsApp): se refleja en el
+   * último mensaje de la fila de la bandeja. No toca los contadores: un tick no es un mensaje.
+   *
+   * @param {Object} event_data Payload Echo (.support.message.status).
+   */
+  function handle_message_status(event_data) {
+    if (event_data) {
+      store.dispatch('support_ticket/apply_message_status', event_data)
+    }
   }
 
   /**
@@ -176,6 +188,7 @@ export function useSupportBadgeSocket(options) {
   channels_to_leave.push(all_admins_channel_name)
   echo.channel(all_admins_channel_name).listen('.SupportMessageReceived', handle_message_received)
   echo.channel(all_admins_channel_name).listen('.SupportMessageRead', handle_message_read)
+  echo.channel(all_admins_channel_name).listen('.support.message.status', handle_message_status)
   echo.channel(all_admins_channel_name).listen('.SupportTicketUpdated', handle_ticket_updated)
   echo.channel(all_admins_channel_name).listen('.SupportTicketAlert', handle_ticket_alert)
   echo.channel(all_admins_channel_name).listen('.SupportTicketEscalated', handle_ticket_escalated)

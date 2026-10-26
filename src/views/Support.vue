@@ -845,6 +845,18 @@ export default {
             self.$store.commit('support_message/patch_message_read', message)
           }
         },
+        on_message_status(payload) {
+          /* Ticks de WhatsApp o reacción del operador: se mezclan en el mensaje del hilo abierto
+             (el de la fila de la bandeja lo actualiza el socket global de support.admins). */
+          if (!payload || payload.id == null) {
+            return
+          }
+          const active_id = self.$store.state.support_message.active_ticket_id
+          if (payload.support_ticket_id != null && active_id && String(payload.support_ticket_id) !== String(active_id)) {
+            return
+          }
+          self.$store.commit('support_message/patch_message_status', payload)
+        },
         on_ai_suggestion_pending(payload) {
           if (!payload || !payload.ticket_id) {
             return

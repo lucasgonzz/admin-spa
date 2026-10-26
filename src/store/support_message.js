@@ -1,4 +1,5 @@
 import api from '@/utils/axios'
+import { keep_best_delivery, merge_status_payload, emoji_to_send, admin_reaction_of } from '@/utils/support_ticks'
 
 /**
  * Cuántos ids entran en cada POST masivo de "marcar leído". El backend valida hasta 500 por
@@ -158,6 +159,28 @@ export default {
       }
     },
     /**
+     * Mezcla en el mensaje el evento `.support.message.status` (ticks de WhatsApp y, si el
+     * servidor los manda en el mismo evento, los datos de la reacción del operador).
+     *
+     * Acepta el payload plano o envuelto en `message`. No retrocede un estado de entrega.
+     *
+     * @param {Object} state   Estado del módulo.
+     * @param {Object} payload Payload del evento: { id, support_ticket_id, whatsapp_delivery_status, ... }
+     */
+    patch_message_status(state, payload) {
+      const data = payload && payload.message ? payload.message : payload
+      if (!data || data.id == null) {
+        return
+      }
+      let k = 0
+      for (k = 0; k < state.models.length; k = k + 1) {
+        if (state.models[k].id == data.id) {
+          state.models.splice(k, 1, merge_status_payload(state.models[k], data))
+          return
+        }
+      }
+    },
+    /**
      * Agrega mensaje en tiempo real al final del listado.
      * Evita duplicados por id; al enviar, quita fila optimista coincidente.
      */
@@ -184,7 +207,13 @@ export default {
         }
       }
       if (merge_idx >= 0) {
-        state.models.splice(merge_idx, 1, Object.assign({}, state.models[merge_idx], value))
+        /* El snapshot que llega puede ser más viejo que un tick que ya entró por el evento de
+           estado: se conserva el mayor progreso de entrega. */
+        state.models.splice(
+          merge_idx,
+          1,
+          Object.assign({}, state.models[merge_idx], keep_best_delivery(value, state.models[merge_idx]))
+        )
         return
       }
       state.models.push(value)
@@ -223,7 +252,7 @@ export default {
       let k = 0
       for (k = 0; k < state.models.length; k = k + 1) {
         if (state.models[k].id == incoming.id) {
-          const merged = Object.assign({}, state.models[k], incoming)
+          const merged = Object.assign({}, state.models[k], keep_best_delivery(incoming, state.models[k]))
           state.models.splice(k, 1, merged)
           return
         }
@@ -386,6 +415,55 @@ export default {
         })
         .catch(function (err) {
           console.log(err)
+        })
+    },
+    /**
+     * Reacciona (o quita la reacción) a un mensaje del cliente por WhatsApp.
+     *
+     * POST /support-message/{id}/reaction con { emoji }. Elegir el mismo emoji que ya está puesto
+     * lo quita (`emoji: null`). Si sale bien, el mensaje del store se reemplaza por el `model`
+     * de la respuesta. El 422 (ventana de 24 h cerrada, mensaje que no admite reacción) lo avisa
+     * el interceptor de axios con el `error` de la respuesta; el 404/405 (API vieja sin el
+     * endpoint) se silencia ahí y se avisa acá con un texto propio.
+     *
+     * Nunca rechaza: devuelve el modelo actualizado o null si no se pudo.
+     *
+     * @param {Object} contexto Contexto Vuex.
+     * @param {Object} payload  { message: mensaje del hilo, emoji: emoji elegido }
+     * @returns {Promise<Object|null>}
+     */
+    react_to_message({ commit }, payload) {
+      const message = payload && payload.message
+      if (!message || message.id == null) {
+        return Promise.resolve(null)
+      }
+      const emoji = emoji_to_send(admin_reaction_of(message), payload.emoji)
+      return api
+        .post(
+          '/support-message/' + message.id + '/reaction',
+          { emoji: emoji },
+          { silent_error_statuses: [404, 405] }
+        )
+        .then(function (response) {
+          const model = response.data && response.data.model
+          if (model) {
+            commit('patch_message', model)
+          }
+          return model || null
+        })
+        .catch(function (error) {
+          const status = error && error.response ? error.response.status : null
+          if (status === 404 || status === 405) {
+            window.dispatchEvent(
+              new CustomEvent('admin-spa-toast', {
+                detail: {
+                  message: 'Este servidor todavía no permite reaccionar a los mensajes.',
+                  variant: 'warning',
+                },
+              })
+            )
+          }
+          return null
         })
     },
     /**

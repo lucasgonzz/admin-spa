@@ -8,6 +8,8 @@
  * @param {string|null} options.client_uuid UUID del cliente del ticket abierto.
  * @param {Function} options.on_message Callback con el mensaje recibido.
  * @param {Function} [options.on_message_read] Callback al marcar leído.
+ * @param {Function} [options.on_message_status] Callback con el estado de entrega de WhatsApp
+ *   (ticks) o la reacción del operador de un mensaje (evento `.support.message.status`).
  * @param {Function} [options.on_ai_suggestion_pending] Callback con sugerencia IA pendiente.
  * @returns {Object}
  */
@@ -62,6 +64,27 @@ export function useSupportSocket(options) {
 
   echo.channel(client_channel_name).listen('.SupportMessageReceived', handle_event)
   echo.channel(client_channel_name).listen('.SupportMessageRead', handle_read)
+
+  const on_message_status = options.on_message_status
+  /**
+   * Estado de entrega de un mensaje saliente (ticks de WhatsApp) o reacción del operador.
+   *
+   * El payload es plano ({ id, support_ticket_id, whatsapp_delivery_status, ... }); se acepta
+   * también envuelto en `message`. Un servidor que todavía no emite el evento simplemente no
+   * lo dispara: escuchar un evento inexistente no rompe nada.
+   *
+   * @param {Object} event_data Payload del evento Pusher.
+   */
+  function handle_status(event_data) {
+    if (!on_message_status || !event_data) {
+      return
+    }
+    on_message_status(event_data.message ? event_data.message : event_data)
+  }
+
+  if (on_message_status) {
+    echo.channel(client_channel_name).listen('.support.message.status', handle_status)
+  }
 
   const on_ai_suggestion_pending = options.on_ai_suggestion_pending
   const on_ai_suggestion_scheduled = options.on_ai_suggestion_scheduled

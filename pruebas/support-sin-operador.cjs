@@ -20,7 +20,7 @@ const nombres = [
   'TICK_SENT', 'TICK_DELIVERED', 'TICK_READ', 'TICK_FAILED', 'REACTION_EMOJIS',
   'is_outgoing_message', 'ticks_state', 'ticks_title', 'client_display_name',
   'agent_is_off_on_open_ticket', 'last_message_author', 'unread_total_from_response',
-  'merge_status_payload', 'payload_matches_message', 'admin_reaction_of', 'same_emoji',
+  'merge_status_payload', 'keep_best_delivery', 'payload_matches_message', 'admin_reaction_of', 'same_emoji',
   'emoji_to_send', 'can_react_to_message',
 ]
 const m = new Function(texto + '\nreturn { ' + nombres.join(', ') + ' }')()
@@ -112,7 +112,16 @@ igual('una reacción quitada (null) sí se aplica', m.merge_status_payload(base,
 igual('no muta el original', base.whatsapp_delivery_status, undefined)
 igual('no retrocede leido a entregado', m.merge_status_payload({ id: 1, whatsapp_delivery_status: 'leido' }, { id: 1, whatsapp_delivery_status: 'entregado' }).whatsapp_delivery_status, 'leido')
 igual('entregado -> leido avanza', m.merge_status_payload({ id: 1, whatsapp_delivery_status: 'entregado' }, { id: 1, whatsapp_delivery_status: 'leido' }).whatsapp_delivery_status, 'leido')
+igual('un snapshot viejo (estado null) no resetea el estado', m.merge_status_payload({ id: 1, whatsapp_delivery_status: 'entregado', whatsapp_delivered_at: 'A' }, { id: 1, whatsapp_delivery_status: null, whatsapp_delivered_at: null }).whatsapp_delivery_status, 'entregado')
+igual('una fecha vacía no borra la que había', m.merge_status_payload({ id: 1, whatsapp_delivered_at: 'A' }, { id: 1, whatsapp_delivered_at: null }).whatsapp_delivered_at, 'A')
+igual('desde sin estado avanza a entregado', m.merge_status_payload({ id: 1 }, { id: 1, whatsapp_delivery_status: 'entregado' }).whatsapp_delivery_status, 'entregado')
 igual('payload nulo devuelve copia', m.merge_status_payload(base, null), base)
+
+/* ---- keep_best_delivery ---- */
+const kb = m.keep_best_delivery({ id: 1, body: 'x', whatsapp_delivery_status: null }, { id: 1, whatsapp_delivery_status: 'leido', whatsapp_delivered_at: 'D', whatsapp_seen_at: 'S' })
+igual('un snapshot viejo conserva el leido que ya había', [kb.body, kb.whatsapp_delivery_status, kb.whatsapp_delivered_at, kb.whatsapp_seen_at], ['x', 'leido', 'D', 'S'])
+igual('un snapshot más nuevo gana', m.keep_best_delivery({ id: 1, whatsapp_delivery_status: 'leido' }, { id: 1, whatsapp_delivery_status: 'entregado' }).whatsapp_delivery_status, 'leido')
+igual('sin previo devuelve copia', m.keep_best_delivery({ id: 1 }, null), { id: 1 })
 
 /* ---- payload_matches_message ---- */
 igual('mismo id (número vs texto)', m.payload_matches_message({ id: 5 }, { id: '5' }), true)

@@ -289,14 +289,12 @@ export default {
       return this.$store.state.auth.admin ? this.$store.state.auth.admin.id : null
     },
     /**
-     * Total de mensajes de usuario sin leer en tickets asignados a este operador (mismo origen que vista Soporte).
+     * Total de mensajes del cliente sin leer en TODA la bandeja de soporte (los tickets ya no son
+     * de un operador). El store lo arma con `unread_total` de la API o, si la API es vieja, con
+     * `unread_totals.mine + unread_totals.others`.
      */
-    support_unread_mine() {
-      const t = this.$store.state.support_ticket.unread_totals
-      if (!t || t.mine == null) {
-        return 0
-      }
-      const n = parseInt(t.mine, 10)
+    support_unread_total() {
+      const n = parseInt(this.$store.state.support_ticket.unread_total, 10)
       return isNaN(n) ? 0 : n
     },
     /**
@@ -313,12 +311,12 @@ export default {
       return isNaN(n) ? null : n
     },
     /**
-     * Número del badge de "Soporte": tickets abiertos; con una API vieja, no leídos míos como antes.
+     * Número del badge de "Soporte": tickets abiertos; con una API vieja, el total de no leídos.
      *
      * @returns {number}
      */
     support_badge_count() {
-      return this.support_open_all !== null ? this.support_open_all : this.support_unread_mine
+      return this.support_open_all !== null ? this.support_open_all : this.support_unread_total
     },
     /**
      * Tooltip del badge de "Soporte" según qué se está contando.
@@ -329,7 +327,7 @@ export default {
       if (this.support_open_all !== null) {
         return 'Tickets de soporte abiertos: ' + this.support_badge_count
       }
-      return 'Mensajes de usuario sin leer en tus tickets: ' + this.support_badge_count
+      return 'Mensajes de clientes sin leer en soporte: ' + this.support_badge_count
     },
     /**
      * Mensajes entrantes del lead sin leer (todos los leads).
