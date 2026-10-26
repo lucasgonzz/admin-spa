@@ -26,6 +26,11 @@
             :key="message_key(message)"
             :class="['support-message-row', message.sender_type == 'admin' ? 'mine' : 'their']">
             <div class="support-message-col">
+              <!-- Fila burbuja + botón de reaccionar. Se comparte la zona para cerrar la barra al
+                   tocar afuera (ver on_document_click). -->
+              <div
+                class="support-message-bubble-row support-reaction-zone"
+                :class="{ 'support-message-bubble-row--react': can_react(message) }">
               <border-progress-wrap
                 :active="is_ai_draft_auto_send_active(message)"
                 :duration_seconds="ai_draft_total_seconds(message)"
@@ -167,8 +172,55 @@
                   class="support-message-placeholder text-muted">
                   {{ media_placeholder(message) }}
                 </div>
+                <!-- Pie de la burbuja saliente por WhatsApp, como en WhatsApp: hora y ticks abajo a
+                     la derecha (un check enviado, dos entregado, dos azules leído, rojo fallido). -->
+                <div v-if="has_bubble_ticks(message)" class="support-message-footer">
+                  <span class="support-message-time">{{ format_read_time(message.created_at) }}</span>
+                  <message-ticks :message="message" :ticket="ticks_ticket" />
+                </div>
                 </div>
               </border-progress-wrap>
+              <!-- Reaccionar a un mensaje del cliente (solo tickets de WhatsApp): el botón aparece
+                   al pasar el mouse y en pantallas táctiles está siempre visible. -->
+              <button
+                v-if="can_react(message)"
+                type="button"
+                class="support-react-btn"
+                :class="{ 'support-react-btn--open': reaction_bar_message_id === message.id }"
+                :disabled="reacting_message_id !== null"
+                title="Reaccionar"
+                aria-label="Reaccionar a este mensaje"
+                aria-haspopup="true"
+                :aria-expanded="reaction_bar_message_id === message.id ? 'true' : 'false'"
+                @click="toggle_reaction_bar(message)">
+                <i class="bi bi-emoji-smile" aria-hidden="true"></i>
+              </button>
+              </div>
+              <!-- Barra de reacciones: abierta debajo de la burbuja (en el flujo, para que el
+                   scroll del hilo no la recorte). Elegir el mismo emoji que ya está puesto lo quita. -->
+              <div
+                v-if="can_react(message) && reaction_bar_message_id === message.id"
+                class="support-reaction-bar support-reaction-zone"
+                role="group"
+                aria-label="Elegí una reacción">
+                <button
+                  v-for="emoji in reaction_emojis"
+                  :key="emoji"
+                  type="button"
+                  class="support-reaction-option"
+                  :class="{ 'support-reaction-option--active': is_current_reaction(message, emoji) }"
+                  :aria-pressed="is_current_reaction(message, emoji) ? 'true' : 'false'"
+                  :disabled="reacting_message_id !== null"
+                  @click="react_with(message, emoji)">{{ emoji }}</button>
+              </div>
+              <!-- Chip con la reacción puesta por el operador, bajo la burbuja. -->
+              <button
+                v-if="reaction_of(message)"
+                type="button"
+                class="support-reaction-chip"
+                :disabled="!can_react(message) || reacting_message_id !== null"
+                :title="can_react(message) ? 'Tu reacción. Tocá para quitarla.' : 'Tu reacción'"
+                @click="react_with(message, reaction_of(message))">{{ reaction_of(message) }}</button>
 
               <!-- Borrador del agente esperando aprobación: se lee, se corrige y se manda acá.
                    Con ai_auto_send_at en null no hay contador, porque no se manda solo. -->
@@ -314,6 +366,7 @@ import api from '@/utils/axios'
 import ImageLightbox from '@/components/common/ImageLightbox.vue'
 import AudioPlayer from '@/components/lead/conversation/AudioPlayer.vue'
 import BorderProgressWrap from '@/components/support/BorderProgressWrap.vue'
+import MessageTicks from '@/components/support/MessageTicks.vue'
 import SupportTemplatePickerModal from '@/components/support/SupportTemplatePickerModal.vue'
 import lead_conversation_date_dividers from '@/mixins/lead_conversation_date_dividers'
 import {
@@ -325,6 +378,13 @@ import {
   attachment_icon_class,
   browser_can_play_ogg_opus,
 } from '@/utils/support_media'
+import {
+  REACTION_EMOJIS,
+  ticks_state,
+  can_react_to_message,
+  admin_reaction_of,
+  same_emoji,
+} from '@/utils/support_ticks'
 import '@/styles/whatsapp-conversation-wallpaper.css'
 import '@/styles/whatsapp-date-divider.css'
 
@@ -334,6 +394,7 @@ export default {
     ImageLightbox,
     AudioPlayer,
     BorderProgressWrap,
+    MessageTicks,
     SupportTemplatePickerModal,
   },
   /* Secciones por día (message_date_sections) a partir del computed sorted_messages. */
@@ -378,6 +439,12 @@ export default {
       media_errors: {},
       /** true si el navegador reproduce Ogg/Opus de forma nativa (Safari/iOS viejo: false). */
       can_play_ogg_opus: browser_can_play_ogg_opus(),
+      /** Emojis de la barra de reacciones. */
+      reaction_emojis: REACTION_EMOJIS,
+      /** Id del mensaje cuya barra de reacciones está abierta, o null. */
+      reaction_bar_message_id: null,
+      /** Id del mensaje con un POST de reacción en vuelo, o null (bloquea los demás botones). */
+      reacting_message_id: null,
     }
   },
   computed: {
@@ -411,6 +478,14 @@ export default {
      */
     active_ticket_id() {
       return this.$store.state.support_message.active_ticket_id
+    },
+    /**
+     * Ticket mínimo para <message-ticks>: solo hace falta el origen (los ticks son de WhatsApp).
+     *
+     * @returns {{source: string|null}}
+     */
+    ticks_ticket() {
+      return { source: this.ticket_source }
     },
     /**
      * Id del último mensaje entrante del hilo. null si el cliente todavía no escribió.
@@ -457,6 +532,15 @@ export default {
    */
   mounted() {
     this.schedule_scroll_to_bottom()
+    document.addEventListener('click', this.on_document_click)
+    document.addEventListener('keydown', this.on_document_keydown)
+  },
+  /**
+   * Saca los listeners globales de la barra de reacciones.
+   */
+  beforeUnmount() {
+    document.removeEventListener('click', this.on_document_click)
+    document.removeEventListener('keydown', this.on_document_keydown)
   },
   watch: {
     /**
@@ -488,6 +572,8 @@ export default {
       immediate: true,
       handler() {
         this.template_modal_visible = false
+        this.reaction_bar_message_id = null
+        this.reacting_message_id = null
         this.whatsapp_window = null
         this.window_ticket_id = null
         this.window_last_inbound_id = this.last_inbound_message_id
@@ -584,6 +670,112 @@ export default {
     on_template_sent() {
       this.template_modal_visible = false
       this.fetch_whatsapp_window(true)
+    },
+    /**
+     * true si el mensaje saliente lleva hora y ticks en el pie de su burbuja: mensaje del
+     * operador o del agente, ya enviado por WhatsApp (tiene wamid) en un ticket de WhatsApp.
+     *
+     * @param {Object} message Mensaje del hilo.
+     * @returns {boolean}
+     */
+    has_bubble_ticks(message) {
+      return ticks_state(message, this.ticks_ticket) !== null
+    },
+    /**
+     * true si se puede reaccionar al mensaje (del cliente, con wamid, en un ticket de WhatsApp).
+     *
+     * @param {Object} message Mensaje del hilo.
+     * @returns {boolean}
+     */
+    can_react(message) {
+      return can_react_to_message(message, this.ticket_source)
+    },
+    /**
+     * Emoji que el operador ya puso sobre el mensaje ('' si ninguno).
+     *
+     * @param {Object} message Mensaje del hilo.
+     * @returns {string}
+     */
+    reaction_of(message) {
+      return admin_reaction_of(message)
+    },
+    /**
+     * true si el emoji es la reacción que ya está puesta (se resalta en la barra).
+     *
+     * @param {Object} message Mensaje del hilo.
+     * @param {string} emoji   Emoji de la barra.
+     * @returns {boolean}
+     */
+    is_current_reaction(message, emoji) {
+      return same_emoji(admin_reaction_of(message), emoji)
+    },
+    /**
+     * Abre o cierra la barra de reacciones de un mensaje. Si es el último del hilo, vuelve a
+     * bajar el scroll para que la barra no quede tapada al pie.
+     *
+     * @param {Object} message Mensaje del hilo.
+     * @returns {void}
+     */
+    toggle_reaction_bar(message) {
+      if (this.reaction_bar_message_id === message.id) {
+        this.reaction_bar_message_id = null
+        return
+      }
+      this.reaction_bar_message_id = message.id
+      const list = this.messages || []
+      const last = list.length ? list[list.length - 1] : null
+      if (last && last.id === message.id) {
+        this.schedule_scroll_to_bottom()
+      }
+    },
+    /**
+     * Manda la reacción (o la quita si es la misma que ya está puesta) y cierra la barra. El
+     * store avisa los errores (422: motivo de la API; 404: servidor sin el endpoint) y nunca
+     * rechaza; acá solo se libera el bloqueo de botones al terminar.
+     *
+     * @param {Object} message Mensaje del cliente.
+     * @param {string} emoji   Emoji elegido.
+     * @returns {void}
+     */
+    react_with(message, emoji) {
+      if (this.reacting_message_id !== null || !this.can_react(message)) {
+        return
+      }
+      const self = this
+      this.reaction_bar_message_id = null
+      this.reacting_message_id = message.id
+      this.$store
+        .dispatch('support_message/react_to_message', { message: message, emoji: emoji })
+        .then(function () {
+          self.reacting_message_id = null
+        })
+    },
+    /**
+     * Cierra la barra de reacciones al tocar fuera de la zona de reacciones.
+     *
+     * @param {Event} event Click del documento.
+     * @returns {void}
+     */
+    on_document_click(event) {
+      if (this.reaction_bar_message_id === null) {
+        return
+      }
+      const target = event && event.target
+      if (target && typeof target.closest === 'function' && target.closest('.support-reaction-zone')) {
+        return
+      }
+      this.reaction_bar_message_id = null
+    },
+    /**
+     * Esc cierra la barra de reacciones.
+     *
+     * @param {KeyboardEvent} event Tecla del documento.
+     * @returns {void}
+     */
+    on_document_keydown(event) {
+      if (event && event.key === 'Escape' && this.reaction_bar_message_id !== null) {
+        this.reaction_bar_message_id = null
+      }
     },
     /**
      * Abre la edición del borrador con el texto que propuso el agente.
@@ -809,8 +1001,9 @@ export default {
       if (this.has_delivery_error(message)) {
         return false
       }
+      /* En WhatsApp los ticks van en el pie de cada burbuja (<message-ticks>), no acá. */
       if (this.ticket_source === 'whatsapp') {
-        return !!message.whatsapp_message_id
+        return false
       }
       return true
     },
@@ -1257,6 +1450,146 @@ export default {
    que se usaba cuando el fondo era gris claro. */
 .support-message-row.mine .support-message-bubble {
   background: #d9fdd3;
+}
+
+/* Fila burbuja + botón de reaccionar. Sin botón (mensajes propios, tickets del ERP) es un bloque
+   común y la burbuja se comporta igual que antes. */
+.support-message-bubble-row {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.support-message-bubble-row--react {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+/* Con botón al costado, la burbuja ya no ocupa el 100% de la columna: se achica lo necesario. */
+.support-message-bubble-row--react :deep(.border-progress-wrap--bubble) {
+  width: auto;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* Hora y ticks abajo a la derecha de la burbuja saliente, como en WhatsApp. */
+.support-message-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1;
+  color: #667781;
+}
+
+/* Botón de reaccionar: invisible hasta pasar el mouse por la fila (conserva su lugar para no
+   mover el texto), siempre visible en pantallas táctiles y en teléfono. */
+.support-react-btn {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  color: #667781;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.support-message-row:hover .support-react-btn,
+.support-react-btn:focus-visible,
+.support-react-btn--open {
+  opacity: 1;
+}
+
+.support-react-btn:hover:not(:disabled) {
+  background: #fff;
+  color: #212529;
+}
+
+.support-react-btn:disabled {
+  cursor: default;
+}
+
+@media (hover: none), (pointer: coarse), (max-width: 767.98px) {
+  /* Táctil: sin hover, el botón se ve siempre y tiene tamaño de toque (>= 32 px). */
+  .support-react-btn {
+    opacity: 1;
+    width: 34px;
+    height: 34px;
+    font-size: 1.1rem;
+  }
+}
+
+/* Barra con las seis reacciones, abierta debajo de la burbuja del cliente. */
+.support-reaction-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  max-width: 100%;
+  margin-top: 4px;
+  padding: 3px 6px;
+  background: #fff;
+  border: 1px solid #e6e6e6;
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.support-reaction-option {
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.1s ease, background 0.1s ease;
+}
+
+.support-reaction-option:hover:not(:disabled) {
+  background: #f0f2f5;
+  transform: scale(1.15);
+}
+
+/* La reacción que ya está puesta se resalta (elegirla de nuevo la quita). */
+.support-reaction-option--active {
+  background: #d9fdd3;
+}
+
+.support-reaction-option:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Chip con la reacción del operador, pegado bajo la burbuja del cliente. */
+.support-reaction-chip {
+  position: relative;
+  z-index: 1;
+  align-self: flex-start;
+  margin: -6px 0 0 10px;
+  min-height: 24px;
+  padding: 0 7px;
+  border: 1px solid #e6e6e6;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.support-reaction-chip:disabled {
+  cursor: default;
 }
 
 .support-message-bubble--ai-draft {
