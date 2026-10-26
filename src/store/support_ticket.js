@@ -2,6 +2,9 @@ import __base_store from '@/common-vue/store/__base_store'
 import api from '@/utils/axios'
 import { run_once } from '@/common-vue/helpers/request_cache_helper'
 
+/** Los eventos públicos no llevan el resumen privado de atención: se refresca por HTTP autenticado. */
+let attention_refresh_timer = null
+
 /**
  * Pide los contadores de la bandeja y los vuelca al store. Nunca rechaza.
  *
@@ -207,6 +210,11 @@ export default __base_store({
       if (idx >= 0) {
         const prev = state.models[idx]
         const merged = Object.assign({}, prev, ticket)
+        // null en un evento significa «no precargado», no «sin misión». Una respuesta
+        // autenticada con { needs_human:false, mission:null } sí reemplaza el resumen.
+        if (ticket.support_attention == null && prev.support_attention) {
+          merged.support_attention = prev.support_attention
+        }
         /**
          * Algunos broadcasts (p. ej. sólo cabecera) no incluyen last_message; conserva preview previo.
          */
@@ -291,9 +299,12 @@ export default __base_store({
     /**
      * Fusiona un SupportTicket (objeto) en la bandeja respetando filtro míos/otros/todos.
      */
-    apply_ticket_row({ commit, state, rootState }, ticket) {
+    apply_ticket_row({ commit, state, rootState, dispatch }, ticket) {
       if (!ticket || !ticket.id) {
         return
+      }
+      if (ticket.support_attention == null) {
+        dispatch('schedule_attention_refresh')
       }
       const t = ticket
       const me = rootState.auth && rootState.auth.admin && rootState.auth.admin.id
@@ -335,6 +346,16 @@ export default __base_store({
         return
       }
       commit('upsert_from_broadcast', t)
+    },
+    /** Agrupa mensajes/lecturas parciales y trae el resumen vigente sin agregarlo al canal público. */
+    schedule_attention_refresh({ dispatch }) {
+      if (attention_refresh_timer) {
+        clearTimeout(attention_refresh_timer)
+      }
+      attention_refresh_timer = setTimeout(function () {
+        attention_refresh_timer = null
+        dispatch('get_models')
+      }, 800)
     },
     /**
      * Desde un SupportMessage (Pusher) con relación ticket embebida.

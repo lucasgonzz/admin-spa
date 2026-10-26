@@ -55,13 +55,6 @@
             {{ last_message_preview(ticket) || 'Sin mensajes todavía' }}
           </span>
           <span class="support-ticket-meta">
-            <!-- Badge prioritario: Claude escaló el caso y requiere intervención humana. -->
-            <span
-              v-if="is_ticket_escalated(ticket)"
-              class="badge rounded-pill support-escalated-badge"
-              :title="escalation_badge_title(ticket)">
-              Requiere supervision
-            </span>
             <span
               v-if="response_time_badge(ticket)"
               class="badge rounded-pill support-response-badge"
@@ -77,11 +70,35 @@
             </span>
           </span>
         </div>
+        <!-- La misión puede seguir su curso mientras Martín atiende otras consultas. Solo una
+             intervención pendiente pinta la fila de rojo; los dos avisos pueden coexistir. -->
+        <div
+          v-if="is_ticket_escalated(ticket) || ticket_mission(ticket)"
+          class="support-ticket-attention">
+          <span
+            v-if="is_ticket_escalated(ticket)"
+            class="badge rounded-pill support-escalated-badge"
+            :title="escalation_badge_title(ticket)">
+            Necesita tu intervención
+          </span>
+          <span
+            v-if="ticket_mission(ticket)"
+            class="badge rounded-pill support-mission-badge"
+            :class="ticket_mission(ticket).status === 'started' ? 'support-mission-badge--started' : 'support-mission-badge--pending'"
+            :title="mission_reason_line(ticket)">
+            {{ ticket_mission(ticket).status === 'started' ? 'Misión iniciada' : 'Misión pendiente' }}
+          </span>
+        </div>
         <small
           v-if="is_ticket_escalated(ticket) && escalation_reason_line(ticket)"
           class="d-block text-truncate support-ticket-escalation-reason"
           :title="escalation_reason_line(ticket)">
           {{ escalation_reason_line(ticket) }}
+        </small>
+        <small
+          v-if="ticket_mission(ticket)"
+          class="d-block support-ticket-mission-reason">
+          {{ mission_reason_line(ticket) }}
         </small>
         <small class="text-muted d-block text-truncate support-ticket-involved">{{ involved_users_line(ticket) }}</small>
       </div>
@@ -112,7 +129,7 @@ export default {
   },
   computed: {
     /**
-     * Tickets ordenados: escalados primero, luego por updated_at descendente.
+     * Tickets ordenados: intervención humana primero, luego por updated_at descendente.
      *
      * @returns {Array<Object>}
      */
@@ -133,17 +150,37 @@ export default {
   },
   methods: {
     /**
-     * Indica si el ticket fue escalado por Claude y aún requiere revisión humana.
-     * Los tickets cerrados/resueltos no muestran el estilo de escalado aunque conserven el dato en BD.
+     * Una misión pendiente no equivale a una atención bloqueada. El dato aditivo del API
+     * decide la intervención; escalated_at queda como respaldo para servidores anteriores.
      *
      * @param {Object} ticket
      * @returns {boolean}
      */
     is_ticket_escalated(ticket) {
-      if (!ticket || !ticket.escalated_at) {
+      if (!ticket || this.ticket_status_class(ticket) !== 'open') {
         return false
       }
-      return this.ticket_status_class(ticket) === 'open'
+      const attention = this.ticket_attention(ticket)
+      return attention ? attention.needs_human === true : !!ticket.escalated_at
+    },
+    ticket_attention(ticket) {
+      const attention = ticket && ticket.support_attention
+      return attention && typeof attention === 'object' && !Array.isArray(attention) ? attention : null
+    },
+    ticket_mission(ticket) {
+      if (this.ticket_status_class(ticket) !== 'open') {
+        return null
+      }
+      const attention = this.ticket_attention(ticket)
+      const mission = attention && attention.mission
+      return mission && ['pending', 'started'].includes(mission.status) ? mission : null
+    },
+    mission_reason_line(ticket) {
+      const mission = this.ticket_mission(ticket)
+      if (!mission) {
+        return ''
+      }
+      return mission.status === 'started' ? 'La misión ya fue iniciada.' : 'La misión todavía no se inició.'
     },
     /**
      * Tooltip del badge de escalado: motivo corto si existe.
@@ -154,9 +191,9 @@ export default {
     escalation_badge_title(ticket) {
       const reason = this.escalation_reason_line(ticket)
       if (reason) {
-        return 'Requiere supervision: ' + reason
+        return 'Necesita tu intervención: ' + reason
       }
-      return 'Requiere supervision humana'
+      return 'Necesita tu intervención'
     },
     /**
      * Motivo del escalado visible bajo el título del ticket.
@@ -165,10 +202,12 @@ export default {
      * @returns {string}
      */
     escalation_reason_line(ticket) {
-      if (!ticket || !ticket.escalation_reason) {
+      if (!this.is_ticket_escalated(ticket)) {
         return ''
       }
-      return String(ticket.escalation_reason).trim()
+      const attention = this.ticket_attention(ticket)
+      const reason = attention ? attention.reason : ticket.escalation_reason
+      return reason ? String(reason).trim() : ''
     },
     /**
      * Clase CSS del indicador de estado (open = rojo, closed = verde).
@@ -505,6 +544,39 @@ export default {
   gap: 0.3rem;
 }
 
+.support-ticket-attention {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.15rem;
+}
+
+.support-mission-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 0.3em 0.55em;
+  border: 1px solid transparent;
+}
+
+.support-mission-badge--pending {
+  color: #664d03;
+  background: #fff3cd;
+  border-color: #ffecb5;
+}
+
+.support-mission-badge--started {
+  color: #084298;
+  background: #cfe2ff;
+  border-color: #b6d4fe;
+}
+
+.support-ticket-mission-reason {
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+}
+
 /* Fila escalada: fondo rojizo, borde izquierdo y sombra suave para destacar en la bandeja. */
 .support-ticket-item--escalated {
   background: linear-gradient(90deg, #fff1f2 0%, #fff8f8 100%);
@@ -614,8 +686,8 @@ export default {
   font-size: 0.68rem;
   font-weight: 700;
   line-height: 1.15;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  white-space: normal;
+  text-align: left;
   padding: 0.3em 0.55em;
   color: #fff;
   background: #dc3545;
