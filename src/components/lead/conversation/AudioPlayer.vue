@@ -11,6 +11,7 @@
       :src="src"
       preload="metadata"
       class="wa-audio-native"
+      @error="$emit('error', $event)"
     />
 
     <!-- Ícono de micrófono visible en reposo; se oculta al reproducir -->
@@ -73,6 +74,8 @@
  */
 export default {
   name: 'LeadAudioPlayer',
+  /* `error`: se reenvía el error del <audio> para que quien lo use pueda mostrar un aviso y una descarga. */
+  emits: ['error'],
   props: {
     /** URL del archivo de audio (URL firmada del adjunto). */
     src: { type: String, required: true },
