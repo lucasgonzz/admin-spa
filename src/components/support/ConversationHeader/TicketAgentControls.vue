@@ -2,6 +2,10 @@
   <!--
     Interruptores del agente para este ticket: prendido/apagado, y si sus respuestas
     necesitan que una persona las apruebe antes de salir.
+
+    Prendido = botón RELLENO de color (agente azul, verificación verde). Apagado = gris tenue.
+    El estado no depende solo del color: el agente apagado cambia el ícono (robot tachado) y el
+    texto ("Agente apagado"), y la verificación apagada cambia el ícono y el texto ("Contesta solo").
   -->
   <div v-if="has_ticket" class="d-flex align-items-center gap-2 flex-shrink-0">
     <button
@@ -11,7 +15,10 @@
       :disabled="saving"
       :title="agent_title"
       @click="$emit('toggle-agent')">
-      <i class="bi" :class="agent_on ? 'bi-robot' : 'bi-slash-circle'" aria-hidden="true" />
+      <!-- Robot; apagado lleva encima una línea diagonal (clase --struck). -->
+      <span class="ticket-agent-icon" :class="{ 'ticket-agent-icon--struck': !agent_on }" aria-hidden="true">
+        <i class="bi bi-robot" />
+      </span>
       {{ agent_on ? 'Agente' : 'Agente apagado' }}
     </button>
 
@@ -70,23 +77,24 @@ export default {
   },
   computed: {
     /**
-     * Clase del botón del agente.
+     * Clase del botón del agente: relleno azul si está prendido, gris tenue si está apagado.
      *
      * @returns {string}
      */
     agent_button_class() {
-      return this.agent_on ? 'btn-outline-primary' : 'btn-outline-secondary'
+      return this.agent_on ? 'btn-primary' : 'ticket-agent-btn--off'
     },
     /**
-     * Clase del botón de verificación.
+     * Clase del botón de verificación: relleno verde si exige verificación; gris tenue si contesta
+     * solo, y también gris tenue (y deshabilitado) si el agente está apagado.
      *
      * @returns {string}
      */
     verification_button_class() {
       if (!this.agent_on) {
-        return 'btn-outline-secondary'
+        return 'ticket-agent-btn--off'
       }
-      return this.verification_on ? 'btn-outline-success' : 'btn-outline-warning'
+      return this.verification_on ? 'btn-success' : 'ticket-agent-btn--off'
     },
     /**
      * Tooltip del botón del agente.
@@ -124,5 +132,53 @@ export default {
 }
 .ticket-agent-btn i {
   margin-right: 4px;
+}
+
+/* Estado apagado: gris tenue (fondo gris claro, borde y texto grises). El texto oscuro sobre el
+   gris claro mantiene el contraste de lectura; lo "tenue" lo da la falta de color, no la opacidad. */
+.ticket-agent-btn--off {
+  background-color: #e9ecef;
+  border: 1px solid #ced4da;
+  color: #5c636a;
+}
+.ticket-agent-btn--off:hover:not(:disabled),
+.ticket-agent-btn--off:focus-visible {
+  background-color: #dee2e6;
+  border-color: #adb5bd;
+  color: #495057;
+}
+.ticket-agent-btn--off:active:not(:disabled) {
+  background-color: #ced4da;
+  color: #343a40;
+}
+
+/* Contenedor del robot: el margen que antes llevaba el <i> pasa a ser de este wrapper para que
+   la línea diagonal tache solo el ícono. */
+.ticket-agent-icon {
+  position: relative;
+  display: inline-block;
+  line-height: 1;
+}
+.ticket-agent-icon i {
+  margin-right: 0;
+}
+.ticket-agent-btn .ticket-agent-icon {
+  margin-right: 4px;
+}
+
+/* Robot tachado: no existe un ícono "robot tachado" en Bootstrap Icons, así que se dibuja una
+   línea diagonal por encima. El halo del color del fondo la despega del dibujo. */
+.ticket-agent-icon--struck::after {
+  content: '';
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+  background: currentColor;
+  border-radius: 1px;
+  transform: rotate(-45deg);
+  box-shadow: 0 0 0 1px #e9ecef;
 }
 </style>
