@@ -64,6 +64,7 @@
             <select
               :id="'contract_modalidad_cliente_' + record.id"
               v-model="form.contract_modalidad"
+              :disabled="!!form.contract_precios_sistemas"
               class="form-select"
             >
               <option :value="null">Elegí la modalidad</option>
@@ -111,6 +112,7 @@
         </div>
       </div>
 
+      <PreciosPorSistema :contrato="form" :id="'contrato-cliente-' + record.id" />
       <!-- En Suscripción no hay licencia que pagar: el pago inicial es la puesta en marcha. -->
       <h6 class="text-primary mb-2">{{ es_suscripcion ? 'Pago inicial' : 'Pago único' }}</h6>
       <div class="alert alert-light border mb-3">
@@ -124,7 +126,7 @@
           </div>
           <div class="col-md-3">
             <label class="form-label">{{ es_suscripcion ? 'Pago inicial (puesta en marcha)' : 'Precio total (licencia + implementación)' }}</label>
-            <input v-model="form.contract_precio_licencia" type="text" class="form-control" />
+            <input :readonly="!!form.contract_precios_sistemas" v-model="form.contract_precio_licencia" type="text" class="form-control" />
           </div>
           <div class="col-md-3">
             <label class="form-label">Fecha de emisión</label>
@@ -184,7 +186,7 @@
           </div>
           <div class="col-md-3">
             <label class="form-label">Mensualidad base</label>
-            <input v-model="form.contract_mensualidad_base" type="text" class="form-control" />
+            <input :readonly="!!form.contract_precios_sistemas" v-model="form.contract_mensualidad_base" type="text" class="form-control" />
           </div>
           <div class="col-md-3">
             <label class="form-label">Usuarios incluidos en la base</label>
@@ -198,11 +200,11 @@
             <label class="form-label">Precio por usuario extra</label>
             <input v-model="form.contract_precio_usuario_extra" type="text" class="form-control" />
           </div>
-          <div class="col-md-4">
+          <div v-if="!form.contract_precios_sistemas" class="col-md-4">
             <label class="form-label">Perfiles de ecommerce</label>
             <input v-model.number="form.contract_perfiles_ecommerce" type="number" min="0" class="form-control" />
           </div>
-          <div class="col-md-4">
+          <div v-if="!form.contract_precios_sistemas" class="col-md-4">
             <label class="form-label">Precio por perfil de ecommerce</label>
             <input v-model="form.contract_precio_perfil_ecommerce" type="text" class="form-control" />
           </div>
@@ -253,7 +255,7 @@
         </button>
         <select
           v-model="clausula_template_key"
-          class="form-select form-select-sm d-inline-block w-auto ms-2"
+          class="form-select form-select-sm d-inline-block w-auto mw-100 mt-2"
           @change="add_clausula_from_template"
         >
           <option value="">Agregar desde biblioteca...</option>
@@ -306,6 +308,8 @@
 </template>
 
 <script>
+import PreciosPorSistema from '@/components/lead/contract/PreciosPorSistema.vue'
+import { actualizar_totales, iniciar_precios_por_sistema, tiene_condiciones_guardadas } from '@/utils/contract_precios'
 import api, { resolve_error_message } from '@/utils/axios'
 import clause_templates from '@/utils/contract_clause_templates'
 import {
@@ -335,6 +339,7 @@ import { formatear_fecha } from '@/components/cobranzas/meses'
  */
 export default {
   name: 'ClientContratoTab',
+  components: { PreciosPorSistema },
   props: {
     /** Cliente abierto en el modal; solo se usa `id`. */
     record: { type: Object, default: null },
@@ -472,7 +477,7 @@ export default {
       if (nuevo.modalidad === viejo.modalidad) {
         return
       }
-      aplicar_defaults_de_modalidad(this.form, nuevo.modalidad || null)
+      if (!this.form.contract_precios_sistemas) aplicar_defaults_de_modalidad(this.form, nuevo.modalidad || null)
     },
   },
   mounted() {
@@ -520,6 +525,9 @@ export default {
         contract_modalidad: null,
         contract_sistemas: [],
         contract_permanencia_meses: null,
+        contract_precios_sistemas: null,
+        contract_descuento_conjunto: null,
+        contract_mes_gratis: null,
         contract_copiado_desde_lead_at: null,
       }
     },
@@ -556,7 +564,7 @@ export default {
             return { titulo: texto(clausula && clausula.titulo, ''), texto: texto(clausula && clausula.texto, '') }
           })
         : []
-      this.form = {
+      const nuevo_form = {
         contract_client_name: texto(c.contract_client_name, base.contract_client_name),
         contract_client_razon_social: texto(c.contract_client_razon_social, base.contract_client_razon_social),
         contract_client_cuit: texto(c.contract_client_cuit, base.contract_client_cuit),
@@ -584,8 +592,15 @@ export default {
         contract_modalidad: normalizar_modalidad(c.contract_modalidad),
         contract_sistemas: normalizar_sistemas(c.contract_sistemas),
         contract_permanencia_meses: normalizar_permanencia(c.contract_permanencia_meses),
+        contract_precios_sistemas: c.contract_precios_sistemas ? JSON.parse(JSON.stringify(c.contract_precios_sistemas)) : null,
+        contract_descuento_conjunto: c.contract_descuento_conjunto ?? null,
+        contract_mes_gratis: c.contract_mes_gratis ?? null,
         contract_copiado_desde_lead_at: c.contract_copiado_desde_lead_at || null,
       }
+      if (!nuevo_form.contract_precios_sistemas && !tiene_condiciones_guardadas(c)) {
+        iniciar_precios_por_sistema(nuevo_form)
+      }
+      this.form = nuevo_form
     },
     /**
      * GET client/{id}/contrato → `{contrato, lead_id, resumen_actualizacion}`.
@@ -683,6 +698,7 @@ export default {
      */
     build_contract_payload() {
       const f = this.form
+      actualizar_totales(f)
       return {
         contract_client_name: f.contract_client_name || null,
         contract_client_razon_social: f.contract_client_razon_social || null,
@@ -708,6 +724,9 @@ export default {
            (licencia|suscripcion, gestion|ecommerce|agentes, 1 a 60) y una API vieja las ignora;
            se normalizan antes para no mandar nada que dé 422 (un plazo de 0 o 61 sale null). */
         contract_modalidad: f.contract_modalidad || null,
+        contract_precios_sistemas: f.contract_precios_sistemas ?? null,
+        contract_descuento_conjunto: f.contract_descuento_conjunto ?? null,
+        contract_mes_gratis: f.contract_mes_gratis ?? null,
         contract_sistemas: normalizar_sistemas(f.contract_sistemas),
         contract_permanencia_meses: normalizar_permanencia(f.contract_permanencia_meses),
       }

@@ -38,6 +38,7 @@
           <select
             :id="'contract_modalidad_' + record.id"
             v-model="record.contract_modalidad"
+            :disabled="!!record.contract_precios_sistemas"
             class="form-select"
           >
             <option :value="null">Elegí la modalidad</option>
@@ -85,6 +86,7 @@
       </div>
     </div>
 
+    <PreciosPorSistema :contrato="record" :id="'contrato-lead-' + record.id" />
     <!-- En Suscripción no hay licencia que pagar: el pago inicial es la puesta en marcha. -->
     <h6 class="text-primary mb-2">{{ es_suscripcion ? 'Pago inicial' : 'Pago único' }}</h6>
     <div class="alert alert-light border mb-3">
@@ -98,7 +100,7 @@
         </div>
         <div class="col-md-3">
           <label class="form-label">{{ es_suscripcion ? 'Pago inicial (puesta en marcha)' : 'Precio total (licencia + implementación)' }}</label>
-          <input v-model="record.contract_precio_licencia" type="text" class="form-control" />
+          <input :readonly="!!record.contract_precios_sistemas" v-model="record.contract_precio_licencia" type="text" class="form-control" />
         </div>
         <div class="col-md-3">
           <label class="form-label">Fecha de emisión</label>
@@ -154,7 +156,7 @@
         </div>
         <div class="col-md-3">
           <label class="form-label">Mensualidad base</label>
-          <input v-model="record.contract_mensualidad_base" type="text" class="form-control" />
+          <input :readonly="!!record.contract_precios_sistemas" v-model="record.contract_mensualidad_base" type="text" class="form-control" />
         </div>
         <div class="col-md-3">
           <label class="form-label">Usuarios incluidos en la base</label>
@@ -168,11 +170,11 @@
           <label class="form-label">Precio por usuario extra</label>
           <input v-model="record.contract_precio_usuario_extra" type="text" class="form-control" />
         </div>
-        <div class="col-md-4">
+        <div v-if="!record.contract_precios_sistemas" class="col-md-4">
           <label class="form-label">Perfiles de ecommerce</label>
           <input v-model.number="record.contract_perfiles_ecommerce" type="number" min="0" class="form-control" />
         </div>
-        <div class="col-md-4">
+        <div v-if="!record.contract_precios_sistemas" class="col-md-4">
           <label class="form-label">Precio por perfil de ecommerce</label>
           <input v-model="record.contract_precio_perfil_ecommerce" type="text" class="form-control" />
         </div>
@@ -233,7 +235,7 @@
       </button>
       <select
         v-model="clausula_template_key"
-        class="form-select form-select-sm d-inline-block w-auto ms-2"
+        class="form-select form-select-sm d-inline-block w-auto mw-100 mt-2"
         @change="add_clausula_from_template"
       >
         <option value="">Agregar desde biblioteca...</option>
@@ -290,6 +292,7 @@
       <button
         type="button"
         class="btn btn-outline-success"
+        v-if="!record.contract_precios_sistemas"
         :disabled="loading_save || loading_pdf"
         @click="abrir_cotizador"
       >
@@ -312,6 +315,8 @@
 </template>
 
 <script>
+import PreciosPorSistema from '@/components/lead/contract/PreciosPorSistema.vue'
+import { actualizar_totales, iniciar_precios_por_sistema, tiene_condiciones_guardadas } from '@/utils/contract_precios'
 import api, { resolve_error_message } from '@/utils/axios'
 import clause_templates from '@/utils/contract_clause_templates'
 import {
@@ -329,7 +334,7 @@ import CotizadorModal from './CotizadorModal.vue'
 
 export default {
   name: 'LeadContractTab',
-  components: { CotizadorModal },
+  components: { CotizadorModal, PreciosPorSistema },
   props: {
     /**
      * Lead en edición (borrador del modal); se mutan los campos `contract_*` en el mismo objeto.
@@ -484,7 +489,7 @@ export default {
       if (nuevo.modalidad === viejo.modalidad) {
         return
       }
-      aplicar_defaults_de_modalidad(this.record, nuevo.modalidad || null)
+      if (!this.record.contract_precios_sistemas) aplicar_defaults_de_modalidad(this.record, nuevo.modalidad || null)
     },
     /**
      * Si en el MISMO lead los sistemas dejan de ser un array (el `Object.assign` del modal después
@@ -553,6 +558,9 @@ export default {
     ensure_contract_defaults() {
       if (!this.record) {
         return
+      }
+      if (!this.record.contract_precios_sistemas && !tiene_condiciones_guardadas(this.record)) {
+        iniciar_precios_por_sistema(this.record)
       }
       if (!this.record.contract_currency) {
         this.record.contract_currency = 'USD'
@@ -689,6 +697,7 @@ export default {
      * @returns {Object}
      */
     build_contract_payload() {
+      actualizar_totales(this.record)
       this.ensure_contract_defaults()
       return {
         contract_client_name: this.record.contract_client_name || null,
@@ -714,6 +723,9 @@ export default {
            🔴 El PUT del lead no valida nada, así que se normaliza acá: sistemas solo con keys
            conocidas (orden del catálogo, sin repetidos) y plazo mínimo entero de 1 a 60 o null. */
         contract_modalidad: this.record.contract_modalidad || null,
+        contract_precios_sistemas: this.record.contract_precios_sistemas ?? null,
+        contract_descuento_conjunto: this.record.contract_descuento_conjunto ?? null,
+        contract_mes_gratis: this.record.contract_mes_gratis ?? null,
         contract_sistemas: normalizar_sistemas(this.record.contract_sistemas),
         contract_permanencia_meses: normalizar_permanencia(this.record.contract_permanencia_meses),
       }
