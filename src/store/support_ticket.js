@@ -27,6 +27,10 @@ function pedir_unread_badges(commit, force) {
         if (response.data && response.data.inbox_nav) {
           commit('set_inbox_nav', response.data.inbox_nav)
         }
+        /* Opcional: una API vieja no lo manda y los badges siguen con no leídos. */
+        if (response.data && response.data.open_totals) {
+          commit('set_open_totals', response.data.open_totals)
+        }
       })
     },
     { force: force === true }
@@ -81,6 +85,11 @@ export default __base_store({
      */
     unread_totals: { mine: 0, others: 0 },
     /**
+     * Tickets abiertos (status open) para los badges: { all, mine, unassigned }.
+     * Queda en null mientras la API no lo mande (API vieja): los badges caen a no leídos.
+     */
+    open_totals: null,
+    /**
      * Botones por operador + Sin asignar (nombre y unread_count por fila).
      */
     inbox_nav: [],
@@ -98,6 +107,22 @@ export default __base_store({
       state.unread_totals = {
         mine: isNaN(mine) ? 0 : mine,
         others: isNaN(others) ? 0 : others,
+      }
+    },
+    /**
+     * Totales de tickets abiertos (API index o /support-ticket/unread-badges).
+     */
+    set_open_totals(state, value) {
+      if (!value || typeof value !== 'object') {
+        return
+      }
+      const all = parseInt(value.all, 10)
+      const mine = parseInt(value.mine, 10)
+      const unassigned = parseInt(value.unassigned, 10)
+      state.open_totals = {
+        all: isNaN(all) ? 0 : all,
+        mine: isNaN(mine) ? 0 : mine,
+        unassigned: isNaN(unassigned) ? 0 : unassigned,
       }
     },
     /**
@@ -228,6 +253,9 @@ export default __base_store({
           if (response.data.inbox_nav) {
             commit('set_inbox_nav', response.data.inbox_nav)
           }
+          if (response.data.open_totals) {
+            commit('set_open_totals', response.data.open_totals)
+          }
         })
         .catch(function (error) {
           commit('set_loading', false)
@@ -334,6 +362,9 @@ export default __base_store({
      */
     update_ticket({ dispatch }, payload) {
       return api.put('/support-ticket/' + payload.id, payload).then(function (response) {
+        /* Cerrar, reabrir o reasignar cambia los badges de tickets abiertos: se refrescan acá
+           sin esperar el SupportTicketUpdated de Pusher (que puede no estar configurado). */
+        dispatch('fetch_unread_badges')
         if (response.data && response.data.model) {
           return dispatch('apply_ticket_row', response.data.model).then(function () {
             return response.data.model
@@ -349,6 +380,9 @@ export default __base_store({
      */
     store({ dispatch }, payload) {
       return api.post('/support-ticket', payload).then(function (response) {
+        /* El alta por ERP no emite ningún evento de Pusher: el ticket abierto nuevo se suma
+           a los badges refrescándolos acá. */
+        dispatch('fetch_unread_badges')
         const m = response.data && response.data.model
         if (m) {
           return dispatch('apply_ticket_row', m).then(function () {
@@ -389,6 +423,8 @@ export default __base_store({
     store_whatsapp({ dispatch }, payload) {
       const cuerpo = Object.assign({}, payload, { source: 'whatsapp' })
       return api.post('/support-ticket', cuerpo).then(function (response) {
+        /* Ticket abierto nuevo (o reutilizado): los badges de abiertos se refrescan acá. */
+        dispatch('fetch_unread_badges')
         const data = response.data || {}
         const m = data.model
         if (m) {

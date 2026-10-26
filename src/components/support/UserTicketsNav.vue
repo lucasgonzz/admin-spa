@@ -1,6 +1,7 @@
 <template>
   <!--
-    Botones de bandeja: Todos + un botón por operador (y Sin asignar) con badge de no leídos.
+    Botones de bandeja: Todos + un botón por operador (y Sin asignar) con badge de tickets abiertos.
+    Si la API no manda `open_count` (API vieja), el badge cae a mensajes sin leer como antes.
     El filtro activo se persiste en Vuex (support_ticket.assigned_filter).
   -->
   <div class="user-tickets-nav d-flex flex-wrap gap-1 w-100" role="group" aria-label="Filtro de bandeja por operador">
@@ -12,10 +13,10 @@
       @click="change_assigned_filter('all')">
       Todos
       <span
-        v-if="total_unread_all > 0"
+        v-if="total_badge_all > 0"
         class="badge bg-danger rounded-pill user-tickets-nav-unread-badge ms-1"
-        :title="'Total mensajes de usuario sin leer: ' + total_unread_all">
-        {{ total_unread_all > 99 ? '99+' : total_unread_all }}
+        :title="badge_title_all">
+        {{ total_badge_all > 99 ? '99+' : total_badge_all }}
       </span>
     </button>
     <button
@@ -28,10 +29,10 @@
       @click="on_nav_row_click(row)">
       {{ row.display_name }}
       <span
-        v-if="row.unread_count > 0"
+        v-if="row_badge_count(row) > 0"
         class="badge bg-danger rounded-pill user-tickets-nav-unread-badge ms-1"
-        :title="'Sin leer en tickets de ' + row.display_name + ': ' + row.unread_count">
-        {{ row.unread_count > 99 ? '99+' : row.unread_count }}
+        :title="row_badge_title(row)">
+        {{ row_badge_count(row) > 99 ? '99+' : row_badge_count(row) }}
       </span>
     </button>
   </div>
@@ -61,7 +62,7 @@ export default {
       return this.$store.state.support_ticket.assigned_filter || 'mine'
     },
     /**
-     * Suma de no leídos de todas las filas del nav (mismo total que en cada badge sumado).
+     * Suma de no leídos de todas las filas del nav (respaldo cuando la API no manda abiertos).
      */
     total_unread_all() {
       let sum = 0
@@ -73,8 +74,76 @@ export default {
       })
       return sum
     },
+    /**
+     * Si la API manda tickets abiertos (`open_count` por fila u `open_totals`), los badges los usan.
+     * Con una API vieja queda en false y todo sigue con no leídos.
+     */
+    uses_open_count() {
+      if (this.$store.state.support_ticket.open_totals) {
+        return true
+      }
+      return this.inbox_nav.some(function (row) {
+        return row.open_count !== undefined && row.open_count !== null
+      })
+    },
+    /**
+     * Total de tickets abiertos: `open_totals.all` si viene; si no, la suma de `open_count` de las filas.
+     */
+    total_open_all() {
+      const totals = this.$store.state.support_ticket.open_totals
+      if (totals && totals.all !== undefined) {
+        const all = parseInt(totals.all, 10)
+        return isNaN(all) ? 0 : all
+      }
+      let sum = 0
+      this.inbox_nav.forEach(function (row) {
+        const n = parseInt(row.open_count, 10)
+        if (!isNaN(n)) {
+          sum += n
+        }
+      })
+      return sum
+    },
+    /**
+     * Número del badge de "Todos": tickets abiertos, o no leídos con una API vieja.
+     */
+    total_badge_all() {
+      return this.uses_open_count ? this.total_open_all : this.total_unread_all
+    },
+    /**
+     * Tooltip del badge de "Todos" según qué se está contando.
+     */
+    badge_title_all() {
+      if (this.uses_open_count) {
+        return 'Tickets abiertos: ' + this.total_badge_all
+      }
+      return 'Total mensajes de usuario sin leer: ' + this.total_badge_all
+    },
   },
   methods: {
+    /**
+     * Número del badge de una fila: `open_count` si la API lo manda; si no, `unread_count`.
+     *
+     * @param {object} row Fila inbox_nav
+     * @returns {number}
+     */
+    row_badge_count(row) {
+      const raw = row.open_count !== undefined && row.open_count !== null ? row.open_count : row.unread_count
+      const n = parseInt(raw, 10)
+      return isNaN(n) ? 0 : n
+    },
+    /**
+     * Tooltip del badge de una fila según qué se está contando.
+     *
+     * @param {object} row Fila inbox_nav
+     * @returns {string}
+     */
+    row_badge_title(row) {
+      if (row.open_count !== undefined && row.open_count !== null) {
+        return 'Tickets abiertos: ' + this.row_badge_count(row)
+      }
+      return 'Sin leer en tickets de ' + row.display_name + ': ' + this.row_badge_count(row)
+    },
     /**
      * Clave estable para v-for según fila (admin id o sin asignar).
      *

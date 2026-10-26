@@ -91,11 +91,11 @@
                 <div class="route-text-block">
                   <span class="route-text">{{ r.text }}</span>
                   <span
-                    v-if="show_nav_labels && r.name === 'support' && support_unread_mine > 0"
+                    v-if="show_nav_labels && r.name === 'support' && support_badge_count > 0"
                     class="badge bg-danger rounded-pill nav-support-unread-badge"
-                    :title="'Mensajes de usuario sin leer en tus tickets: ' + support_unread_mine"
+                    :title="support_badge_title"
                   >
-                    {{ support_unread_mine > 99 ? '99+' : support_unread_mine }}
+                    {{ support_badge_count > 99 ? '99+' : support_badge_count }}
                   </span>
                   <span
                     v-if="show_nav_labels && r.name === 'leads' && leads_unread_total > 0"
@@ -122,11 +122,11 @@
                 <div class="route-icon-badge-wrap">
                   <i :class="[icon(r), 'route-icon']" />
                   <span
-                    v-if="!show_nav_labels && r.name === 'support' && support_unread_mine > 0"
+                    v-if="!show_nav_labels && r.name === 'support' && support_badge_count > 0"
                     class="badge rounded-pill bg-danger nav-support-unread-badge nav-support-unread-badge--dot"
-                    :title="'Mensajes sin leer: ' + support_unread_mine"
+                    :title="support_badge_title"
                   >
-                    {{ support_unread_mine > 9 ? '9+' : support_unread_mine }}
+                    {{ support_badge_count > 9 ? '9+' : support_badge_count }}
                   </span>
                   <span
                     v-if="!show_nav_labels && r.name === 'leads' && leads_unread_total > 0"
@@ -298,6 +298,38 @@ export default {
       }
       const n = parseInt(t.mine, 10)
       return isNaN(n) ? 0 : n
+    },
+    /**
+     * Total de tickets de soporte abiertos (todos los operadores); null si la API no lo manda.
+     *
+     * @returns {number|null}
+     */
+    support_open_all() {
+      const t = this.$store.state.support_ticket.open_totals
+      if (!t || t.all == null) {
+        return null
+      }
+      const n = parseInt(t.all, 10)
+      return isNaN(n) ? null : n
+    },
+    /**
+     * Número del badge de "Soporte": tickets abiertos; con una API vieja, no leídos míos como antes.
+     *
+     * @returns {number}
+     */
+    support_badge_count() {
+      return this.support_open_all !== null ? this.support_open_all : this.support_unread_mine
+    },
+    /**
+     * Tooltip del badge de "Soporte" según qué se está contando.
+     *
+     * @returns {string}
+     */
+    support_badge_title() {
+      if (this.support_open_all !== null) {
+        return 'Tickets de soporte abiertos: ' + this.support_badge_count
+      }
+      return 'Mensajes de usuario sin leer en tus tickets: ' + this.support_badge_count
     },
     /**
      * Mensajes entrantes del lead sin leer (todos los leads).
