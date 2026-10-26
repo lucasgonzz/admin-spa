@@ -240,14 +240,20 @@ export default {
       return { label: label, class_name: 'bg-warning text-dark' }
     },
     /**
-     * Inicial del avatar: la del título del ticket. Si el título arranca con un número
+     * Inicial del avatar: la del contacto (o la del título si no hay contacto). Si arranca con un número
      * (p. ej. un teléfono) muestra "#", como en la lista de leads.
      *
      * @param {Object} ticket
      * @returns {string}
      */
     ticket_initial(ticket) {
-      const primera = String(this.ticket_title(ticket) || '').trim().charAt(0)
+      /* Inicial del contacto, como el avatar de los chats de leads: con la del título muchos
+         tickets ("Consulta…", "Ticket #…") terminaban con la misma letra. */
+      const contacto = ticket.client_user_name ||
+        (ticket.client_employee && ticket.client_employee.name) ||
+        (ticket.client && (ticket.client.company_name || ticket.client.name)) ||
+        this.ticket_title(ticket)
+      const primera = String(contacto || '').trim().charAt(0)
       if (!primera || /\d/.test(primera)) {
         return '#'
       }

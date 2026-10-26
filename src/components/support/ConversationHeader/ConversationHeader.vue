@@ -4,11 +4,26 @@
     nombre del ticket, asignación, estado, Guardar (API) y Salir.
   -->
   <div class="support-conversation-header d-flex flex-column gap-2 flex-shrink-0 w-100">
-    <ticket-contact-info
-      v-if="has_ticket"
-      :ticket="selected_ticket"
-      :show_back="show_back"
-      @back="$emit('back')" />
+    <div v-if="has_ticket" class="d-flex align-items-center gap-2 w-100 min-w-0">
+      <ticket-contact-info
+        class="flex-grow-1 min-w-0"
+        :ticket="selected_ticket"
+        :show_back="show_back"
+        @back="$emit('back')" />
+      <!-- En teléfono los controles del ticket ocupaban cuatro renglones y le comían media
+           pantalla a la conversación: quedan detrás de este botón, como el menú de WhatsApp. -->
+      <button
+        v-if="show_back"
+        type="button"
+        class="btn btn-sm flex-shrink-0 support-conversation-header-toggle"
+        :class="controles_abiertos ? 'btn-secondary' : 'btn-outline-secondary'"
+        :title="controles_abiertos ? 'Ocultar opciones del ticket' : 'Opciones del ticket'"
+        :aria-label="controles_abiertos ? 'Ocultar opciones del ticket' : 'Opciones del ticket'"
+        :aria-expanded="controles_abiertos ? 'true' : 'false'"
+        @click="controles_abiertos = !controles_abiertos">
+        <i class="bi bi-sliders" aria-hidden="true"></i>
+      </button>
+    </div>
     <button
       v-else-if="show_back"
       type="button"
@@ -18,7 +33,10 @@
       @click="$emit('back')">
       <i class="bi bi-arrow-left" aria-hidden="true"></i>
     </button>
-    <div class="d-flex align-items-center flex-wrap gap-2 w-100">
+    <!-- d-none y no v-show: el display:none en línea de v-show pierde contra el d-flex !important. -->
+    <div
+      class="d-flex align-items-center flex-wrap gap-2 w-100"
+      :class="{ 'd-none': show_back && !controles_abiertos }">
       <ticket-source-badge
         v-if="has_ticket"
         :ticket_source="selected_ticket.source || 'erp'" />
@@ -182,6 +200,23 @@ export default {
     show_back: {
       type: Boolean,
       default: false,
+    },
+  },
+  data() {
+    return {
+      /**
+       * En teléfono (`show_back`): si están desplegados los controles del ticket.
+       * En escritorio no se usa: los controles se ven siempre.
+       */
+      controles_abiertos: false,
+    }
+  },
+  watch: {
+    /**
+     * Al cambiar de ticket los controles vuelven a plegarse.
+     */
+    'selected_ticket.id'() {
+      this.controles_abiertos = false
     },
   },
   computed: {
@@ -356,5 +391,9 @@ export default {
   line-height: 1;
   color: var(--bs-body-color);
   text-decoration: none;
+}
+
+.support-conversation-header-toggle {
+  line-height: 1;
 }
 </style>

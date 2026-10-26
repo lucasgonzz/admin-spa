@@ -1218,7 +1218,9 @@ export default {
      */
     on_ticket_created(ticket_id) {
       if (ticket_id != null) {
-        this.select_ticket(ticket_id)
+        /* Mismo camino que tocar la fila: en teléfono la conversación vive en su propia ruta y
+           seleccionar en el lugar la dejaba abierta detrás de la lista, sin que se viera. */
+        this.on_ticket_list_select(ticket_id)
       }
     },
   },

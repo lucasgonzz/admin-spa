@@ -97,7 +97,10 @@ export default {
         return String(t.client_employee.phone).trim()
       }
       if (String(t.whatsapp_phone || '').trim()) {
-        return String(t.whatsapp_phone).trim()
+        const wa = String(t.whatsapp_phone).trim()
+        /* `whatsapp_phone` se guarda en dígitos pelados (5493416123456): con el + se lee como
+           número internacional y el tel: marca bien desde el celular. */
+        return /^\d{10,}$/.test(wa) ? '+' + wa : wa
       }
       if (t.client && String(t.client.phone || '').trim()) {
         return String(t.client.phone).trim()
