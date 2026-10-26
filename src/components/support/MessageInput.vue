@@ -54,7 +54,7 @@
         @input="ajustar_alto"
         @paste="on_paste"
         @keydown.enter.exact.prevent="emit_send" />
-      <input ref="file_input" class="d-none" type="file" accept="audio/*,image/*,.m4a,.mp3,.ogg,.oga,.opus,.aac,.amr,.webm,.jpg,.jpeg,.png,.webp,.gif,.heic" @change="on_file_change" />
+      <input ref="file_input" class="d-none" type="file" accept="audio/*,image/*,.m4a,.mp3,.ogg,.oga,.opus,.aac,.amr,.webm" @change="on_file_change" />
       <!-- Botón de grabación: rojo mientras graba; muestra tiempo en tooltip -->
       <button
         type="button"
