@@ -199,15 +199,6 @@ export default {
       type: Boolean,
       default: false,
     },
-    /**
-     * Operador logueado. El alta por WhatsApp no lo manda -el backend le asigna el ticket a
-     * quien lo abre-, pero la prop queda declarada porque la vista de soporte la sigue pasando
-     * y sacarla la convertiría en un atributo suelto.
-     */
-    assigned_admin_id: {
-      type: [Number, String],
-      default: null,
-    },
   },
   emits: ['update:show', 'created'],
   data() {

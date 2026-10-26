@@ -64,9 +64,7 @@
         <conversation-header
           :selected_ticket="selected_ticket"
           :ticket_name_draft="ticket_name_draft"
-          :assigned_admin_id="assigned_admin_id"
           :ticket_status_draft="ticket_status_draft"
-          :admin_rows="admin_assign_options"
           :saving_header="saving_header"
           :saving_agent_controls="saving_agent_controls"
           :ai_suggestion_loading="loading_suggestion"
@@ -74,7 +72,6 @@
           :ai_consult_timer="active_ai_consult_timer_for_input"
           :show_back="is_mobile && is_conversation_route"
           @update:ticket_name_draft="set_header_ticket_name_draft"
-          @update:assigned_admin_id="set_header_assigned_admin_id"
           @update:ticket_status_draft="set_header_ticket_status_draft"
           @save-header="save_header"
           @exit-ticket="on_exit_ticket"
@@ -107,7 +104,6 @@
 
     <create-ticket-modal
       :show="create_ticket_modal_visible"
-      :assigned_admin_id="current_admin_id"
       @update:show="create_ticket_modal_visible = $event"
       @created="on_ticket_created" />
     
@@ -142,10 +138,6 @@ export default {
        */
       selected_ticket_id: null,
       /**
-       * Admin asignado al ticket actual.
-       */
-      assigned_admin_id: null,
-      /**
        * Cleanup de canales Pusher (se reemplaza al cambiar admin o ticket).
        */
       support_socket_instance: null,
@@ -158,7 +150,7 @@ export default {
        */
       ticket_status_draft: 'open',
       /**
-       * Mientras se persiste nombre, asignación y estado del header vía API.
+       * Mientras se persiste nombre y estado del header vía API.
        */
       saving_header: false,
       /**
@@ -423,18 +415,6 @@ export default {
     support_socket_fingerprint() {
       return String(this.current_admin_id || '') + ':' + String(this.support_socket_client_uuid || '')
     },
-    /**
-     * Filas de operadores con nombre (misma fuente que UserTicketsNav / API index).
-     */
-    admin_assign_options() {
-      const nav = this.$store.state.support_ticket.inbox_nav
-      if (!Array.isArray(nav)) {
-        return []
-      }
-      return nav.filter(function (row) {
-        return row && row.assigned_admin_id != null && row.assigned_admin_id !== undefined
-      })
-    },
   },
   watch: {
     /**
@@ -467,13 +447,8 @@ export default {
        requests sueltos y el puntual ganaba casi siempre: después llegaba el listado, pisaba el
        array entero (set_models) y seleccionaba tickets[0], así que el link del WhatsApp de
        escalado terminaba abriendo cualquier otro ticket. */
-    /* 🔴 Un deep link desde el panel de inicio fuerza la bandeja a 'all' ANTES del get_models.
-       La bandeja arranca en 'mine' (store/support_ticket.js) y las tarjetas de inicio cuentan
-       global: sin esto la tarjeta diría 3 y el listado mostraría 0 o 1 — el mismo defecto
-       "dice 2 y veo una sola fila" que Lucas reportó el 2/9/2026 del lado de leads. */
-    if (this.filtro_activo) {
-      this.$store.commit('support_ticket/set_assigned_filter', 'all')
-    }
+    /* La bandeja ya no se divide por operador: el filtro del store es siempre 'all' y las
+       tarjetas de inicio (que cuentan global) coinciden con las filas del listado. */
     /* Teléfono con ?ticket_id= (link del WhatsApp de escalado): la conversación va en su
        propia pantalla, así que se pasa a la ruta de conversación conservando el filtro. */
     if (this.is_mobile && !this.is_conversation_route && this.$route.query && this.$route.query.ticket_id) {
@@ -768,15 +743,6 @@ export default {
       }
     },
     /**
-     * Borrador admin asignado.
-     *
-     * @param {number|string|null} value Id de operador o null
-     * @returns {void}
-     */
-    set_header_assigned_admin_id(value) {
-      this.assigned_admin_id = value
-    },
-    /**
      * Borrador estado open/closed.
      *
      * @param {string} value open | closed
@@ -786,7 +752,7 @@ export default {
       this.ticket_status_draft = value
     },
     /**
-     * Actualiza contadores de badges (Míos / Otros) con petición ligera, agrupada en ráfagas.
+     * Actualiza el contador de no leídos con una petición ligera, agrupada en ráfagas.
      */
     schedule_refresh_unread_badges() {
       const self = this
@@ -926,7 +892,6 @@ export default {
       this.$store.dispatch('support_message/load_ticket_messages', ticket_id)
       const ticket = this.tickets.find((t) => t.id == ticket_id)
       if (ticket) {
-        this.assigned_admin_id = ticket.assigned_admin_id || this.current_admin_id
         this.ticket_name_draft = ticket.name == null ? '' : String(ticket.name)
         this.ticket_status_draft = ticket.status === 'closed' ? 'closed' : 'open'
       } else {
@@ -1150,13 +1115,12 @@ export default {
       this.ai_reasoning = ''
       this.ticket_name_draft = ''
       this.ticket_status_draft = 'open'
-      this.assigned_admin_id = this.current_admin_id
       this.$store.commit('support_message/set_active_ticket_id', null)
       this.$store.commit('support_message/set_models', [])
       this.$store.commit('support_message/set_messages_loading', false)
     },
     /**
-     * Persiste nombre, operador asignado y estado del ticket en un único PUT.
+     * Persiste nombre y estado del ticket en un único PUT (el ticket no tiene operador asignado).
      * nextTick: deja encolar el último input/change de los controles antes de leer this.*.
      */
     save_header() {
@@ -1175,13 +1139,11 @@ export default {
           .dispatch('support_ticket/update_ticket', {
             id: self.selected_ticket.id,
             name: name_trimmed || null,
-            assigned_admin_id: self.assigned_admin_id,
             status: status_value,
           })
           .then(function (model) {
             if (model) {
               self.ticket_name_draft = model.name == null ? '' : String(model.name)
-              self.assigned_admin_id = model.assigned_admin_id != null ? model.assigned_admin_id : self.current_admin_id
               self.ticket_status_draft = model.status === 'closed' ? 'closed' : 'open'
             }
           })

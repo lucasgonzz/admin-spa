@@ -1,7 +1,7 @@
 <template>
   <!--
     Cabecera del panel: arriba, con quién se habla (nombre y teléfono del contacto); abajo,
-    nombre del ticket, asignación, estado, Guardar (API) y Salir.
+    nombre del ticket, estado, Guardar (API) y Salir. El ticket no tiene operador asignado.
   -->
   <div class="support-conversation-header d-flex flex-column gap-2 flex-shrink-0 w-100">
     <div v-if="has_ticket" class="d-flex align-items-center gap-2 w-100 min-w-0">
@@ -45,11 +45,6 @@
         :ticket_name_draft="ticket_name_draft"
         :ticket_has_name="ticket_has_stored_name"
         @update:ticket_name_draft="on_update_draft" />
-      <ticket-assignee-select
-        :has_ticket="has_ticket"
-        :assigned_admin_id="assigned_admin_id"
-        :admin_rows="admin_rows"
-        @update:assigned_admin_id="on_update_assignee" />
       <ticket-status-select
         :has_ticket="has_ticket"
         :ticket_status_draft="ticket_status_draft"
@@ -85,7 +80,6 @@
 <script>
 import TicketNameField from './TicketNameField.vue'
 import TicketSourceBadge from './TicketSourceBadge.vue'
-import TicketAssigneeSelect from './TicketAssigneeSelect.vue'
 import TicketStatusSelect from './TicketStatusSelect.vue'
 import TicketConversationActions from './TicketConversationActions.vue'
 import TicketAgentControls from './TicketAgentControls.vue'
@@ -93,14 +87,13 @@ import TicketAiSuggestionButton from './TicketAiSuggestionButton.vue'
 import TicketContactInfo from './TicketContactInfo.vue'
 
 /**
- * Agrupa controles del hilo y un único guardado HTTP para nombre, asignado y estado.
+ * Agrupa controles del hilo y un único guardado HTTP para nombre y estado.
  */
 export default {
   name: 'ConversationHeader',
   components: {
     TicketNameField,
     TicketSourceBadge,
-    TicketAssigneeSelect,
     TicketStatusSelect,
     TicketConversationActions,
     TicketAgentControls,
@@ -112,7 +105,6 @@ export default {
    */
   emits: [
     'update:ticket_name_draft',
-    'update:assigned_admin_id',
     'update:ticket_status_draft',
     'save-header',
     'exit-ticket',
@@ -137,27 +129,11 @@ export default {
       default: '',
     },
     /**
-     * Id seleccionado en el combo de asignación.
-     */
-    assigned_admin_id: {
-      type: [Number, String],
-      default: null,
-    },
-    /**
      * Estado local open | closed antes del PUT.
      */
     ticket_status_draft: {
       type: String,
       default: 'open',
-    },
-    /**
-     * Lista de admins para el select (desde inbox_nav filtrado).
-     */
-    admin_rows: {
-      type: Array,
-      default: function () {
-        return []
-      },
     },
     /**
      * true mientras corre update_ticket del header.
@@ -221,15 +197,6 @@ export default {
   },
   computed: {
     /**
-     * Id del operador logueado (misma fuente que Support.vue al abrir el ticket).
-     *
-     * @returns {number|string|null}
-     */
-    current_admin_id() {
-      const a = this.$store.state.auth && this.$store.state.auth.admin
-      return a ? a.id : null
-    },
-    /**
      * Atajo para condicionar hijos.
      *
      * @returns {boolean}
@@ -274,32 +241,6 @@ export default {
       return String(stored).trim() !== ''
     },
     /**
-     * Id efectivo almacenado (null en ticket → se muestra operador actual).
-     *
-     * @returns {number|null}
-     */
-    effective_stored_assign() {
-      const t = this.selected_ticket
-      if (!t) {
-        return null
-      }
-      if (t.assigned_admin_id != null && t.assigned_admin_id !== '') {
-        return Number(t.assigned_admin_id)
-      }
-      return this.current_admin_id != null && this.current_admin_id !== '' ? Number(this.current_admin_id) : null
-    },
-    /**
-     * Id efectivo de los controles (misma regla que al abrir el ticket en Support.vue).
-     *
-     * @returns {number|null}
-     */
-    effective_draft_assign() {
-      if (this.assigned_admin_id != null && this.assigned_admin_id !== '') {
-        return Number(this.assigned_admin_id)
-      }
-      return this.current_admin_id != null && this.current_admin_id !== '' ? Number(this.current_admin_id) : null
-    },
-    /**
      * Diferencia en nombre respecto al modelo.
      *
      * @returns {boolean}
@@ -311,22 +252,6 @@ export default {
       }
       const stored = t.name == null || t.name === undefined ? '' : String(t.name)
       return String(this.ticket_name_draft).trim() !== String(stored).trim()
-    },
-    /**
-     * Diferencia en asignatario.
-     *
-     * @returns {boolean}
-     */
-    assign_is_changed() {
-      if (!this.selected_ticket) {
-        return false
-      }
-      const a = this.effective_stored_assign
-      const b = this.effective_draft_assign
-      if (a == null && b == null) {
-        return false
-      }
-      return String(a) !== String(b)
     },
     /**
      * Diferencia de estado open/closed.
@@ -350,7 +275,7 @@ export default {
       if (!this.selected_ticket || this.saving_header) {
         return false
       }
-      return this.name_is_changed || this.assign_is_changed || this.status_is_changed
+      return this.name_is_changed || this.status_is_changed
     },
   },
   methods: {
@@ -362,15 +287,6 @@ export default {
      */
     on_update_draft(value) {
       this.$emit('update:ticket_name_draft', value)
-    },
-    /**
-     * Sincroniza admin asignado (v-model:assigned_admin_id hacia abajo).
-     *
-     * @param {number|null} admin_id Id de operador
-     * @returns {void}
-     */
-    on_update_assignee(admin_id) {
-      this.$emit('update:assigned_admin_id', admin_id)
     },
     /**
      * Sincroniza estado del ticket (v-model:ticket_status_draft hacia abajo).
