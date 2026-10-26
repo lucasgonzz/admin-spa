@@ -11,186 +11,198 @@
         <span class="visually-hidden">Cargando mensajes…</span>
       </div>
       <template v-else>
-      <div
-        v-for="message in messages"
-        :key="message_key(message)"
-        :class="['support-message-row', message.sender_type == 'admin' ? 'mine' : 'their']">
-        <div class="support-message-col">
-          <border-progress-wrap
-            :active="is_ai_draft_auto_send_active(message)"
-            :duration_seconds="ai_draft_total_seconds(message)"
-            :elapsed_seconds="ai_draft_elapsed_seconds(message)"
-            :animation_key="ai_draft_animation_key(message)"
-            variant="bubble">
-            <div
-              :class="[
-                'support-message-bubble',
-                has_delivery_error(message) ? 'support-message-bubble--error' : '',
-                is_ai_draft_message(message) ? 'support-message-bubble--ai-draft' : '',
-              ]"
-              :title="message_sent_at_tooltip(message)">
+      <!-- Mensajes agrupados por día con divisor sticky estilo WhatsApp (Hoy / Ayer / día / fecha),
+           con el mismo marcado que la conversación de leads. -->
+      <div class="conversation-messages-flow support-messages-flow">
+        <div
+          v-for="section in message_date_sections"
+          :key="section.key"
+          class="wa-date-section">
+          <div v-if="section.date_label" class="wa-date-divider">
+            <span class="wa-date-divider-label">{{ section.date_label }}</span>
+          </div>
+          <div
+            v-for="message in section.messages"
+            :key="message_key(message)"
+            :class="['support-message-row', message.sender_type == 'admin' ? 'mine' : 'their']">
+            <div class="support-message-col">
+              <border-progress-wrap
+                :active="is_ai_draft_auto_send_active(message)"
+                :duration_seconds="ai_draft_total_seconds(message)"
+                :elapsed_seconds="ai_draft_elapsed_seconds(message)"
+                :animation_key="ai_draft_animation_key(message)"
+                variant="bubble">
+                <div
+                  :class="[
+                    'support-message-bubble',
+                    has_delivery_error(message) ? 'support-message-bubble--error' : '',
+                    is_ai_draft_message(message) ? 'support-message-bubble--ai-draft' : '',
+                  ]"
+                  :title="message_sent_at_tooltip(message)">
+                  <div
+                    v-if="message.body && !should_hide_body_for_remote_image(message)"
+                    class="support-message-text">
+                    {{ message.body }}
+                  </div>
+                <!-- Imagen remota (Kapso) cuando no hay adjunto local -->
+                <template
+                  v-if="message.kind === 'image' && remote_image_url_from_message(message) && !has_local_attachment(message)">
+                  <button
+                    type="button"
+                    class="support-message-image-btn"
+                    title="Ver imagen en grande"
+                    @click="open_image_preview(remote_image_url_from_message(message))">
+                    <img
+                      :src="remote_image_url_from_message(message)"
+                      class="support-message-image"
+                      alt="Imagen de WhatsApp"
+                      @error="on_remote_image_error" />
+                  </button>
+                  <a
+                    :href="remote_image_url_from_message(message)"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="support-message-remote-link small">
+                    Abrir imagen
+                  </a>
+                </template>
+                <!-- Renderizado diferenciado según tipo de adjunto -->
+                <template v-if="has_local_attachment(message)">
+                  <!-- Reproductor inline para mensajes de audio -->
+                  <audio
+                    v-if="message.kind === 'audio'"
+                    controls
+                    :src="attachment_url(message.attachments[0])"
+                    class="support-message-audio"
+                    preload="metadata">
+                    Tu navegador no soporta reproducción de audio.
+                  </audio>
+                  <!-- Miniatura: abre visor en la misma página -->
+                  <button
+                    v-else-if="message.kind === 'image'"
+                    type="button"
+                    class="support-message-image-btn"
+                    title="Ver imagen en grande"
+                    @click="open_image_preview(attachment_url(message.attachments[0]))">
+                    <img
+                      :src="attachment_url(message.attachments[0])"
+                      class="support-message-image"
+                      alt="Imagen adjunta" />
+                  </button>
+                  <!-- Fallback genérico para otros tipos de adjunto -->
+                  <a
+                    v-else
+                    :href="attachment_url(message.attachments[0])"
+                    target="_blank">
+                    Ver adjunto
+                  </a>
+                </template>
+                <div
+                  v-if="message.kind === 'image' && !has_local_attachment(message) && !remote_image_url_from_message(message) && !message.body"
+                  class="support-message-placeholder text-muted">
+                  [Imagen]
+                </div>
+                </div>
+              </border-progress-wrap>
+
+              <!-- Borrador del agente esperando aprobación: se lee, se corrige y se manda acá.
+                   Con ai_auto_send_at en null no hay contador, porque no se manda solo. -->
+              <div v-if="is_ai_draft_message(message)" class="support-ai-draft-actions">
+                <template v-if="editing_draft_id === message.id">
+                  <textarea
+                    v-model="draft_edit_text"
+                    class="form-control form-control-sm support-ai-draft-textarea"
+                    rows="4"
+                    :disabled="draft_busy"></textarea>
+                  <div class="support-ai-draft-buttons">
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-success"
+                      :disabled="draft_busy || !draft_edit_text.trim()"
+                      @click="send_draft(message, draft_edit_text)">
+                      Enviar con mis ajustes
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline-secondary"
+                      :disabled="draft_busy"
+                      @click="cancel_draft_edit()">
+                      Cancelar
+                    </button>
+                  </div>
+                </template>
+                <template v-else>
+                  <span class="support-ai-draft-label">
+                    {{ is_ai_draft_auto_send_active(message) ? 'Se envía solo en unos segundos' : 'Esperando tu aprobación' }}
+                  </span>
+                  <div class="support-ai-draft-buttons">
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-success"
+                      :disabled="draft_busy"
+                      @click="send_draft(message, null)">
+                      Enviar
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline-primary"
+                      :disabled="draft_busy"
+                      @click="start_draft_edit(message)">
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline-danger"
+                      :disabled="draft_busy"
+                      @click="$emit('discard-draft', message)">
+                      Descartar
+                    </button>
+                  </div>
+                </template>
+              </div>
+
               <div
-                v-if="message.body && !should_hide_body_for_remote_image(message)"
-                class="support-message-text">
-                {{ message.body }}
+                v-if="is_mine(message) && has_delivery_error(message)"
+                class="support-message-error-row">
+                <span class="support-message-error-text">{{ delivery_error_label(message) }}</span>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-danger support-message-retry-btn"
+                  @click="$emit('retry-message', message)">
+                  Reintentar
+                </button>
               </div>
-            <!-- Imagen remota (Kapso) cuando no hay adjunto local -->
-            <template
-              v-if="message.kind === 'image' && remote_image_url_from_message(message) && !has_local_attachment(message)">
-              <button
-                type="button"
-                class="support-message-image-btn"
-                title="Ver imagen en grande"
-                @click="open_image_preview(remote_image_url_from_message(message))">
-                <img
-                  :src="remote_image_url_from_message(message)"
-                  class="support-message-image"
-                  alt="Imagen de WhatsApp"
-                  @error="on_remote_image_error" />
-              </button>
-              <a
-                :href="remote_image_url_from_message(message)"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="support-message-remote-link small">
-                Abrir imagen
-              </a>
-            </template>
-            <!-- Renderizado diferenciado según tipo de adjunto -->
-            <template v-if="has_local_attachment(message)">
-              <!-- Reproductor inline para mensajes de audio -->
-              <audio
-                v-if="message.kind === 'audio'"
-                controls
-                :src="attachment_url(message.attachments[0])"
-                class="support-message-audio"
-                preload="metadata">
-                Tu navegador no soporta reproducción de audio.
-              </audio>
-              <!-- Miniatura: abre visor en la misma página -->
-              <button
-                v-else-if="message.kind === 'image'"
-                type="button"
-                class="support-message-image-btn"
-                title="Ver imagen en grande"
-                @click="open_image_preview(attachment_url(message.attachments[0]))">
-                <img
-                  :src="attachment_url(message.attachments[0])"
-                  class="support-message-image"
-                  alt="Imagen adjunta" />
-              </button>
-              <!-- Fallback genérico para otros tipos de adjunto -->
-              <a
-                v-else
-                :href="attachment_url(message.attachments[0])"
-                target="_blank">
-                Ver adjunto
-              </a>
-            </template>
-            <div
-              v-if="message.kind === 'image' && !has_local_attachment(message) && !remote_image_url_from_message(message) && !message.body"
-              class="support-message-placeholder text-muted">
-              [Imagen]
+              <div
+                v-else-if="is_mine(message) && is_last_mine_message(message)"
+                class="support-message-meta">
+                <span
+                  v-if="message._client_pending"
+                  class="support-meta-sending"
+                  aria-label="Enviando">Enviando…</span>
+                <template v-else>
+                  <span
+                    v-if="message.whatsapp_message_id"
+                    class="support-meta-whatsapp"
+                    title="Enviado por WhatsApp">
+                    <i class="bi bi-whatsapp" aria-hidden="true"></i>
+                  </span>
+                  <span
+                    v-if="message.read_at"
+                    class="support-meta-read">Visto a las {{ format_read_time(message.read_at) }}</span>
+                  <span
+                    v-else-if="show_delivery_tick(message)"
+                    class="support-meta-delivery"
+                    :title="delivery_remote_title(message)">
+                    <i
+                      v-if="message.synced_to_client_at"
+                      class="bi bi-check2-all support-tick-double"></i>
+                    <i
+                      v-else
+                      class="bi bi-check2 support-tick-single"></i>
+                  </span>
+                </template>
+              </div>
             </div>
-            </div>
-          </border-progress-wrap>
-
-          <!-- Borrador del agente esperando aprobación: se lee, se corrige y se manda acá.
-               Con ai_auto_send_at en null no hay contador, porque no se manda solo. -->
-          <div v-if="is_ai_draft_message(message)" class="support-ai-draft-actions">
-            <template v-if="editing_draft_id === message.id">
-              <textarea
-                v-model="draft_edit_text"
-                class="form-control form-control-sm support-ai-draft-textarea"
-                rows="4"
-                :disabled="draft_busy"></textarea>
-              <div class="support-ai-draft-buttons">
-                <button
-                  type="button"
-                  class="btn btn-sm btn-success"
-                  :disabled="draft_busy || !draft_edit_text.trim()"
-                  @click="send_draft(message, draft_edit_text)">
-                  Enviar con mis ajustes
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-outline-secondary"
-                  :disabled="draft_busy"
-                  @click="cancel_draft_edit()">
-                  Cancelar
-                </button>
-              </div>
-            </template>
-            <template v-else>
-              <span class="support-ai-draft-label">
-                {{ is_ai_draft_auto_send_active(message) ? 'Se envía solo en unos segundos' : 'Esperando tu aprobación' }}
-              </span>
-              <div class="support-ai-draft-buttons">
-                <button
-                  type="button"
-                  class="btn btn-sm btn-success"
-                  :disabled="draft_busy"
-                  @click="send_draft(message, null)">
-                  Enviar
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-outline-primary"
-                  :disabled="draft_busy"
-                  @click="start_draft_edit(message)">
-                  Editar
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-outline-danger"
-                  :disabled="draft_busy"
-                  @click="$emit('discard-draft', message)">
-                  Descartar
-                </button>
-              </div>
-            </template>
-          </div>
-
-          <div
-            v-if="is_mine(message) && has_delivery_error(message)"
-            class="support-message-error-row">
-            <span class="support-message-error-text">{{ delivery_error_label(message) }}</span>
-            <button
-              type="button"
-              class="btn btn-sm btn-outline-danger support-message-retry-btn"
-              @click="$emit('retry-message', message)">
-              Reintentar
-            </button>
-          </div>
-          <div
-            v-else-if="is_mine(message) && is_last_mine_message(message)"
-            class="support-message-meta">
-            <span
-              v-if="message._client_pending"
-              class="support-meta-sending"
-              aria-label="Enviando">Enviando…</span>
-            <template v-else>
-              <span
-                v-if="message.whatsapp_message_id"
-                class="support-meta-whatsapp"
-                title="Enviado por WhatsApp">
-                <i class="bi bi-whatsapp" aria-hidden="true"></i>
-              </span>
-              <span
-                v-if="message.read_at"
-                class="support-meta-read">Visto a las {{ format_read_time(message.read_at) }}</span>
-              <span
-                v-else-if="show_delivery_tick(message)"
-                class="support-meta-delivery"
-                :title="delivery_remote_title(message)">
-                <i
-                  v-if="message.synced_to_client_at"
-                  class="bi bi-check2-all support-tick-double"></i>
-                <i
-                  v-else
-                  class="bi bi-check2 support-tick-single"></i>
-              </span>
-            </template>
           </div>
         </div>
       </div>
@@ -237,7 +249,9 @@ import api from '@/utils/axios'
 import ImageLightbox from '@/components/common/ImageLightbox.vue'
 import BorderProgressWrap from '@/components/support/BorderProgressWrap.vue'
 import SupportTemplatePickerModal from '@/components/support/SupportTemplatePickerModal.vue'
+import lead_conversation_date_dividers from '@/mixins/lead_conversation_date_dividers'
 import '@/styles/whatsapp-conversation-wallpaper.css'
+import '@/styles/whatsapp-date-divider.css'
 
 export default {
   name: 'SupportConversation',
@@ -246,6 +260,8 @@ export default {
     BorderProgressWrap,
     SupportTemplatePickerModal,
   },
+  /* Secciones por día (message_date_sections) a partir del computed sorted_messages. */
+  mixins: [lead_conversation_date_dividers],
   emits: ['retry-message', 'send-draft', 'discard-draft'],
   props: {
     messages: { type: Array, default: () => [] },
@@ -285,6 +301,26 @@ export default {
     }
   },
   computed: {
+    /**
+     * Mensajes del hilo para el mixin de divisores de fecha, en el orden en que vienen del store.
+     *
+     * Los pendientes del operador (`_client_pending`, el optimista de send_message) no traen
+     * `created_at`: sin fecha el mixin los dejaría en una sección sin divisor. Se les completa
+     * la hora local en una copia, sin mutar el store, para que caigan en la sección de hoy.
+     *
+     * @returns {Array<Object>}
+     */
+    sorted_messages() {
+      const list = Array.isArray(this.messages) ? this.messages : []
+      const ahora = new Date().toISOString()
+      return list.map(function (message) {
+        const fecha = message && message.created_at ? new Date(message.created_at) : null
+        if (fecha && !isNaN(fecha.getTime())) {
+          return message
+        }
+        return Object.assign({}, message, { created_at: message.delivered_at || ahora })
+      })
+    },
     /**
      * Ticket abierto en el hilo.
      *
@@ -905,6 +941,11 @@ export default {
   z-index: 2;
   min-height: 8rem;
   background: rgba(239, 234, 226, 0.92);
+}
+
+/* El flujo de secciones ya separa con gap: las filas no suman su margen propio. */
+.support-messages-flow .support-message-row {
+  margin-bottom: 0;
 }
 
 /* Marcador cero altura; scrollIntoView alinea el scroll al final del hilo. */

@@ -3,7 +3,12 @@
     Altura: ocupa el alto visible del contenedor (viewport menos padding de main;
     overflow: hidden para que solo conversación y listado lateral tengan scroll).
   -->
-  <div class="support-view d-flex w-100">
+  <!--
+    Teléfono (<768px): en /soporte se ve solo la bandeja; tocar un ticket abre
+    /soporte/ticket/:id, donde se ve solo la conversación a pantalla completa, como en leads.
+    Escritorio: bandeja y conversación lado a lado en las dos rutas.
+  -->
+  <div class="support-view d-flex w-100" :class="support_view_class">
 
     <!-- Parte izquierda -->
     <div class="support-left d-flex flex-column min-h-0">
@@ -48,7 +53,7 @@
         :selected_ticket_id="selected_ticket_id"
         :support_alert_minutes="support_alert_minutes"
         :now_tick="now_tick"
-        @select-ticket="select_ticket"
+        @select-ticket="on_ticket_list_select"
         @create-ticket="create_ticket" />
     </div>
 
@@ -67,11 +72,13 @@
           :ai_suggestion_loading="loading_suggestion"
           :ai_suggestion_disabled="ai_suggestion_disabled"
           :ai_consult_timer="active_ai_consult_timer_for_input"
+          :show_back="is_mobile && is_conversation_route"
           @update:ticket_name_draft="set_header_ticket_name_draft"
           @update:assigned_admin_id="set_header_assigned_admin_id"
           @update:ticket_status_draft="set_header_ticket_status_draft"
           @save-header="save_header"
-          @exit-ticket="deselect_ticket"
+          @exit-ticket="on_exit_ticket"
+          @back="volver_a_la_lista"
           @toggle-agent="toggle_agent"
           @toggle-verification="toggle_verification"
           @request-suggestion="request_suggestion" />
@@ -180,9 +187,43 @@ export default {
       draft_busy: false,
       /** Modal de alta manual de ticket (select de cliente). */
       create_ticket_modal_visible: false,
+      /** Ancho de teléfono (<768px): bandeja y conversación van en pantallas separadas. */
+      is_mobile: typeof window !== 'undefined' ? window.innerWidth < 768 : false,
     }
   },
   computed: {
+    /**
+     * true en /soporte/ticket/:ticket_id (conversación a pantalla completa en teléfono).
+     *
+     * @returns {boolean}
+     */
+    is_conversation_route() {
+      return !!(this.$route && this.$route.name === 'support_ticket_conversation')
+    },
+    /**
+     * Id del ticket que viene en la ruta de conversación; null en /soporte.
+     *
+     * @returns {string|null}
+     */
+    route_ticket_id() {
+      if (!this.is_conversation_route || !this.$route.params) {
+        return null
+      }
+      const id = this.$route.params.ticket_id
+      return id == null || id === '' ? null : String(id)
+    },
+    /**
+     * Clases del contenedor según ancho y ruta (ver el comentario del template).
+     *
+     * @returns {Object}
+     */
+    support_view_class() {
+      return {
+        'support-view--fullscreen': this.is_conversation_route,
+        'support-view--mobile-list': this.is_mobile && !this.is_conversation_route,
+        'support-view--mobile-conversation': this.is_mobile && this.is_conversation_route,
+      }
+    },
     /**
      * Tickets cargados desde módulo Vuex de soporte.
      */
@@ -397,6 +438,16 @@ export default {
   },
   watch: {
     /**
+     * En la ruta de conversación, si cambia el ticket de la URL (otro ticket desde la bandeja
+     * en escritorio, o atrás/adelante del navegador) se abre ese.
+     */
+    route_ticket_id(value) {
+      if (!value || String(value) === String(this.selected_ticket_id)) {
+        return
+      }
+      this.abrir_ticket_de_la_ruta()
+    },
+    /**
      * Carga suscripción (admin + optional client) cuando haya id de operador o al cambiar de hilo.
      */
     support_socket_fingerprint: {
@@ -423,8 +474,30 @@ export default {
     if (this.filtro_activo) {
       this.$store.commit('support_ticket/set_assigned_filter', 'all')
     }
+    /* Teléfono con ?ticket_id= (link del WhatsApp de escalado): la conversación va en su
+       propia pantalla, así que se pasa a la ruta de conversación conservando el filtro. */
+    if (this.is_mobile && !this.is_conversation_route && this.$route.query && this.$route.query.ticket_id) {
+      this.$router
+        .replace({
+          name: 'support_ticket_conversation',
+          params: { ticket_id: String(this.$route.query.ticket_id) },
+          query: this.query_del_filtro(),
+        })
+        .catch(function () {})
+      return
+    }
     this.$store.dispatch('support_ticket/get_models').then(function () {
+      /* Ruta de conversación: se abre el ticket de la URL y nada más. */
+      if (self.is_conversation_route) {
+        self.abrir_ticket_de_la_ruta()
+        return
+      }
       if (self.abrir_ticket_del_query_param()) {
+        return
+      }
+      /* En teléfono /soporte es solo la bandeja: abrir un ticket solo no tiene sentido porque
+         la conversación no se ve hasta que el operador toca uno. */
+      if (self.is_mobile) {
         return
       }
       /* El auto-seleccionado va sobre la lista YA filtrada: con el filtro puesto, abrir un
@@ -436,9 +509,11 @@ export default {
   },
   mounted() {
     window.addEventListener('support-ticket-alert', this.on_support_ticket_alert)
+    window.addEventListener('resize', this.on_window_resize)
   },
   beforeUnmount() {
     window.removeEventListener('support-ticket-alert', this.on_support_ticket_alert)
+    window.removeEventListener('resize', this.on_window_resize)
     if (this.unread_badges_debounce_timer) {
       clearTimeout(this.unread_badges_debounce_timer)
     }
@@ -448,6 +523,120 @@ export default {
     this.teardown_support_socket()
   },
   methods: {
+    /**
+     * Recalcula si el ancho es de teléfono al redimensionar o rotar.
+     *
+     * @returns {void}
+     */
+    on_window_resize() {
+      this.is_mobile = window.innerWidth < 768
+    },
+    /**
+     * Query a conservar al ir y volver entre la bandeja y la conversación: solo el `filtro`
+     * del deep link del panel de inicio (el chip tiene que seguir puesto al volver).
+     *
+     * @returns {Object}
+     */
+    query_del_filtro() {
+      const filtro = this.$route && this.$route.query ? this.$route.query.filtro : null
+      return filtro ? { filtro: filtro } : {}
+    },
+    /**
+     * Click en una fila de la bandeja.
+     *
+     * En teléfono, desde /soporte, abre la conversación en su propia pantalla. En escritorio
+     * sobre la ruta de conversación cambia el id de la URL (el watch de route_ticket_id lo abre).
+     * En cualquier otro caso selecciona en el lugar, como siempre.
+     *
+     * @param {number|string} ticket_id
+     * @returns {void}
+     */
+    on_ticket_list_select(ticket_id) {
+      if (this.is_conversation_route) {
+        if (String(ticket_id) === String(this.route_ticket_id)) {
+          return
+        }
+        this.$router
+          .replace({
+            name: 'support_ticket_conversation',
+            params: { ticket_id: String(ticket_id) },
+            query: this.query_del_filtro(),
+          })
+          .catch(function () {})
+        return
+      }
+      if (this.is_mobile) {
+        this.$router
+          .push({
+            name: 'support_ticket_conversation',
+            params: { ticket_id: String(ticket_id) },
+            query: this.query_del_filtro(),
+          })
+          .catch(function () {})
+        return
+      }
+      this.select_ticket(ticket_id)
+    },
+    /**
+     * Vuelve de la conversación a pantalla completa a la bandeja, con el filtro que hubiera.
+     *
+     * @returns {void}
+     */
+    volver_a_la_lista() {
+      this.$router.push({ name: 'support', query: this.query_del_filtro() }).catch(function () {})
+    },
+    /**
+     * "Salir" del header: en la ruta de conversación vuelve a la bandeja (esa ruta no tiene la
+     * barra de navegación); en /soporte solo deselecciona, como siempre.
+     *
+     * @returns {void}
+     */
+    on_exit_ticket() {
+      if (this.is_conversation_route) {
+        this.volver_a_la_lista()
+        return
+      }
+      this.deselect_ticket()
+    },
+    /**
+     * Abre el ticket de /soporte/ticket/:ticket_id.
+     *
+     * Mismo criterio que abrir_ticket_del_query_param: si no está en la bandeja cargada (el
+     * filtro por defecto es "míos"), se lo trae con un GET puntual. Si no se puede traer, se
+     * vuelve a la bandeja en vez de dejar una conversación vacía sin explicación.
+     *
+     * @returns {void}
+     */
+    abrir_ticket_de_la_ruta() {
+      const ticket_id = this.route_ticket_id
+      if (!ticket_id) {
+        return
+      }
+      const ya_esta = this.tickets.some(function (ticket) {
+        return String(ticket.id) === String(ticket_id)
+      })
+      if (ya_esta) {
+        this.select_ticket(ticket_id)
+        return
+      }
+      const self = this
+      api
+        .get('/support-ticket/' + ticket_id)
+        .then(function (response) {
+          const model = response.data && response.data.model
+          /* La respuesta puede llegar con otro ticket ya en la URL. */
+          if (!model || String(self.route_ticket_id) !== String(ticket_id)) {
+            return
+          }
+          self.$store.commit('support_ticket/upsert_from_broadcast', model)
+          self.select_ticket(model.id)
+        })
+        .catch(function () {
+          if (String(self.route_ticket_id) === String(ticket_id)) {
+            self.volver_a_la_lista()
+          }
+        })
+    },
     /**
      * GET umbral de alertas para badges en TicketList.
      *
@@ -1044,6 +1233,33 @@ export default {
   min-height: 0;
   box-sizing: border-box;
   overflow: hidden;
+}
+
+/* Ruta de conversación (hide_app_nav): <main> va sin padding, así que ocupa todo el alto.
+   100dvh y no 100vh: en el teléfono deja el input de mensaje arriba de la barra del navegador. */
+.support-view--fullscreen {
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
+/* Teléfono en /soporte: solo la bandeja, a todo el ancho. */
+.support-view--mobile-list .support-left {
+  width: 100%;
+  min-width: 0;
+  border-right: none;
+}
+
+.support-view--mobile-list .support-right {
+  display: none !important;
+}
+
+/* Teléfono en la conversación: solo el hilo, a todo el ancho y alto. */
+.support-view--mobile-conversation .support-left {
+  display: none !important;
+}
+
+.support-view--mobile-conversation .support-right {
+  width: 100%;
 }
 
 .support-left {

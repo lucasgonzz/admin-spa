@@ -1,48 +1,65 @@
 <template>
   <!--
-    Cabecera del panel: nombre, asignación, estado, Guardar (API) y Salir.
+    Cabecera del panel: arriba, con quién se habla (nombre y teléfono del contacto); abajo,
+    nombre del ticket, asignación, estado, Guardar (API) y Salir.
   -->
-  <div class="support-conversation-header d-flex align-items-center flex-wrap gap-2 flex-shrink-0 w-100">
-    <ticket-source-badge
+  <div class="support-conversation-header d-flex flex-column gap-2 flex-shrink-0 w-100">
+    <ticket-contact-info
       v-if="has_ticket"
-      :ticket_source="selected_ticket.source || 'erp'" />
-    <ticket-name-field
-      :has_ticket="has_ticket"
-      :ticket_name_draft="ticket_name_draft"
-      :ticket_has_name="ticket_has_stored_name"
-      @update:ticket_name_draft="on_update_draft" />
-    <ticket-assignee-select
-      :has_ticket="has_ticket"
-      :assigned_admin_id="assigned_admin_id"
-      :admin_rows="admin_rows"
-      @update:assigned_admin_id="on_update_assignee" />
-    <ticket-status-select
-      :has_ticket="has_ticket"
-      :ticket_status_draft="ticket_status_draft"
-      @update:ticket_status_draft="on_update_status" />
-    <ticket-agent-controls
-      :has_ticket="has_ticket"
-      :agent_on="agent_on"
-      :verification_on="verification_on"
-      :saving="saving_agent_controls"
-      @toggle-agent="$emit('toggle-agent')"
-      @toggle-verification="$emit('toggle-verification')" />
-    <ticket-ai-suggestion-button
-      :has_ticket="has_ticket"
-      :loading="ai_suggestion_loading"
-      :disabled="ai_suggestion_disabled"
-      :consult_timer="ai_consult_timer"
-      @request-suggestion="$emit('request-suggestion')" />
-    <div class="ms-auto d-flex align-items-center gap-2 flex-shrink-0 ticket-header-actions-end">
-      <button
-        type="button"
-        class="btn btn-sm btn-primary flex-shrink-0"
-        :disabled="!save_button_enabled"
-        @click="$emit('save-header')">
-        <span v-if="saving_header" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-        <span v-else>Guardar</span>
-      </button>
-      <ticket-conversation-actions :has_ticket="has_ticket" @exit-ticket="$emit('exit-ticket')" />
+      :ticket="selected_ticket"
+      :show_back="show_back"
+      @back="$emit('back')" />
+    <button
+      v-else-if="show_back"
+      type="button"
+      class="btn btn-link p-0 align-self-start support-conversation-header-back"
+      title="Volver a los tickets"
+      aria-label="Volver a los tickets"
+      @click="$emit('back')">
+      <i class="bi bi-arrow-left" aria-hidden="true"></i>
+    </button>
+    <div class="d-flex align-items-center flex-wrap gap-2 w-100">
+      <ticket-source-badge
+        v-if="has_ticket"
+        :ticket_source="selected_ticket.source || 'erp'" />
+      <ticket-name-field
+        :has_ticket="has_ticket"
+        :ticket_name_draft="ticket_name_draft"
+        :ticket_has_name="ticket_has_stored_name"
+        @update:ticket_name_draft="on_update_draft" />
+      <ticket-assignee-select
+        :has_ticket="has_ticket"
+        :assigned_admin_id="assigned_admin_id"
+        :admin_rows="admin_rows"
+        @update:assigned_admin_id="on_update_assignee" />
+      <ticket-status-select
+        :has_ticket="has_ticket"
+        :ticket_status_draft="ticket_status_draft"
+        @update:ticket_status_draft="on_update_status" />
+      <ticket-agent-controls
+        :has_ticket="has_ticket"
+        :agent_on="agent_on"
+        :verification_on="verification_on"
+        :saving="saving_agent_controls"
+        @toggle-agent="$emit('toggle-agent')"
+        @toggle-verification="$emit('toggle-verification')" />
+      <ticket-ai-suggestion-button
+        :has_ticket="has_ticket"
+        :loading="ai_suggestion_loading"
+        :disabled="ai_suggestion_disabled"
+        :consult_timer="ai_consult_timer"
+        @request-suggestion="$emit('request-suggestion')" />
+      <div class="ms-auto d-flex align-items-center gap-2 flex-shrink-0 ticket-header-actions-end">
+        <button
+          type="button"
+          class="btn btn-sm btn-primary flex-shrink-0"
+          :disabled="!save_button_enabled"
+          @click="$emit('save-header')">
+          <span v-if="saving_header" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+          <span v-else>Guardar</span>
+        </button>
+        <ticket-conversation-actions :has_ticket="has_ticket" @exit-ticket="$emit('exit-ticket')" />
+      </div>
     </div>
   </div>
 </template>
@@ -55,6 +72,7 @@ import TicketStatusSelect from './TicketStatusSelect.vue'
 import TicketConversationActions from './TicketConversationActions.vue'
 import TicketAgentControls from './TicketAgentControls.vue'
 import TicketAiSuggestionButton from './TicketAiSuggestionButton.vue'
+import TicketContactInfo from './TicketContactInfo.vue'
 
 /**
  * Agrupa controles del hilo y un único guardado HTTP para nombre, asignado y estado.
@@ -69,6 +87,7 @@ export default {
     TicketConversationActions,
     TicketAgentControls,
     TicketAiSuggestionButton,
+    TicketContactInfo,
   },
   /**
    * Vue 3: v-model:prop requiere emitir update:prop; se declara para evitar fallos de two-way.
@@ -82,6 +101,7 @@ export default {
     'toggle-agent',
     'toggle-verification',
     'request-suggestion',
+    'back',
   ],
   props: {
     /**
@@ -155,6 +175,13 @@ export default {
     ai_consult_timer: {
       type: Object,
       default: null,
+    },
+    /**
+     * Muestra la flecha de volver a la lista (vista de teléfono, conversación a pantalla completa).
+     */
+    show_back: {
+      type: Boolean,
+      default: false,
     },
   },
   computed: {
@@ -322,3 +349,12 @@ export default {
   },
 }
 </script>
+
+<style scoped>
+.support-conversation-header-back {
+  font-size: 1.35rem;
+  line-height: 1;
+  color: var(--bs-body-color);
+  text-decoration: none;
+}
+</style>

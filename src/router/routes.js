@@ -436,6 +436,17 @@ const routes_def = [
     meta: { requiresAuth: true, nav: false, hide_app_nav: true },
   },
   {
+    /**
+     * Conversación de un ticket de soporte a pantalla completa (versión teléfono, como
+     * /leads/:id/conversacion). Es la misma vista Support.vue: en teléfono muestra solo el hilo
+     * con la flecha de volver; en escritorio, la bandeja y el hilo lado a lado con ese ticket.
+     */
+    path: '/soporte/ticket/:ticket_id',
+    name: 'support_ticket_conversation',
+    component: () => import('@/views/Support.vue'),
+    meta: { requiresAuth: true, nav: false, hide_app_nav: true },
+  },
+  {
     /** Vista fullscreen de la conversación WhatsApp de una implementación. */
     path: '/implementaciones/:implementation_id/conversacion',
     name: 'implementation_conversation',

@@ -13,6 +13,9 @@
     <div class="px-2 py-2 border-bottom">
       <button class="btn btn-sm btn-outline-primary w-100" @click="$emit('create-ticket')">Nuevo ticket</button>
     </div>
+    <!-- Fila con el formato de la lista de chats de leads (lead/chats/ChatRow.vue): avatar con
+         inicial, título y hora del último mensaje arriba, preview y badges abajo. El semáforo de
+         estado queda como punto sobre el avatar y el operador asignado en la línea chica de abajo. -->
     <div
       v-for="ticket in display_tickets"
       :key="ticket.id"
@@ -21,18 +24,37 @@
         {
           active: ticket.id == selected_ticket_id,
           'support-ticket-item--escalated': is_ticket_escalated(ticket),
+          'support-ticket-item--unread': unread_count(ticket) > 0,
         },
       ]"
-      @click="$emit('select-ticket', ticket.id)">
-      <div class="support-status-dot flex-shrink-0" :class="ticket_status_dot_class(ticket)"></div>
-      <div class="flex-grow-1 min-w-0">
-        <div class="d-flex align-items-center justify-content-between gap-2">
+      role="listitem"
+      tabindex="0"
+      @click="$emit('select-ticket', ticket.id)"
+      @keydown.enter.prevent="$emit('select-ticket', ticket.id)">
+      <span class="support-ticket-avatar" aria-hidden="true">
+        {{ ticket_initial(ticket) }}
+        <span
+          class="support-status-dot"
+          :class="ticket_status_dot_class(ticket)"
+          :title="ticket_status_class(ticket) === 'open' ? 'Abierto' : 'Cerrado'"></span>
+      </span>
+      <div class="support-ticket-body">
+        <div class="support-ticket-line">
           <span
-            class="fw-semibold text-truncate"
+            class="support-ticket-title"
             :class="{ 'support-ticket-title--escalated': is_ticket_escalated(ticket) }">
             {{ ticket_title(ticket) }}
           </span>
-          <div class="d-flex align-items-center gap-1 flex-shrink-0">
+          <span class="support-ticket-time" :title="last_activity_full(ticket)">{{ last_activity_label(ticket) }}</span>
+        </div>
+        <div class="support-ticket-line">
+          <span
+            class="support-ticket-last-preview"
+            :class="{ 'support-ticket-last-preview--muted': !last_message_preview(ticket) }"
+            :title="last_message_preview(ticket)">
+            {{ last_message_preview(ticket) || 'Sin mensajes todavía' }}
+          </span>
+          <span class="support-ticket-meta">
             <!-- Badge prioritario: Claude escaló el caso y requiere intervención humana. -->
             <span
               v-if="is_ticket_escalated(ticket)"
@@ -49,11 +71,11 @@
             </span>
             <span
               v-if="unread_count(ticket) > 0"
-              class="badge bg-danger rounded-pill support-unread-badge"
+              class="badge rounded-pill support-unread-badge"
               :title="'Mensajes no leídos: ' + unread_count(ticket)">
               {{ unread_count(ticket) }}
             </span>
-          </div>
+          </span>
         </div>
         <small
           v-if="is_ticket_escalated(ticket) && escalation_reason_line(ticket)"
@@ -62,18 +84,14 @@
           {{ escalation_reason_line(ticket) }}
         </small>
         <small class="text-muted d-block text-truncate support-ticket-involved">{{ involved_users_line(ticket) }}</small>
-        <small
-          v-if="last_message_preview(ticket)"
-          class="text-muted d-block text-truncate support-ticket-last-preview"
-          :title="last_message_preview(ticket)">
-          {{ last_message_preview(ticket) }}
-        </small>
       </div>
     </div>
   </div>
 </template>
 
 <script>
+import moment from 'moment'
+
 export default {
   name: 'SupportTicketList',
   props: {
@@ -222,6 +240,81 @@ export default {
       return { label: label, class_name: 'bg-warning text-dark' }
     },
     /**
+     * Inicial del avatar: la del título del ticket. Si el título arranca con un número
+     * (p. ej. un teléfono) muestra "#", como en la lista de leads.
+     *
+     * @param {Object} ticket
+     * @returns {string}
+     */
+    ticket_initial(ticket) {
+      const primera = String(this.ticket_title(ticket) || '').trim().charAt(0)
+      if (!primera || /\d/.test(primera)) {
+        return '#'
+      }
+      return primera.toUpperCase()
+    },
+    /**
+     * Momento de la última actividad: el último mensaje, o el updated_at del ticket si no hay.
+     *
+     * @param {Object} ticket
+     * @returns {string|null}
+     */
+    last_activity_at(ticket) {
+      if (ticket && ticket.last_message && ticket.last_message.created_at) {
+        return ticket.last_message.created_at
+      }
+      if (ticket && ticket.updated_at) {
+        return ticket.updated_at
+      }
+      return null
+    },
+    /**
+     * Hora a la derecha del título, como WhatsApp: HH:mm si es de hoy, "Ayer", el día de la
+     * semana si es de los últimos seis días y DD/MM/AA si es más viejo.
+     *
+     * Depende de `now_tick` para que "hoy" pase a "Ayer" sola al cambiar el día.
+     *
+     * @param {Object} ticket
+     * @returns {string}
+     */
+    last_activity_label(ticket) {
+      const raw = this.last_activity_at(ticket)
+      if (!raw) {
+        return ''
+      }
+      const m = moment(raw)
+      if (!m.isValid()) {
+        return ''
+      }
+      const ahora = this.now_tick > 0 ? moment(this.now_tick) : moment()
+      const dias = ahora.clone().startOf('day').diff(m.clone().startOf('day'), 'days')
+      if (dias <= 0) {
+        return m.format('HH:mm')
+      }
+      if (dias === 1) {
+        return 'Ayer'
+      }
+      if (dias <= 6) {
+        const nombre = m.toDate().toLocaleDateString('es-AR', { weekday: 'long' })
+        return nombre.charAt(0).toUpperCase() + nombre.slice(1)
+      }
+      return m.format('DD/MM/YY')
+    },
+    /**
+     * Tooltip de la hora con la fecha completa.
+     *
+     * @param {Object} ticket
+     * @returns {string}
+     */
+    last_activity_full(ticket) {
+      const raw = this.last_activity_at(ticket)
+      if (!raw) {
+        return ''
+      }
+      const m = moment(raw)
+      return m.isValid() ? m.format('DD/MM/YYYY HH:mm') : ''
+    },
+    /**
      * Define título de ticket usando nombre o fallback por id.
      */
     ticket_title(ticket) {
@@ -323,20 +416,93 @@ export default {
 }
 
 .support-ticket-item {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px;
-  border-bottom: 1px solid #f1f3f5;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--bs-border-color-translucent, rgba(0, 0, 0, 0.08));
+  background: #fff;
   cursor: pointer;
   transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+
+.support-ticket-item:hover {
+  background: var(--bs-tertiary-bg, #f5f6f6);
+}
+
+.support-ticket-item:focus-visible {
+  outline: 2px solid var(--bs-primary);
+  outline-offset: -2px;
+}
+
+/* Avatar redondo con la inicial, como en la lista de chats de leads. */
+.support-ticket-avatar {
+  position: relative;
+  flex: 0 0 auto;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.1rem;
+  background: #ced4da;
+  color: #212529;
+}
+
+.support-ticket-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.support-ticket-line {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.support-ticket-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.support-ticket-time {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+  white-space: nowrap;
+}
+
+/* Con mensajes sin leer la hora se pinta en verde, como WhatsApp. */
+.support-ticket-item--unread .support-ticket-time {
+  color: #1fa855;
+  font-weight: 600;
+}
+
+.support-ticket-meta {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 /* Fila escalada: fondo rojizo, borde izquierdo y sombra suave para destacar en la bandeja. */
 .support-ticket-item--escalated {
   background: linear-gradient(90deg, #fff1f2 0%, #fff8f8 100%);
-  border-left: 3px solid #dc3545;
-  box-shadow: inset 0 0 0 1px rgba(220, 53, 69, 0.12);
+  box-shadow: inset 3px 0 0 #dc3545, inset 0 0 0 1px rgba(220, 53, 69, 0.12);
 }
 
 .support-ticket-item--escalated:hover {
@@ -345,7 +511,7 @@ export default {
 
 /* Ticket seleccionado: fondo claramente más gris y acento a la izquierda (no desplaza el layout). */
 .support-ticket-item.active {
-  background: #dee2e6;
+  background: var(--bs-success-bg-subtle);
   box-shadow: inset 3px 0 0 #0d6efd;
 }
 
@@ -366,21 +532,33 @@ export default {
 }
 
 .support-ticket-involved {
-  font-size: 0.8rem;
-  margin-top: 2px;
+  font-size: 0.75rem;
 }
 
+/* Preview del último mensaje con quién lo mandó: ocupa lo que dejan los badges. */
 .support-ticket-last-preview {
-  font-size: 0.78rem;
-  margin-top: 2px;
-  opacity: 0.92;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.85rem;
+  color: var(--bs-secondary-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
+.support-ticket-last-preview--muted {
+  font-style: italic;
+}
+
+/* Semáforo de estado: punto sobre el borde inferior derecho del avatar. */
 .support-status-dot {
-  width: 10px;
-  height: 10px;
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 12px;
+  height: 12px;
   border-radius: 999px;
-  flex-shrink: 0;
+  border: 2px solid #fff;
 }
 
 .support-status-dot.open {
@@ -409,12 +587,14 @@ export default {
   }
 }
 
-/* Badge compacto alineado a la derecha del título. */
+/* Contador de no leídos en verde WhatsApp, a la derecha del preview. */
 .support-unread-badge {
   font-size: 0.65rem;
   min-width: 1.2rem;
   line-height: 1.1;
-  padding: 0.2em 0.45em;
+  padding: 0.25em 0.45em;
+  background: #25d366;
+  color: #fff;
 }
 
 .support-response-badge {
@@ -435,6 +615,19 @@ export default {
   background: #dc3545;
   border: 1px solid #b02a37;
   box-shadow: 0 1px 3px rgba(176, 42, 55, 0.35);
+}
+
+@media (max-width: 575.98px) {
+  .support-ticket-item {
+    padding: 0.55rem 0.6rem;
+    gap: 0.6rem;
+  }
+
+  .support-ticket-avatar {
+    width: 2.5rem;
+    height: 2.5rem;
+    font-size: 1rem;
+  }
 }
 </style>
 
