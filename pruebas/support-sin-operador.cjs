@@ -146,6 +146,13 @@ igual('no a un mensaje propio', m.can_react_to_message({ id: 8, sender_type: 'ad
 igual('no si el cliente no tiene wamid', m.can_react_to_message({ id: 8, sender_type: 'user' }, 'whatsapp'), false)
 igual('no si el ticket no informa el origen', m.can_react_to_message(entrante, null), false)
 
+/* ---- guarda del preview de la lista ----
+   Un commit perdió la barra de /\s+/g y el preview se comía las «s» del mensaje (26/10/2026). El componente
+   no se puede importar desde Node, así que se vigila el texto del fuente. */
+const fuente_lista = require('fs').readFileSync(require('path').join(__dirname, '..', 'src/components/support/TicketList.vue'), 'utf8')
+igual('el preview colapsa espacios con \\s+ (no con s+)', fuente_lista.indexOf("replace(/\\s+/g, ' ')") >= 0, true)
+igual('ningún replace(/s+/g) suelto en la lista', fuente_lista.indexOf('replace(/s+/g') >= 0, false)
+
 console.log('\n' + (corridas - fallos) + '/' + corridas + ' pruebas ok')
 if (fallos > 0) {
   console.log(fallos + ' FALLARON')
