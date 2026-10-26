@@ -14,8 +14,10 @@
       <button class="btn btn-sm btn-outline-primary w-100" @click="$emit('create-ticket')">Nuevo ticket</button>
     </div>
     <!-- Fila con el formato de la lista de chats de leads (lead/chats/ChatRow.vue): avatar con
-         inicial, título y hora del último mensaje arriba, preview y badges abajo. El semáforo de
-         estado queda como punto sobre el avatar y el operador asignado en la línea chica de abajo. -->
+         inicial y tres líneas. 1) nombre del CLIENTE en negrita y la hora del último mensaje;
+         2) "Ticket #id" (más el chip de agente apagado, si corresponde); 3) último mensaje, con
+         los ticks de WhatsApp si lo mandó un operador o el agente, y los badges a la derecha.
+         El semáforo de estado queda como punto sobre el avatar. Los tickets no tienen operador. -->
     <div
       v-for="ticket in display_tickets"
       :key="ticket.id"
@@ -42,17 +44,38 @@
         <div class="support-ticket-line">
           <span
             class="support-ticket-title"
-            :class="{ 'support-ticket-title--escalated': is_ticket_escalated(ticket) }">
-            {{ ticket_title(ticket) }}
+            :class="{ 'support-ticket-title--escalated': is_ticket_escalated(ticket) }"
+            :title="client_name(ticket)">
+            {{ client_name(ticket) }}
           </span>
           <span class="support-ticket-time" :title="last_activity_full(ticket)">{{ last_activity_label(ticket) }}</span>
         </div>
-        <div class="support-ticket-line">
+        <div class="support-ticket-line support-ticket-line--sub">
+          <span class="support-ticket-number">Ticket #{{ ticket.id }}</span>
+          <!-- Agente apagado en un ticket abierto: nadie contesta solo, hay que escribir a mano. -->
           <span
-            class="support-ticket-last-preview"
-            :class="{ 'support-ticket-last-preview--muted': !last_message_preview(ticket) }"
-            :title="last_message_preview(ticket)">
-            {{ last_message_preview(ticket) || 'Sin mensajes todavía' }}
+            v-if="agent_is_off(ticket)"
+            class="support-agent-off-chip"
+            title="El agente está apagado en este ticket: no contesta solo, hay que responder a mano.">
+            <span class="support-agent-off-icon" aria-hidden="true">
+              <i class="bi bi-robot"></i>
+            </span>
+            <span class="support-agent-off-text">Agente apagado · modo manual</span>
+          </span>
+        </div>
+        <div class="support-ticket-line">
+          <span class="support-ticket-last">
+            <!-- Ticks de WhatsApp del último mensaje, solo si lo mandó un operador o el agente. -->
+            <message-ticks
+              class="support-ticket-ticks"
+              :message="ticket.last_message"
+              :ticket="ticket" />
+            <span
+              class="support-ticket-last-preview"
+              :class="{ 'support-ticket-last-preview--muted': !last_message_preview(ticket) }"
+              :title="last_message_preview(ticket)">
+              {{ last_message_preview(ticket) || 'Sin mensajes todavía' }}
+            </span>
           </span>
           <span class="support-ticket-meta">
             <!-- Badge prioritario: Claude escaló el caso y requiere intervención humana. -->
@@ -83,7 +106,6 @@
           :title="escalation_reason_line(ticket)">
           {{ escalation_reason_line(ticket) }}
         </small>
-        <small class="text-muted d-block text-truncate support-ticket-involved">{{ involved_users_line(ticket) }}</small>
       </div>
     </div>
   </div>
@@ -91,9 +113,14 @@
 
 <script>
 import moment from 'moment'
+import MessageTicks from '@/components/support/MessageTicks.vue'
+import { client_display_name, agent_is_off_on_open_ticket, last_message_author } from '@/utils/support_ticks'
 
 export default {
   name: 'SupportTicketList',
+  components: {
+    MessageTicks,
+  },
   props: {
     tickets: { type: Array, default: () => [] },
     selected_ticket_id: { type: [String, Number], default: null },
@@ -240,20 +267,14 @@ export default {
       return { label: label, class_name: 'bg-warning text-dark' }
     },
     /**
-     * Inicial del avatar: la del contacto (o la del título si no hay contacto). Si arranca con un número
-     * (p. ej. un teléfono) muestra "#", como en la lista de leads.
+     * Inicial del avatar: la del nombre del cliente que se ve en la primera línea. Si arranca con
+     * un número (p. ej. un teléfono) muestra "#", como en la lista de leads.
      *
      * @param {Object} ticket
      * @returns {string}
      */
     ticket_initial(ticket) {
-      /* Inicial del contacto, como el avatar de los chats de leads: con la del título muchos
-         tickets ("Consulta…", "Ticket #…") terminaban con la misma letra. */
-      const contacto = ticket.client_user_name ||
-        (ticket.client_employee && ticket.client_employee.name) ||
-        (ticket.client && (ticket.client.company_name || ticket.client.name)) ||
-        this.ticket_title(ticket)
-      const primera = String(contacto || '').trim().charAt(0)
+      const primera = String(this.client_name(ticket) || '').trim().charAt(0)
       if (!primera || /\d/.test(primera)) {
         return '#'
       }
@@ -321,13 +342,23 @@ export default {
       return m.isValid() ? m.format('DD/MM/YYYY HH:mm') : ''
     },
     /**
-     * Define título de ticket usando nombre o fallback por id.
+     * Nombre del cliente (la empresa) para la primera línea de la fila. El nombre propio del
+     * ticket ya no se muestra acá: el que importa para ubicar la conversación es el cliente.
+     *
+     * @param {Object} ticket
+     * @returns {string}
      */
-    ticket_title(ticket) {
-      if (ticket.name) {
-        return ticket.name
-      }
-      return 'Ticket #' + ticket.id
+    client_name(ticket) {
+      return client_display_name(ticket)
+    },
+    /**
+     * true si hay que mostrar el chip «Agente apagado · modo manual» (agente apagado y ticket abierto).
+     *
+     * @param {Object} ticket
+     * @returns {boolean}
+     */
+    agent_is_off(ticket) {
+      return agent_is_off_on_open_ticket(ticket)
     },
     /**
      * Cantidad de mensajes del usuario (empresa) sin leer; viene del API y de Pusher (unread_messages_count).
@@ -346,31 +377,24 @@ export default {
       return parsed
     },
     /**
-     * Cliente remoto y operador asignado en una sola línea.
+     * Quién escribió el último mensaje, para el prefijo del preview: «Vos» si fue el operador
+     * logueado, el nombre del operador si fue otro, «Agente» si salió del agente y, si lo
+     * escribió el cliente, el nombre de la persona (o «Cliente»).
+     *
      * @param {Object} ticket
      * @returns {string}
      */
-    involved_users_line(ticket) {
-      let client_label = ticket.client_user_name || ''
-      if (!client_label && ticket.client_employee && ticket.client_employee.name) {
-        client_label = ticket.client_employee.name
-      }
-      if (!client_label && ticket.client) {
-        client_label = ticket.client.company_name || ticket.client.name || ''
-      }
-      if (!client_label) {
-        client_label = 'Usuario #' + ticket.client_user_id
-      }
-      if (ticket.assigned_admin && ticket.assigned_admin.name) {
-        return client_label + ' · ' + ticket.assigned_admin.name
-      }
-      if (!ticket.assigned_admin_id) {
-        return client_label + ' · Sin asignar'
-      }
-      return client_label + ' · Operador #' + ticket.assigned_admin_id
+    last_message_prefix(ticket) {
+      const admin = this.$store.state.auth && this.$store.state.auth.admin
+      const contact = ticket.client_user_name ||
+        (ticket.client_employee && ticket.client_employee.name) ||
+        'Cliente'
+      return last_message_author(ticket.last_message, admin ? admin.id : null, contact)
     },
     /**
-     * Texto compacto del último mensaje (enviado o recibido) para la fila de bandeja.
+     * Texto compacto del último mensaje (enviado o recibido) para la fila de bandeja:
+     * «Quién: texto». Los ticks de WhatsApp van aparte, delante, en <message-ticks>.
+     *
      * @param {Object} ticket
      * @returns {string}
      */
@@ -379,14 +403,9 @@ export default {
       if (!lm) {
         return ''
       }
-      const who = lm.sender_type === 'admin' ? 'Operador' : 'Cliente'
-      let admin_suffix = ''
-      if (lm.sender_type === 'admin' && lm.sender_admin && lm.sender_admin.name) {
-        admin_suffix = ' (' + lm.sender_admin.name + ')'
-      }
       let snippet = ''
       if (lm.body && String(lm.body).trim()) {
-        snippet = String(lm.body).trim().replace(/\s+/g, ' ')
+        snippet = String(lm.body).trim().replace(/s+/g, ' ')
         if (snippet.length > 72) {
           snippet = snippet.slice(0, 69) + '…'
         }
@@ -397,7 +416,7 @@ export default {
       } else {
         snippet = '[Mensaje]'
       }
-      return who + admin_suffix + ': ' + snippet
+      return this.last_message_prefix(ticket) + ': ' + snippet
     },
   },
 }
@@ -476,7 +495,7 @@ export default {
 .support-ticket-title {
   flex: 0 1 auto;
   min-width: 0;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 0.95rem;
   line-height: 1.25;
   white-space: nowrap;
@@ -537,8 +556,77 @@ export default {
   margin-top: 2px;
 }
 
-.support-ticket-involved {
-  font-size: 0.75rem;
+/* Segunda línea: "Ticket #id" y, si hace falta, el chip de agente apagado. */
+.support-ticket-line--sub {
+  flex-wrap: nowrap;
+}
+
+.support-ticket-number {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  color: var(--bs-secondary-color);
+  white-space: nowrap;
+}
+
+/* Chip «Agente apagado · modo manual»: gris tenue con el robot tachado. No depende solo del color:
+   lleva el ícono tachado y el texto. En pantallas angostas el texto se recorta con puntos. */
+.support-agent-off-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid #ced4da;
+  background: #f1f3f5;
+  color: #495057;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  font-weight: 600;
+}
+
+.support-agent-off-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Robot tachado: una línea diagonal por encima del ícono (no hay un ícono "robot tachado"). */
+.support-agent-off-icon {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.support-agent-off-icon::after {
+  content: '';
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  top: 50%;
+  height: 2px;
+  background: #495057;
+  border-radius: 1px;
+  transform: rotate(-45deg);
+  box-shadow: 0 0 0 1px #f1f3f5;
+}
+
+/* Último mensaje: ticks (si los hay) + texto recortado, todo en una línea. */
+.support-ticket-last {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.support-ticket-ticks {
+  margin-right: 0.05rem;
 }
 
 /* Preview del último mensaje con quién lo mandó: ocupa lo que dejan los badges. */
