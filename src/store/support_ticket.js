@@ -3,6 +3,9 @@ import api from '@/utils/axios'
 import { run_once } from '@/common-vue/helpers/request_cache_helper'
 import { keep_best_delivery, merge_status_payload, payload_matches_message, unread_total_from_response } from '@/utils/support_ticks'
 
+/** Los eventos públicos no llevan el resumen privado de atención: se refresca por HTTP autenticado. */
+let attention_refresh_timer = null
+
 /**
  * Pide los contadores de la bandeja y los vuelca al store. Nunca rechaza.
  *
@@ -258,6 +261,11 @@ export default __base_store({
       if (idx >= 0) {
         const prev = state.models[idx]
         const merged = Object.assign({}, prev, ticket)
+        // null en un evento significa «no precargado», no «sin misión». Una respuesta
+        // autenticada con { needs_human:false, mission:null } sí reemplaza el resumen.
+        if (ticket.support_attention == null && prev.support_attention) {
+          merged.support_attention = prev.support_attention
+        }
         /**
          * Algunos broadcasts (p. ej. sólo cabecera) no incluyen last_message; conserva preview previo.
          */
@@ -351,9 +359,13 @@ export default __base_store({
      * Antes se descartaba el ticket si no cumplía el filtro "míos / otros / sin asignar". Ya no
      * hay filtro por operador: todo ticket entra a la bandeja, tenga o no tenga operador.
      */
-    apply_ticket_row({ commit }, ticket) {
+    apply_ticket_row({ commit, dispatch }, ticket) {
       if (!ticket || !ticket.id) {
         return
+      }
+      // El evento público no trae el resumen privado de atención: se refresca por HTTP autenticado.
+      if (ticket.support_attention == null) {
+        dispatch('schedule_attention_refresh')
       }
       commit('upsert_from_broadcast', ticket)
     },
@@ -371,6 +383,16 @@ export default __base_store({
         return
       }
       commit('patch_last_message_status', payload)
+    },
+    /** Agrupa mensajes/lecturas parciales y trae el resumen vigente sin agregarlo al canal público. */
+    schedule_attention_refresh({ dispatch }) {
+      if (attention_refresh_timer) {
+        clearTimeout(attention_refresh_timer)
+      }
+      attention_refresh_timer = setTimeout(function () {
+        attention_refresh_timer = null
+        dispatch('get_models')
+      }, 800)
     },
     /**
      * Desde un SupportMessage (Pusher) con relación ticket embebida.
