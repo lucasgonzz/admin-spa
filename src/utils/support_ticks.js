@@ -29,6 +29,9 @@ function has_text(value) {
   return value !== null && value !== undefined && String(value).trim() !== ''
 }
 
+/** Pasado este tiempo, un mensaje sin estado de entrega deja de mostrar el check de «enviado» (3 días). */
+const SENT_TICK_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000
+
 /**
  * true si el mensaje es saliente: lo escribió un operador o el agente (el mensaje de IA sale con
  * `sender_type = 'admin'`, igual que el de una persona). Los borradores del agente que todavía
@@ -57,9 +60,10 @@ export function is_outgoing_message(message) {
  *
  * @param {Object|null} message Mensaje del hilo o `last_message` de un ticket.
  * @param {Object|null} ticket  Ticket (solo se mira `source`).
+ * @param {number} [now_ms]     Ahora en ms (para pruebas); por defecto Date.now().
  * @returns {string|null} 'sent' | 'delivered' | 'read' | 'failed' | null
  */
-export function ticks_state(message, ticket) {
+export function ticks_state(message, ticket, now_ms) {
   if (!ticket || ticket.source !== 'whatsapp') {
     return null
   }
@@ -75,6 +79,14 @@ export function ticks_state(message, ticket) {
   }
   if (status === 'fallido') {
     return TICK_FAILED
+  }
+  /* Sin estado de entrega: WhatsApp manda «entregado» y «leído» dentro de los días siguientes al envío. Un mensaje
+     más viejo que eso sin estado es historia anterior a los ticks (o un estado que nunca llegó): un solo check gris
+     diría «enviado, nunca entregado», que es mentira para casi todos. Ahí no se muestra nada. */
+  const creado = message.created_at ? new Date(message.created_at).getTime() : NaN
+  const ahora = typeof now_ms === 'number' ? now_ms : Date.now()
+  if (!isNaN(creado) && ahora - creado > SENT_TICK_MAX_AGE_MS) {
+    return null
   }
   return TICK_SENT
 }
