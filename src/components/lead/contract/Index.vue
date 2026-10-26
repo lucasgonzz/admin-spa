@@ -155,7 +155,7 @@
           </select>
         </div>
         <div class="col-md-3">
-          <label class="form-label">Mensualidad base</label>
+          <label class="form-label">{{ record.contract_pago_anual ? 'Base mensual de referencia (cubierta en el pago anual)' : 'Mensualidad base' }}</label>
           <input :readonly="!!record.contract_precios_sistemas" v-model="record.contract_mensualidad_base" type="text" class="form-control" />
         </div>
         <div class="col-md-3">
@@ -179,7 +179,7 @@
           <input v-model="record.contract_precio_perfil_ecommerce" type="text" class="form-control" />
         </div>
         <div class="col-md-4">
-          <label class="form-label">Fecha primer pago mensual</label>
+          <label class="form-label">{{ record.contract_pago_anual ? 'Fecha del primer pago anual' : 'Fecha primer pago mensual' }}</label>
           <input v-model="record.contract_fecha_primer_pago_mensual" type="date" class="form-control" />
         </div>
         <!--
@@ -316,7 +316,7 @@
 
 <script>
 import PreciosPorSistema from '@/components/lead/contract/PreciosPorSistema.vue'
-import { actualizar_totales, iniciar_precios_por_sistema, tiene_condiciones_guardadas } from '@/utils/contract_precios'
+import { actualizar_totales, iniciar_precios_por_sistema, tiene_condiciones_guardadas, aplicar_defaults_anuales } from '@/utils/contract_precios'
 import api, { resolve_error_message } from '@/utils/axios'
 import clause_templates from '@/utils/contract_clause_templates'
 import {
@@ -579,7 +579,7 @@ export default {
       }
       /* Default 15000: precio vigente de la cuenta/usuario extra (comercial/proceso_comercial.md).
          Brisa lo puede sobreescribir a mano si un cliente puntual negocia otro valor. */
-      if (!this.record.contract_precio_usuario_extra) {
+      if (this.record.contract_precio_usuario_extra == null || this.record.contract_precio_usuario_extra === '') {
         this.record.contract_precio_usuario_extra = '15000'
       }
       /* Default 6: es lo que el contrato decía fijo hasta ahora ("seis (6) meses"), así un lead
@@ -601,6 +601,7 @@ export default {
       if (!Array.isArray(this.record.contract_sistemas)) {
         this.record.contract_sistemas = sistemas_desde_cotizacion(this.record.contract_cotizacion_items)
       }
+      aplicar_defaults_anuales(this.record)
       this.ensure_financiacion_on_record()
       this.ensure_clausulas_on_record()
     },
@@ -713,7 +714,7 @@ export default {
         contract_mensualidad_base: this.record.contract_mensualidad_base || null,
         contract_usuarios_incluidos: this.record.contract_usuarios_incluidos,
         contract_usuarios_extra: this.record.contract_usuarios_extra,
-        contract_precio_usuario_extra: this.record.contract_precio_usuario_extra || null,
+        contract_precio_usuario_extra: this.record.contract_precio_usuario_extra == null || this.record.contract_precio_usuario_extra === '' ? null : String(this.record.contract_precio_usuario_extra),
         contract_perfiles_ecommerce: this.record.contract_perfiles_ecommerce,
         contract_precio_perfil_ecommerce: this.record.contract_precio_perfil_ecommerce || null,
         contract_fecha_primer_pago_mensual: this.to_date_only_for_payload(this.record.contract_fecha_primer_pago_mensual),
@@ -726,6 +727,8 @@ export default {
         contract_precios_sistemas: this.record.contract_precios_sistemas ?? null,
         contract_descuento_conjunto: this.record.contract_descuento_conjunto ?? null,
         contract_mes_gratis: this.record.contract_mes_gratis ?? null,
+        contract_pago_anual: this.record.contract_pago_anual ?? false,
+        contract_descuento_anual: this.record.contract_descuento_anual ?? null,
         contract_sistemas: normalizar_sistemas(this.record.contract_sistemas),
         contract_permanencia_meses: normalizar_permanencia(this.record.contract_permanencia_meses),
       }

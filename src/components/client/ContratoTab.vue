@@ -185,7 +185,7 @@
             </select>
           </div>
           <div class="col-md-3">
-            <label class="form-label">Mensualidad base</label>
+            <label class="form-label">{{ form.contract_pago_anual ? 'Base mensual de referencia (cubierta en el pago anual)' : 'Mensualidad base' }}</label>
             <input :readonly="!!form.contract_precios_sistemas" v-model="form.contract_mensualidad_base" type="text" class="form-control" />
           </div>
           <div class="col-md-3">
@@ -209,7 +209,7 @@
             <input v-model="form.contract_precio_perfil_ecommerce" type="text" class="form-control" />
           </div>
           <div class="col-md-4">
-            <label class="form-label">Fecha primer pago mensual</label>
+            <label class="form-label">{{ form.contract_pago_anual ? 'Fecha del primer pago anual' : 'Fecha primer pago mensual' }}</label>
             <input v-model="form.contract_fecha_primer_pago_mensual" type="date" class="form-control" />
           </div>
           <!-- Cada cuántos meses se actualiza el precio (IPC). Sale en el PDF y es el N con el
@@ -309,7 +309,7 @@
 
 <script>
 import PreciosPorSistema from '@/components/lead/contract/PreciosPorSistema.vue'
-import { actualizar_totales, iniciar_precios_por_sistema, tiene_condiciones_guardadas } from '@/utils/contract_precios'
+import { actualizar_totales, iniciar_precios_por_sistema, tiene_condiciones_guardadas, aplicar_defaults_anuales } from '@/utils/contract_precios'
 import api, { resolve_error_message } from '@/utils/axios'
 import clause_templates from '@/utils/contract_clause_templates'
 import {
@@ -528,6 +528,8 @@ export default {
         contract_precios_sistemas: null,
         contract_descuento_conjunto: null,
         contract_mes_gratis: null,
+        contract_pago_anual: false,
+        contract_descuento_anual: 20,
         contract_copiado_desde_lead_at: null,
       }
     },
@@ -595,11 +597,14 @@ export default {
         contract_precios_sistemas: c.contract_precios_sistemas ? JSON.parse(JSON.stringify(c.contract_precios_sistemas)) : null,
         contract_descuento_conjunto: c.contract_descuento_conjunto ?? null,
         contract_mes_gratis: c.contract_mes_gratis ?? null,
+        contract_pago_anual: c.contract_pago_anual ?? false,
+        contract_descuento_anual: c.contract_descuento_anual ?? 20,
         contract_copiado_desde_lead_at: c.contract_copiado_desde_lead_at || null,
       }
       if (!nuevo_form.contract_precios_sistemas && !tiene_condiciones_guardadas(c)) {
         iniciar_precios_por_sistema(nuevo_form)
       }
+      aplicar_defaults_anuales(nuevo_form)
       this.form = nuevo_form
     },
     /**
@@ -713,7 +718,7 @@ export default {
         contract_mensualidad_base: f.contract_mensualidad_base || null,
         contract_usuarios_incluidos: f.contract_usuarios_incluidos,
         contract_usuarios_extra: f.contract_usuarios_extra,
-        contract_precio_usuario_extra: f.contract_precio_usuario_extra || null,
+        contract_precio_usuario_extra: f.contract_precio_usuario_extra == null || f.contract_precio_usuario_extra === '' ? null : String(f.contract_precio_usuario_extra),
         contract_perfiles_ecommerce: f.contract_perfiles_ecommerce,
         contract_precio_perfil_ecommerce: f.contract_precio_perfil_ecommerce || null,
         contract_fecha_primer_pago_mensual: this.to_date_only_for_payload(f.contract_fecha_primer_pago_mensual),
@@ -727,6 +732,8 @@ export default {
         contract_precios_sistemas: f.contract_precios_sistemas ?? null,
         contract_descuento_conjunto: f.contract_descuento_conjunto ?? null,
         contract_mes_gratis: f.contract_mes_gratis ?? null,
+        contract_pago_anual: f.contract_pago_anual ?? false,
+        contract_descuento_anual: f.contract_descuento_anual ?? null,
         contract_sistemas: normalizar_sistemas(f.contract_sistemas),
         contract_permanencia_meses: normalizar_permanencia(f.contract_permanencia_meses),
       }

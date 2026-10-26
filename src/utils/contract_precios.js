@@ -14,6 +14,7 @@ export function tiene_condiciones_guardadas(c) {
     .some(k => c[k] !== null && c[k] !== undefined && c[k] !== '') ||
     ['contract_financiacion', 'contract_clausulas_particulares', 'contract_sistemas'].some(k => Array.isArray(c[k]) && c[k].length > 0) ||
     c.contract_mes_gratis === true ||
+    c.contract_pago_anual === true ||
     c.contract_descuento_conjunto != null ||
     (c.contract_currency != null && c.contract_currency !== '' && c.contract_currency !== 'USD') ||
     (c.contract_mensualidad_moneda != null && c.contract_mensualidad_moneda !== '' && c.contract_mensualidad_moneda !== 'ARS') ||
@@ -54,4 +55,36 @@ export function actualizar_totales(c) {
   const resumen = resumen_precios(c)
   c.contract_precio_licencia = String(resumen.total)
   c.contract_mensualidad_base = String(resumen.mensualidad)
+}
+
+export function aplicar_defaults_anuales(c) {
+  if (c.contract_pago_anual == null) c.contract_pago_anual = false
+  if (c.contract_descuento_anual == null) c.contract_descuento_anual = 20
+}
+
+/** Mismos separadores argentinos que ClientContratoService::monto_desde_texto. */
+export function monto_de_texto(valor) {
+  if (typeof valor === 'number') return valor
+  let limpio = String(valor ?? '').replace(/[^0-9.,]/g, '')
+  const punto = limpio.lastIndexOf('.')
+  const coma = limpio.lastIndexOf(',')
+  if (punto >= 0 && coma >= 0) {
+    const decimal = punto > coma ? '.' : ','
+    const miles = decimal === '.' ? ',' : '.'
+    return Number(limpio.split(miles).join('').replace(decimal, '.')) || 0
+  }
+  const separador = punto >= 0 ? '.' : coma >= 0 ? ',' : null
+  if (!separador) return Number(limpio) || 0
+  const partes = limpio.split(separador)
+  if (partes.slice(1).every(p => p.length === 3)) limpio = partes.join('')
+  return Number(limpio.replace(',', '.')) || 0
+}
+
+export function resumen_anual(c) {
+  const base = c.contract_precios_sistemas ? resumen_precios(c).mensualidad : monto_de_texto(c.contract_mensualidad_base)
+  const porcentaje = c.contract_descuento_anual == null ? 20 : Number(c.contract_descuento_anual)
+  const bruto = Math.round(base * 12 * 100) / 100
+  const descuento = Math.round(bruto * porcentaje) / 100
+  const extras = Math.round(Number(c.contract_usuarios_extra || 0) * monto_de_texto(c.contract_precio_usuario_extra) * 100) / 100
+  return { base, porcentaje, bruto, descuento, total: Math.round((bruto - descuento) * 100) / 100, extras }
 }
