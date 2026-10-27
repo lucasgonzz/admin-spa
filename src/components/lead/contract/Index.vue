@@ -727,6 +727,7 @@ export default {
         contract_precios_sistemas: this.record.contract_precios_sistemas ?? null,
         contract_descuento_conjunto: this.record.contract_descuento_conjunto ?? null,
         contract_mes_gratis: this.record.contract_mes_gratis ?? null,
+        contract_plan_gestion: this.record.contract_plan_gestion ?? null,
         contract_pago_anual: this.record.contract_pago_anual ?? false,
         contract_descuento_anual: this.record.contract_descuento_anual ?? null,
         contract_sistemas: normalizar_sistemas(this.record.contract_sistemas),
