@@ -172,11 +172,10 @@
                   class="support-message-placeholder text-muted">
                   {{ media_placeholder(message) }}
                 </div>
-                <!-- Pie de la burbuja saliente por WhatsApp, como en WhatsApp: hora y ticks abajo a
-                     la derecha (un check enviado, dos entregado, dos azules leído, rojo fallido). -->
-                <div v-if="has_bubble_ticks(message)" class="support-message-footer">
-                  <span class="support-message-time">{{ format_read_time(message.created_at) }}</span>
-                  <message-ticks :message="message" :ticket="ticks_ticket" />
+                <!-- La hora también acompaña cada mensaje entrante; los ticks siguen siendo solo salientes. -->
+                <div v-if="!is_mine(message) || has_bubble_ticks(message)" class="support-message-footer">
+                  <span class="support-message-time">{{ format_read_time(message_datetime(message)) }}</span>
+                  <message-ticks v-if="has_bubble_ticks(message)" :message="message" :ticket="ticks_ticket" />
                 </div>
                 </div>
               </border-progress-wrap>
@@ -348,6 +347,7 @@
     </div>
 
     <image-lightbox
+      :zoom_enabled="true"
       :show="image_preview_visible"
       :image_url="image_preview_url"
       @update:show="image_preview_visible = $event"
@@ -1052,8 +1052,13 @@ export default {
       return 'Error de entrega'
     },
     /**
-     * Hora:minuto local para leyenda de visto.
+     * Fecha de envío para la hora visible y el tooltip, según el sentido del mensaje.
      */
+    message_datetime(message) {
+      // En entrantes delivered_at conserva la hora original de WhatsApp; created_at es la recepción.
+      return this.is_mine(message) ? message.created_at || message.delivered_at : message.delivered_at || message.created_at
+    },
+    /** Hora:minuto local para hora de envío y leyenda de visto. */
     format_read_time(value) {
       if (!value) {
         return ''
@@ -1105,7 +1110,7 @@ export default {
       if (message._client_pending && !message.created_at) {
         return 'Enviando…'
       }
-      const raw = message.created_at || message.delivered_at
+      const raw = this.message_datetime(message)
       const formatted = this.format_sent_datetime(raw)
       if (!formatted) {
         return ''
@@ -1472,7 +1477,7 @@ export default {
   min-width: 0;
 }
 
-/* Hora y ticks abajo a la derecha de la burbuja saliente, como en WhatsApp. */
+/* Hora en todas las burbujas entrantes y ticks en las salientes de WhatsApp. */
 .support-message-footer {
   display: flex;
   align-items: center;
