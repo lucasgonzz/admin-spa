@@ -1,7 +1,23 @@
+/**
+ * Planes de Gestión por ventas mensuales (misma política que el manual de precios y la API).
+ * `limite` son las ventas por mes que cubre el plan; `abono` va en ARS y es null cuando el plan es
+ * a medida (importe libre, se carga a mano).
+ */
+export const PLANES_GESTION = [
+  { clave: 'inicial', nombre: 'Inicial', limite: 300, abono: 34200 },
+  { clave: 'estandar', nombre: 'Estándar', limite: 1500, abono: 71500 },
+  { clave: 'pro', nombre: 'Pro', limite: 5000, abono: 105600 },
+  { clave: 'a_medida', nombre: 'A medida', limite: null, abono: null },
+]
+
+/** Plan elegido por defecto en un contrato nuevo: el del medio. */
+const PLAN_GESTION_POR_DEFECTO = 'estandar'
+
 /** Importes acordados para nuevos contratos; se copian para que cada contrato sea editable. */
 export function precios_por_defecto() {
+  const plan = PLANES_GESTION.find(p => p.clave === PLAN_GESTION_POR_DEFECTO)
   return {
-    gestion: { licencia: 800, mensualidad: 100000 },
+    gestion: { licencia: 800, mensualidad: plan.abono },
     ecommerce: { licencia: 500, mensualidad: 20000 },
     agentes: { licencia: 500, mensualidad: 30000 },
   }
@@ -14,6 +30,7 @@ export function tiene_condiciones_guardadas(c) {
     .some(k => c[k] !== null && c[k] !== undefined && c[k] !== '') ||
     ['contract_financiacion', 'contract_clausulas_particulares', 'contract_sistemas'].some(k => Array.isArray(c[k]) && c[k].length > 0) ||
     c.contract_mes_gratis === true ||
+    (c.contract_plan_gestion != null && c.contract_plan_gestion !== '') ||
     c.contract_pago_anual === true ||
     c.contract_descuento_conjunto != null ||
     (c.contract_currency != null && c.contract_currency !== '' && c.contract_currency !== 'USD') ||
@@ -24,6 +41,7 @@ export function tiene_condiciones_guardadas(c) {
 
 export function iniciar_precios_por_sistema(c) {
   c.contract_precios_sistemas = precios_por_defecto()
+  c.contract_plan_gestion = PLAN_GESTION_POR_DEFECTO
   c.contract_descuento_conjunto = 300
   c.contract_mes_gratis = false
   c.contract_meses_actualizacion = 6
@@ -34,6 +52,19 @@ export function iniciar_precios_por_sistema(c) {
   c.contract_precio_perfil_ecommerce = ''
   if (!Array.isArray(c.contract_sistemas) || !c.contract_sistemas.length) c.contract_sistemas = ['gestion']
   actualizar_totales(c)
+}
+
+/**
+ * Elige el plan de Gestión del contrato. Un plan con abono precarga la mensualidad de Gestión
+ * (sigue siendo editable); a medida y la opción vacía (importe acordado) no tocan el importe.
+ */
+export function elegir_plan_gestion(c, clave) {
+  const plan = PLANES_GESTION.find(p => p.clave === clave)
+  c.contract_plan_gestion = plan ? plan.clave : null
+  if (plan && plan.abono != null && c.contract_precios_sistemas?.gestion) {
+    c.contract_precios_sistemas.gestion.mensualidad = plan.abono
+    actualizar_totales(c)
+  }
 }
 
 export function resumen_precios(c) {
