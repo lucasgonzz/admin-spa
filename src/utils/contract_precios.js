@@ -10,14 +10,16 @@ export const PLANES_GESTION = [
   { clave: 'a_medida', nombre: 'A medida', limite: null, abono: null },
 ]
 
-/** Plan elegido por defecto en un contrato nuevo: el del medio. */
-const PLAN_GESTION_POR_DEFECTO = 'estandar'
+/**
+ * Un contrato nuevo no trae plan elegido («Sin plan»): el abono de Gestión arranca en el del
+ * plan Estándar y el operador elige el plan (que lo precarga) o carga el importe acordado.
+ */
+const ABONO_GESTION_POR_DEFECTO = 71500
 
 /** Importes acordados para nuevos contratos; se copian para que cada contrato sea editable. */
 export function precios_por_defecto() {
-  const plan = PLANES_GESTION.find(p => p.clave === PLAN_GESTION_POR_DEFECTO)
   return {
-    gestion: { licencia: 800, mensualidad: plan.abono },
+    gestion: { licencia: 800, mensualidad: ABONO_GESTION_POR_DEFECTO },
     ecommerce: { licencia: 500, mensualidad: 20000 },
     agentes: { licencia: 500, mensualidad: 30000 },
   }
@@ -41,7 +43,7 @@ export function tiene_condiciones_guardadas(c) {
 
 export function iniciar_precios_por_sistema(c) {
   c.contract_precios_sistemas = precios_por_defecto()
-  c.contract_plan_gestion = PLAN_GESTION_POR_DEFECTO
+  c.contract_plan_gestion = null
   c.contract_descuento_conjunto = 300
   c.contract_mes_gratis = false
   c.contract_meses_actualizacion = 6
