@@ -87,7 +87,7 @@ export default {
   },
   methods: {
     iniciar() { iniciar_precios_por_sistema(this.contrato) },
-    /** Texto de cada opción: «Inicial — hasta 300 ventas por mes», «A medida — más de 5.000 ventas por mes». */
+    /** Texto de cada opción: «Inicial — hasta 300 ventas por mes», «A medida — más de 7.000 ventas por mes». */
     nombre_plan(plan) {
       if (plan.clave === 'a_medida') return plan.nombre + ' — más de ' + PLANES_GESTION.find(p => p.clave === 'pro').limite.toLocaleString('es-AR') + ' ventas por mes'
       return plan.nombre + ' — hasta ' + plan.limite.toLocaleString('es-AR') + ' ventas por mes'

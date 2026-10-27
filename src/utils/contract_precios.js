@@ -6,7 +6,7 @@
 export const PLANES_GESTION = [
   { clave: 'inicial', nombre: 'Inicial', limite: 300, abono: 34200 },
   { clave: 'estandar', nombre: 'Estándar', limite: 1500, abono: 71500 },
-  { clave: 'pro', nombre: 'Pro', limite: 5000, abono: 105600 },
+  { clave: 'pro', nombre: 'Pro', limite: 7000, abono: 105600 },
   { clave: 'a_medida', nombre: 'A medida', limite: null, abono: null },
 ]
 
