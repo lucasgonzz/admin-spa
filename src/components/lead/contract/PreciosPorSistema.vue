@@ -87,12 +87,10 @@ export default {
   },
   methods: {
     iniciar() { iniciar_precios_por_sistema(this.contrato) },
-    /** Texto de cada opción: «Inicial — hasta 300 ventas por mes»; las demás abrevian el sufijo. */
+    /** Texto de cada opción: «Inicial — hasta 300 ventas por mes», «A medida — más de 5.000 ventas por mes». */
     nombre_plan(plan) {
-      const limite = Number(plan.limite).toLocaleString('es-AR')
-      if (plan.clave === 'a_medida') return plan.nombre + ' — más de 5.000'
-      if (plan.clave === 'inicial') return plan.nombre + ' — hasta ' + limite + ' ventas por mes'
-      return plan.nombre + ' — hasta ' + limite
+      if (plan.clave === 'a_medida') return plan.nombre + ' — más de ' + PLANES_GESTION.find(p => p.clave === 'pro').limite.toLocaleString('es-AR') + ' ventas por mes'
+      return plan.nombre + ' — hasta ' + plan.limite.toLocaleString('es-AR') + ' ventas por mes'
     },
     formato(valor) { return Number(valor).toLocaleString('es-AR', { maximumFractionDigits: 2 }) },
   },
