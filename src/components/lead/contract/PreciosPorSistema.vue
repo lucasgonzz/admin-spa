@@ -14,6 +14,15 @@
             <label class="form-label" :for="id + '-abono-' + sistema.key">Mensualidad ({{ contrato.contract_mensualidad_moneda || 'ARS' }})</label>
             <input :id="id + '-abono-' + sistema.key" v-model.number="contrato.contract_precios_sistemas[sistema.key].mensualidad" type="number" min="0" step="0.01" class="form-control" />
           </div>
+          <div v-if="sistema.key === 'gestion'" class="col-12">
+            <label class="form-label" :for="id + '-plan-gestion'">Plan de Gestión (ventas por mes)</label>
+            <select :id="id + '-plan-gestion'" v-model="plan_gestion" class="form-select">
+              <option value="">Sin plan (importe acordado)</option>
+              <option v-for="plan in planes" :key="plan.clave" :value="plan.clave">{{ nombre_plan(plan) }}</option>
+            </select>
+            <div v-if="contrato.contract_plan_gestion === 'a_medida'" class="form-text">Plan a medida: cargá el importe acordado.</div>
+            <div v-else-if="contrato.contract_plan_gestion" class="form-text">Abono precargado del plan; podés editarlo.</div>
+          </div>
         </div>
         <div v-if="resumen.tres" class="mb-3">
           <label class="form-label" :for="id + '-descuento'">Descuento por contratar los tres sistemas ({{ contrato.contract_currency || 'USD' }})</label>
@@ -55,12 +64,18 @@
 
 <script>
 import { SISTEMAS } from '@/utils/contract_modalidades'
-import { iniciar_precios_por_sistema, resumen_precios, resumen_anual, actualizar_totales } from '@/utils/contract_precios'
+import { PLANES_GESTION, iniciar_precios_por_sistema, elegir_plan_gestion, resumen_precios, resumen_anual, actualizar_totales } from '@/utils/contract_precios'
 
 export default {
   props: { contrato: { type: Object, required: true }, id: { type: String, required: true } },
   computed: {
     sistemas() { return SISTEMAS },
+    planes() { return PLANES_GESTION },
+    /** El select del plan: lee y escribe `contract_plan_gestion` por `elegir_plan_gestion`, que precarga el abono. */
+    plan_gestion: {
+      get() { return this.contrato.contract_plan_gestion || '' },
+      set(clave) { elegir_plan_gestion(this.contrato, clave) },
+    },
     resumen() { return resumen_precios(this.contrato) },
     anual() { return resumen_anual(this.contrato) },
   },
@@ -72,6 +87,13 @@ export default {
   },
   methods: {
     iniciar() { iniciar_precios_por_sistema(this.contrato) },
+    /** Texto de cada opción: «Inicial — hasta 300 ventas por mes»; las demás abrevian el sufijo. */
+    nombre_plan(plan) {
+      const limite = Number(plan.limite).toLocaleString('es-AR')
+      if (plan.clave === 'a_medida') return plan.nombre + ' — más de 5.000'
+      if (plan.clave === 'inicial') return plan.nombre + ' — hasta ' + limite + ' ventas por mes'
+      return plan.nombre + ' — hasta ' + limite
+    },
     formato(valor) { return Number(valor).toLocaleString('es-AR', { maximumFractionDigits: 2 }) },
   },
 }
