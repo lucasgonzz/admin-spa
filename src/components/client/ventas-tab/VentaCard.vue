@@ -487,10 +487,15 @@ export default {
         return
       }
       const etiquetas = this.productos_visibles.map(function (p) { return p.etiqueta }).join(', ')
+      /* Si el cliente ya pagó algo, el aviso lo dice con el monto: borrar la venta se lleva
+         también las cuotas cobradas, y eso es plata registrada que desaparece. */
+      const aviso_cuotas = this.resumen.cobrado > 0
+        ? 'Se borran también las cuotas, incluidas las que el cliente ya pagó: ' + format_monto_con_moneda(this.resumen.cobrado, this.venta.moneda) + '.'
+        : 'Se borran también sus ' + this.cuotas.length + ' cuotas.'
       const confirmado = window.confirm(
         '¿Eliminar la venta (' + (etiquetas || 'sin productos') + ') de ' +
         format_monto_con_moneda(this.resumen.total, this.venta.moneda) +
-        '? Se borran también sus ' + this.cuotas.length + ' cuotas.'
+        '? ' + aviso_cuotas
       )
       if (!confirmado) {
         return
