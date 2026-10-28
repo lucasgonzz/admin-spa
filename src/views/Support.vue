@@ -93,7 +93,9 @@
       </div>
       <div class="support-right-bottom flex-shrink-0">
         <message-input
+          :key="String(current_admin_id) + ':' + String(selected_ticket_id || 'sin-ticket')"
           ref="message_input"
+          :ticket_id="selected_ticket_id"
           :can_send="can_send_message"
           :ai_suggestion_send_at="selected_ticket_ai_send_at"
           :suggestion_error="suggestion_error"
@@ -1163,7 +1165,11 @@ export default {
          su error o su razonamiento visibles después del envío no explica nada del mensaje nuevo. */
       this.suggestion_error = ''
       this.ai_reasoning = ''
-      this.$store.dispatch('support_message/send_message', payload)
+      this.$store.dispatch('support_message/send_message', payload).then(function (model) {
+        if (payload.on_result) payload.on_result(model)
+      }).catch(function () {
+        if (payload.on_result) payload.on_result(null)
+      })
     },
     /**
      * Reintenta POST local o sincronización hacia el empresa-api del cliente.

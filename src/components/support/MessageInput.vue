@@ -16,6 +16,7 @@
         {{ attachment_is_audio ? '🎤' : attachment_is_image ? '🖼' : '📎' }}
       </span>
       <span class="support-input-attachment-name text-truncate">{{ attachment.name }}</span>
+      <button v-if="attachment_is_audio" type="button" class="btn btn-sm btn-link" @click="download_audio">Descargar</button>
       <button
         v-if="attachment_is_image"
         type="button"
@@ -28,9 +29,17 @@
         type="button"
         class="btn btn-sm btn-link support-input-attachment-remove"
         title="Quitar adjunto"
+        :disabled="draft_sending"
         @click="remove_attachment">
         ✕
       </button>
+    </div>
+    <div v-if="audio_notice" class="support-input-audio-notice" role="status">{{ audio_notice }}</div>
+    <audio v-if="attachment_is_audio && attachment_preview_url && !audio_preview_failed" :src="attachment_preview_url" controls preload="metadata" class="support-input-audio-player" @error="audio_preview_failed = true" />
+    <div v-if="attachment_is_audio && audio_preview_failed" class="support-input-audio-notice">Este navegador no puede reproducir la copia local. Podés descargarla o enviarla igual.</div>
+    <div v-for="draft in recovered_drafts" :key="draft.id" class="support-input-audio-notice">
+      Audio pendiente de este ticket.
+      <button type="button" class="btn btn-sm btn-link" :disabled="!!attachment || audio_busy" @click="restore_audio(draft)">Recuperar</button>
     </div>
     <!-- Aviso cuando el navegador deniega el permiso de micrófono -->
     <div v-if="mic_error" class="support-input-mic-error">
@@ -49,7 +58,7 @@
         class="form-control support-input-textarea"
         rows="1"
         placeholder="Escribir mensaje..."
-        :disabled="!can_send"
+        :disabled="!can_send || draft_sending"
         v-model="body"
         @input="ajustar_alto"
         @paste="on_paste"
@@ -62,11 +71,11 @@
           'btn btn-sm support-input-icon-btn',
           audio_recording ? 'btn-danger support-input-icon-btn--recording' : 'btn-outline-secondary',
         ]"
-        :disabled="!can_send"
-        :title="audio_closing
+        :disabled="(!can_send && !audio_busy) || draft_sending || (!audio_busy && (!!attachment || !storage_ready))"
+        :title="audio_starting ? 'Comprobando micrófono…' : audio_closing
           ? 'Cerrando la grabación…'
           : (audio_recording ? ('Detener grabación (' + audio_elapsed_label + ')') : 'Grabar audio')"
-        :aria-label="audio_closing
+        :aria-label="audio_starting ? 'Comprobando micrófono…' : audio_closing
           ? 'Cerrando la grabación…'
           : (audio_recording ? ('Detener grabación (' + audio_elapsed_label + ')') : 'Grabar audio')"
         @click="on_audio_click"
@@ -77,32 +86,32 @@
         @touchend.prevent="on_audio_touchend"
         @touchcancel.prevent="on_audio_touchcancel">
         <span
-          v-if="audio_closing"
+          v-if="audio_closing || audio_starting"
           class="spinner-border spinner-border-sm"
           role="status"
           aria-hidden="true" />
         <i v-else-if="audio_recording" class="bi bi-stop-fill" aria-hidden="true" />
         <i v-else class="bi bi-mic" aria-hidden="true" />
-        <span v-if="audio_recording" class="support-input-recording-time">
-          {{ audio_closing ? 'Cerrando…' : audio_elapsed_label }}
+        <span v-if="audio_busy" class="support-input-recording-time">
+          {{ audio_starting ? 'Preparando…' : audio_closing ? 'Cerrando…' : audio_elapsed_label }}
         </span>
       </button>
       <!-- Sólo mientras graba: cancelar sin enviar (grupo 323, prompt 04). NO se esconde
            mientras cierra: es la única salida que tiene la pantalla si el grabador se queda
            colgado. Ver el comentario largo en LeadConversationView.vue. -->
       <button
-        v-if="audio_recording"
+        v-if="audio_busy"
         type="button"
         class="btn btn-link btn-sm text-muted support-input-cancel-btn"
         title="Cancelar grabación"
         aria-label="Cancelar grabación"
-        @click="cancel_audio_recording">
+        @click="discard_audio_recording">
         Cancelar
       </button>
       <button
         type="button"
         class="btn btn-outline-secondary btn-sm support-input-icon-btn"
-        :disabled="!can_send || audio_recording"
+        :disabled="!can_send || audio_busy || draft_sending || !!attachment"
         title="Adjuntar archivo"
         aria-label="Adjuntar archivo"
         @click="open_file_input">
@@ -111,7 +120,7 @@
       <button
         type="button"
         class="btn btn-success btn-sm support-input-icon-btn support-input-icon-btn--send"
-        :disabled="!can_send || audio_recording"
+        :disabled="!can_send || audio_busy || draft_sending"
         title="Enviar mensaje"
         aria-label="Enviar mensaje"
         @click="emit_send">
@@ -137,6 +146,7 @@ import ImageAnnotationEditor from '@/components/common/ImageAnnotationEditor.vue
 import { OggOpusRecorder } from '@/utils/oggOpusRecorder'
 import audio_recorder_button from '@/mixins/audio_recorder_button'
 import { extension_of } from '@/utils/support_media'
+import { new_audio_id, check_audio_storage, save_audio_draft, load_audio_drafts, remove_audio_draft } from '@/utils/support_audio_drafts'
 
 /* Extensiones de audio que se reconocen cuando el navegador no informa `File.type` (iPhone con notas de voz .m4a). */
 const AUDIO_FILE_EXTENSIONS = ['m4a', 'mp3', 'ogg', 'oga', 'opus', 'aac', 'amr', 'webm']
@@ -151,6 +161,7 @@ export default {
   mixins: [audio_recorder_button],
   emits: ['send-message'],
   props: {
+    ticket_id: { type: [Number, String], default: null },
     can_send: { type: Boolean, default: true },
     /** ISO8601 del envío automático programado (null si no hay timer). */
     ai_suggestion_send_at: { type: String, default: null },
@@ -177,9 +188,23 @@ export default {
       mic_error: false,
       /** Texto del aviso rojo según el motivo del fallo. */
       mic_error_message: '',
+      storage_ready: false,
+      audio_notice: '',
+      audio_draft_id: null,
+      audio_draft_partial: false,
+      audio_owner_scope: null,
+      audio_preview_failed: false,
+      recovered_drafts: [],
+      draft_sending: false,
+      attachment_preview_url: '',
     }
   },
   computed: {
+    audio_busy() { return this.audio_recording || this.audio_starting || this.audio_closing },
+    draft_scope() {
+      const admin = this.$store.state.auth.admin
+      return admin && admin.id && this.ticket_id ? String(admin.id) + ':' + String(this.ticket_id) : null
+    },
     /**
      * Indica si el adjunto pendiente es audio (para el ícono del preview).
      * @returns {boolean}
@@ -222,6 +247,11 @@ export default {
     },
   },
   watch: {
+    attachment(file) {
+      this.audio_preview_failed = false
+      if (this.attachment_preview_url) URL.revokeObjectURL(this.attachment_preview_url)
+      this.attachment_preview_url = file && this.file_media_kind(file) === 'audio' ? URL.createObjectURL(file) : ''
+    },
     /**
      * Abre el panel de razonamiento cuando llega uno nuevo, y lo pliega cuando se limpia.
      *
@@ -237,8 +267,105 @@ export default {
   },
   mounted() {
     this.ajustar_alto()
+    this._draft_save_chain = Promise.resolve()
+    this._audio_visibility_listener = () => {
+      if (document.visibilityState === 'hidden' && this.audio_busy) this.stop_and_send_audio()
+    }
+    this._audio_pagehide_listener = () => { if (this.audio_busy) this.stop_and_send_audio() }
+    this._audio_confirmed_listener = (event) => {
+      const detail = event.detail || {}
+      if (detail.id === this.audio_draft_id && detail.scope === this.draft_scope) {
+        if (this._audio_result_handler && this._audio_result_id === detail.id) this._audio_result_handler(detail.model)
+        else this.confirm_recovered_audio(detail.model, detail.id)
+      }
+    }
+    document.addEventListener('visibilitychange', this._audio_visibility_listener)
+    window.addEventListener('pagehide', this._audio_pagehide_listener)
+    window.addEventListener('support-audio-confirmed', this._audio_confirmed_listener)
+    check_audio_storage().then(() => {
+      this.storage_ready = true
+      return this.refresh_audio_drafts()
+    }).catch(() => {
+      this.audio_notice = 'No se puede asegurar el guardado local. Habilitá el almacenamiento de este navegador para grabar; también podés adjuntar un audio.'
+    })
+  },
+  beforeUnmount() {
+    document.removeEventListener('visibilitychange', this._audio_visibility_listener)
+    window.removeEventListener('pagehide', this._audio_pagehide_listener)
+    window.removeEventListener('support-audio-confirmed', this._audio_confirmed_listener)
+    if (this.attachment_preview_url) URL.revokeObjectURL(this.attachment_preview_url)
   },
   methods: {
+    async confirm_recovered_audio(model, id) {
+      if (!model || model.id == null || !(model.attachments && model.attachments.length) || id !== this.audio_draft_id) return
+      this.draft_sending = true
+      try { await remove_audio_draft(id) } catch (err) { /* la API ya confirmó la copia durable */ }
+      if (id === this.audio_draft_id) {
+        this.attachment = null
+        this.body = ''
+        this.audio_draft_id = null
+        this.audio_draft_partial = false
+        this.audio_notice = model.remote_delivery_status === 'not_received'
+          ? 'Audio guardado en el servidor. Su entrega falló: usá Reintentar en el mensaje de la conversación.' : ''
+      }
+      this.draft_sending = false
+    },
+    preserve_audio_on_leave() { return true },
+    refresh_audio_drafts() {
+      if (!this.draft_scope) return Promise.resolve()
+      return load_audio_drafts(this.draft_scope).then((rows) => {
+        this.recovered_drafts = rows.filter((row) => row.id !== this.audio_draft_id)
+        if (!this.attachment && this.recovered_drafts.length) this.restore_audio(this.recovered_drafts[0])
+      })
+    },
+    restore_audio(draft) {
+      if (draft.scope !== this.draft_scope || this.attachment || this.audio_busy) return
+      this.audio_draft_id = draft.id
+      this.audio_owner_scope = draft.scope
+      this.audio_draft_partial = !!draft.partial
+      this.attachment = new File([draft.blob], draft.name, { type: draft.blob.type || '' })
+      this.body = draft.body || ''
+      this.recovered_drafts = this.recovered_drafts.filter((row) => row.id !== draft.id)
+      this.audio_notice = draft.partial
+        ? 'Se recuperó el audio guardado antes de una interrupción. Puede faltar el final; podés descargar una copia antes de enviar.'
+        : 'Audio recuperado. Está guardado en este dispositivo y listo para enviar.'
+      this.$nextTick(() => this.ajustar_alto())
+    },
+    persist_audio(blob, partial) {
+      const id = this.audio_draft_id
+      const scope = this.audio_owner_scope || this.draft_scope
+      if (!id || !scope) return Promise.reject(new Error('No se pudo identificar el borrador.'))
+      const draft = { id: id, scope: scope, blob: blob, partial: !!partial, body: this.body,
+        name: this.attachment ? this.attachment.name : 'audio_' + id + '.ogg', updated_at: Date.now() }
+      // Serializar checkpoints: uno viejo jamás puede pisar el archivo final después del cierre.
+      this._draft_save_chain = (this._draft_save_chain || Promise.resolve()).catch(() => {}).then(() => save_audio_draft(draft))
+      return this._draft_save_chain
+    },
+    on_audio_started() { this.audio_notice = 'Grabando. Guardamos una copia local mientras hablás.' },
+    on_audio_progress(blob) {
+      this.persist_audio(blob, true).catch(() => {
+        this.audio_notice = 'El almacenamiento se interrumpió. Estamos cerrando el audio para conservarlo: descargalo antes de salir.'
+        this.stop_and_send_audio()
+      })
+    },
+    discard_audio_recording() {
+      this.cancel_audio_recording()
+      const id = this.audio_draft_id
+      this.audio_draft_id = null
+      if (id) (this._draft_save_chain || Promise.resolve()).catch(() => {}).then(() => remove_audio_draft(id)).catch(() => {
+        this.audio_notice = 'No se pudo quitar la copia local; puede aparecer para recuperar al volver.'
+      })
+      this.audio_notice = ''
+    },
+    download_audio() {
+      if (!this.attachment) return
+      const url = URL.createObjectURL(this.attachment)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = this.attachment.name
+      link.click()
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
+    },
     /**
      * Ajusta el alto del textarea al contenido, hasta ocho renglones. A partir de ahí aparece
      * el scroll interno y el footer deja de crecer.
@@ -283,6 +410,7 @@ export default {
      * @returns {void}
      */
     set_body(texto) {
+      if (this.draft_sending || this.audio_busy || this.attachment) return
       const self = this
       this.body = texto == null ? '' : String(texto)
       this.$nextTick(function () {
@@ -296,6 +424,7 @@ export default {
      * @param {ClipboardEvent} event
      */
     on_paste(event) {
+      if (this.attachment || this.audio_busy || this.draft_sending) return
       const items = event.clipboardData ? event.clipboardData.items : []
       for (let i = 0; i < items.length; i++) {
         const item = items[i]
@@ -315,6 +444,7 @@ export default {
      * @param {File} file
      */
     open_image_editor(file) {
+      if (this.audio_busy || this.draft_sending || (this.attachment && !this.attachment_is_image)) return
       if (!file || file.type.indexOf('image/') !== 0) {
         return
       }
@@ -351,12 +481,14 @@ export default {
      * Abre selector de archivos.
      */
     open_file_input() {
+      if (this.attachment || this.audio_busy || this.draft_sending) return
       this.$refs.file_input.click()
     },
     /**
      * Captura archivo seleccionado para incluirlo en payload.
      */
     on_file_change(event) {
+      if (this.attachment || this.audio_busy || this.draft_sending) { event.target.value = ''; return }
       const files = event.target.files || []
       if (!files.length) {
         return
@@ -367,6 +499,16 @@ export default {
         this.open_image_editor(file)
       } else {
         this.attachment = file
+        if (this.file_media_kind(file) === 'audio') {
+          this.audio_draft_id = new_audio_id()
+          this.audio_owner_scope = this.draft_scope
+          this.audio_draft_partial = false
+          this.persist_audio(file, false).then(() => {
+            this.audio_notice = 'Audio adjunto guardado en este dispositivo.'
+          }).catch(() => {
+            this.audio_notice = 'No se pudo guardar una copia local del adjunto. Conservá el archivo original hasta confirmar el envío.'
+          })
+        }
       }
       event.target.value = ''
     },
@@ -374,6 +516,8 @@ export default {
      * Elimina el adjunto pendiente y resetea el input de archivo.
      */
     remove_attachment() {
+      if (this.draft_sending) return
+      if (this.audio_draft_id) this.discard_audio_recording()
       this.attachment = null
       this.$refs.file_input.value = ''
     },
@@ -397,8 +541,16 @@ export default {
      * @param {Blob} blob
      * @returns {void}
      */
-    on_audio_blob(blob) {
-      this.attachment = new File([blob], 'audio_' + Date.now() + '.ogg', { type: 'audio/ogg' })
+    on_audio_blob(blob, origin) {
+      this.audio_draft_partial = origin === 'rescate'
+      this.attachment = new File([blob], 'audio_' + this.audio_draft_id + '.ogg', { type: 'audio/ogg' })
+      this.persist_audio(blob, origin === 'rescate').then(() => {
+        this.audio_notice = origin === 'rescate'
+          ? 'Audio recuperado tras una interrupción. Puede faltar el final; podés descargar una copia antes de enviar.'
+          : 'Audio guardado en este dispositivo. Podés enviarlo o descargarlo.'
+      }).catch(() => {
+        this.audio_notice = 'El audio está disponible, pero no se pudo guardar una copia local. Descargalo ahora antes de salir.'
+      })
     },
 
     /**
@@ -410,6 +562,7 @@ export default {
      * @returns {boolean}
      */
     can_record_audio() {
+      if (!this.storage_ready || !this.draft_scope || this.attachment || this.draft_sending) return false
       if (!this.microphone_available || !OggOpusRecorder.isSupported()) {
         this.mic_error = true
         this.mic_error_message = this.build_mic_unavailable_message()
@@ -417,6 +570,10 @@ export default {
       }
       this.mic_error = false
       this.mic_error_message = ''
+      this.audio_draft_id = new_audio_id()
+      this.audio_owner_scope = this.draft_scope
+      this.audio_draft_partial = false
+      this.audio_notice = 'Comprobando micrófono. Esperá el cronómetro para empezar a hablar.'
       return true
     },
 
@@ -435,7 +592,8 @@ export default {
       this.mic_error = true
       this.mic_error_message = fase === 'cierre'
         ? 'No se pudo cerrar la grabación. Probá de nuevo o usá Adjuntar.'
-        : 'Sin acceso al micrófono. Verificá los permisos del navegador o usá Adjuntar.'
+        : message
+      this.audio_notice = ''
     },
     /**
      * Deriva si un archivo es audio o imagen: primero por `File.type` y, si viene vacío o genérico
@@ -467,8 +625,8 @@ export default {
     /**
      * Emite mensaje al padre con tipo detectado por mime (o por extensión si el mime viene vacío).
      */
-    emit_send() {
-      if (!this.body && !this.attachment) {
+    async emit_send() {
+      if (!this.can_send || this.audio_busy || this.draft_sending || (!this.body && !this.attachment)) {
         return
       }
       const self = this
@@ -479,15 +637,58 @@ export default {
           kind = detected_kind
         }
       }
+      this.draft_sending = true
+      if (kind === 'audio') {
+        if (!this.audio_draft_id) this.audio_draft_id = new_audio_id()
+        try {
+          await this.persist_audio(this.attachment, this.audio_draft_partial)
+        } catch (err) {
+          // El File sigue en memoria y se puede enviar; el aviso ofrece copia fuera del navegador.
+          this.audio_notice = 'No pudimos guardar la copia local. Conservá esta pantalla o descargá el audio mientras intentamos enviarlo.'
+        }
+      }
+      const draft_id = this.audio_draft_id
+      const original_body = this.body
+      const original_attachment = this.attachment
+      let acknowledged = false
+      const on_result = async (model) => {
+          if (acknowledged) return
+          // La API confirma el archivo durable; un timeout/422/500 conserva el borrador entero.
+          if (!model || model.id == null || (kind === 'audio' && !(model.attachments && model.attachments.length))) {
+            this.draft_sending = false
+            this.audio_notice = kind === 'audio'
+              ? 'No se confirmó el envío. Tu audio sigue acá: podés reintentar con el mismo botón o descargarlo.'
+              : 'No se confirmó el envío. Tu mensaje sigue acá para reintentar.'
+            return
+          }
+          acknowledged = true
+          this.draft_sending = true
+          if (draft_id) {
+            try { await remove_audio_draft(draft_id) } catch (err) {
+              this.audio_notice = 'El audio se guardó en el servidor, pero quedó una copia local pendiente de limpiar.'
+            }
+          }
+          if (this.body === original_body) this.body = ''
+          if (this.attachment === original_attachment) this.attachment = null
+          this.audio_draft_id = null
+          this.audio_draft_partial = false
+          this.reasoning_visible = false
+          if (this.$refs.file_input) this.$refs.file_input.value = ''
+          this.audio_notice = model.remote_delivery_status === 'not_received'
+            ? 'Audio guardado en el servidor. Su entrega falló: usá Reintentar en el mensaje de la conversación.' : ''
+          this.$nextTick(() => this.ajustar_alto())
+          this.draft_sending = false
+      }
+      this._audio_result_handler = on_result
+      this._audio_result_id = draft_id
       this.$emit('send-message', {
         body: this.body,
         kind: kind,
         attachment: this.attachment,
+        ticket_id: this.ticket_id,
+        client_message_id: draft_id || new_audio_id(),
+        on_result: on_result,
       })
-      this.body = ''
-      this.attachment = null
-      this.reasoning_visible = false
-      this.$refs.file_input.value = ''
       /* Con el texto ya vaciado el textarea tiene que volver a un renglón; si no, el footer se
          queda del alto que tenía el mensaje que se acaba de mandar. */
       this.$nextTick(function () {
@@ -503,6 +704,9 @@ export default {
   border-top: 1px solid #e9ecef;
   padding: 10px;
 }
+
+.support-input-audio-notice { font-size: 12px; padding: 4px 0; overflow-wrap: anywhere; }
+.support-input-audio-player { display: block; width: 100%; max-height: 42px; margin-bottom: 6px; }
 
 /* Fila compacta que muestra el archivo adjunto pendiente antes de enviar */
 .support-input-attachment-preview {

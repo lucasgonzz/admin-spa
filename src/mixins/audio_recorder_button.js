@@ -1,4 +1,5 @@
 import { OggOpusRecorder } from '@/utils/oggOpusRecorder'
+import { markRaw } from 'vue'
 
 /** A partir de acá el gesto se considera "mantener pulsado" en vez de un toque corto. */
 const HOLD_THRESHOLD_MS = 400
@@ -51,6 +52,8 @@ export default {
     return {
       /** true mientras el micrófono está grabando. */
       audio_recording: false,
+      /** Preparación real: todavía no se recibió audio del micrófono. */
+      audio_starting: false,
       /** true desde que se pidió el corte hasta que sale el archivo (o falla). */
       audio_closing: false,
       /** Instancia OggOpusRecorder activa (null cuando no graba). */
@@ -94,7 +97,12 @@ export default {
     /* cancel_audio_recording() ya limpia los temporizadores (tick, hold y el
        del corte pendiente) vía stop_audio_tick(): ninguna vista que use este
        mixin puede dejar el micrófono abierto al desmontarse. */
-    this.cancel_audio_recording()
+    if (typeof this.preserve_audio_on_leave === 'function' && this.preserve_audio_on_leave() && this.audio_recorder) {
+      this.stop_and_send_audio()
+      this.stop_audio_tick()
+    } else {
+      this.cancel_audio_recording()
+    }
   },
 
   methods: {
@@ -112,7 +120,7 @@ export default {
       event.preventDefault()
       this._audio_last_touch_at = Date.now()
 
-      if (this.audio_recording) {
+      if (this.audio_recording || this.audio_starting) {
         /*
           Este toque es el que corta, no el que arranca: se marca para que el touchend no lo mida
           como si fuera un "mantener pulsado". Sin esta marca, un touchend que llega tarde --
@@ -212,7 +220,7 @@ export default {
       this._audio_pending_toggle_stop = false
       this._audio_gesto_de_corte = false
       this._clear_pending_stop_timer()
-      if (this.audio_recording) {
+      if (this.audio_recording || this.audio_starting) {
         this.stop_and_send_audio()
       }
     },
@@ -249,7 +257,7 @@ export default {
         clearTimeout(this._audio_hold_timer_id)
         this._audio_hold_timer_id = null
       }
-      if (this._audio_hold_mode && this.audio_recording) {
+      if (this._audio_hold_mode && (this.audio_recording || this.audio_starting)) {
         this._audio_hold_mode = false
         this.stop_and_send_audio()
       }
@@ -269,7 +277,7 @@ export default {
         this._audio_hold_mode = false
         return
       }
-      if (this.audio_recording) {
+      if (this.audio_recording || this.audio_starting) {
         this.stop_and_send_audio()
       } else {
         this.start_audio_recording()
@@ -285,7 +293,7 @@ export default {
      */
     start_audio_recording() {
       const self = this
-      if (this.audio_recording) {
+      if (this.audio_recording || this.audio_starting || this.audio_closing) {
         return
       }
       if (typeof this.can_record_audio === 'function' && !this.can_record_audio()) {
@@ -296,16 +304,33 @@ export default {
         return
       }
 
-      const recorder = new OggOpusRecorder({
+      // El wrapper tiene identidad y recursos nativos: un Proxy de Vue rompe la comparación
+      // con los callbacks del encoder y hace que nunca se anuncie el inicio efectivo.
+      const recorder = markRaw(new OggOpusRecorder({
+        onReady: function () {
+          if (self.audio_recorder !== recorder) return
+          self.audio_starting = false
+          if (self.audio_closing) return
+          self.audio_recording = true
+          self._audio_tick_id = setInterval(function () {
+            self.audio_elapsed_seconds += 1
+            if (self.audio_elapsed_seconds >= MAX_RECORDING_SECONDS) self.stop_and_send_audio()
+          }, 1000)
+          if (typeof self.on_audio_started === 'function') self.on_audio_started()
+        },
+        onProgress: function (blob) {
+          if (typeof self.on_audio_progress === 'function') self.on_audio_progress(blob)
+        },
         onData: function (blob, origen) {
           self.stop_audio_tick()
           self.audio_recording = false
+          self.audio_starting = false
           self.audio_closing = false
           self.audio_recorder = null
           if (origen === 'rescate') {
             /*
               Queda anotado a propósito, y fuerte. Una nota rescatada sale truncada al final (hasta
-              800 ms) y por lo demás es indistinguible de una entera: si el cuelgue del cierre
+              200 ms) y por lo demás es indistinguible de una entera: si el cuelgue del cierre
               volviera a aparecer, sin este aviso el bug dejaría de verse y pasaría a ser una
               degradación silenciosa que nadie reporta.
             */
@@ -321,6 +346,7 @@ export default {
           console.error('Error en la grabación de audio', err)
           self.stop_audio_tick()
           self.audio_recording = false
+          self.audio_starting = false
           self.audio_closing = false
           self.audio_recorder = null
           /*
@@ -333,24 +359,20 @@ export default {
             self.avisar_error_de_audio('No se pudo cerrar la grabación. Probá de nuevo.', 'cierre')
           } else {
             self.avisar_error_de_audio(
-              'No se pudo acceder al micrófono. Verificá los permisos del navegador.',
+              err && err.name === 'NotAllowedError'
+                ? 'El navegador no permitió usar el micrófono. Revisá sus permisos y probá de nuevo.'
+                : 'El micrófono no llegó a iniciar la captura. No empezaste a grabar. Probá de nuevo.',
               'arranque'
             )
           }
         },
-      })
+      }))
 
       self.audio_recorder = recorder
-      self.audio_recording = true
+      self.audio_starting = true
+      self.audio_recording = false
       self.audio_closing = false
       self.audio_elapsed_seconds = 0
-      self._audio_tick_id = setInterval(function () {
-        self.audio_elapsed_seconds += 1
-        if (self.audio_elapsed_seconds >= MAX_RECORDING_SECONDS) {
-          self.stop_and_send_audio()
-        }
-      }, 1000)
-
       recorder.start().catch(function () {
         /* el error ya se maneja por onError */
       })
@@ -370,7 +392,7 @@ export default {
      * @returns {void}
      */
     stop_and_send_audio() {
-      if (!this.audio_recording || !this.audio_recorder) {
+      if ((!this.audio_recording && !this.audio_starting) || !this.audio_recorder) {
         return
       }
       this.audio_closing = true
@@ -389,6 +411,7 @@ export default {
       }
       this.stop_audio_tick()
       this.audio_recording = false
+      this.audio_starting = false
       this.audio_closing = false
       this.audio_recorder = null
     },

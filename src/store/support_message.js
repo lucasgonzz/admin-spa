@@ -1,5 +1,6 @@
 import api from '@/utils/axios'
 import { keep_best_delivery, merge_status_payload, emoji_to_send, admin_reaction_of } from '@/utils/support_ticks'
+import { remove_audio_draft } from '@/utils/support_audio_drafts'
 
 /**
  * Cuántos ids entran en cada POST masivo de "marcar leído". El backend valida hasta 500 por
@@ -334,39 +335,50 @@ export default {
     /**
      * Envía mensaje desde admin-spa con fila optimista.
      */
-    send_message({ commit, state, dispatch }, payload) {
+    send_message({ commit, state, dispatch, rootState }, payload) {
+      if (state.sending) return Promise.resolve(null)
       commit('set_sending', true)
-      const client_key = 'c' + String(Date.now()) + '-' + String(Math.random()).slice(2, 8)
+      const ticket_id = payload.ticket_id || state.active_ticket_id
+      const owner_id = rootState.auth.admin && rootState.auth.admin.id
+      const client_key = payload.client_message_id || 'c' + String(Date.now()) + '-' + String(Math.random()).slice(2, 8)
       const body_text = (payload.body && String(payload.body).trim()) || ''
       const kind_val = payload.kind || 'text'
-      commit('push_pending_message', {
+      commit('remove_pending_message', client_key)
+      if (String(state.active_ticket_id) === String(ticket_id)) commit('push_pending_message', {
         _client_pending: client_key,
-        support_ticket_id: state.active_ticket_id,
+        support_ticket_id: ticket_id,
         sender_type: 'admin',
         kind: kind_val,
         body: body_text,
         _retry_attachment: payload.attachment || null,
+        _retry_client_message_id: client_key,
       })
       const form_data = new FormData()
       form_data.append('body', payload.body || '')
       form_data.append('kind', kind_val)
+      form_data.append('client_message_id', client_key)
       if (payload.attachment) {
         form_data.append('attachment', payload.attachment)
       }
       return api
-        .post('/support-ticket/' + state.active_ticket_id + '/message', form_data, {
+        .post('/support-ticket/' + ticket_id + '/message', form_data, {
+          timeout: 60000,
           headers: {
             'Content-Type': 'multipart/form-data',
           },
         })
         .then(function (response) {
+          const model = response.data && response.data.model
+          if (!model || model.id == null || (kind_val === 'audio' && !(model.attachments && model.attachments.length))) {
+            throw new Error('El servidor no confirmó el archivo del mensaje.')
+          }
           commit('set_sending', false)
-          commit('replace_pending_with_model', { client_key: client_key, model: response.data.model })
-          if (state.active_ticket_id != null) {
+          if (String(state.active_ticket_id) === String(ticket_id)) commit('replace_pending_with_model', { client_key: client_key, model: model })
+          if (ticket_id != null) {
             commit(
               'support_ticket/patch_ticket_ai_pending',
               {
-                ticket_id: state.active_ticket_id,
+                ticket_id: ticket_id,
                 ai_pending_suggestion: null,
                 ai_suggestion_send_at: null,
               },
@@ -375,6 +387,13 @@ export default {
           }
           if (response.data && response.data.model) {
             dispatch('support_ticket/apply_ticket_from_message', response.data.model, { root: true })
+          }
+          if (kind_val === 'audio') {
+            // También confirma el reintento de la fila optimista, que no pasa por el input.
+            remove_audio_draft(client_key).catch(function () {})
+            window.dispatchEvent(new CustomEvent('support-audio-confirmed', {
+              detail: { id: client_key, scope: String(owner_id) + ':' + String(ticket_id), model: model },
+            }))
           }
           return response.data.model
         })
@@ -385,6 +404,7 @@ export default {
             error_code: 'not_sent',
           })
           console.log(error)
+          return null
         })
     },
     /**
@@ -396,6 +416,8 @@ export default {
         commit('remove_pending_message', pending_key)
       }
       return dispatch('send_message', {
+        ticket_id: message.support_ticket_id,
+        client_message_id: message._retry_client_message_id || message._client_pending,
         body: message.body,
         kind: message.kind || 'text',
         attachment: message._retry_attachment || null,
