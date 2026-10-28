@@ -342,9 +342,10 @@ export function sumar_meses_a_fecha(fecha, meses) {
 export function repartir_en_cuotas(total, cantidad, primer_vencimiento) {
   const n = Math.max(1, Math.floor(numero(cantidad) || 1))
   const monto_total = redondear(total)
-  /* La cuota "normal" se redondea a centavos como lo hace el backend (`round(total / n, 2)`); la
-     diferencia de ese redondeo la absorbe la última. */
-  const cuota_base = redondear(monto_total / n)
+  /* La cuota "normal" se trunca a centavos, igual que `VentaService::repartir()`
+     (`floor(total * 100 / n) / 100`); la diferencia la absorbe la última, que así nunca queda
+     por debajo de las otras. */
+  const cuota_base = Math.floor((monto_total * 100) / n) / 100
   const cuotas = []
   let acumulado = 0
   for (let i = 0; i < n; i++) {

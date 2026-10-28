@@ -60,7 +60,7 @@
           v-model.number="form.cantidad_cuotas"
           type="number"
           min="1"
-          max="36"
+          max="60"
           step="1"
           class="form-control form-control-sm"
           @input="cantidad_tocada = true"
@@ -335,8 +335,8 @@ export default {
         return 'Para un desarrollo a medida u otro producto, escribí qué se vende.'
       }
       const cantidad = Math.floor(numero(f.cantidad_cuotas))
-      if (cantidad < 1 || cantidad > 36) {
-        return 'La cantidad de cuotas tiene que estar entre 1 y 36.'
+      if (cantidad < 1 || cantidad > 60) {
+        return 'La cantidad de cuotas tiene que estar entre 1 y 60 (el tope de la API).'
       }
       if (f.vendedor_admin_id && (String(f.comision_porcentaje) === '' || numero(f.comision_porcentaje) < 0 || numero(f.comision_porcentaje) > 100)) {
         return 'El porcentaje de comisión tiene que estar entre 0 y 100.'
