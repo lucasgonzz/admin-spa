@@ -115,6 +115,7 @@
         :venta="venta"
         :productos="productos"
         :vendedores="vendedores"
+        :es_suscripcion="es_suscripcion"
         @lista="aplicar_respuesta"
         @cambio="cargar"
       />

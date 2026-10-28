@@ -108,7 +108,7 @@
           </div>
           <div class="col-6 col-md-2">
             <label class="form-label small mb-1">Comisión %</label>
-            <input v-model="edicion.form.comision_porcentaje" type="number" min="0" max="100" step="0.5" class="form-control form-control-sm" />
+            <input v-model="edicion.form.comision_porcentaje" type="number" min="0" max="100" step="0.5" class="form-control form-control-sm" :placeholder="String(porcentaje_sugerido_edicion)" />
           </div>
           <div class="col-6 col-md-2">
             <label class="form-label small mb-1">Comisión total</label>
@@ -188,6 +188,7 @@ import {
   comision_de_venta,
   nombre_de_vendedor,
   numero,
+  porcentaje_sugerido,
   productos_de_venta,
   redondear,
   resumen_de_venta,
@@ -222,6 +223,11 @@ export default {
     productos: { type: Object, default: function () { return {} } },
     /** Admins que pueden ser vendedores: `[{id, name}]`. */
     vendedores: { type: Array, default: function () { return [] } },
+    /**
+     * true si el contrato del cliente (o de su lead) está en Suscripción: con el sistema
+     * (`gestion`) en la venta, el % sugerido es 30 en vez de 15.
+     */
+    es_suscripcion: { type: Boolean, default: false },
   },
   emits: ['lista', 'cambio'],
   data() {
@@ -311,6 +317,33 @@ export default {
     comision_editada() {
       return redondear(numero(this.resumen.total || this.venta.monto_total) * numero(this.edicion.form.comision_porcentaje) / 100)
     },
+    /**
+     * % que le corresponde a la venta con los productos que tiene tildados la edición: 30 si
+     * incluye el sistema y el cliente está en Suscripción, 15 si no (espejo de
+     * `VentaService::porcentaje_por_defecto()`).
+     * @returns {number}
+     */
+    porcentaje_sugerido_edicion() {
+      return porcentaje_sugerido(this.edicion.form.productos || [], this.es_suscripcion)
+    },
+  },
+  watch: {
+    /**
+     * Hallazgo H1 de la revisión (28/10/2026): una venta sin % a la que se le asigna vendedor
+     * guardaba `comision_porcentaje: null` y la comisión quedaba en cero. Ahora, al elegir un
+     * vendedor con el % vacío, se precarga el % sugerido y la comisión calculada aparece en
+     * vivo. Si el operador ya tenía un % cargado, no se toca.
+     * @param {number|null} nuevo
+     */
+    'edicion.form.vendedor_admin_id': function (nuevo) {
+      if (!this.edicion.show || !nuevo) {
+        return
+      }
+      const actual = this.edicion.form.comision_porcentaje
+      if (actual === '' || actual === null || actual === undefined) {
+        this.edicion.form.comision_porcentaje = this.porcentaje_sugerido_edicion
+      }
+    },
   },
   methods: {
     formatear_fecha,
@@ -364,7 +397,9 @@ export default {
     },
     /**
      * PUT client/{id}/ventas/{ventaId}. El backend recalcula `comision_monto` si cambió el %.
-     * Un % vacío viaja como null (la venta queda sin porcentaje y sin comisión).
+     * Si el % quedó vacío, la clave NO se manda (hallazgo H1): mandar null dejaba la venta sin
+     * porcentaje y con la comisión en cero; sin la clave, la API conserva lo que había o aplica
+     * su default.
      */
     guardar_edicion() {
       const self = this
@@ -372,18 +407,21 @@ export default {
         return
       }
       const f = this.edicion.form
-      const porcentaje = f.comision_porcentaje === '' || f.comision_porcentaje === null ? null : Number(f.comision_porcentaje)
+      const payload = {
+        productos: f.productos,
+        descripcion: String(f.descripcion || '').trim() || null,
+        fecha: f.fecha || null,
+        moneda: f.moneda || 'USD',
+        vendedor_admin_id: f.vendedor_admin_id || null,
+        observacion: String(f.observacion || '').trim() || null,
+      }
+      /* El % viaja solo si tiene un valor: vacío = no se manda la clave (ver el comentario de arriba). */
+      if (f.comision_porcentaje !== '' && f.comision_porcentaje !== null && f.comision_porcentaje !== undefined) {
+        payload.comision_porcentaje = Number(f.comision_porcentaje)
+      }
       self.ocupado = true
       api
-        .put('/client/' + this.client_id + '/ventas/' + this.venta.id, {
-          productos: f.productos,
-          descripcion: String(f.descripcion || '').trim() || null,
-          fecha: f.fecha || null,
-          moneda: f.moneda || 'USD',
-          vendedor_admin_id: f.vendedor_admin_id || null,
-          comision_porcentaje: porcentaje,
-          observacion: String(f.observacion || '').trim() || null,
-        }, { silent_error: true })
+        .put('/client/' + this.client_id + '/ventas/' + this.venta.id, payload, { silent_error: true })
         .then(function (res) {
           self.ocupado = false
           self.edicion.show = false
