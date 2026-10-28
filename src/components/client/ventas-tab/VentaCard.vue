@@ -170,6 +170,7 @@
       <cuotas-tabla
         :client_id="client_id"
         :cuotas="cuotas"
+        :moneda_venta="venta.moneda || 'USD'"
         texto_vacio="Esta venta no tiene cuotas cargadas."
         @cambio="$emit('cambio')"
       />

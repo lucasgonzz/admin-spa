@@ -128,7 +128,16 @@
       <div class="row g-2">
         <div class="col-6 col-md-2">
           <label class="form-label small mb-1">Moneda</label>
-          <select v-model="edicion.form.moneda" class="form-select form-select-sm">
+          <!-- Una cuota de una venta va en la moneda de la venta (la API la fuerza): se muestra,
+               no se edita. Las cuotas sueltas (sin venta) sí la pueden cambiar. -->
+          <div
+            v-if="moneda_bloqueada(cuota_en_edicion)"
+            class="form-control form-control-sm bg-white text-muted"
+            title="La moneda es la de la venta"
+          >
+            {{ moneda_de(cuota_en_edicion) }}
+          </div>
+          <select v-else v-model="edicion.form.moneda" class="form-select form-select-sm">
             <option value="USD">USD</option>
             <option value="ARS">ARS</option>
           </select>
@@ -200,6 +209,11 @@ export default {
     cuotas: { type: Array, default: function () { return [] } },
     /** Texto cuando no hay ninguna cuota. */
     texto_vacio: { type: String, default: 'Sin cuotas.' },
+    /**
+     * Moneda de la venta dueña de estas cuotas (null = cuotas sueltas). Con moneda de venta, la
+     * moneda de cada cuota no se edita: la API la fuerza a la de la venta.
+     */
+    moneda_venta: { type: String, default: null },
   },
   emits: ['cambio'],
   data() {
@@ -246,6 +260,24 @@ export default {
       window.dispatchEvent(new CustomEvent('admin-spa-toast', {
         detail: { message: String(message), variant: variant || 'success' },
       }))
+    },
+    /**
+     * true si la moneda de la cuota no se puede editar: pertenece a una venta (tiene `venta_id`,
+     * o la tabla es la de una venta). Una venta no mezcla monedas.
+     * @param {Object} cuota
+     * @returns {boolean}
+     */
+    moneda_bloqueada(cuota) {
+      return !!(this.moneda_venta || (cuota && cuota.venta_id))
+    },
+    /**
+     * Moneda a mostrar (y mandar) para una cuota de venta: la de la venta si se conoce; si no, la
+     * que trae la cuota, que la API ya igualó a la de su venta.
+     * @param {Object} cuota
+     * @returns {string}
+     */
+    moneda_de(cuota) {
+      return this.moneda_venta || (cuota && cuota.moneda) || 'USD'
     },
     /**
      * true si la cuota es de un mes anterior al corriente.
@@ -407,7 +439,8 @@ export default {
       api
         .put('/client/' + this.client_id + '/licencias/' + cuota.id, {
           monto: Number(f.monto || 0),
-          moneda: f.moneda || 'USD',
+          /* Cuota de venta: va la moneda de la venta, nunca otra (la API igual la fuerza). */
+          moneda: this.moneda_bloqueada(cuota) ? this.moneda_de(cuota) : (f.moneda || 'USD'),
           vencimiento: f.vencimiento || null,
           periodo: partes_de_periodo(f.periodo) ? f.periodo : null,
           observacion: f.observacion || null,
