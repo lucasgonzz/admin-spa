@@ -12,7 +12,7 @@ import ClientInstallationsTab from '@/components/client/InstallationsTab.vue'
 import EcommerceImplementationTab from '@/components/client/EcommerceImplementationTab.vue'
 import MensualidadTab from '@/components/client/MensualidadTab.vue'
 import ContratoTab from '@/components/client/ContratoTab.vue'
-import LicenciasTab from '@/components/client/LicenciasTab.vue'
+import VentasTab from '@/components/client/ventas-tab/Index.vue'
 import ClientScheduleTab from '@/components/client/ScheduleTab.vue'
 import ClientTokensTab from '@/components/client/TokensTab.vue'
 import ClientSerperTab from '@/components/client/SerperTab.vue'
@@ -61,11 +61,13 @@ export default {
           component: markRaw(ContratoTab),
         },
         {
-          /* Cuotas de la licencia (misma misión): monto y mes de cada cuota del contrato, con
-             pagos parciales. Es la otra mitad de la plata del cliente, junto a Mensualidad. */
-          key: 'licencias',
-          label: 'Licencias',
-          component: markRaw(LicenciasTab),
+          /* Ventas del cliente (misión ventas-y-comisiones, 28/10/2026; antes "Licencias", de la
+             misión modulo-cobranzas): lo que se le vendió —sistema, e-commerce, agentes, un
+             desarrollo u otra cosa—, cada venta con sus cuotas (pagos parciales incluidos) y la
+             comisión del vendedor. Es la otra mitad de la plata del cliente, junto a Mensualidad. */
+          key: 'ventas',
+          label: 'Ventas',
+          component: markRaw(VentasTab),
         },
         {
           key: 'horarios',

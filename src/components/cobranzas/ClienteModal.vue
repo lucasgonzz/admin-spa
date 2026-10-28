@@ -25,8 +25,10 @@
       <div v-if="montadas.mensualidad" v-show="pestana_activa === 'mensualidad'">
         <mensualidad-tab :record="cliente" />
       </div>
-      <div v-if="montadas.licencias" v-show="pestana_activa === 'licencias'">
-        <licencias-tab :record="cliente" />
+      <!-- Ventas (ex Licencias, misión ventas-y-comisiones 28/10/2026). `abrir_nueva` lo usa el
+           botón "Nueva venta" de Cobranzas › Ventas: abre el modal con el formulario de alta. -->
+      <div v-if="montadas.ventas" v-show="pestana_activa === 'ventas'">
+        <ventas-tab :record="cliente" :abrir_nueva="abrir_nueva_venta" />
       </div>
     </template>
 
@@ -41,15 +43,18 @@
 import BaseModal from '@/components/ui/BaseModal.vue'
 import HorizontalNav from '@/common-vue/components/horizontal-nav/Index.vue'
 import MensualidadTab from '@/components/client/MensualidadTab.vue'
-import LicenciasTab from '@/components/client/LicenciasTab.vue'
+import VentasTab from '@/components/client/ventas-tab/Index.vue'
 
 /**
  * Modal del cliente del módulo Cobranzas (misión modulo-cobranzas, 18/9/2026).
  *
- * Es "el modal del cliente pero solo con Mensualidad y Licencias", como lo pidió Lucas: las dos
+ * Es "el modal del cliente pero solo con Mensualidad y Ventas", como lo pidió Lucas: las dos
  * pestañas son EXACTAMENTE los componentes que usa la ficha completa en Clientes
- * (`components/client/MensualidadTab.vue` y `LicenciasTab.vue`), así que lo que se hace acá y lo
- * que se hace desde Clientes es lo mismo, sin dos versiones que mantener.
+ * (`components/client/MensualidadTab.vue` y `components/client/ventas-tab/Index.vue`), así que
+ * lo que se hace acá y lo que se hace desde Clientes es lo mismo, sin dos versiones que mantener.
+ *
+ * Misión ventas-y-comisiones (28/10/2026): la pestaña "Licencias" pasó a ser "Ventas". La clave
+ * vieja `licencias` en `pestana_inicial` se sigue aceptando y abre Ventas.
  *
  * No usa el `ResourceView`/modal genérico porque ese exige el modelo completo con sus
  * propiedades y su formulario, y acá se quiere abrir desde una fila de la tabla con nada más
@@ -57,14 +62,16 @@ import LicenciasTab from '@/components/client/LicenciasTab.vue'
  */
 export default {
   name: 'CobranzasClienteModal',
-  components: { BaseModal, HorizontalNav, MensualidadTab, LicenciasTab },
+  components: { BaseModal, HorizontalNav, MensualidadTab, VentasTab },
   props: {
     /** Visibilidad, controlada por el padre (v-model:show). */
     show: { type: Boolean, default: false },
     /** Cliente a mostrar: `{id, name, company_name}`. */
     cliente: { type: Object, default: null },
-    /** Pestaña con la que se abre: `mensualidad` (default) o `licencias`. */
+    /** Pestaña con la que se abre: `mensualidad` (default) o `ventas` (también acepta `licencias`, el nombre viejo). */
     pestana_inicial: { type: String, default: 'mensualidad' },
+    /** Si es true y se abre en Ventas, la pestaña arranca con el formulario "Nueva venta" abierto. */
+    abrir_nueva_venta: { type: Boolean, default: false },
   },
   emits: ['update:show', 'close'],
   data() {
@@ -72,12 +79,12 @@ export default {
       /** Pestañas del nav. */
       pestanas: [
         { key: 'mensualidad', label: 'Mensualidad' },
-        { key: 'licencias', label: 'Licencias' },
+        { key: 'ventas', label: 'Ventas' },
       ],
       /** Clave de la pestaña visible. */
       pestana_activa: 'mensualidad',
       /** Pestañas que ya se abrieron en esta apertura del modal (ver montaje perezoso). */
-      montadas: { mensualidad: false, licencias: false },
+      montadas: { mensualidad: false, ventas: false },
     }
   },
   computed: {
@@ -101,11 +108,14 @@ export default {
       immediate: true,
       handler(visible) {
         if (visible) {
-          this.pestana_activa = this.pestana_inicial === 'licencias' ? 'licencias' : 'mensualidad'
-          this.montadas = { mensualidad: false, licencias: false }
+          /* `licencias` es el nombre viejo de la pestaña: se sigue aceptando por si algún
+             llamador quedó sin actualizar. */
+          const pide_ventas = this.pestana_inicial === 'ventas' || this.pestana_inicial === 'licencias'
+          this.pestana_activa = pide_ventas ? 'ventas' : 'mensualidad'
+          this.montadas = { mensualidad: false, ventas: false }
           this.montadas[this.pestana_activa] = true
         } else {
-          this.montadas = { mensualidad: false, licencias: false }
+          this.montadas = { mensualidad: false, ventas: false }
         }
       },
     },
