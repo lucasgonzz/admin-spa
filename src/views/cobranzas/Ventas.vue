@@ -245,8 +245,9 @@ import {
  *
  * Toda la gestión (alta, edición, cuotas, pagos) vive en la pestaña Ventas del cliente
  * (`components/client/ventas-tab/`): click en una fila abre el `ClienteModal` en esa pestaña, y
- * "Nueva venta" pide primero el cliente (`GET /client`, la lista completa: el cliente al que se le
- * vende por primera vez todavía no figura en esta tabla) y lo abre con el formulario de alta.
+ * "Nueva venta" pide primero el cliente (`GET /client?for_select=1`, la lista completa pero en su
+ * forma liviana `{id, name, company_name}`: el cliente al que se le vende por primera vez
+ * todavía no figura en esta tabla) y lo abre con el formulario de alta.
  */
 export default {
   name: 'ViewCobranzasVentas',
@@ -477,8 +478,10 @@ export default {
       }
     },
     /**
-     * "Nueva venta": abre el selector de cliente. La lista de clientes (`GET /client`) se pide
-     * una sola vez por visita a la pantalla.
+     * "Nueva venta": abre el selector de cliente. La lista de clientes se pide una sola vez por
+     * visita a la pantalla, por el camino liviano `GET /client?for_select=1` de
+     * `ClientController::index_json` (solo id, name y company_name, sin las relaciones de
+     * `withAll()`): para elegir un cliente no hace falta más.
      */
     abrir_elegir_cliente() {
       const self = this
@@ -490,7 +493,7 @@ export default {
       }
       this.elegir.cargando = true
       api
-        .get('/client', { silent_error: true })
+        .get('/client', { params: { for_select: 1 }, silent_error: true })
         .then(function (res) {
           const modelos = (res.data && res.data.models) || []
           self.elegir.clientes = modelos.slice().sort(function (a, b) {
