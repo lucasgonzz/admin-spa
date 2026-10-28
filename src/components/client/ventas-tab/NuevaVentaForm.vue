@@ -39,7 +39,8 @@
           min="0"
           step="0.01"
           class="form-control form-control-sm"
-          :placeholder="hay_importe_libre ? 'Importe libre' : ''"
+          :class="{ 'is-invalid': falta_total_en_pesos }"
+          :placeholder="hay_importe_libre || form.moneda !== 'USD' ? 'Importe libre' : ''"
         />
       </div>
       <div class="col-6 col-md-2 d-flex align-items-end">
@@ -127,8 +128,10 @@
       <i class="bi bi-info-circle me-1"></i>
       El cliente está en modalidad Suscripción y la venta incluye el sistema: la comisión por defecto es {{ porcentaje_suscripcion }} %.
     </p>
-    <p v-if="form.moneda !== 'USD' && hay_precio_de_lista" class="small text-muted mb-0 mt-2">
-      Los precios de lista son en dólares: en pesos el total no se precarga.
+    <!-- En pesos no hay precio de lista: el total es obligatorio (la API contesta 422 sin él) y
+         el botón Guardar queda bloqueado hasta que se cargue. -->
+    <p v-if="form.moneda !== 'USD' && (hay_precio_de_lista || falta_total_en_pesos)" class="small mb-0 mt-2" :class="falta_total_en_pesos ? 'text-danger' : 'text-muted'">
+      Los precios de lista son en dólares: en pesos el total no se precarga<template v-if="falta_total_en_pesos"> y hay que cargarlo para poder guardar</template>.
     </p>
 
     <!-- ============================================================ -->
@@ -161,7 +164,7 @@
 
     <div class="d-flex flex-wrap justify-content-end gap-2 mt-3">
       <button type="button" class="btn btn-secondary btn-sm" :disabled="guardando" @click="$emit('cancelar')">Cancelar</button>
-      <button type="button" class="btn btn-primary btn-sm" :disabled="guardando" @click="guardar">
+      <button type="button" class="btn btn-primary btn-sm" :disabled="guardando || falta_total_en_pesos" @click="guardar">
         {{ guardando ? 'Guardando...' : 'Guardar venta' }}
       </button>
     </div>
@@ -243,6 +246,9 @@ export default {
       porcentaje_tocado: false,
       // true si el operador tocó a mano el primer vencimiento: deja de seguir a la fecha de la venta.
       vencimiento_tocado: false,
+      // Último total que precargó el formulario (null = ninguno, o el operador lo pisó). Sirve
+      // para limpiarlo al pasar a pesos: un 1.500 de lista en dólares no vale como ARS 1.500.
+      ultimo_precargado: null,
       // true después del primer intento de guardar: recién ahí se pintan los errores.
       intento_guardar: false,
       // true mientras corre el POST.
@@ -320,6 +326,14 @@ export default {
       return repartir_en_cuotas(this.form.monto_total, this.form.cantidad_cuotas, this.form.primer_vencimiento || this.form.fecha)
     },
     /**
+     * true si la venta es en pesos y el total está vacío (o en cero). En pesos no hay precio de
+     * lista que la API pueda usar, así que sin total contesta 422: el formulario lo bloquea antes.
+     * @returns {boolean}
+     */
+    falta_total_en_pesos() {
+      return this.form.moneda !== 'USD' && numero(this.form.monto_total) <= 0
+    },
+    /**
      * Primer error de validación (vacío si el formulario se puede mandar).
      * @returns {string}
      */
@@ -327,6 +341,9 @@ export default {
       const f = this.form
       if (!f.productos.length) {
         return 'Elegí al menos un producto.'
+      }
+      if (this.falta_total_en_pesos) {
+        return 'En pesos no hay precio de lista: cargá el total de la venta.'
       }
       if (numero(f.monto_total) <= 0) {
         return 'Cargá el total de la venta.'
@@ -403,7 +420,13 @@ export default {
         const sugerido = precio_sugerido(f.productos, f.contado, this.precios)
         if (sugerido !== null) {
           f.monto_total = sugerido
+          this.ultimo_precargado = sugerido
         }
+      } else if (this.ultimo_precargado !== null && numero(f.monto_total) === this.ultimo_precargado) {
+        /* Se pasó a pesos con el precio de lista en dólares todavía en el campo: se vacía para
+           que no se guarde "ARS 1.500" por error. Lo que el operador tipeó a mano no se toca. */
+        f.monto_total = ''
+        this.ultimo_precargado = null
       }
       if (!this.cantidad_tocada) {
         if (f.contado) {
