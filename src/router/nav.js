@@ -11,14 +11,43 @@ function admin_is_closer(admin) {
 }
 
 /**
+ * Indica si el perfil admin autenticado es vendedor (misión ventas-y-comisiones, 28/10/2026): es
+ * lo que muestra "Mis comisiones" en el menú.
+ *
+ * Lee `admin.es_vendedor`. Si el perfil no trae la clave (`undefined`: un perfil cacheado en
+ * localStorage desde antes de esta misión, o un `/me` que todavía no la devuelve) se cae a
+ * `is_closer`, porque el comando de migración `ventas:migrar-licencias` marca como vendedores
+ * justamente a los closers (Tomás). Apenas la clave llega, manda ella: un `false` explícito
+ * esconde el ítem aunque el admin sea closer.
+ *
+ * @param {Object|null|undefined} admin Perfil desde auth.admin.
+ * @returns {boolean}
+ */
+function admin_es_vendedor(admin) {
+  if (!admin) {
+    return false
+  }
+  if (admin.es_vendedor === undefined || admin.es_vendedor === null) {
+    return !!admin.is_closer
+  }
+  return !!admin.es_vendedor
+}
+
+/**
  * Rutas visibles en la barra de navegación lateral (meta.nav === true).
  *
- * @param {Object|null|undefined} admin Perfil admin autenticado (reservado para filtros futuros por perfil).
+ * Las que tienen `meta.solo_vendedor` (hoy, "Mis comisiones") se muestran solo si el admin es
+ * vendedor (`admin_es_vendedor`).
+ *
+ * @param {Object|null|undefined} admin Perfil admin autenticado.
  * @returns {Array<object>}
  */
 export function get_nav_routes(admin) {
   return routes_def.filter(function (r) {
     if (!r.meta || !r.meta.nav) {
+      return false
+    }
+    if (r.meta.solo_vendedor && !admin_es_vendedor(admin)) {
       return false
     }
     return true

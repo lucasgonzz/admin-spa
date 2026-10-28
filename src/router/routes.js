@@ -166,9 +166,11 @@ const routes_def = [
     /**
      * Módulo Cobranzas (misión modulo-cobranzas, 18/9/2026): la planilla de administración de
      * Lucas adentro del admin. Mensualidades (una fila por cliente, una columna por mes, con
-     * emitir factura / registrar pago / traer empleados) y Licencias (las cuotas del contrato,
-     * con pagos parciales). Va pegado a Clientes y Tokens porque es el mismo objeto mirado
-     * desde la plata que entra. Redirige a Mensualidades, que es la pantalla de entrada.
+     * emitir factura / registrar pago / traer empleados), Ventas (lo que se le vendió a cada
+     * cliente con sus cuotas; ex Licencias) y Comisiones (lo que le corresponde a cada vendedor,
+     * con sus pagos) — estas dos últimas de la misión ventas-y-comisiones, 28/10/2026. Va pegado
+     * a Clientes y Tokens porque es el mismo objeto mirado desde la plata que entra. Redirige a
+     * Mensualidades, que es la pantalla de entrada.
      */
     path: '/cobranzas',
     name: 'cobranzas',
@@ -185,14 +187,53 @@ const routes_def = [
         meta: { requiresAuth: true, nav: false },
       },
       {
-        /** Cuotas de la licencia de cada cliente, con pagos parciales. */
-        path: '/cobranzas/licencias',
-        name: 'cobranzas_licencias',
-        text: 'Licencias',
-        component: () => import('@/views/cobranzas/Licencias.vue'),
+        /**
+         * Ventas de cada cliente (misión ventas-y-comisiones, 28/10/2026; reemplaza a Licencias):
+         * por cliente y por venta, el total, lo cobrado, lo que debe y la comisión del vendedor.
+         */
+        path: '/cobranzas/ventas',
+        name: 'cobranzas_ventas',
+        text: 'Ventas',
+        component: () => import('@/views/cobranzas/Ventas.vue'),
+        meta: { requiresAuth: true, nav: false },
+      },
+      {
+        /**
+         * Comisiones de los vendedores (misma misión): cuánto le corresponde a cada uno por venta,
+         * cuánto está liberado y cuánto se le pagó, con el registro de los pagos.
+         */
+        path: '/cobranzas/comisiones',
+        name: 'cobranzas_comisiones',
+        text: 'Comisiones',
+        component: () => import('@/views/cobranzas/Comisiones.vue'),
         meta: { requiresAuth: true, nav: false },
       },
     ],
+  },
+  {
+    /**
+     * Ex "Cobranzas > Licencias": desde la misión ventas-y-comisiones (28/10/2026) esa pantalla es
+     * Cobranzas > Ventas. Queda el redirect para que un link viejo o un marcador no termine en un
+     * 404. Fuera del array de children a propósito: el Nav pinta TODOS los hijos de un grupo sin
+     * mirar meta.nav (mismo criterio que `/actualizaciones/demo`).
+     */
+    path: '/cobranzas/licencias',
+    redirect: '/cobranzas/ventas',
+    meta: { requiresAuth: true, nav: false },
+  },
+  {
+    /**
+     * Mis comisiones (misión ventas-y-comisiones, 28/10/2026): la pantalla del vendedor, de solo
+     * lectura, con lo que tiene para cobrar, lo que ya cobró y lo que se le libera cuando paguen
+     * los clientes. `meta.solo_vendedor` la saca del menú a los admins que no están marcados "Es
+     * vendedor" (ver `get_nav_routes` en router/nav.js); la ruta en sí no tiene más guarda que la
+     * sesión porque la API (`comisiones/mias`) ya filtra por el admin autenticado.
+     */
+    path: '/mis-comisiones',
+    name: 'mis_comisiones',
+    text: 'Mis comisiones',
+    component: () => import('@/views/MisComisiones.vue'),
+    meta: { requiresAuth: true, nav: true, icon: 'wallet2', solo_vendedor: true },
   },
   {
     // Ítem padre con submenú: Sistema / Ecommerce. Redirige a Sistema por compatibilidad
