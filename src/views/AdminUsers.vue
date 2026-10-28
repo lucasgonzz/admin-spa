@@ -36,6 +36,8 @@
             <th>Teléfono</th>
             <th>Es closer</th>
             <th>Es setter</th>
+            <!-- Misión ventas-y-comisiones (28/10/2026): a quién se le liquida comisión. -->
+            <th>Es vendedor</th>
             <th style="width: 100px">Acciones</th>
           </tr>
         </thead>
@@ -62,6 +64,15 @@
                 :class="admin.es_setter ? 'bg-success' : 'bg-light text-muted'"
               >
                 {{ admin.es_setter ? 'Sí' : 'No' }}
+              </span>
+            </td>
+            <td>
+              <!-- Indicador visual del flag es_vendedor (misión ventas-y-comisiones, 28/10/2026) -->
+              <span
+                class="badge"
+                :class="admin.es_vendedor ? 'bg-success' : 'bg-light text-muted'"
+              >
+                {{ admin.es_vendedor ? 'Sí' : 'No' }}
               </span>
             </td>
             <td>
@@ -207,6 +218,24 @@
                 lo cierra. Si no hay ningún setter marcado, esas tareas quedan sin asignar y las
                 puede tomar cualquiera, y las notificaciones caen en quien haya activado la
                 campanita del lead.
+              </div>
+            </div>
+
+            <!-- Campo: Es vendedor (misión ventas-y-comisiones, 28/10/2026). El flag vive en
+                 `admins.es_vendedor` y lo guarda `AdminProperties` (entrada "Es vendedor"). -->
+            <div class="mb-3 form-check">
+              <input
+                v-model="form.es_vendedor"
+                type="checkbox"
+                class="form-check-input"
+                id="es_vendedor_check"
+              />
+              <label class="form-check-label" for="es_vendedor_check">
+                Es vendedor
+              </label>
+              <div class="form-text text-muted">
+                Se le liquida comisión por las ventas que se le asignan. Si hay un solo vendedor,
+                las ventas nuevas se le asignan solas. Ve sus comisiones en "Mis comisiones".
               </div>
             </div>
 
@@ -384,6 +413,8 @@ export default {
         is_closer: false,
         /* Flag que indica si el admin es setter: recibe automáticamente tareas de leads. */
         es_setter: false,
+        /* Flag que indica si el admin es vendedor: se le liquida comisión por sus ventas. */
+        es_vendedor: false,
         /* Flag que indica si el admin debe preseleccionarse por defecto al crear tareas manuales. */
         is_default_task_assignee: false,
         /* Teléfono en formato E.164; requerido para notificar al closer por WhatsApp. */
@@ -449,6 +480,7 @@ export default {
         password: '',
         is_closer: false,
         es_setter: false,
+        es_vendedor: false,
         is_default_task_assignee: false,
         phone_number: '',
         notify_lead_escalation_whatsapp: false,
@@ -477,6 +509,8 @@ export default {
         is_closer:    !!admin.is_closer,
         /* Cargar flags de rol: es_setter e is_default_task_assignee. */
         es_setter:    !!admin.es_setter,
+        /* Flag de vendedor (misión ventas-y-comisiones, 28/10/2026). */
+        es_vendedor:  !!admin.es_vendedor,
         is_default_task_assignee: !!admin.is_default_task_assignee,
         /* Cargar teléfono existente para que el setter pueda editarlo. */
         phone_number: admin.phone_number || '',
@@ -519,6 +553,8 @@ export default {
         is_closer:    self.form.is_closer,
         /* Flags de rol: es_setter e is_default_task_assignee; se envían siempre. */
         es_setter:    self.form.es_setter,
+        /* Flag de vendedor: se envía siempre para poder desmarcarlo. */
+        es_vendedor:  self.form.es_vendedor,
         is_default_task_assignee: self.form.is_default_task_assignee,
         /* Teléfono del admin; se envía siempre (puede estar vacío para borrarlo). */
         phone_number: self.form.phone_number,
