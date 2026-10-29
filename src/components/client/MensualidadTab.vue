@@ -60,6 +60,27 @@
               <div class="form-text small">Primer mes de mensualidad. Vacío = no se le reclaman meses.</div>
             </div>
 
+            <!-- Cliente que no paga mensualidad (misión no-paga-mensualidad, 29/10/2026): está
+                 cargado en el admin pero no usa el sistema y no se le cobra. Cobranzas lo deja
+                 fuera de lo que hay que cobrar (no lo pinta de rojo ni lo suma en "Falta cobrar").
+                 Lo que pagó de verdad sigue contando en "Cobrado". Se guarda con el botón Guardar. -->
+            <div class="col-md-8">
+              <div class="form-check form-switch">
+                <input
+                  id="mensualidad-no-paga"
+                  v-model="form.no_paga_mensualidad"
+                  class="form-check-input"
+                  type="checkbox"
+                />
+                <label class="form-check-label small fw-semibold" for="mensualidad-no-paga">
+                  No paga mensualidad (no usa el sistema)
+                </label>
+              </div>
+              <div class="form-text small">
+                No se le reclaman meses en Cobranzas y no suma en lo que falta cobrar. Después hay que apretar Guardar.
+              </div>
+            </div>
+
             <!-- Cantidad de empleados: input principal para clientes viejos, se carga a mano -->
             <div class="col-md-4">
               <label class="form-label small mb-1 fw-semibold">Cantidad de empleados</label>
@@ -919,6 +940,8 @@ export default {
         afip_domicilio: '',
         // true = la factura de mensualidad sale a Consumidor final, sin CUIT.
         facturar_consumidor_final: false,
+        // true = el cliente no usa el sistema y no paga mensualidad: Cobranzas no lo cuenta como deuda.
+        no_paga_mensualidad: false,
       },
       // Valor de `facturar_consumidor_final` que el backend tiene GUARDADO (el último snapshot). El
       // backend factura lo guardado, no lo que está sin guardar en el form: el confirm() de
@@ -1539,6 +1562,8 @@ export default {
         afip_domicilio: snapshot.afip_domicilio || '',
         // Una API vieja no manda la clave: se lee como false.
         facturar_consumidor_final: !!snapshot.facturar_consumidor_final,
+        // Una API vieja tampoco manda esta clave: se lee como false (el cliente paga).
+        no_paga_mensualidad: !!snapshot.no_paga_mensualidad,
       }
       // Lo que quedó guardado en el backend (ver `consumidor_final_guardado` en data()).
       this.consumidor_final_guardado = !!snapshot.facturar_consumidor_final

@@ -200,6 +200,13 @@
                 <div class="d-flex align-items-center gap-2">
                   <span class="fw-semibold">{{ cliente.nombre || 'Cliente #' + cliente.id }}</span>
                   <span v-if="cliente.is_active === false" class="badge text-bg-light text-muted border">inactivo</span>
+                  <!-- No usa el sistema y no se le cobra: sus meses no cuentan como deuda. La API
+                       vieja no manda la clave y el badge no aparece. -->
+                  <span
+                    v-if="cliente.no_paga_mensualidad"
+                    class="badge text-bg-secondary"
+                    title="No usa el sistema: no se le cobra mensualidad y no suma en lo que falta cobrar."
+                  >no paga</span>
                 </div>
                 <div v-if="cliente.name && cliente.name !== cliente.nombre" class="cobranzas-tabla__nota">{{ cliente.name }}</div>
                 <div v-if="cliente.cobranzas_observaciones" class="cobranzas-tabla__nota" :title="cliente.cobranzas_observaciones">
