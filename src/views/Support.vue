@@ -78,6 +78,7 @@
           @back="volver_a_la_lista"
           @toggle-agent="toggle_agent"
           @toggle-verification="toggle_verification"
+          @toggle-attention="toggle_attention"
           @request-suggestion="request_suggestion" />
       </div>
       <div class="support-right-middle flex-grow-1 min-h-0 d-flex flex-column overflow-hidden">
@@ -927,6 +928,28 @@ export default {
      * @param {string} endpoint Sufijo de la ruta.
      * @returns {void}
      */
+    toggle_attention() {
+      if (this.saving_agent_controls || !this.selected_ticket_id || !this.selected_ticket.support_attention) {
+        return
+      }
+      const self = this
+      const ticket_id = this.selected_ticket_id
+      const needs_human = this.selected_ticket.support_attention.needs_human !== true
+      this.saving_agent_controls = true
+      api.patch('/support-ticket/' + ticket_id + '/attention', { needs_human })
+        .then(function (response) {
+          const model = response.data && response.data.model
+          if (model) {
+            self.$store.commit('support_ticket/upsert_from_broadcast', model)
+          }
+        })
+        .catch(function (error) {
+          self.mostrar_error_de_borrador(error, 'No se pudo cambiar la alerta de intervención.')
+        })
+        .then(function () {
+          self.saving_agent_controls = false
+        })
+    },
     post_agent_toggle(endpoint) {
       if (this.saving_agent_controls || !this.selected_ticket_id) {
         return
@@ -959,6 +982,7 @@ export default {
         return
       }
       const self = this
+      const ticket_id = payload.message.support_ticket_id || this.selected_ticket_id
       const cuerpo = payload.body === null ? {} : { body: payload.body }
       this.draft_busy = true
       api
@@ -970,7 +994,7 @@ export default {
             self.$store.commit('support_message/patch_message', model)
           }
           self.$store.commit('support_ticket/patch_ticket_ai_pending', {
-            ticket_id: self.selected_ticket_id,
+            ticket_id: ticket_id,
             ai_pending_suggestion: null,
             ai_suggestion_send_at: null,
           })
@@ -978,6 +1002,11 @@ export default {
              las demás quedan en la conversación marcadas como no enviadas. Sin este aviso, el
              operador aprieta Enviar, no ve ningún error, y no tiene por qué mirar si aparecieron
              dos burbujas rojas más abajo. */
+          if (datos.ticket) {
+            self.$store.commit('support_ticket/upsert_from_broadcast', datos.ticket)
+          } else {
+            self.$store.dispatch('support_ticket/schedule_attention_refresh')
+          }
           if (datos.partial) {
             window.alert(datos.error)
           }
@@ -1000,13 +1029,15 @@ export default {
         return
       }
       const self = this
+      const ticket_id = message.support_ticket_id || this.selected_ticket_id
       this.draft_busy = true
       api
         .post('/support-message/' + message.id + '/discard-ai-draft')
         .then(function () {
           self.$store.commit('support_message/remove_model_by_id', message.id)
+          self.$store.dispatch('support_ticket/schedule_attention_refresh')
           self.$store.commit('support_ticket/patch_ticket_ai_pending', {
-            ticket_id: self.selected_ticket_id,
+            ticket_id: ticket_id,
             ai_pending_suggestion: null,
             ai_suggestion_send_at: null,
           })

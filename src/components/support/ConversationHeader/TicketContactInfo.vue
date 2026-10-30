@@ -148,6 +148,13 @@ export default {
 </script>
 
 <style scoped>
+/* El nombre cede espacio al menú del teléfono: sin esto el foco desplaza el hilo y corta controles. */
+.ticket-contact-info,
+.ticket-contact-text,
+.ticket-contact-line {
+  min-width: 0;
+}
+
 .ticket-contact-back {
   font-size: 1.35rem;
   line-height: 1;

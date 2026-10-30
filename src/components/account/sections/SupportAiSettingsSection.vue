@@ -83,27 +83,10 @@
       con el último mensaje.
     </p>
 
-    <div class="form-check mb-3">
-      <input
-        id="support_ai_require_verification"
-        v-model="local_require_verification"
-        class="form-check-input"
-        type="checkbox"
-        :disabled="loading || saving || load_failed" />
-      <label class="form-check-label small" for="support_ai_require_verification">
-        Los tickets nuevos arrancan pidiendo verificación humana
-      </label>
-    </div>
-    <p class="text-muted small mb-2">
-      Decide con qué régimen nace cada ticket nuevo. Tildado, toda respuesta que el agente escriba en un ticket nuevo
-      queda esperando tu aprobación desde la conversación. Destildado, los tickets nuevos le contestan solos al cliente,
-      tras el tiempo de espera que tengas configurado para el envío automático, y el escalado sigue siendo la red para
-      lo que el agente no sabe responder. Mientras «Activar sugerencias automáticas de IA para soporte» esté apagado el
-      agente no genera ninguna respuesta, así que este régimen recién se nota cuando lo prendas.
-    </p>
     <p class="text-muted small mb-3">
-      <strong>Cambiar esto no toca ningún ticket ya abierto.</strong> Cada conversación se queda con el régimen que
-      tenía, y solo lo cambia una persona con el botón del encabezado.
+      Los tickets nuevos siempre contestan automáticamente. Si querés revisar las respuestas de una
+      conversación antes de enviarlas, activá "Con verificación" en el encabezado de ese ticket.
+      Ese cambio se aplica solamente a esa conversación.
     </p>
 
     <div v-if="local_suggestions_enabled" class="row g-2 align-items-end mb-2">
@@ -159,8 +142,8 @@
       «Activar sugerencias automáticas de IA para soporte» es el corte maestro: apagado, el agente no genera nada en
       ningún ticket. Prendido, cada conversación manda con sus dos botones propios, en el encabezado del ticket: uno
       prende o apaga el agente para ese cliente, y el otro decide si sus respuestas necesitan tu aprobación antes de
-      salir. Los tickets nuevos nacen con el régimen que indique «Los tickets nuevos arrancan pidiendo verificación
-      humana», y una vez abiertos no lo cambian solos.
+      salir. Los tickets nuevos siempre nacen para contestar solos; la verificación se activa solamente desde
+      esa conversación.
     </p>
 
     <p v-if="loading" class="text-muted small mt-2 mb-0">Cargando…</p>
@@ -175,7 +158,7 @@ import api from '@/utils/axios'
 /**
  * Sección en Cuenta: el interruptor del canal de soporte por WhatsApp (si un mensaje abre ticket y qué se contesta
  * mientras esté apagado) y, debajo, las sugerencias IA automáticas, el debounce previo a Claude, la demora de envío
- * y el régimen con el que nacen los tickets nuevos.
+ * para los tickets sin verificación. La aprobación se elige en cada conversación.
  */
 export default {
   name: 'SupportAiSettingsSection',
@@ -188,16 +171,9 @@ export default {
       /** Segundos antes del envío automático de la sugerencia generada (0 = inmediato). */
       local_auto_send_delay: 0,
       /**
-       * Checkbox: régimen con el que nacen los tickets nuevos.
-       *
-       * Arranca en true y no en false porque este valor se muestra antes de que vuelva el GET: si la carga falla, el
-       * operador ve el estado seguro (todo espera aprobación) y no el que le manda respuestas al cliente sin leerlas.
-       */
-      local_require_verification: true,
-      /**
        * Interruptor maestro del canal: si un cliente que escribe por WhatsApp abre ticket de soporte.
        *
-       * Arranca en false, al revés de `local_require_verification`, porque acá el estado seguro es el
+       * Arranca en false porque acá el estado seguro es el
        * apagado: si la carga falla o la API no manda la clave, mostrarlo prendido haría creer que los
        * mensajes de los clientes se están leyendo cuando puede que caigan en silencio.
        */
@@ -216,7 +192,6 @@ export default {
       stored_suggestions_enabled: false,
       stored_suggestion_delay: 0,
       stored_auto_send_delay: 0,
-      stored_require_verification: true,
       stored_tickets_habilitados: false,
       stored_texto_desconectado: '',
       /** Carga inicial GET settings. */
@@ -262,14 +237,6 @@ export default {
         return this.is_suggestion_delay_valid() && this.is_auto_send_delay_valid()
       }
       if (this.local_suggestions_enabled !== this.stored_suggestions_enabled) {
-        if (!this.local_suggestions_enabled) {
-          return true
-        }
-        return this.is_suggestion_delay_valid() && this.is_auto_send_delay_valid()
-      }
-      // Se chequea antes del `return false` de abajo: con las sugerencias apagadas ese return deja el botón Guardar
-      // muerto, y entonces el régimen de nacimiento no se podría cambiar nunca sin prender el corte maestro.
-      if (this.local_require_verification !== this.stored_require_verification) {
         if (!this.local_suggestions_enabled) {
           return true
         }
@@ -325,9 +292,6 @@ export default {
           const enabled = !!data.suggestions_enabled
           const suggestion_delay = parseInt(data.suggestion_delay, 10)
           const auto_send_delay = parseInt(data.auto_send_delay, 10)
-          // Si la API todavía no manda el campo, se asume prendido: mostrarlo apagado y que el operador guarde sin
-          // querer daría vuelta el régimen de todos los tickets nuevos.
-          const require_verification = data.require_verification === undefined ? true : !!data.require_verification
           // Si la API todavía no manda las claves del canal se asume apagado y sin texto, que es el estado
           // real desde el 16/9 y además el que no miente: con esto apagado los mensajes de los clientes no
           // abren ticket, y mostrarlo prendido haría creer que alguien los está leyendo.
@@ -341,8 +305,6 @@ export default {
           self.canal_soportado = canal_soportado
           self.local_suggestions_enabled = enabled
           self.stored_suggestions_enabled = enabled
-          self.local_require_verification = require_verification
-          self.stored_require_verification = require_verification
           self.local_tickets_habilitados = tickets_habilitados
           self.stored_tickets_habilitados = tickets_habilitados
           self.local_texto_desconectado = texto_desconectado
@@ -384,18 +346,10 @@ export default {
       self.saving = true
       self.saved_message = ''
       self.error_message = ''
-      // La regla es una sola y pareja: cada clave viaja solo si el operador la cambió. Las tres son `nullable` del
-      // lado de la API y, si no vienen, caen en lo que ya está guardado, así que este PUT no puede pisar lo que otro
-      // operador acabe de configurar desde otra pestaña —ni una demora que el corte maestro esconde, ni el régimen de
-      // nacimiento, que es justo el que decide si el agente le escribe solo a un cliente—. La única excepción es
-      // `suggestions_enabled`, que va siempre porque la API lo pide `required`: no agregar más excepciones.
+      // Cada clave opcional viaja solo si el operador la cambió, para no pisar cambios de otra pestaña.
+      // La verificación se configura únicamente desde cada ticket.
       const payload = {
         suggestions_enabled: self.local_suggestions_enabled,
-      }
-      // No se condiciona por `local_suggestions_enabled`, a diferencia de las demoras: el régimen de nacimiento es una
-      // perilla aparte y se tiene que poder cambiar con el corte maestro apagado.
-      if (self.local_require_verification !== self.stored_require_verification) {
-        payload.require_verification = self.local_require_verification
       }
       // Tampoco se condicionan por `local_suggestions_enabled`: el canal es anterior a la IA.
       if (self.local_tickets_habilitados !== self.stored_tickets_habilitados) {
@@ -419,9 +373,6 @@ export default {
           const data = res.data || {}
           self.local_suggestions_enabled = !!data.suggestions_enabled
           self.stored_suggestions_enabled = self.local_suggestions_enabled
-          self.local_require_verification =
-            data.require_verification === undefined ? true : !!data.require_verification
-          self.stored_require_verification = self.local_require_verification
           const saved_suggestion_delay = parseInt(data.suggestion_delay, 10)
           const saved_auto_send_delay = parseInt(data.auto_send_delay, 10)
           if (!isNaN(saved_suggestion_delay)) {
@@ -463,10 +414,6 @@ export default {
             (err.response && err.response.data && err.response.data.message) ||
             'No se pudo guardar.'
           self.error_message = msg
-          // La pantalla vuelve a mostrar lo que hay en el servidor. Dejar el check como lo dejó el operador lo haría
-          // irse creyendo que los tickets nuevos ya esperan su aprobación cuando en el servidor siguen contestando
-          // solos: de todas las formas de fallar, esa es la única que miente hacia el lado peligroso.
-          self.local_require_verification = self.stored_require_verification
           // Y por el mismo motivo, el interruptor del canal: la mentira peligrosa es mostrarlo prendido
           // cuando en el servidor los mensajes de los clientes no abren ticket.
           self.local_tickets_habilitados = self.stored_tickets_habilitados
