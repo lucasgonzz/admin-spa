@@ -22,11 +22,37 @@
           </div>
           <p v-if="venta.descripcion" class="small mb-0 mt-1">{{ venta.descripcion }}</p>
           <p v-if="venta.observacion" class="text-muted small mb-0 mt-1 fst-italic">{{ venta.observacion }}</p>
+          <!-- Seña (misión senas-en-ventas, 30/10/2026): chip con el total; al tocarlo se despliega
+               la lista (fecha, monto, nota). Oculto si la venta no tiene señas. -->
+          <div v-if="tiene_senas" class="mt-1">
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-success venta-card__sena-chip"
+              :aria-expanded="senas_abiertas ? 'true' : 'false'"
+              :title="senas_abiertas ? 'Ocultar las señas' : 'Ver las señas'"
+              @click="senas_abiertas = !senas_abiertas"
+            >
+              <i class="bi bi-cash-coin me-1"></i>Seña {{ format_monto_con_moneda(sena_total, venta.moneda) }}
+              <i class="bi ms-1" :class="senas_abiertas ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+            </button>
+            <ul v-if="senas_abiertas" class="list-unstyled small mb-0 mt-1 venta-card__senas">
+              <li v-for="sena in senas" :key="sena.id" class="venta-card__sena">
+                <span class="text-muted">{{ formatear_fecha(sena.fecha) }}</span>
+                <span class="fw-semibold ms-2">{{ format_monto_con_moneda(sena.monto, sena.moneda || venta.moneda) }}</span>
+                <span v-if="sena.nota" class="text-muted fst-italic ms-2">{{ sena.nota }}</span>
+              </li>
+            </ul>
+          </div>
         </div>
         <div class="d-flex flex-wrap gap-1 ms-auto">
           <button type="button" class="btn btn-outline-primary btn-sm" :disabled="ocupado" @click="alternar_cuota_nueva">
             <i class="bi bi-plus-lg"></i>
             <span class="d-none d-sm-inline ms-1">{{ cuota_nueva.show ? 'Cancelar' : 'Cuota' }}</span>
+          </button>
+          <!-- Solo si queda saldo: una seña no puede pasar la deuda. -->
+          <button v-if="puede_registrar_sena" type="button" class="btn btn-outline-success btn-sm" :disabled="ocupado" @click="alternar_sena_nueva">
+            <i class="bi bi-cash-coin"></i>
+            <span class="ms-1">{{ sena_nueva.show ? 'Cancelar' : 'Registrar seña' }}</span>
           </button>
           <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="ocupado" title="Editar la venta" @click="alternar_edicion">
             <i class="bi bi-pencil"></i>
@@ -168,6 +194,22 @@
         </div>
       </div>
 
+      <!-- ========================================================== -->
+      <!-- Registrar una seña: pago a cuenta que el backend aplica    -->
+      <!-- solo a las cuotas pendientes más próximas.                 -->
+      <!-- ========================================================== -->
+      <sena-form
+        v-if="sena_nueva.show"
+        :id_base="'venta-' + venta.id + '-sena'"
+        :url="'/ventas/' + venta.id + '/senas'"
+        :moneda="venta.moneda || 'USD'"
+        :maximo="resumen.pendiente"
+        titulo="Registrar seña"
+        ayuda="La seña se aplica sola a las cuotas pendientes más próximas."
+        @registrada="sena_registrada"
+        @cancelar="sena_nueva.show = false"
+      />
+
       <cuotas-tabla
         :client_id="client_id"
         :cuotas="cuotas"
@@ -182,6 +224,7 @@
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
 import CuotasTabla from './CuotasTabla.vue'
+import SenaForm from '@/components/senas/SenaForm.vue'
 import { formatear_fecha } from '@/components/cobranzas/meses'
 import { format_monto_con_moneda } from '@/components/cobranzas/plata'
 import {
@@ -209,13 +252,19 @@ import {
  * (`DELETE client/{id}/ventas/{ventaId}`; la API contesta 422 si ya se le pagó comisión al
  * vendedor, y ese mensaje se muestra tal cual).
  *
+ * Señas (misión senas-en-ventas, 30/10/2026): si la venta trae `senas` / `resumen.sena_total` se
+ * muestra el chip «Seña USD X» con la lista desplegable, y mientras haya saldo pendiente el botón
+ * «Registrar seña» abre `SenaForm` (`POST ventas/{id}/senas`). La seña se aplica sola a las
+ * cuotas en el backend; acá solo se redibuja con la respuesta. Contra una API vieja que no manda
+ * `senas`, el chip no aparece (lista vacía, total 0).
+ *
  * No guarda estado propio de la venta: todo lo que cambia vuelve al orquestador, con `lista`
  * cuando la respuesta trae la lista entera de ventas (forma del GET) o con `cambio` cuando hay
  * que volver a pedirla.
  */
 export default {
   name: 'VentasTabVentaCard',
-  components: { CuotasTabla },
+  components: { CuotasTabla, SenaForm },
   props: {
     /** id del cliente (arma las rutas). */
     client_id: { type: [Number, String], required: true },
@@ -240,6 +289,10 @@ export default {
       edicion: { show: false, form: {} },
       // Alta inline de una cuota de esta venta.
       cuota_nueva: { show: false, form: { monto: '', vencimiento: '', observacion: '' } },
+      // Alta inline de una seña (el formulario vive en `SenaForm`).
+      sena_nueva: { show: false },
+      // true si el desplegable con la lista de señas está abierto.
+      senas_abiertas: false,
     }
   },
   computed: {
@@ -256,6 +309,40 @@ export default {
      */
     cuotas() {
       return Array.isArray(this.venta.cuotas) ? this.venta.cuotas : []
+    },
+    /**
+     * Señas de la venta `[{id, monto, moneda, fecha, nota, origen}]`; vacío si la API no las manda.
+     * @returns {Array<Object>}
+     */
+    senas() {
+      return Array.isArray(this.venta.senas) ? this.venta.senas : []
+    },
+    /**
+     * Total señado: `resumen.sena_total` si la API lo manda; si no, la suma de la lista; 0 sin nada.
+     * @returns {number}
+     */
+    sena_total() {
+      const resumen = this.venta.resumen || {}
+      if (resumen.sena_total !== undefined && resumen.sena_total !== null) {
+        return numero(resumen.sena_total)
+      }
+      return redondear(this.senas.reduce(function (acumulado, sena) {
+        return acumulado + numero(sena.monto)
+      }, 0))
+    },
+    /**
+     * true si hay algo para mostrar en el chip de seña.
+     * @returns {boolean}
+     */
+    tiene_senas() {
+      return this.senas.length > 0 || this.sena_total > 0
+    },
+    /**
+     * true si se puede registrar una seña: queda saldo pendiente en la venta.
+     * @returns {boolean}
+     */
+    puede_registrar_sena() {
+      return this.resumen.pendiente > 0
     },
     /**
      * `{total, cobrado, pendiente}` de la venta.
@@ -383,6 +470,7 @@ export default {
         return
       }
       this.cuota_nueva.show = false
+      this.sena_nueva.show = false
       const venta = this.venta
       this.edicion = {
         show: true,
@@ -444,6 +532,7 @@ export default {
         return
       }
       this.edicion.show = false
+      this.sena_nueva.show = false
       this.cuota_nueva = { show: true, form: { monto: '', vencimiento: '', observacion: '' } }
     },
     /**
@@ -476,6 +565,34 @@ export default {
           self.ocupado = false
           self.avisar(resolve_error_message(error), 'danger')
         })
+    },
+    /**
+     * Abre o cierra el alta de seña. Cierra la edición de la venta y el alta de cuota: un
+     * formulario a la vez.
+     */
+    alternar_sena_nueva() {
+      if (this.sena_nueva.show) {
+        this.sena_nueva.show = false
+        return
+      }
+      this.edicion.show = false
+      this.cuota_nueva.show = false
+      this.sena_nueva = { show: true }
+    },
+    /**
+     * La seña se registró (`POST ventas/{id}/senas`). El backend devuelve la lista entera del
+     * cliente: en la raíz con `ventas` o, según la versión, dentro de `lista_del_cliente`. Si no
+     * viene ninguna de las dos, se pide al orquestador que recargue.
+     * @param {Object} data Respuesta de la API.
+     */
+    sena_registrada(data) {
+      this.sena_nueva.show = false
+      this.avisar('Seña registrada: se aplicó a las cuotas.')
+      if (data && !Array.isArray(data.ventas) && data.lista_del_cliente && Array.isArray(data.lista_del_cliente.ventas)) {
+        this.devolver(data.lista_del_cliente)
+        return
+      }
+      this.devolver(data || {})
     },
     /**
      * DELETE client/{id}/ventas/{ventaId}, previa confirmación. Se lleva sus cuotas. Si al
@@ -527,6 +644,24 @@ export default {
 
 .venta-card__badge {
 	font-weight: 500;
+}
+
+/* Chip de la seña: compacto, para que no robe protagonismo a las cifras. */
+.venta-card__sena-chip {
+	padding: 0.1rem 0.5rem;
+	font-size: 0.8rem;
+	border-radius: 1rem;
+}
+
+/* Lista de señas desplegada: una por renglón, con una guía a la izquierda. */
+.venta-card__senas {
+	border-left: 2px solid #b7dfc6;
+	padding-left: 0.6rem;
+}
+
+.venta-card__sena {
+	padding: 0.1rem 0;
+	overflow-wrap: anywhere;
 }
 
 /* Las cifras con un separador fino arriba, para leerlas como una franja aparte del título. */
