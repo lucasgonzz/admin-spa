@@ -50,7 +50,8 @@
         </div>
         <div class="col-6 col-md-2">
           <div class="text-muted small">Debe el cliente</div>
-          <div class="fw-semibold" :class="{ 'text-danger': resumen.pendiente > 0 }">{{ format_monto_con_moneda(resumen.pendiente, venta.moneda) }}</div>
+          <!-- Rojo = plata a cobrar; ámbar = el cliente es de dudoso cobro (deuda en stand-by). -->
+          <div class="fw-semibold" :class="{ 'text-danger': resumen.pendiente > 0 && !venta.cobro_dudoso, 'text-warning-emphasis': resumen.pendiente > 0 && venta.cobro_dudoso }">{{ format_monto_con_moneda(resumen.pendiente, venta.moneda) }}</div>
         </div>
         <div class="col-6 col-md-6">
           <div class="text-muted small">
