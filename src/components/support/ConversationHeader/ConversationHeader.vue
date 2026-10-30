@@ -78,6 +78,9 @@
         <ticket-conversation-actions :has_ticket="has_ticket" @exit-ticket="$emit('exit-ticket')" />
       </div>
     </div>
+    <p v-if="has_ticket && !verification_on && selected_ticket.ai_pending_suggestion" class="small text-muted mb-0">
+      El borrador pendiente sigue esperando que lo envíes o descartes. Las próximas respuestas salen solas.
+    </p>
   </div>
 </template>
 
