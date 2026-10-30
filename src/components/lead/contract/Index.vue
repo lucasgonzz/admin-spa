@@ -144,6 +144,9 @@
       </button>
     </div>
 
+    <!-- Seña antes del alta (misión senas-en-ventas, 30/10/2026): se aplica sola a las cuotas al promover. -->
+    <senas-del-lead :lead="record" />
+
     <h6 class="text-primary mb-2">Mensualidad</h6>
     <div class="alert alert-light border mb-3">
       <div class="row g-2">
@@ -331,10 +334,11 @@ import {
   normalizar_permanencia,
 } from '@/utils/contract_modalidades'
 import CotizadorModal from './CotizadorModal.vue'
+import SenasDelLead from './SenasDelLead.vue'
 
 export default {
   name: 'LeadContractTab',
-  components: { CotizadorModal, PreciosPorSistema },
+  components: { CotizadorModal, PreciosPorSistema, SenasDelLead },
   props: {
     /**
      * Lead en edición (borrador del modal); se mutan los campos `contract_*` en el mismo objeto.
