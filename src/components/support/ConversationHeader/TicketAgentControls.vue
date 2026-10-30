@@ -7,13 +7,14 @@
     El estado no depende solo del color: el agente apagado cambia el ícono (robot tachado) y el
     texto ("Agente apagado"), y la verificación apagada cambia el ícono y el texto ("Contesta solo").
   -->
-  <div v-if="has_ticket" class="d-flex align-items-center gap-2 flex-shrink-0">
+  <div v-if="has_ticket" class="d-flex align-items-center flex-wrap gap-2">
     <button
       type="button"
       class="btn btn-sm ticket-agent-btn"
       :class="agent_button_class"
       :disabled="saving"
       :title="agent_title"
+      :aria-pressed="agent_on"
       @click="$emit('toggle-agent')">
       <!-- Robot; apagado lleva encima una línea diagonal (clase --struck). -->
       <span class="ticket-agent-icon" :class="{ 'ticket-agent-icon--struck': !agent_on }" aria-hidden="true">
@@ -28,23 +29,36 @@
       :class="verification_button_class"
       :disabled="saving || !agent_on"
       :title="verification_title"
+      :aria-pressed="verification_on"
       @click="$emit('toggle-verification')">
       <i class="bi" :class="verification_on ? 'bi-shield-check' : 'bi-shield-slash'" aria-hidden="true" />
       {{ verification_on ? 'Con verificación' : 'Contesta solo' }}
+    </button>
+
+    <button
+      type="button"
+      class="btn btn-sm ticket-agent-btn"
+      :class="attention_on ? 'btn-danger' : 'ticket-agent-btn--off'"
+      :disabled="saving || !attention_available"
+      :aria-pressed="attention_on"
+      :title="attention_title"
+      @click="$emit('toggle-attention')">
+      <i class="bi" :class="attention_on ? 'bi-bell-fill' : 'bi-bell-slash'" aria-hidden="true" />
+      {{ attention_on ? 'Necesita tu intervención' : 'Sin alerta de intervención' }}
     </button>
   </div>
 </template>
 
 <script>
 /**
- * Dos interruptores del agente de IA, por ticket.
+ * Controles de respuestas y alerta de intervención, propios de este ticket.
  *
  * Son los mismos que ya tiene la conversación de leads en su header. El de verificación se
  * deshabilita con el agente apagado porque no hay nada que verificar.
  */
 export default {
   name: 'TicketAgentControls',
-  emits: ['toggle-agent', 'toggle-verification'],
+  emits: ['toggle-agent', 'toggle-verification', 'toggle-attention'],
   props: {
     /**
      * Hay un ticket abierto en el panel.
@@ -65,17 +79,39 @@ export default {
      */
     verification_on: {
       type: Boolean,
-      default: true,
+      default: false,
     },
     /**
      * true mientras corre alguno de los dos POST.
      */
+    attention_on: {
+      type: Boolean,
+      default: false,
+    },
+    attention_available: {
+      type: Boolean,
+      default: false,
+    },
+    attention_reason: {
+      type: String,
+      default: '',
+    },
     saving: {
       type: Boolean,
       default: false,
     },
   },
   computed: {
+    attention_title() {
+      if (!this.attention_available) {
+        return 'Esperando el estado de intervención de este ticket.'
+      }
+      if (this.attention_on) {
+        const motivo = this.attention_reason ? this.attention_reason + ' ' : ''
+        return motivo + 'Tocá para marcar la alerta como atendida. El ticket y su misión se conservan.'
+      }
+      return 'Tocá para marcar que este ticket necesita tu intervención.'
+    },
     /**
      * Clase del botón del agente: relleno azul si está prendido, gris tenue si está apagado.
      *

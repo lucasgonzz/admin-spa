@@ -53,9 +53,13 @@
         :has_ticket="has_ticket"
         :agent_on="agent_on"
         :verification_on="verification_on"
+        :attention_on="attention_on"
+        :attention_available="attention_available"
+        :attention_reason="attention_reason"
         :saving="saving_agent_controls"
         @toggle-agent="$emit('toggle-agent')"
-        @toggle-verification="$emit('toggle-verification')" />
+        @toggle-verification="$emit('toggle-verification')"
+        @toggle-attention="$emit('toggle-attention')" />
       <ticket-ai-suggestion-button
         :has_ticket="has_ticket"
         :loading="ai_suggestion_loading"
@@ -74,6 +78,9 @@
         <ticket-conversation-actions :has_ticket="has_ticket" @exit-ticket="$emit('exit-ticket')" />
       </div>
     </div>
+    <p v-if="has_ticket && !verification_on && selected_ticket.ai_pending_suggestion" class="small text-muted mb-0">
+      El borrador pendiente sigue esperando que lo envíes o descartes. Las próximas respuestas salen solas.
+    </p>
   </div>
 </template>
 
@@ -110,6 +117,7 @@ export default {
     'exit-ticket',
     'toggle-agent',
     'toggle-verification',
+    'toggle-attention',
     'request-suggestion',
     'back',
   ],
@@ -196,6 +204,15 @@ export default {
     },
   },
   computed: {
+    attention_available() {
+      return !!(this.selected_ticket && this.selected_ticket.support_attention && this.selected_ticket.support_attention.can_toggle === true)
+    },
+    attention_on() {
+      return !!(this.selected_ticket && this.selected_ticket.support_attention && this.selected_ticket.support_attention.needs_human === true)
+    },
+    attention_reason() {
+      return this.selected_ticket && this.selected_ticket.support_attention ? (this.selected_ticket.support_attention.reason || '') : ''
+    },
     /**
      * Atajo para condicionar hijos.
      *
@@ -222,10 +239,10 @@ export default {
      */
     verification_on() {
       if (!this.selected_ticket) {
-        return true
+        return false
       }
       const value = this.selected_ticket.requiere_verificacion_mensajes
-      return value !== false && value !== 0
+      return value === true || value === 1
     },
     /**
      * true si el ticket en servidor ya tiene nombre (no vacío).
