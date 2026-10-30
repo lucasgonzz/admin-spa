@@ -156,21 +156,58 @@ export function clase_badge_producto(clave) {
 }
 
 /**
- * Resumen de cobro de una venta: `{total, cobrado, pendiente}` en la moneda de la venta. Lee
- * `venta.resumen`; si no viene (o le falta alguna cifra), lo arma con las cuotas, con el mismo
- * criterio que el backend: una cuota `pagada` sin `monto_pagado` cuenta completa.
+ * Parte de «cobro dudoso» (stand-by) del resumen de una venta (misión cobro-dudoso-y-pagos-ventas,
+ * 30/10/2026).
+ *
+ * Un cliente marcado de dudoso cobro tiene su deuda en un balde aparte: no cuenta como plata a
+ * cobrar, pero tampoco se da por perdida. La API lo manda en `resumen.en_espera` (la parte del
+ * pendiente que está en stand-by) y `resumen.por_cobrar` (el pendiente que sí se espera cobrar).
+ * `pendiente` conserva su significado: es la deuda total, en stand-by o no.
+ *
+ * Compatibilidad con una API vieja que no manda esas claves: `en_espera` vale 0 y `por_cobrar`
+ * cae a `pendiente` (todo lo que se debe se sigue viendo como plata a cobrar).
+ *
+ * @param {Object} resumen el `venta.resumen` de la API (puede venir vacío)
+ * @param {number} pendiente el pendiente total ya calculado
+ * @returns {{en_espera: number, por_cobrar: number}}
+ */
+function parte_en_espera(resumen, pendiente) {
+  const en_espera = resumen.en_espera !== undefined && resumen.en_espera !== null ? numero(resumen.en_espera) : 0
+  const por_cobrar = resumen.por_cobrar !== undefined && resumen.por_cobrar !== null
+    ? numero(resumen.por_cobrar)
+    : redondear(pendiente - en_espera)
+  return { en_espera: en_espera, por_cobrar: por_cobrar }
+}
+
+/**
+ * true si la venta (o la fila de cliente) viene marcada como de dudoso cobro. Una API vieja no
+ * manda la clave y se lee como false (el cliente paga).
+ *
+ * @param {Object|null|undefined} venta_o_cliente
+ * @returns {boolean}
+ */
+export function es_cobro_dudoso(venta_o_cliente) {
+  return !!(venta_o_cliente && venta_o_cliente.cobro_dudoso)
+}
+
+/**
+ * Resumen de cobro de una venta: `{total, cobrado, pendiente, en_espera, por_cobrar}` en la
+ * moneda de la venta. Lee `venta.resumen`; si no viene (o le falta alguna cifra), lo arma con las
+ * cuotas, con el mismo criterio que el backend: una cuota `pagada` sin `monto_pagado` cuenta
+ * completa. `en_espera` y `por_cobrar` solo los calcula la API (ver `parte_en_espera`).
  *
  * @param {Object} venta
- * @returns {{total: number, cobrado: number, pendiente: number}}
+ * @returns {{total: number, cobrado: number, pendiente: number, en_espera: number, por_cobrar: number}}
  */
 export function resumen_de_venta(venta) {
   const resumen = (venta && venta.resumen) || {}
   if (resumen.total !== undefined && resumen.cobrado !== undefined && resumen.pendiente !== undefined) {
-    return {
+    const pendiente_api = numero(resumen.pendiente)
+    return Object.assign({
       total: numero(resumen.total),
       cobrado: numero(resumen.cobrado),
-      pendiente: numero(resumen.pendiente),
-    }
+      pendiente: pendiente_api,
+    }, parte_en_espera(resumen, pendiente_api))
   }
   /* Plan B: sumar las cuotas. `monto_cobrado` lo manda `cuota_para_json`; si tampoco está, se
      deriva del estado y de `monto_pagado`. */
@@ -191,7 +228,12 @@ export function resumen_de_venta(venta) {
     total = numero(venta ? venta.monto_total : 0)
   }
   const pendiente = total - cobrado
-  return { total: redondear(total), cobrado: redondear(cobrado), pendiente: redondear(pendiente > 0 ? pendiente : 0) }
+  const pendiente_redondeado = redondear(pendiente > 0 ? pendiente : 0)
+  return Object.assign({
+    total: redondear(total),
+    cobrado: redondear(cobrado),
+    pendiente: pendiente_redondeado,
+  }, parte_en_espera(resumen, pendiente_redondeado))
 }
 
 /**
