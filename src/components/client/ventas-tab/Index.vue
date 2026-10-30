@@ -34,7 +34,7 @@
                   <div class="fw-semibold text-success">{{ format_por_moneda(totales.cobrado) }}</div>
                 </div>
                 <div class="col-4">
-                  <div class="text-muted small">{{ cobro_dudoso ? 'Debe (stand-by)' : 'Debe' }}</div>
+                  <div class="text-muted small text-nowrap">{{ cobro_dudoso ? 'Debe (stand-by)' : 'Debe' }}</div>
                   <!-- Rojo = plata que se espera cobrar; ámbar = deuda en stand-by (cobro dudoso). -->
                   <div
                     class="fw-semibold"
