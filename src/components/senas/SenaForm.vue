@@ -150,7 +150,7 @@ export default {
       self.ocupado = true
       api
         .post(this.url, {
-          monto: this.monto_numero,
+          monto: Math.round(this.monto_numero * 100) / 100,
           fecha: this.form.fecha || null,
           nota: String(this.form.nota || '').trim() || null,
         }, { silent_error: true })

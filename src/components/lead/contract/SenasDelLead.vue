@@ -56,7 +56,7 @@
           </ul>
           <p v-else class="small text-muted fst-italic mb-2">Todavía no hay señas registradas.</p>
           <p v-if="senas.length" class="small fw-semibold mb-2">
-            Total en seña: {{ format_monto_con_moneda(total, moneda) }}
+            Pendiente de aplicar: {{ format_monto_con_moneda(total, moneda) }}
           </p>
         </template>
 
