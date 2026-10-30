@@ -34,8 +34,12 @@
                   <div class="fw-semibold text-success">{{ format_por_moneda(totales.cobrado) }}</div>
                 </div>
                 <div class="col-4">
-                  <div class="text-muted small">Debe</div>
-                  <div class="fw-semibold" :class="{ 'text-danger': hay_valor(totales.pendiente) }">{{ format_por_moneda(totales.pendiente) }}</div>
+                  <div class="text-muted small">{{ cobro_dudoso ? 'Debe (stand-by)' : 'Debe' }}</div>
+                  <!-- Rojo = plata que se espera cobrar; ámbar = deuda en stand-by (cobro dudoso). -->
+                  <div
+                    class="fw-semibold"
+                    :class="{ 'text-danger': hay_valor(totales.por_cobrar), 'text-warning-emphasis': hay_valor(totales.en_espera) }"
+                  >{{ format_por_moneda(totales.pendiente) }}</div>
                 </div>
               </div>
               <p class="text-muted small mb-0 mt-2">
@@ -67,6 +71,59 @@
                 La comisión se libera a medida que paga el cliente.
               </p>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- Cobro dudoso (misión cobro-dudoso-y-pagos-ventas, 30/10/2026): -->
+      <!-- marca del CLIENTE. Su deuda de ventas deja de contar como    -->
+      <!-- plata a cobrar (queda "En stand-by" en Cobranzas), pero no   -->
+      <!-- se da por perdida. Se guarda al tocar el interruptor.        -->
+      <!-- ============================================================ -->
+      <div class="card border-0 ventas-panel mb-3" :class="{ 'ventas-panel--dudoso': cobro_dudoso }">
+        <div class="card-body py-2">
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            <div class="form-check form-switch mb-0">
+              <input
+                id="ventas-cobro-dudoso"
+                class="form-check-input"
+                type="checkbox"
+                :checked="cobro_dudoso"
+                :disabled="guardando_dudoso"
+                @change="alternar_cobro_dudoso($event)"
+              />
+              <label class="form-check-label small fw-semibold" for="ventas-cobro-dudoso">
+                Cobro dudoso (en stand-by)
+              </label>
+            </div>
+            <span v-if="cobro_dudoso && cobro_dudoso_desde" class="badge text-bg-warning">
+              desde {{ formatear_fecha(cobro_dudoso_desde) }}
+            </span>
+            <span v-if="guardando_dudoso" class="spinner-border spinner-border-sm text-secondary" role="status" aria-hidden="true" />
+          </div>
+          <div class="form-text small mb-2">
+            Su deuda deja de contar como plata a cobrar, pero tampoco se da por perdida.
+          </div>
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            <input
+              v-model="motivo_dudoso"
+              type="text"
+              maxlength="255"
+              class="form-control form-control-sm ventas-panel__motivo"
+              placeholder="Motivo (opcional)"
+              :disabled="guardando_dudoso"
+              @keyup.enter="guardar_motivo_dudoso"
+            />
+            <button
+              v-if="cobro_dudoso && motivo_dudoso_cambiado"
+              type="button"
+              class="btn btn-outline-secondary btn-sm"
+              :disabled="guardando_dudoso"
+              @click="guardar_motivo_dudoso"
+            >
+              Guardar motivo
+            </button>
           </div>
         </div>
       </div>
@@ -146,6 +203,7 @@ import CuotasTabla from './CuotasTabla.vue'
 import NuevaVentaForm from './NuevaVentaForm.vue'
 import VentaCard from './VentaCard.vue'
 import { format_por_moneda } from '@/components/cobranzas/plata'
+import { formatear_fecha } from '@/components/cobranzas/meses'
 import {
   COMISION_PORCENTAJE_DEFAULT,
   PRODUCTOS_ETIQUETAS_DEFAULT,
@@ -168,6 +226,8 @@ import {
  * - arriba muestra el resumen por moneda (lo que compró, cobrado, lo que debe; y la comisión);
  * - `NuevaVentaForm` es el alta manual; `VentaCard`, cada venta con sus cuotas; `CuotasTabla`
  *   (también adentro de cada venta) gestiona cuotas sueltas;
+ * - el interruptor "Cobro dudoso (en stand-by)" (misión cobro-dudoso-y-pagos-ventas, 30/10/2026)
+ *   marca al CLIENTE con `PUT client/{id}/cobro-dudoso`; la respuesta es la lista completa;
  * - "Generar cuotas desde el contrato" sigue (ruta vieja `licencias/desde-contrato`): desde esta
  *   misión, además de las cuotas, la API arma la venta con su vendedor y su comisión.
  *
@@ -215,6 +275,17 @@ export default {
       nueva_abierta: false,
       // true mientras corre el POST desde-contrato.
       generando: false,
+      // Marca de dudoso cobro del cliente (misión cobro-dudoso-y-pagos-ventas, 30/10/2026). Una
+      // API vieja no manda la clave y se lee como false.
+      cobro_dudoso: false,
+      // Fecha (Y-m-d) desde la que está marcado, o null.
+      cobro_dudoso_desde: null,
+      // Motivo guardado en el servidor ('' = sin motivo).
+      cobro_dudoso_motivo: '',
+      // Texto del campo de motivo (lo que se está tipeando).
+      motivo_dudoso: '',
+      // true mientras corre el PUT cobro-dudoso.
+      guardando_dudoso: false,
     }
   },
   computed: {
@@ -224,12 +295,15 @@ export default {
      * @returns {Object<string, Object<string, number>>}
      */
     totales() {
-      const acumulado = { total: {}, cobrado: {}, pendiente: {}, comision: {}, comision_pagada: {}, comision_a_pagar: {} }
+      const self = this
+      const acumulado = { total: {}, cobrado: {}, pendiente: {}, por_cobrar: {}, en_espera: {}, comision: {}, comision_pagada: {}, comision_a_pagar: {} }
       this.ventas.forEach(function (venta) {
         const resumen = resumen_de_venta(venta)
         sumar_en_moneda(acumulado.total, venta.moneda, resumen.total)
         sumar_en_moneda(acumulado.cobrado, venta.moneda, resumen.cobrado)
         sumar_en_moneda(acumulado.pendiente, venta.moneda, resumen.pendiente)
+        sumar_en_moneda(acumulado.por_cobrar, venta.moneda, resumen.por_cobrar)
+        sumar_en_moneda(acumulado.en_espera, venta.moneda, resumen.en_espera)
         const comision = comision_de_venta(venta)
         if (comision.vendedor_admin_id) {
           sumar_en_moneda(acumulado.comision, comision.moneda, comision.total)
@@ -245,8 +319,18 @@ export default {
         sumar_en_moneda(acumulado.total, cuota.moneda, una.total)
         sumar_en_moneda(acumulado.cobrado, cuota.moneda, una.cobrado)
         sumar_en_moneda(acumulado.pendiente, cuota.moneda, una.pendiente)
+        /* Una cuota suelta no trae corte de stand-by: si el cliente es de dudoso cobro, todo su
+           pendiente va a stand-by; si no, es plata a cobrar. */
+        sumar_en_moneda(self.cobro_dudoso ? acumulado.en_espera : acumulado.por_cobrar, cuota.moneda, una.pendiente)
       })
       return acumulado
+    },
+    /**
+     * true si el motivo tipeado difiere del guardado (habilita "Guardar motivo").
+     * @returns {boolean}
+     */
+    motivo_dudoso_cambiado() {
+      return String(this.motivo_dudoso || '').trim() !== String(this.cobro_dudoso_motivo || '')
     },
   },
   watch: {
@@ -264,6 +348,7 @@ export default {
   },
   methods: {
     format_por_moneda,
+    formatear_fecha,
     /**
      * Toast global del admin.
      * @param {string} message
@@ -326,6 +411,12 @@ export default {
     aplicar_respuesta(data) {
       if (Array.isArray(data.ventas)) {
         this.ventas = data.ventas
+        /* La marca de cobro dudoso viaja en la raíz de la lista completa del cliente. Una API
+           vieja no la manda: se lee como false. */
+        this.cobro_dudoso = !!data.cobro_dudoso
+        this.cobro_dudoso_desde = data.cobro_dudoso_desde || null
+        this.cobro_dudoso_motivo = data.cobro_dudoso_motivo || ''
+        this.motivo_dudoso = this.cobro_dudoso_motivo
       }
       if (Array.isArray(data.cuotas_sin_venta)) {
         this.cuotas_sin_venta = data.cuotas_sin_venta
@@ -349,6 +440,54 @@ export default {
         this.es_suscripcion = data.es_suscripcion
       } else {
         this.es_suscripcion = this.porcentaje_por_defecto > COMISION_PORCENTAJE_DEFAULT
+      }
+    },
+    /**
+     * PUT client/{id}/cobro-dudoso `{cobro_dudoso, motivo}`: enciende o apaga la marca del
+     * cliente. La API contesta con la lista completa de ventas del cliente (con las cifras
+     * recalculadas), que se vuelca igual que cualquier otra acción de la pestaña. Si falla, el
+     * interruptor vuelve a como estaba y el mensaje va al toast.
+     * @param {boolean} encendido nuevo valor de la marca
+     * @param {Object} [evento] el `change` del interruptor, para deshacerlo si falla
+     */
+    guardar_cobro_dudoso(encendido, evento) {
+      const self = this
+      if (!this.record || !this.record.id || this.guardando_dudoso) {
+        return
+      }
+      self.guardando_dudoso = true
+      api
+        .put('/client/' + this.record.id + '/cobro-dudoso', {
+          cobro_dudoso: encendido,
+          motivo: encendido ? (String(this.motivo_dudoso || '').trim() || null) : null,
+        }, { silent_error: true })
+        .then(function (res) {
+          self.guardando_dudoso = false
+          self.aplicar_respuesta(res.data || {})
+          self.avisar(encendido ? 'Cliente marcado como de dudoso cobro.' : 'Se quitó la marca de dudoso cobro.')
+        })
+        .catch(function (error) {
+          self.guardando_dudoso = false
+          if (evento && evento.target) {
+            evento.target.checked = self.cobro_dudoso
+          }
+          self.avisar(resolve_error_message(error), 'danger')
+        })
+    },
+    /**
+     * Tocar el interruptor: guarda el valor nuevo.
+     * @param {Event} evento
+     */
+    alternar_cobro_dudoso(evento) {
+      this.guardar_cobro_dudoso(!!evento.target.checked, evento)
+    },
+    /**
+     * "Guardar motivo" (o Enter en el campo): reenvía la marca encendida con el motivo nuevo. Con
+     * la marca apagada no hace nada: el motivo viaja al encenderla.
+     */
+    guardar_motivo_dudoso() {
+      if (this.cobro_dudoso && this.motivo_dudoso_cambiado) {
+        this.guardar_cobro_dudoso(true)
       }
     },
     /**
@@ -412,6 +551,15 @@ export default {
 	letter-spacing: 0.04em;
 	color: #6c757d;
 	font-weight: 600;
+}
+
+/* Cobro dudoso encendido: el panel se tiñe de ámbar para que se note de un vistazo. */
+.ventas-panel--dudoso {
+	background: var(--bs-warning-bg-subtle);
+}
+
+.ventas-panel__motivo {
+	max-width: 24rem;
 }
 
 /* Mientras se recarga después de un cambio, las cifras se atenúan en vez de desaparecer. */
