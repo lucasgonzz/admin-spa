@@ -48,12 +48,13 @@
 
     <div v-else>
       <!-- ============================================================ -->
-      <!-- Cifras de arriba, por moneda: lo vendido, lo que deben los   -->
-      <!-- clientes y lo que hay que pagarles a los vendedores. Suman   -->
-      <!-- lo que se ve (respetan los filtros).                         -->
+      <!-- Cifras de arriba, por moneda: lo vendido, lo que hay que     -->
+      <!-- cobrarle a los clientes, lo que está en stand-by (clientes   -->
+      <!-- de dudoso cobro) y lo que hay que pagarles a los vendedores. -->
+      <!-- Suman lo que se ve (respetan los filtros).                   -->
       <!-- ============================================================ -->
       <div class="row g-2 g-md-3 mb-3">
-        <div class="col-12 col-md-4">
+        <div class="col-12 col-md-6 col-xl-3">
           <div class="card h-100 cobranzas-cifra cobranzas-cifra--neutral">
             <div class="card-body py-3">
               <p class="cobranzas-cifra__rotulo mb-1">Vendido</p>
@@ -64,15 +65,27 @@
             </div>
           </div>
         </div>
-        <div class="col-6 col-md-4">
+        <div class="col-6 col-md-6 col-xl-3">
           <div class="card h-100 cobranzas-cifra cobranzas-cifra--danger">
             <div class="card-body py-3">
               <p class="cobranzas-cifra__rotulo mb-1">Deben los clientes</p>
-              <p class="cobranzas-cifra__valor mb-0" :class="{ 'text-danger': hay_valor(totales.pendiente) }">{{ format_por_moneda(totales.pendiente) }}</p>
+              <p class="cobranzas-cifra__valor mb-0" :class="{ 'text-danger': hay_valor(totales.por_cobrar) }">{{ format_por_moneda(totales.por_cobrar) }}</p>
+              <p class="cobranzas-cifra__pie mb-0">Plata que se espera cobrar</p>
             </div>
           </div>
         </div>
-        <div class="col-6 col-md-4">
+        <!-- Deuda de clientes de dudoso cobro: ni se espera cobrar ni se da por perdida. Ámbar, no
+             rojo. Una API vieja no manda la cifra y queda en "—". -->
+        <div class="col-6 col-md-6 col-xl-3">
+          <div class="card h-100 cobranzas-cifra cobranzas-cifra--warning">
+            <div class="card-body py-3">
+              <p class="cobranzas-cifra__rotulo mb-1">En stand-by</p>
+              <p class="cobranzas-cifra__valor mb-0" :class="{ 'text-warning-emphasis': hay_valor(totales.en_espera) }">{{ format_por_moneda(totales.en_espera) }}</p>
+              <p class="cobranzas-cifra__pie mb-0">Cobro dudoso, no se da por perdida</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-12 col-md-6 col-xl-3">
           <div class="card h-100 cobranzas-cifra cobranzas-cifra--primary">
             <div class="card-body py-3">
               <p class="cobranzas-cifra__rotulo mb-1">A pagar a vendedores</p>
@@ -122,6 +135,13 @@
               >
                 <td v-if="indice === 0" :rowspan="cliente.ventas_visibles.length" class="ventas-tabla__cliente">
                   <span class="fw-semibold">{{ nombre_de_cliente(cliente) }}</span>
+                  <!-- Cliente de dudoso cobro: su deuda está en stand-by (ámbar, no rojo). -->
+                  <div v-if="es_cobro_dudoso(cliente)">
+                    <span
+                      class="badge text-bg-warning"
+                      :title="titulo_cobro_dudoso(cliente)"
+                    >Cobro dudoso</span>
+                  </div>
                   <div v-if="cliente.ventas_visibles.length > 1" class="cobranzas-tabla__nota">{{ cliente.ventas_visibles.length }} ventas</div>
                 </td>
                 <td>
@@ -140,7 +160,7 @@
                 <td class="text-nowrap">{{ formatear_fecha(venta.fecha) }}</td>
                 <td class="text-end text-nowrap">{{ format_monto_con_moneda(resumen_de(venta).total, venta.moneda) }}</td>
                 <td class="text-end text-nowrap text-success">{{ format_monto_con_moneda(resumen_de(venta).cobrado, venta.moneda) }}</td>
-                <td class="text-end text-nowrap" :class="{ 'text-danger fw-semibold': resumen_de(venta).pendiente > 0 }">
+                <td class="text-end text-nowrap" :class="clase_pendiente(cliente, venta)">
                   {{ format_monto_con_moneda(resumen_de(venta).pendiente, venta.moneda) }}
                 </td>
                 <td>
@@ -223,6 +243,7 @@ import {
   PRODUCTOS_ETIQUETAS_DEFAULT,
   clase_badge_producto,
   comision_de_venta,
+  es_cobro_dudoso,
   nombre_de_cliente,
   nombre_de_vendedor,
   numero,
@@ -238,6 +259,11 @@ import {
  * debe el cliente, el vendedor, su % y la comisión (total · liberada · pagada · a pagar). Arriba,
  * las cifras por moneda: lo vendido, lo que deben los clientes y lo que hay que pagarles a los
  * vendedores.
+ *
+ * Clientes de dudoso cobro (misión cobro-dudoso-y-pagos-ventas, 30/10/2026): su deuda no cuenta
+ * como plata a cobrar ("Deben los clientes" usa `resumen.por_cobrar`) sino que va a la cifra aparte
+ * "En stand-by" (`resumen.en_espera`), y su saldo pendiente se pinta en ámbar, no en rojo. El
+ * filtro "Con saldo pendiente" los sigue mostrando: siguen debiendo.
  *
  * Lee `GET cobranzas/ventas` → `{clientes: [{client_id, nombre, ventas, resumen_por_moneda}],
  * vendedores, productos}`. Los filtros (producto, con saldo pendiente, búsqueda por nombre) son
@@ -313,8 +339,8 @@ export default {
         }
       })
       return resultado.sort(function (a, b) {
-        const debe_a = self.debe_algo(a) ? 0 : 1
-        const debe_b = self.debe_algo(b) ? 0 : 1
+        const debe_a = self.prioridad_deuda(a)
+        const debe_b = self.prioridad_deuda(b)
         if (debe_a !== debe_b) {
           return debe_a - debe_b
         }
@@ -334,17 +360,20 @@ export default {
     },
     /**
      * Cifras de arriba, por moneda, sobre las ventas visibles: total, cobrado, pendiente del
-     * cliente; a pagar y por liberar de las comisiones (solo ventas con vendedor).
+     * cliente (con su corte en `por_cobrar` y `en_espera`); a pagar y por liberar de las
+     * comisiones (solo ventas con vendedor).
      * @returns {Object<string, Object<string, number>>}
      */
     totales() {
-      const acumulado = { total: {}, cobrado: {}, pendiente: {}, a_pagar: {}, por_liberar: {} }
+      const acumulado = { total: {}, cobrado: {}, pendiente: {}, por_cobrar: {}, en_espera: {}, a_pagar: {}, por_liberar: {} }
       this.clientes_visibles.forEach(function (cliente) {
         cliente.ventas_visibles.forEach(function (venta) {
           const resumen = resumen_de_venta(venta)
           sumar_en_moneda(acumulado.total, venta.moneda, resumen.total)
           sumar_en_moneda(acumulado.cobrado, venta.moneda, resumen.cobrado)
           sumar_en_moneda(acumulado.pendiente, venta.moneda, resumen.pendiente)
+          sumar_en_moneda(acumulado.por_cobrar, venta.moneda, resumen.por_cobrar)
+          sumar_en_moneda(acumulado.en_espera, venta.moneda, resumen.en_espera)
           const comision = comision_de_venta(venta)
           if (comision.vendedor_admin_id) {
             sumar_en_moneda(acumulado.a_pagar, comision.moneda, comision.a_pagar)
@@ -425,14 +454,51 @@ export default {
       })
     },
     /**
-     * true si el cliente debe algo en alguna de sus ventas visibles (para ordenar).
+     * Prioridad para ordenar: 0 = hay plata que se espera cobrar, 1 = solo debe en stand-by
+     * (cobro dudoso), 2 = no debe nada.
      * @param {Object} cliente
-     * @returns {boolean}
+     * @returns {number}
      */
-    debe_algo(cliente) {
-      return (cliente.ventas_visibles || []).some(function (venta) {
-        return resumen_de_venta(venta).pendiente > 0
-      })
+    prioridad_deuda(cliente) {
+      const ventas = cliente.ventas_visibles || []
+      if (ventas.some(function (venta) { return resumen_de_venta(venta).por_cobrar > 0 })) {
+        return 0
+      }
+      if (ventas.some(function (venta) { return resumen_de_venta(venta).pendiente > 0 })) {
+        return 1
+      }
+      return 2
+    },
+    es_cobro_dudoso,
+    /**
+     * Clases de la celda "Pendiente": rojo si hay plata que se espera cobrar, ámbar si el
+     * cliente es de dudoso cobro (su deuda está en stand-by), nada si no debe.
+     * @param {Object} cliente
+     * @param {Object} venta
+     * @returns {Object}
+     */
+    clase_pendiente(cliente, venta) {
+      const hay_deuda = resumen_de_venta(venta).pendiente > 0
+      const dudoso = es_cobro_dudoso(cliente) || es_cobro_dudoso(venta)
+      return {
+        'text-danger fw-semibold': hay_deuda && !dudoso,
+        'text-warning-emphasis fw-semibold': hay_deuda && dudoso,
+      }
+    },
+    /**
+     * Texto del tooltip de la etiqueta "Cobro dudoso": desde cuándo y por qué (si se cargó).
+     * @param {Object} cliente
+     * @returns {string}
+     */
+    titulo_cobro_dudoso(cliente) {
+      let texto = 'Su deuda está en stand-by: no cuenta como plata a cobrar, pero no se da por perdida.'
+      if (cliente.cobro_dudoso_desde) {
+        texto += ' Desde ' + formatear_fecha(cliente.cobro_dudoso_desde) + '.'
+      }
+      if (cliente.cobro_dudoso_motivo) {
+        texto += ' Motivo: ' + cliente.cobro_dudoso_motivo
+      }
+      return texto
     },
     /**
      * Productos de una venta con su etiqueta.
@@ -558,6 +624,11 @@ export default {
 .cobranzas-cifra--danger {
 	background-color: var(--bs-danger-bg-subtle);
 	border-color: var(--bs-danger-border-subtle);
+}
+
+.cobranzas-cifra--warning {
+	background-color: var(--bs-warning-bg-subtle);
+	border-color: var(--bs-warning-border-subtle);
 }
 
 .cobranzas-cifra--primary {
