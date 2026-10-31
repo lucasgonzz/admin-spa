@@ -19,6 +19,20 @@ const routes_def = [
     meta: { requiresAuth: true, nav: true, icon: 'house' },
   },
   {
+    /**
+     * Agenda (misión agenda-admin, 31/10/2026): copia de la interfaz de Structured con las tareas
+     * personales del admin logueado (descripción, subpasos, fecha y hora, repetir, bandeja sin
+     * fecha, marcar hechas, mover arrastrando). Claude crea y mueve tareas por `claude/agenda`.
+     * Va pegada a Inicio porque es lo segundo que se mira al arrancar el día; el Inicio también
+     * la muestra embebida debajo de sus tres tarjetas.
+     */
+    path: '/agenda',
+    name: 'agenda',
+    text: 'Agenda',
+    component: () => import('@/views/Agenda.vue'),
+    meta: { requiresAuth: true, nav: true, icon: 'calendar-week' },
+  },
+  {
     /** Panel operativo del closer: visible para cualquier admin autenticado. */
     path: '/closer',
     name: 'closer-panel',
