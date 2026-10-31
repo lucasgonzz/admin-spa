@@ -382,6 +382,16 @@
       @cancelar="confirmar = null"
       @confirmar="borrar"
     />
+    <dialogo-confirmar
+      v-if="confirmar === 'bandeja'"
+      titulo="Esta tarea se repite"
+      texto="En la bandeja deja de repetirse y se pierde lo marcado como hecho. ¿La mandamos igual?"
+      texto_cancelar="Cancelar"
+      texto_confirmar="Seguir"
+      :ocupado="ocupado"
+      @cancelar="confirmar = null"
+      @confirmar="confirmar_mover_a_bandeja"
+    />
   </div>
 </template>
 
@@ -442,6 +452,16 @@ function copiar_form(form) {
 }
 
 /**
+ * Muestra una toast con el mecanismo global del admin (App.vue escucha este evento).
+ *
+ * @param {string} mensaje
+ * @returns {void}
+ */
+function avisar(mensaje) {
+  window.dispatchEvent(new CustomEvent('admin-spa-toast', { detail: { message: mensaje, variant: 'warning' } }))
+}
+
+/**
  * Firma comparable del formulario: lo que cuenta como "cambio" (sin las claves locales).
  *
  * @param {Object} form
@@ -496,7 +516,7 @@ export default {
       nuevo_subpaso: '',
       /** Popover abierto: null | 'color' | 'repetir' | 'menu'. */
       popover: null,
-      /** Diálogo de confirmación abierto: null | 'descartar' | 'borrar'. */
+      /** Diálogo de confirmación abierto: null | 'descartar' | 'borrar' | 'bandeja'. */
       confirmar: null,
       /** true mientras se guarda (crear o editar). */
       guardando: false,
@@ -858,10 +878,9 @@ export default {
       if (!valor) {
         return
       }
+      /* No se toca el "hasta": es de la serie y la fecha que se mueve es la de una ocurrencia.
+         Antes se comparaban las dos y la serie quedaba sin fin (D1 de la revisión). */
       this.form.date = valor
-      if (this.form.repeat_until && this.form.repeat_until < valor) {
-        this.form.repeat_until = null
-      }
     },
     /**
      * Tarea de la bandeja: "Fecha" le pone la fecha elegida (con horario a las 9).
@@ -1119,8 +1138,15 @@ export default {
       if (form.icon !== original.icon) {
         cambios.icon = form.icon
       }
-      if (form.date && (cambio_repetir || (form.repeat_until || null) !== (original.repeat_until || null))) {
+      if (form.date && cambio_repetir) {
         cambios.repeat = form.repeat
+      }
+      /*
+        El "hasta" (repeat_until) es de la SERIE y viaja solo si el usuario lo cambió a mano. Si el
+        PUT trae `date` sin `repeat_until`, la API corre el fin de la serie el mismo delta que la
+        base; mandarlo sin que lo hayan tocado lo dejaría clavado en el valor viejo.
+      */
+      if (form.date && (form.repeat_until || null) !== (original.repeat_until || null)) {
         cambios.repeat_until = form.repeat !== 'none' ? form.repeat_until || null : null
       }
       const firma_subpasos = function (lista) {
@@ -1161,18 +1187,26 @@ export default {
       if (self.es_nueva) {
         crear_tarea(self.payload_nueva())
           .then(function (respuesta) {
+            /*
+              Desde acá la tarea YA EXISTE: pase lo que pase con el complete, el panel se cierra y
+              se refresca. Si quedara abierto como "nueva", un segundo "Crear tarea" la duplicaría
+              (D3 de la revisión).
+            */
             const modelo = respuesta.data && respuesta.data.model ? respuesta.data.model : null
-            if (self.completar_al_crear && modelo) {
-              return completar_tarea(modelo)
+            if (!self.completar_al_crear || !modelo) {
+              return null
             }
-            return null
+            return completar_tarea(modelo, { silent_error: true }).catch(function () {
+              avisar('Se creó la tarea, pero no se pudo marcar como hecha.')
+            })
           })
           .then(function () {
             self.guardando = false
             self.$emit('guardado', { cerrar: true })
           })
           .catch(function () {
-            /* El interceptor ya mostró el motivo (422 en criollo, red, etc.): el panel queda abierto. */
+            /* Solo llega acá si falló el POST: el interceptor ya mostró el motivo (422 en
+               criollo, red, etc.) y el panel queda abierto para corregir. */
             self.guardando = false
             self.$emit('cambio')
           })
@@ -1218,16 +1252,32 @@ export default {
      * @returns {void}
      */
     mover_a_bandeja() {
+      this.popover = null
+      /* Una serie que va a la bandeja deja de repetirse y pierde lo marcado como hecho: se
+         pregunta antes. */
+      if (this.tarea && this.tarea.is_recurring) {
+        this.confirmar = 'bandeja'
+        return
+      }
+      this.confirmar_mover_a_bandeja()
+    },
+    /**
+     * Manda la tarea a la bandeja (directo, o confirmado si era una serie).
+     *
+     * @returns {void}
+     */
+    confirmar_mover_a_bandeja() {
       const self = this
-      self.popover = null
       self.ocupado_accion = true
       actualizar_tarea(self.tarea.id, { date: null })
         .then(function () {
           self.ocupado_accion = false
+          self.confirmar = null
           self.$emit('guardado', { cerrar: true })
         })
         .catch(function () {
           self.ocupado_accion = false
+          self.confirmar = null
         })
     },
     /**
