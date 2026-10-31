@@ -254,6 +254,17 @@
       @cancelar="confirmar_borrado_masivo = false"
       @confirmar="borrar_seleccion"
     />
+
+    <!-- Mandar a la bandeja una tarea que se repite (arrastre o selección múltiple): se confirma. -->
+    <dialogo-confirmar
+      v-if="pendiente_bandeja"
+      :titulo="titulo_pendiente_bandeja"
+      :texto="texto_pendiente_bandeja"
+      texto_cancelar="Cancelar"
+      texto_confirmar="Seguir"
+      @cancelar="pendiente_bandeja = null"
+      @confirmar="confirmar_pendiente_bandeja"
+    />
   </div>
 </template>
 
@@ -280,6 +291,7 @@ import {
   es_api_no_disponible,
   status_de,
 } from './agenda_api'
+import { resolve_error_message } from '@/utils/axios'
 import {
   MINUTOS_DIA,
   clave_ocurrencia,
@@ -307,6 +319,12 @@ const AGENDA_POLL_MS = 60000
 
 /** Vistas válidas. */
 const VISTAS = ['dia', 'varios', 'semana', 'mes']
+
+/**
+ * Llamadas simultáneas de una acción masiva de la selección múltiple. La API limita a 60 por
+ * minuto por usuario: de a 5 una selección grande avanza sin chocar de golpe con el tope.
+ */
+const CONCURRENCIA_LOTE = 5
 
 /**
  * Lee las preferencias guardadas en el navegador. Si el almacenamiento no está disponible
@@ -349,6 +367,22 @@ function avisar(mensaje, variante) {
   window.dispatchEvent(
     new CustomEvent('admin-spa-toast', { detail: { message: mensaje, variant: variante || 'warning' } })
   )
+}
+
+/**
+ * Motivo de una falla de la API en criollo: el `message` que manda admin-api (404 "No existe esa
+ * tarea en la agenda.", 422 con el texto de la validación) o, si no vino, el texto genérico del
+ * cliente HTTP del admin.
+ *
+ * @param {*} error Error de axios.
+ * @returns {string}
+ */
+function motivo_de_error(error) {
+  const datos = error && error.response && error.response.data ? error.response.data : null
+  if (datos && typeof datos.message === 'string' && datos.message.trim() !== '') {
+    return datos.message.trim()
+  }
+  return resolve_error_message(error)
 }
 
 /**
@@ -422,6 +456,11 @@ export default {
       ocupado_masivo: false,
       /** true con el diálogo de borrar las elegidas abierto. */
       confirmar_borrado_masivo: false,
+      /**
+       * Mandar a la bandeja esperando confirmación porque hay series de por medio:
+       * null | `{ tipo: 'arrastre' | 'lote', tareas: Object[], series: number }`.
+       */
+      pendiente_bandeja: null,
       /** Arrastre en curso: null | `{ tarea, desde_cajon? }` (la ocurrencia que se agarró). */
       arrastre: null,
       /** true mientras se arrastra desde el cajón de la bandeja: el cajón se corre fuera de la vista. */
@@ -624,6 +663,36 @@ export default {
         }
       })
       return encontradas
+    },
+    /**
+     * Título del diálogo de mandar series a la bandeja.
+     *
+     * @returns {string}
+     */
+    titulo_pendiente_bandeja() {
+      const pendiente = this.pendiente_bandeja
+      if (!pendiente || pendiente.tipo === 'arrastre') {
+        return 'Esta tarea se repite'
+      }
+      if (pendiente.series === 1) {
+        return pendiente.tareas.length === 1 ? 'Esta tarea se repite' : 'Una de las tareas se repite'
+      }
+      return 'Hay ' + pendiente.series + ' tareas que se repiten'
+    },
+    /**
+     * Texto del diálogo de mandar series a la bandeja.
+     *
+     * @returns {string}
+     */
+    texto_pendiente_bandeja() {
+      const pendiente = this.pendiente_bandeja
+      if (pendiente && pendiente.series > 1) {
+        return 'En la bandeja dejan de repetirse y se pierde lo marcado como hecho. ¿Las mandamos igual?'
+      }
+      if (pendiente && pendiente.tipo === 'lote' && pendiente.tareas.length > 1) {
+        return 'En la bandeja deja de repetirse y se pierde lo marcado como hecho. ¿Las mandamos igual?'
+      }
+      return 'En la bandeja deja de repetirse y se pierde lo marcado como hecho. ¿La mandamos igual?'
     },
     /**
      * Texto del diálogo de borrar las elegidas (avisa si hay series).
@@ -978,21 +1047,24 @@ export default {
       this.cargar()
     },
     /**
-     * Alta rápida en la bandeja: POST con solo el título (`date: null`).
+     * Alta rápida en la bandeja: POST con solo el título (`date: null`). La bandeja deja el texto
+     * escrito hasta que el POST sale bien (`al_terminar(true)`); si falla, queda para reintentar.
      *
-     * @param {string} titulo
+     * @param {{titulo: string, al_terminar: Function}} pedido
      * @returns {void}
      */
-    crear_en_bandeja(titulo) {
+    crear_en_bandeja(pedido) {
       const self = this
       self.creando_en_bandeja = true
-      crear_tarea({ title: titulo, date: null })
+      crear_tarea({ title: pedido.titulo, date: null })
         .then(function () {
           self.creando_en_bandeja = false
+          pedido.al_terminar(true)
           return self.cargar()
         })
         .catch(function () {
           self.creando_en_bandeja = false
+          pedido.al_terminar(false)
         })
     },
     /**
@@ -1118,6 +1190,11 @@ export default {
       let cambios = null
       if (destino.tipo === 'bandeja') {
         if (en_bandeja) {
+          return
+        }
+        if (tarea.is_recurring) {
+          /* Una serie en la bandeja deja de repetirse y pierde lo hecho: se pregunta antes. */
+          this.pendiente_bandeja = { tipo: 'arrastre', tareas: [tarea], series: 1 }
           return
         }
         cambios = { date: null }
@@ -1288,48 +1365,74 @@ export default {
       })
     },
     /**
-     * Aplica una llamada a la API por tarea, todas en paralelo; al terminar refresca y, si alguna
-     * falló, avisa una sola vez cuántas no se aplicaron. Las llamadas van con `silent_error` para
-     * no tirar una toast por tarea.
+     * Aplica una llamada a la API por tarea, en tandas de a CONCURRENCIA_LOTE (una cola: cada
+     * llamada que termina larga la siguiente). Todas a la vez chocaban con el limitador de la API
+     * (60 por minuto por usuario) apenas la selección era grande. Al terminar refresca y, si alguna
+     * falló, avisa una sola vez "N de M" con el primer motivo que dio la API. Las llamadas van con
+     * `silent_error` para no tirar una toast por tarea.
      *
      * @param {Object[]} tareas
      * @param {Function} crear_llamada `(tarea, opciones) => Promise|null` (null = no aplica a esa tarea).
-     * @param {string} [texto_omitidas] Aviso para las tareas a las que no se les aplica ("no tenían horario").
+     *   Se llama recién cuando le toca el turno a esa tarea.
+     * @param {{una: string, varias: string}} [texto_omitidas] Aviso para las tareas a las que no se
+     *   les aplica, en singular y en plural (va después del número: "1 tarea sin horario no se movió").
      * @returns {Promise<number>} Cantidad de fallas.
      */
     aplicar_en_lote(tareas, crear_llamada, texto_omitidas) {
       const self = this
       const opciones = { silent_error: true }
+      const pendientes = tareas.slice()
       let fallas = 0
       let omitidas = 0
       let api_vieja = false
+      /** Primer motivo de falla que devolvió la API (para el aviso). */
+      let primer_motivo = ''
       self.ocupado_masivo = true
-      const promesas = tareas.map(function (tarea) {
+
+      /**
+       * Toma la próxima tarea de la cola, la manda y, cuando vuelve, sigue con la que queda.
+       *
+       * @returns {Promise<void>}
+       */
+      const siguiente = function () {
+        if (pendientes.length === 0) {
+          return Promise.resolve()
+        }
+        const tarea = pendientes.shift()
         const llamada = crear_llamada(tarea, opciones)
         if (!llamada) {
           omitidas = omitidas + 1
-          return Promise.resolve()
+          return siguiente()
         }
-        return llamada.catch(function (error) {
-          fallas = fallas + 1
-          if (es_api_no_disponible(error)) {
-            api_vieja = true
-          }
-        })
-      })
-      return Promise.all(promesas).then(function () {
+        return llamada
+          .catch(function (error) {
+            fallas = fallas + 1
+            if (es_api_no_disponible(error)) {
+              api_vieja = true
+            }
+            if (!primer_motivo) {
+              primer_motivo = motivo_de_error(error)
+            }
+          })
+          .then(siguiente)
+      }
+
+      const trabajadores = []
+      for (let i = 0; i < Math.min(CONCURRENCIA_LOTE, pendientes.length); i++) {
+        trabajadores.push(siguiente())
+      }
+      return Promise.all(trabajadores).then(function () {
         self.ocupado_masivo = false
         const intentadas = tareas.length - omitidas
         if (fallas > 0) {
-          avisar(
+          const resumen =
             fallas === intentadas
-              ? 'No se pudo aplicar el cambio a ninguna de las ' + intentadas + ' tareas.'
-              : 'No se pudo aplicar el cambio a ' + fallas + ' de ' + intentadas + ' tareas.',
-            'warning'
-          )
+              ? 'No se pudo aplicar el cambio a ninguna de las ' + intentadas + ' tareas'
+              : 'No se pudo aplicar el cambio a ' + fallas + ' de ' + intentadas + ' tareas'
+          avisar(resumen + (primer_motivo ? ': ' + primer_motivo : '.'), 'warning')
         }
         if (omitidas > 0 && texto_omitidas) {
-          avisar(omitidas + (omitidas === 1 ? ' tarea ' : ' tareas ') + texto_omitidas, 'info')
+          avisar(omitidas + ' ' + (omitidas === 1 ? texto_omitidas.una : texto_omitidas.varias), 'info')
         }
         if (api_vieja && fallas === intentadas) {
           self.api_no_disponible = true
@@ -1368,7 +1471,10 @@ export default {
             opciones
           )
         },
-        'sin horario (de todo el día o de la bandeja) no se movieron.'
+        {
+          una: 'tarea sin horario (de todo el día o de la bandeja) no se movió.',
+          varias: 'tareas sin horario (de todo el día o de la bandeja) no se movieron.',
+        }
       )
     },
     /**
@@ -1460,23 +1566,60 @@ export default {
      * @returns {void}
      */
     mover_seleccion_a_bandeja() {
-      this.aplicar_en_lote(this.unicas_por_id(this.tareas_seleccionadas), function (tarea, opciones) {
+      const tareas = this.unicas_por_id(this.tareas_seleccionadas)
+      const series = tareas.filter(function (tarea) {
+        return tarea.is_recurring && !!tarea.date
+      }).length
+      if (series > 0) {
+        /* Hay series: en la bandeja dejan de repetirse y pierden lo hecho. Se pregunta antes. */
+        this.pendiente_bandeja = { tipo: 'lote', tareas: tareas, series: series }
+        return
+      }
+      this.mandar_lote_a_bandeja(tareas)
+    },
+    /**
+     * Manda a la bandeja un grupo de tareas (`date: null`), en la cola de la selección múltiple.
+     *
+     * @param {Object[]} tareas Una por id.
+     * @returns {Promise<number>} Cantidad de fallas.
+     */
+    mandar_lote_a_bandeja(tareas) {
+      return this.aplicar_en_lote(tareas, function (tarea, opciones) {
         if (!tarea.date) {
           return Promise.resolve()
         }
         return actualizar_tarea(tarea.id, { date: null }, opciones)
       })
     },
+    /**
+     * "Seguir" en la confirmación de mandar series a la bandeja: ejecuta lo que había quedado
+     * pendiente (el arrastre o la acción masiva).
+     *
+     * @returns {void}
+     */
+    confirmar_pendiente_bandeja() {
+      const pendiente = this.pendiente_bandeja
+      this.pendiente_bandeja = null
+      if (!pendiente) {
+        return
+      }
+      if (pendiente.tipo === 'arrastre') {
+        const tarea = pendiente.tareas[0]
+        this.escribir_y_refrescar(actualizar_tarea(tarea.id, { date: null }))
+        return
+      }
+      this.mandar_lote_a_bandeja(pendiente.tareas)
+    },
   },
 }
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
 /*
   Tema oscuro de Structured, encapsulado: los tokens viven en la raíz y los heredan todos los
   subcomponentes (sus estilos scoped usan var(--ag-…)). Medidas tomadas de su página.
+  La tipografía Inter (400 a 700) ya la carga index.html con su <link> de Google Fonts: acá solo
+  se la nombra, con system-ui de respaldo.
 */
 .agenda {
   --ag-negro: #000000;

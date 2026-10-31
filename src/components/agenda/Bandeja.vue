@@ -151,18 +151,26 @@ export default {
   },
   methods: {
     /**
-     * Alta rápida: avisa el título al orquestador y limpia el campo (el foco queda ahí para
-     * seguir anotando).
+     * Alta rápida: le pasa el título al orquestador junto con `al_terminar`, que el orquestador
+     * llama cuando vuelve el POST. El campo se limpia recién si salió bien (y si no se escribió
+     * otra cosa mientras tanto); si falló, el texto queda para reintentar sin volver a tipearlo.
      *
      * @returns {void}
      */
     crear() {
-      const titulo = this.titulo_nuevo.trim()
-      if (titulo === '' || this.creando) {
+      const self = this
+      const titulo = self.titulo_nuevo.trim()
+      if (titulo === '' || self.creando) {
         return
       }
-      this.$emit('crear', titulo)
-      this.titulo_nuevo = ''
+      self.$emit('crear', {
+        titulo: titulo,
+        al_terminar: function (salio_bien) {
+          if (salio_bien && self.titulo_nuevo.trim() === titulo) {
+            self.titulo_nuevo = ''
+          }
+        },
+      })
     },
     /**
      * Pone el foco en el alta rápida (lo usa el orquestador al abrir la bandeja vacía).

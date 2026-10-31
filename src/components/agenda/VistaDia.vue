@@ -50,8 +50,8 @@
           role="button"
           tabindex="0"
           :aria-label="'Tiempo libre desde las ' + fila.hora + '. Crear una tarea'"
-          @click="$emit('nueva-en', { fecha: fecha, hora: fila.hora })"
-          @keydown.enter="$emit('nueva-en', { fecha: fecha, hora: fila.hora })"
+          @click="on_click_hueco(fila)"
+          @keydown.enter="on_click_hueco(fila)"
           @dragover.prevent.stop="on_drag_over_hueco(fila.clave, $event)"
           @dragleave="on_drag_leave_hueco(fila.clave)"
           @drop.prevent.stop="on_drop_hueco(fila)"
@@ -341,6 +341,19 @@ export default {
         return
       }
       this.$emit('abrir', tarea)
+    },
+    /**
+     * Toque sobre "Tiempo libre. ¿Qué sigue?": tarea nueva a esa hora. Con la selección múltiple
+     * activa no hace nada (se está eligiendo, no creando).
+     *
+     * @param {Object} fila Fila del hueco.
+     * @returns {void}
+     */
+    on_click_hueco(fila) {
+      if (this.seleccion_activa) {
+        return
+      }
+      this.$emit('nueva-en', { fecha: this.fecha, hora: fila.hora })
     },
     /**
      * Despliega o pliega los subpasos de una tarea.
