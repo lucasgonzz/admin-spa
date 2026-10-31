@@ -350,6 +350,9 @@ export default {
 .ag-enc {
   display: flex;
   flex-wrap: wrap;
+  /* Sin esto, en el teléfono la columna flex de la agenda la achicaba a una sola fila y la
+     franja de días tapaba el segmentado de la segunda (medido a 375 px). */
+  flex-shrink: 0;
   align-items: center;
   gap: 10px 16px;
   min-height: 64px;

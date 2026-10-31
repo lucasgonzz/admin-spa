@@ -284,7 +284,11 @@ export default {
 .ag-mes {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  grid-template-rows: repeat(6, minmax(132px, 1fr));
+  /* Filas `auto` (no `1fr`): con `1fr` y alto indefinido TODAS las semanas tomaban el alto del día
+     más cargado y la sexta quedaba fuera de pantalla en un escritorio de 900 px. Con `auto` solo
+     crece la semana que lo necesita, y el sobrante se reparte entre todas (el grid estira las
+     filas `auto` para llenar el `min-height`). */
+  grid-template-rows: repeat(6, minmax(118px, auto));
   min-height: 100%;
 }
 

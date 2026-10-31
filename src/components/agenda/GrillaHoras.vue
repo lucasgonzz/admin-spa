@@ -420,10 +420,12 @@ export default {
     desplazar_a_primera_hora() {
       const self = this
       self.$nextTick(function () {
-        if (!self.$el || !self.$refs.cuerpo) {
+        if (!self.$refs.cuerpo) {
           return
         }
-        const contenedor = self.$el.closest('[data-ag-scroll]')
+        /* Se busca desde la ref del cuerpo y no desde $el: con el comentario de la raíz, en
+           desarrollo $el es un nodo de texto del fragmento y no tiene closest(). */
+        const contenedor = self.$refs.cuerpo.closest('[data-ag-scroll]')
         if (!contenedor) {
           return
         }

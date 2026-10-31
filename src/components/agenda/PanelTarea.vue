@@ -10,7 +10,7 @@
     El panel llama a la API por su cuenta (agenda_api.js) y avisa con `guardado` / `cambio` para que
     el orquestador refresque el rango visible.
   -->
-  <div class="ag-panel-capa" :class="{ 'ag-panel-capa--telefono': es_telefono }">
+  <div ref="capa" class="ag-panel-capa" :class="{ 'ag-panel-capa--telefono': es_telefono }">
     <div class="ag-panel-capa__fondo" aria-hidden="true" @mousedown="intentar_cerrar" />
 
     <section
@@ -889,7 +889,9 @@ export default {
       self.form.date = self.fecha_por_defecto || self.hoy
       self.form.all_day = false
       self.$nextTick(function () {
-        const input = self.$el.querySelector('.ag-panel__fila .ag-hora__input')
+        /* Por la ref y no por $el: con el comentario de la raíz, en desarrollo $el es un nodo de
+           texto del fragmento y no tiene querySelector. */
+        const input = self.$refs.capa ? self.$refs.capa.querySelector('.ag-panel__fila .ag-hora__input') : null
         if (input) {
           input.focus()
         }
@@ -1346,13 +1348,17 @@ export default {
 
 /* ---------- Cabecera ---------- */
 .ag-panel__cabecera {
+  /* Relleno vertical en variables: las medias lunas de las "vecinas" se apoyan justo en el borde
+     de la cabecera con estos mismos valores (en el teléfono cambian). */
+  --ag-cab-pad-arriba: 26px;
+  --ag-cab-pad-abajo: 26px;
   position: relative;
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   gap: 16px;
   min-height: 202px;
-  padding: 26px 70px 26px 50px;
+  padding: var(--ag-cab-pad-arriba) 70px var(--ag-cab-pad-abajo) 50px;
   color: var(--ag-tinta);
 }
 
@@ -1371,24 +1377,29 @@ export default {
   align-self: stretch;
 }
 
-/* Las "vecinas": medio círculo arriba y abajo de la píldora, las tareas de antes y después. */
+/*
+  Las "vecinas": medio círculo arriba y abajo de la píldora, las tareas de antes y después. Son
+  MEDIAS lunas apoyadas en el borde de la cabecera (como en Structured): antes eran círculos
+  enteros que se salían de la cabecera y tapaban la caja de la fecha.
+*/
 .ag-panel__vecina {
   position: absolute;
   left: 50%;
   width: 52px;
-  height: 52px;
+  height: 26px;
   margin-left: -26px;
-  border-radius: 50%;
   background: var(--ag-color-tarea);
   opacity: 0.75;
 }
 
 .ag-panel__vecina--arriba {
-  top: -58px;
+  top: calc(-1 * var(--ag-cab-pad-arriba));
+  border-radius: 0 0 26px 26px;
 }
 
 .ag-panel__vecina--abajo {
-  bottom: -58px;
+  bottom: calc(-1 * var(--ag-cab-pad-abajo));
+  border-radius: 26px 26px 0 0;
 }
 
 .ag-panel__pildora {
@@ -2024,8 +2035,10 @@ export default {
 }
 
 .ag-panel-capa--telefono .ag-panel__cabecera {
+  --ag-cab-pad-arriba: 50px;
+  --ag-cab-pad-abajo: 20px;
   min-height: 170px;
-  padding: 50px 54px 20px 34px;
+  padding: var(--ag-cab-pad-arriba) 54px var(--ag-cab-pad-abajo) 34px;
 }
 
 .ag-panel-capa--telefono .ag-panel__titulo {

@@ -801,8 +801,19 @@ export default {
       if (VISTAS.indexOf(vista) === -1 || (vista === 'mes' && this.seleccion_activa)) {
         return
       }
-      this.vista = vista
-      this.guardar_preferencias()
+      const self = this
+      self.vista = vista
+      self.guardar_preferencias()
+      /* La superficie es UN solo contenedor de scroll para las cuatro vistas: sin esto, Día y Mes
+         heredaban el scroll de la grilla horaria (venir de Semana dejaba la primera tarea del día
+         escondida arriba). Semana y Varios días se ubican solas en la primera tarea al montarse. */
+      if (vista === 'dia' || vista === 'mes') {
+        self.$nextTick(function () {
+          if (self.$refs.superficie) {
+            self.$refs.superficie.scrollTop = 0
+          }
+        })
+      }
     },
     /**
      * ‹ / ›: una semana en Día y Semana, los días visibles en Varios días, un mes en Mes.
