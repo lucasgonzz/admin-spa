@@ -291,9 +291,11 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 26px;
+  flex: 0 0 auto;
   width: var(--ag-ancho-bandeja);
   min-height: 0;
-  padding: 16px 0 0 28px;
+  /* 28 px a la izquierda y 30 de aire hasta la superficie, como en Structured. */
+  padding: 16px 30px 0 28px;
   background: var(--ag-negro);
   transition: background 0.15s ease;
 }

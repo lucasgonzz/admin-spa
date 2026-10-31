@@ -198,11 +198,22 @@
       </div>
     </div>
 
-    <!-- Bandeja como cajón superpuesto (tablet y teléfono) -->
+    <!--
+      Bandeja como cajón superpuesto (tablet y teléfono). Mientras se arrastra una tarjeta desde
+      el cajón, el cajón y el velo se corren fuera de la vista (no se desmontan: si el nodo
+      arrastrado desaparece, el navegador no avisa el fin del arrastre) para dejar ver dónde
+      soltarla.
+    -->
     <template v-if="bandeja_abierta && !bandeja_en_columna">
-      <div class="agenda__velo" aria-hidden="true" @click="bandeja_abierta = false" />
+      <div
+        class="agenda__velo"
+        :class="{ 'agenda__velo--escondido': cajon_escondido }"
+        aria-hidden="true"
+        @click="bandeja_abierta = false"
+      />
       <bandeja
         flotante
+        :class="{ 'agenda__cajon--escondido': cajon_escondido }"
         :tareas="bandeja_visible"
         :seleccion_activa="seleccion_activa"
         :seleccionadas="seleccionadas"
@@ -411,8 +422,10 @@ export default {
       ocupado_masivo: false,
       /** true con el diálogo de borrar las elegidas abierto. */
       confirmar_borrado_masivo: false,
-      /** Arrastre en curso: null | `{ tarea }` (la ocurrencia que se agarró). */
+      /** Arrastre en curso: null | `{ tarea, desde_cajon? }` (la ocurrencia que se agarró). */
       arrastre: null,
+      /** true mientras se arrastra desde el cajón de la bandeja: el cajón se corre fuera de la vista. */
+      cajon_escondido: false,
       /** true en teléfono (< 768 px). */
       es_telefono: false,
       /** true en tablet (768 a 1199 px). */
@@ -1047,22 +1060,24 @@ export default {
      */
     iniciar_arrastre_desde_cajon(tarea) {
       const self = this
-      self.arrastre = { tarea: tarea }
-      /* Se cierra en el tick siguiente: si el nodo arrastrado desaparece en el mismo dragstart,
-         el navegador cancela el arrastre. */
+      self.arrastre = { tarea: tarea, desde_cajon: true }
+      /* Se esconde en el tick siguiente: el navegador saca la "foto" de lo que se arrastra justo
+         después del dragstart, y si el cajón ya se corrió la foto sale vacía. */
       window.setTimeout(function () {
         if (self.arrastre) {
-          self.bandeja_abierta = false
+          self.cajon_escondido = true
         }
       }, 0)
     },
     /**
-     * Termina un arrastre (dragend llega después del drop).
+     * Termina un arrastre (dragend llega después del drop). Si se soltó fuera de un destino, el
+     * cajón de la bandeja vuelve a aparecer como estaba.
      *
      * @returns {void}
      */
     terminar_arrastre() {
       this.arrastre = null
+      this.cajon_escondido = false
     },
     /**
      * Sueltan la tarea arrastrada en un destino. Arma el PUT según el destino:
@@ -1077,7 +1092,13 @@ export default {
      */
     soltar(destino) {
       const tarea = this.arrastre ? this.arrastre.tarea : null
+      const desde_cajon = !!(this.arrastre && this.arrastre.desde_cajon)
       this.arrastre = null
+      this.cajon_escondido = false
+      if (desde_cajon && destino && destino.tipo !== 'bandeja') {
+        /* Se soltó en la agenda una tarjeta que venía del cajón: el cajón queda cerrado. */
+        this.bandeja_abierta = false
+      }
       if (!tarea || !destino) {
         return
       }
@@ -1457,7 +1478,7 @@ export default {
   --ag-apagado: #858585;
   --ag-texto: #ffffff;
   --ag-canaleta: 48px;
-  --ag-ancho-bandeja: 330px;
+  --ag-ancho-bandeja: 360px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -1606,6 +1627,20 @@ export default {
   inset: 0;
   z-index: 29;
   background: rgba(0, 0, 0, 0.5);
+  transition: opacity 0.15s ease;
+}
+
+/* Durante un arrastre desde el cajón, velo y cajón se corren para dejar ver la agenda. */
+.agenda__velo--escondido {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.agenda__cajon--escondido {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-105%);
+  transition: transform 0.15s ease, opacity 0.15s ease;
 }
 
 /* Embebida en el Inicio: misma cara, el alto lo pone el contenedor. */

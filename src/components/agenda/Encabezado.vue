@@ -22,7 +22,7 @@
         @click="$emit('alternar-bandeja')"
       >
         <i class="bi bi-inbox-fill" aria-hidden="true" />
-        <span v-if="!es_telefono">Bandeja</span>
+        <span v-if="!es_telefono && !es_tablet">Bandeja</span>
         <span v-if="cantidad_bandeja > 0 && !bandeja_abierta" class="ag-enc__bandeja-cuenta">
           {{ cantidad_bandeja }}
         </span>
@@ -349,8 +349,9 @@ export default {
 <style scoped>
 .ag-enc {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
+  gap: 10px 16px;
   min-height: 64px;
   padding: 12px 30px;
   background: var(--ag-negro);
@@ -729,9 +730,28 @@ export default {
   }
 }
 
-/* Teléfono: dos filas. Arriba bandeja + título + acciones; abajo el segmentado a todo el ancho. */
+/* Tablet: la bandeja solo con el ícono, para que todo entre en una fila (si no entra, el
+   grupo de la derecha baja a una segunda fila gracias al flex-wrap). */
+@media (min-width: 768px) and (max-width: 1199.98px) {
+  .ag-enc__bandeja {
+    width: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .ag-enc__bandeja-cuenta {
+    position: absolute;
+    top: -5px;
+    right: -6px;
+  }
+}
+
+/*
+  Teléfono: dos filas. Arriba bandeja + título + flechas; abajo el segmentado (que se estira) y
+  la pastilla de acciones. Las bases de flex fuerzan el corte: título (200) + segmentado (180) no
+  entran en 360 px, así que el segmentado y las acciones bajan juntos.
+*/
 .ag-enc--telefono {
-  flex-wrap: wrap;
   gap: 10px 8px;
   padding: 10px 12px;
 }
@@ -742,8 +762,14 @@ export default {
   justify-content: center;
 }
 
+.ag-enc--telefono .ag-enc__bandeja-cuenta {
+  position: absolute;
+  top: -5px;
+  right: -6px;
+}
+
 .ag-enc--telefono .ag-enc__centro {
-  flex: 1 1 auto;
+  flex: 1 1 200px;
   gap: 4px;
 }
 
@@ -760,19 +786,22 @@ export default {
   display: contents;
 }
 
-.ag-enc--telefono .ag-enc__acciones {
+.ag-enc--telefono .ag-seg {
   order: 2;
+  flex: 1 1 180px;
+  min-width: 0;
+  padding: 0 3px;
 }
 
-.ag-enc--telefono .ag-seg {
+.ag-enc--telefono .ag-enc__acciones {
   order: 3;
-  flex: 1 1 100%;
-  justify-content: space-between;
+  flex: 0 0 auto;
 }
 
 .ag-enc--telefono .ag-seg__btn {
   flex: 1 1 0;
-  padding: 0 6px;
+  min-width: 0;
+  padding: 0 4px;
 }
 
 .ag-enc--telefono .ag-enc__pop-mes {

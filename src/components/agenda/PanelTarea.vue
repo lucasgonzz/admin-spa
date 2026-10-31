@@ -1230,7 +1230,8 @@ export default {
     },
     /**
      * Menú ⋯ → Pasar a todo el día. Se guarda al instante y el panel queda abierto (los demás
-     * cambios sin guardar siguen pendientes).
+     * cambios sin guardar siguen pendientes). Viaja SOLO `all_day`: la tarea ya tiene fecha, y
+     * mandar `date` en una repetida movería la base de la serie.
      *
      * @returns {void}
      */
@@ -1238,7 +1239,7 @@ export default {
       const self = this
       self.popover = null
       self.ocupado_accion = true
-      actualizar_tarea(self.tarea.id, { date: self.fecha_para_api(self.original.date), all_day: true })
+      actualizar_tarea(self.tarea.id, { all_day: true })
         .then(function () {
           self.form.all_day = true
           self.original.all_day = true

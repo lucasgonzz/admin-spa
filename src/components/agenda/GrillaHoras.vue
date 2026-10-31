@@ -325,6 +325,14 @@ export default {
       }
     },
     /**
+     * Las fechas de las columnas como un solo texto (lo que se vigila para el scroll).
+     *
+     * @returns {string}
+     */
+    clave_dias() {
+      return this.dias.join(',')
+    },
+    /**
      * Primera hora con tareas en todo el rango (o la hora por defecto), para llevar el scroll ahí.
      *
      * @returns {number}
@@ -341,8 +349,12 @@ export default {
     },
   },
   watch: {
-    /** Al cambiar el rango de días se vuelve a llevar el scroll a la primera tarea. */
-    dias() {
+    /**
+     * Al cambiar el rango de días se vuelve a llevar el scroll a la primera tarea. Se vigila el
+     * texto y no el array: el orquestador arma un array nuevo cada vez que cambia el día elegido,
+     * aunque sea de la misma semana, y eso no tiene que mover el scroll.
+     */
+    clave_dias() {
       this.ya_desplazo_con_datos = false
       this.desplazar_a_primera_hora()
     },
