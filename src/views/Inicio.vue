@@ -77,11 +77,31 @@
         </span>
       </router-link>
     </div>
+
+    <!--
+      Agenda embebida (misión agenda-admin, 31/10/2026): la vista tipo Structured completa y
+      operable, debajo de las tres tarjetas. Tiene alto fijo y scroll interno para no estirar el
+      Inicio; "Abrir agenda" lleva a la misma agenda a pantalla completa. Es independiente de las
+      tarjetas: si la API de la agenda no está, avisa adentro y las tarjetas siguen igual.
+    -->
+    <section class="inicio-agenda" aria-label="Agenda">
+      <div class="inicio-agenda__cabecera">
+        <h2 class="h5 mb-0 fw-semibold">Agenda</h2>
+        <router-link to="/agenda" class="inicio-agenda__abrir">
+          Abrir agenda
+          <i class="bi bi-arrow-right ms-1" aria-hidden="true" />
+        </router-link>
+      </div>
+      <div class="inicio-agenda__marco">
+        <agenda-index embebido />
+      </div>
+    </section>
   </div>
 </template>
 
 <script>
 import api from '@/utils/axios'
+import AgendaIndex from '@/components/agenda/Index.vue'
 
 /** Cada cuánto se vuelven a pedir los tres números, en milisegundos. */
 const INICIO_POLL_MS = 60000
@@ -110,6 +130,7 @@ const DEFINICION_TARJETAS = [
 
 export default {
   name: 'ViewInicio',
+  components: { AgendaIndex },
   data() {
     return {
       /**
@@ -420,6 +441,43 @@ export default {
 
   .inicio-tarjeta__numero {
     font-size: 2.25rem;
+  }
+}
+
+/* Agenda embebida debajo de las tarjetas: título con el link y un marco de alto fijo. */
+.inicio-agenda {
+  margin-top: 1.5rem;
+}
+
+.inicio-agenda__cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.inicio-agenda__abrir {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #0d6efd;
+  text-decoration: none;
+}
+
+.inicio-agenda__abrir:hover {
+  text-decoration: underline;
+}
+
+/* El alto lo pone este marco; la agenda scrollea por dentro. */
+.inicio-agenda__marco {
+  height: 760px;
+}
+
+@media (max-width: 575.98px) {
+  .inicio-agenda__marco {
+    height: 640px;
   }
 }
 </style>
