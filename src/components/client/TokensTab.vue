@@ -54,14 +54,54 @@
               </div>
             </div>
 
+            <!-- Con tope de gasto se muestra ése y no el de tokens, que del lado del cliente ya no corta. -->
             <p v-if="paquete_elegido_obj" class="tokens-tabla__nota mb-0 mt-2">
-              Tope: {{ tope_visible(paquete_elegido_obj.tope_tokens_mensual) }} tokens/mes ·
+              Tope:
+              <template v-if="tope_gasto_elegido > 0">{{ precio_visible(tope_gasto_elegido) }} de gasto/mes (reemplaza al de tokens)</template>
+              <template v-else>{{ tope_visible(paquete_elegido_obj.tope_tokens_mensual) }} tokens/mes</template>
+              ·
               {{ tope_visible(paquete_elegido_obj.tope_interacciones_diarias) }} interacciones/día ·
               {{ tope_busquedas_visible(paquete_elegido_obj.tope_busquedas_web_diarias) }} búsquedas por código de barras/día.
             </p>
             <p v-else class="tokens-tabla__nota mb-0 mt-2">
               Sin paquete asignado: el sistema del cliente no corta por tope.
             </p>
+
+            <!-- ============================================================ -->
+            <!-- Gasto del mes contra el tope (misión plan-ia-por-gasto,       -->
+            <!-- 2/11/2026). Solo aparece si el paquete tiene tope de gasto:   -->
+            <!-- sin él, esta solapa queda exactamente como estaba. El número  -->
+            <!-- sale del espejo del admin, así que puede ir atrás del que     -->
+            <!-- corta en el sistema del cliente, y el pie lo dice.            -->
+            <!-- ============================================================ -->
+            <div v-if="muestra_gasto_del_mes" class="tokens-gasto mt-3">
+              <div class="d-flex flex-wrap justify-content-between align-items-baseline column-gap-3">
+                <span class="tokens-gasto__rotulo">Gasto de este mes</span>
+                <span class="tokens-gasto__valor">
+                  {{ costo_visible(gasto_del_mes.costo_usd) }} de {{ precio_visible(tope_gasto_elegido) }}<template v-if="porcentaje_del_tope !== null"> ({{ porcentaje_del_tope }} %)</template>
+                </span>
+              </div>
+
+              <div
+                class="progress tokens-gasto__barra mt-1"
+                role="progressbar"
+                aria-label="Gasto de este mes contra el tope del paquete"
+                :aria-valuenow="ancho_de_la_barra"
+                aria-valuemin="0"
+                aria-valuemax="100"
+              >
+                <div class="progress-bar" :class="clase_de_la_barra" :style="{ width: ancho_de_la_barra + '%' }" />
+              </div>
+
+              <p class="tokens-tabla__nota mb-0 mt-1">
+                Del {{ dia_corto(gasto_del_mes.desde) }} al {{ dia_corto(gasto_del_mes.hasta) }}, según la última
+                recolección. El sistema del cliente corta con su propia cuenta, al momento.
+              </p>
+              <p v-if="gasto_modelos_sin_precio_texto" class="tokens-tabla__nota mb-0 mt-1">
+                No incluye {{ gasto_modelos_sin_precio_texto }}: sin precio cargado. El sistema del cliente los
+                cuenta a la tarifa más cara, así que allá el gasto puede dar más alto.
+              </p>
+            </div>
 
             <div class="mt-3">
               <p class="mb-1 small text-muted">{{ plan_sync_texto }}</p>
@@ -518,6 +558,10 @@ import { nombre_proveedor, nombre_pensamiento } from '@/utils/ia'
  * El GET lee del espejo local del admin y no sale a la red, así que abrir la pestaña es barato. El
  * único camino que le pega al sistema del cliente es "Traer ahora", y por eso tiene su propio
  * spinner y su propio estado.
+ *
+ * El gasto del mes contra el tope del paquete (misión plan-ia-por-gasto, 2/11/2026) respeta el punto 1:
+ * el gasto viene calculado del backend y acá solo se lo compara con el tope del paquete elegido. Se
+ * apoya en el mes calendario, no en el período de los atajos, porque ésa es la ventana del tope.
  */
 export default {
   name: 'ClientTokensTab',
@@ -582,6 +626,12 @@ export default {
         pensamiento: null,
         modelo: null,
       },
+      /*
+       * Gasto del mes calendario en curso, tal como lo manda el backend: { desde, hasta, costo_usd,
+       * modelos_sin_precio }. No depende del período elegido. null = todavía no llegó, o el GET falló,
+       * o la API es anterior: en los tres casos no se muestra el bloque.
+       */
+      gasto_del_mes: null,
       // Estado persistido de la última recolección.
       sync_status: null,
       sync_message: '',
@@ -696,14 +746,70 @@ export default {
      * @returns {string}
      */
     modelos_sin_precio_texto() {
-      const lista = Array.isArray(this.totales.modelos_sin_precio)
-        ? this.totales.modelos_sin_precio
-        : []
-      return lista
-        .map(function (modelo) {
-          return String(modelo || '').trim() === '' ? '(sin modelo)' : String(modelo)
-        })
-        .join(', ')
+      return this.nombres_de_modelos(this.totales.modelos_sin_precio)
+    },
+    /**
+     * Tope de gasto del paquete elegido, como número. 0 = sin tope de gasto (null, vacío o sin paquete).
+     * @returns {number}
+     */
+    tope_gasto_elegido() {
+      const paquete = this.paquete_elegido_obj
+      if (!paquete) {
+        return 0
+      }
+      const tope = Number(paquete.tope_gasto_usd_mensual)
+      return isNaN(tope) || tope < 0 ? 0 : tope
+    },
+    /**
+     * true si hay tope de gasto y ya se sabe el gasto del mes. Sin tope no se muestra nada: la solapa
+     * tiene que quedar igual que antes hasta que Lucas cargue el valor.
+     * @returns {boolean}
+     */
+    muestra_gasto_del_mes() {
+      return this.tope_gasto_elegido > 0 && this.gasto_del_mes !== null
+    },
+    /**
+     * Qué parte del tope se gastó, en porcentaje entero y sin techo: 112 % es un dato que se tiene que
+     * leer. null cuando el gasto es "no sé" (todos sus modelos sin precio): no es un 0 %.
+     * @returns {number|null}
+     */
+    porcentaje_del_tope() {
+      if (!this.muestra_gasto_del_mes) {
+        return null
+      }
+      const gasto = this.gasto_del_mes.costo_usd
+      if (gasto === null || gasto === undefined) {
+        return null
+      }
+      return Math.round((Number(gasto) / this.tope_gasto_elegido) * 100)
+    },
+    /**
+     * Ancho de la barra, de 0 a 100: la barra sí tiene techo, para no salirse de su pista.
+     * @returns {number}
+     */
+    ancho_de_la_barra() {
+      return Math.min(100, this.porcentaje_del_tope === null ? 0 : this.porcentaje_del_tope)
+    },
+    /**
+     * Color de la barra: oscura como las de la serie por día, ámbar desde el 80 % (el mismo umbral de
+     * "cerca" que usa el sistema del cliente) y roja al llegar al tope.
+     * @returns {string}
+     */
+    clase_de_la_barra() {
+      if (this.porcentaje_del_tope !== null && this.porcentaje_del_tope >= 100) {
+        return 'bg-danger'
+      }
+      if (this.porcentaje_del_tope !== null && this.porcentaje_del_tope >= 80) {
+        return 'bg-warning'
+      }
+      return 'tokens-gasto__relleno'
+    },
+    /**
+     * Los modelos sin precio del gasto del mes, listos para meter en una frase ('' = ninguno).
+     * @returns {string}
+     */
+    gasto_modelos_sin_precio_texto() {
+      return this.gasto_del_mes ? this.nombres_de_modelos(this.gasto_del_mes.modelos_sin_precio) : ''
     },
     /**
      * true si alguna persona tiene la plata parcial (el corte por modelo no cubre todas sus
@@ -970,6 +1076,9 @@ export default {
          corte por persona queda como antes (sin plata) y el modelo elegido como "no informó". */
       this.informa_modelo_por_persona = cuerpo.informa_modelo_por_persona === true
 
+      // Un admin-api anterior no lo manda: el bloque del gasto del mes queda sin mostrarse.
+      this.gasto_del_mes = cuerpo.gasto_del_mes || null
+
       const config = cuerpo.configuracion || {}
       this.configuracion = {
         proveedor: config.proveedor || null,
@@ -981,6 +1090,23 @@ export default {
       this.sync_status = sync.estado || null
       this.sync_message = sync.mensaje || ''
       this.sync_synced_at = sync.sincronizado_at || null
+    },
+    /**
+     * Una lista de modelos, lista para meter en una frase.
+     *
+     * Una fila con el `modelo` vacío es un caso real —el cliente no informó con qué modelo gastó—
+     * y llega como cadena vacía. Sin esto, la frase queda "No incluye : sin precio cargado.", que
+     * se lee como un error de la pantalla en vez de como el dato que es.
+     * @param {Array<string>|undefined} modelos
+     * @returns {string}
+     */
+    nombres_de_modelos(modelos) {
+      const lista = Array.isArray(modelos) ? modelos : []
+      return lista
+        .map(function (modelo) {
+          return String(modelo || '').trim() === '' ? '(sin modelo)' : String(modelo)
+        })
+        .join(', ')
     },
     /**
      * Clave estable de una fila de "Por persona": los procesos automáticos no tienen id.
@@ -1149,6 +1275,9 @@ export default {
     inicializar_plan() {
       // El aviso de la activación automática es de la última asignación de ESTE cliente: no se arrastra al siguiente.
       this.agentes_ia_resultado = null
+      /* Tampoco su gasto del mes: el bloque vive afuera del `load_error`, así que si el GET del cliente
+         nuevo falla, seguiría mostrando la plata del anterior. */
+      this.gasto_del_mes = null
       this.aplicar_estado_plan(this.record || {})
       this.cargar_paquetes()
     },
@@ -1505,6 +1634,31 @@ export default {
 .tokens-config__vacio {
   color: #8a8a8f;
   font-style: italic;
+}
+
+/* Gasto del mes contra el tope: el rótulo en el tono de los títulos de panel y el monto al lado. Con
+   `flex-wrap` del contenedor, a 360px el monto baja de renglón en vez de partirse a la mitad. */
+.tokens-gasto__rotulo {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6c757d;
+  font-weight: 600;
+}
+
+.tokens-gasto__valor {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.tokens-gasto__barra {
+  height: 0.5rem;
+  background: #f2f2f4;
+}
+
+/* Mismo tono que las barras de la serie por día: oscura mientras no haya nada que avisar. */
+.tokens-gasto__relleno {
+  background: #1f1f24;
 }
 
 /* Sub-filas por modelo, debajo de cada persona: atenuadas, más chicas y con el nombre corrido a
