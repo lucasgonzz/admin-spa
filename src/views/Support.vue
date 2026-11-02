@@ -89,6 +89,7 @@
           :now_tick="now_tick"
           :draft_busy="draft_busy"
           @retry-message="on_retry_message"
+          @reply-message="on_reply_message"
           @send-draft="on_send_draft"
           @discard-draft="on_discard_draft" />
       </div>
@@ -1187,6 +1188,17 @@ export default {
             self.saving_header = false
           })
       })
+    },
+    /**
+     * El operador tocó «Responder» en una burbuja: el input pasa a citar ese mensaje.
+     *
+     * @param {Object} message Mensaje del hilo al que se responde.
+     * @returns {void}
+     */
+    on_reply_message(message) {
+      if (this.$refs.message_input && this.$refs.message_input.set_reply_to) {
+        this.$refs.message_input.set_reply_to(message)
+      }
     },
     /**
      * Envía mensaje; la bandeja se alinea vía Pusher y apply_ticket del store.

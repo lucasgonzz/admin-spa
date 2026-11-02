@@ -130,6 +130,16 @@ export default {
       }
       if (idx >= 0) {
         state.models.splice(idx, 1, model)
+        /* El mismo mensaje puede haber entrado ya por el evento en vivo (el servidor lo emite antes
+           de contestar el POST): nunca puede quedar el mismo id en dos filas. */
+        const kept = state.models[idx]
+        let dup = state.models.length - 1
+        while (dup >= 0) {
+          if (state.models[dup] !== kept && state.models[dup].id == model.id) {
+            state.models.splice(dup, 1)
+          }
+          dup = dup - 1
+        }
       } else {
         let exists = false
         state.models.forEach(function (existing) {
@@ -190,11 +200,23 @@ export default {
         return
       }
       if (value.support_ticket_id) {
+        /* La fila optimista se reconoce por la clave del borrador (`client_message_id`), que el
+           servidor devuelve tal cual. Comparar por texto no sirve: un audio sale con body '' y vuelve
+           con null, no coinciden, y la fila quedaba duplicada. Solo si el servidor no devuelve la clave
+           (API vieja) se cae al texto, y entonces se quita una sola fila. */
         let n = state.models.length - 1
         while (n >= 0) {
           const m = state.models[n]
-          if (m._client_pending && m.support_ticket_id == value.support_ticket_id && m.body == value.body) {
-            state.models.splice(n, 1)
+          if (m._client_pending && m.support_ticket_id == value.support_ticket_id) {
+            const same_key = value.client_message_id
+              ? m._retry_client_message_id === value.client_message_id
+              : m.body == value.body
+            if (same_key) {
+              state.models.splice(n, 1)
+              if (!value.client_message_id) {
+                break
+              }
+            }
           }
           n = n - 1
         }
@@ -352,11 +374,17 @@ export default {
         body: body_text,
         _retry_attachment: payload.attachment || null,
         _retry_client_message_id: client_key,
+        /* Cita: la barra del input y el reintento la necesitan igual que el envío original. */
+        reply_to_message_id: payload.reply_to_message_id || null,
+        reply_to_message: payload.reply_to_message || null,
       })
       const form_data = new FormData()
       form_data.append('body', payload.body || '')
       form_data.append('kind', kind_val)
       form_data.append('client_message_id', client_key)
+      if (payload.reply_to_message_id) {
+        form_data.append('reply_to_message_id', payload.reply_to_message_id)
+      }
       if (payload.attachment) {
         form_data.append('attachment', payload.attachment)
       }
@@ -421,6 +449,8 @@ export default {
         body: message.body,
         kind: message.kind || 'text',
         attachment: message._retry_attachment || null,
+        reply_to_message_id: message.reply_to_message_id || null,
+        reply_to_message: message.reply_to_message || null,
       })
     },
     /**

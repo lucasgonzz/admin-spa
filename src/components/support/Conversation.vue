@@ -24,13 +24,14 @@
           <div
             v-for="message in section.messages"
             :key="message_key(message)"
+            :data-message-id="message.id"
             :class="['support-message-row', message.sender_type == 'admin' ? 'mine' : 'their']">
             <div class="support-message-col">
-              <!-- Fila burbuja + botón de reaccionar. Se comparte la zona para cerrar la barra al
-                   tocar afuera (ver on_document_click). -->
+              <!-- Fila burbuja + botones de responder y reaccionar. Se comparte la zona para cerrar la
+                   barra al tocar afuera (ver on_document_click). -->
               <div
                 class="support-message-bubble-row support-reaction-zone"
-                :class="{ 'support-message-bubble-row--react': can_react(message) }">
+                :class="{ 'support-message-bubble-row--react': can_react(message) || can_reply(message) }">
               <border-progress-wrap
                 :active="is_ai_draft_auto_send_active(message)"
                 :duration_seconds="ai_draft_total_seconds(message)"
@@ -45,6 +46,17 @@
                     is_ai_draft_message(message) ? 'support-message-bubble--ai-draft' : '',
                   ]"
                   :title="message_sent_at_tooltip(message)">
+                  <!-- Cita: el mensaje al que este responde. Al tocarla se salta al original. -->
+                  <button
+                    v-if="has_quote(message)"
+                    type="button"
+                    class="support-quote"
+                    :class="{ 'support-quote--mine': is_mine(message), 'support-quote--missing': !message.reply_to_message }"
+                    :disabled="!message.reply_to_message"
+                    @click="jump_to_message(message.reply_to_message_id)">
+                    <span class="support-quote-author">{{ message.reply_to_message ? quote_author(message.reply_to_message) : '' }}</span>
+                    <span class="support-quote-text">{{ message.reply_to_message ? quote_text(message.reply_to_message) : 'Mensaje no disponible' }}</span>
+                  </button>
                   <div
                     v-if="visible_body(message)"
                     class="support-message-text">
@@ -179,6 +191,16 @@
                 </div>
                 </div>
               </border-progress-wrap>
+              <!-- Responder citando este mensaje (tickets de WhatsApp, también los propios). -->
+              <button
+                v-if="can_reply(message)"
+                type="button"
+                class="support-react-btn support-reply-btn"
+                title="Responder"
+                aria-label="Responder a este mensaje"
+                @click="reply_to_message(message)">
+                <i class="bi bi-reply" aria-hidden="true"></i>
+              </button>
               <!-- Reaccionar a un mensaje del cliente (solo tickets de WhatsApp): el botón aparece
                    al pasar el mouse y en pantallas táctiles está siempre visible. -->
               <button
@@ -378,6 +400,7 @@ import {
   attachment_icon_class,
   browser_can_play_ogg_opus,
 } from '@/utils/support_media'
+import { reply_author_label, reply_preview_text } from '@/utils/support_reply'
 import {
   REACTION_EMOJIS,
   ticks_state,
@@ -399,7 +422,7 @@ export default {
   },
   /* Secciones por día (message_date_sections) a partir del computed sorted_messages. */
   mixins: [lead_conversation_date_dividers],
-  emits: ['retry-message', 'send-draft', 'discard-draft'],
+  emits: ['retry-message', 'send-draft', 'discard-draft', 'reply-message'],
   props: {
     messages: { type: Array, default: () => [] },
     /**
@@ -689,6 +712,75 @@ export default {
      */
     can_react(message) {
       return can_react_to_message(message, this.ticket_source)
+    },
+    /**
+     * true si se puede responder citando el mensaje: ticket de WhatsApp (la cita viaja en el
+     * mensaje de WhatsApp), mensaje ya guardado y que no sea un borrador del agente sin aprobar.
+     *
+     * @param {Object} message Mensaje del hilo.
+     * @returns {boolean}
+     */
+    can_reply(message) {
+      return (
+        this.ticket_source === 'whatsapp' &&
+        !!message &&
+        message.id != null &&
+        !message._client_pending &&
+        !message.is_ai_suggestion_draft
+      )
+    },
+    /**
+     * Pide al padre que el input pase a «responder» a este mensaje.
+     *
+     * @param {Object} message Mensaje del hilo.
+     * @returns {void}
+     */
+    reply_to_message(message) {
+      this.$emit('reply-message', message)
+    },
+    /**
+     * true si la burbuja lleva el bloque de cita (el mensaje responde a otro).
+     *
+     * @param {Object} message Mensaje del hilo.
+     * @returns {boolean}
+     */
+    has_quote(message) {
+      return !!(message && (message.reply_to_message_id || message.reply_to_message))
+    },
+    /**
+     * @param {Object} quoted Mensaje citado (vista previa).
+     * @returns {string} Quién lo escribió.
+     */
+    quote_author(quoted) {
+      return reply_author_label(quoted)
+    },
+    /**
+     * @param {Object} quoted Mensaje citado (vista previa).
+     * @returns {string} Texto corto del mensaje citado.
+     */
+    quote_text(quoted) {
+      return reply_preview_text(quoted)
+    },
+    /**
+     * Lleva el hilo hasta el mensaje citado y lo resalta un momento. Si no está en pantalla
+     * (hilo viejo no cargado) no hace nada.
+     *
+     * @param {number|string} message_id Id del mensaje original.
+     * @returns {void}
+     */
+    jump_to_message(message_id) {
+      if (message_id == null) {
+        return
+      }
+      const row = this.$el.querySelector('[data-message-id="' + String(message_id) + '"]')
+      if (!row) {
+        return
+      }
+      row.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      row.classList.add('support-message-row--flash')
+      setTimeout(function () {
+        row.classList.remove('support-message-row--flash')
+      }, 1600)
     },
     /**
      * Emoji que el operador ya puso sobre el mensaje ('' si ninguno).
@@ -1487,6 +1579,59 @@ export default {
   font-size: 11px;
   line-height: 1;
   color: #667781;
+}
+
+/* En mis mensajes los botones van a la izquierda de la burbuja (que está pegada a la derecha). */
+.support-message-row.mine .support-message-bubble-row--react {
+  flex-direction: row-reverse;
+}
+
+/* Cita dentro de la burbuja: barra de color a la izquierda, autor y texto cortado a dos renglones. */
+.support-quote {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin: 0 0 4px;
+  padding: 4px 8px;
+  text-align: left;
+  background: rgba(0, 0, 0, 0.05);
+  border: none;
+  border-left: 4px solid #53bdeb;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.support-quote--mine {
+  border-left-color: #06cf9c;
+}
+
+.support-quote--missing {
+  cursor: default;
+  font-style: italic;
+  color: #667781;
+}
+
+.support-quote-author {
+  font-weight: 600;
+  color: #128c7e;
+}
+
+.support-quote-text {
+  color: #54656f;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+/* Resalte breve del mensaje al que se salta desde su cita. */
+.support-message-row--flash .support-message-bubble {
+  box-shadow: 0 0 0 3px rgba(83, 189, 235, 0.6);
+  transition: box-shadow 0.3s ease;
 }
 
 /* Botón de reaccionar: invisible hasta pasar el mouse por la fila (conserva su lugar para no

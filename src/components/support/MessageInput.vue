@@ -8,6 +8,22 @@
       @confirm="on_image_annotation_confirm"
       @cancel="on_image_annotation_cancel" />
 
+    <!-- Respondiendo a un mensaje: la cita sale junto con lo que se escriba. Se quita con la ✕ o Esc. -->
+    <div v-if="reply_to" class="support-input-reply-bar">
+      <div class="support-input-reply-body">
+        <span class="support-input-reply-author">Respondiendo a {{ reply_author_label(reply_to) }}</span>
+        <span class="support-input-reply-text text-truncate">{{ reply_preview_text(reply_to) }}</span>
+      </div>
+      <button
+        type="button"
+        class="btn btn-sm btn-link support-input-attachment-remove"
+        title="Cancelar respuesta"
+        aria-label="Cancelar respuesta"
+        :disabled="draft_sending"
+        @click="clear_reply">
+        ✕
+      </button>
+    </div>
     <!-- Los cuatro avisos de acá abajo quedan AFUERA de la fila del composer a propósito: son de
          alto variable y adentro la partirían en dos renglones. -->
     <!-- Indicador de adjunto pendiente: nombre del archivo y botón para cancelarlo -->
@@ -62,7 +78,8 @@
         v-model="body"
         @input="ajustar_alto"
         @paste="on_paste"
-        @keydown.enter.exact.prevent="emit_send" />
+        @keydown.enter.exact.prevent="emit_send"
+        @keydown.esc="clear_reply" />
       <input ref="file_input" class="d-none" type="file" accept="audio/*,image/*,.m4a,.mp3,.ogg,.oga,.opus,.aac,.amr,.webm" @change="on_file_change" />
       <!-- Botón de grabación: rojo mientras graba; muestra tiempo en tooltip -->
       <button
@@ -146,6 +163,7 @@ import ImageAnnotationEditor from '@/components/common/ImageAnnotationEditor.vue
 import { OggOpusRecorder } from '@/utils/oggOpusRecorder'
 import audio_recorder_button from '@/mixins/audio_recorder_button'
 import { extension_of } from '@/utils/support_media'
+import { reply_author_label, reply_preview_text, reply_preview_of } from '@/utils/support_reply'
 import { new_audio_id, check_audio_storage, save_audio_draft, load_audio_drafts, remove_audio_draft } from '@/utils/support_audio_drafts'
 
 /* Extensiones de audio que se reconocen cuando el navegador no informa `File.type` (iPhone con notas de voz .m4a). */
@@ -197,6 +215,8 @@ export default {
       recovered_drafts: [],
       draft_sending: false,
       attachment_preview_url: '',
+      /** Mensaje del hilo al que se está respondiendo citándolo (vista previa), o null. */
+      reply_to: null,
     }
   },
   computed: {
@@ -296,6 +316,46 @@ export default {
     if (this.attachment_preview_url) URL.revokeObjectURL(this.attachment_preview_url)
   },
   methods: {
+    reply_author_label,
+    reply_preview_text,
+    /**
+     * Devuelve el foco al campo de texto. Va en nextTick porque mientras se envía el textarea está
+     * deshabilitado y un campo deshabilitado no puede tomar el foco.
+     *
+     * @returns {void}
+     */
+    focus_textarea() {
+      const self = this
+      this.$nextTick(function () {
+        const el = self.$refs.textarea
+        if (el && !el.disabled && typeof el.focus === 'function') {
+          el.focus({ preventScroll: true })
+        }
+      })
+    },
+    /**
+     * Empieza a responder citando un mensaje del hilo. Lo llama Support.vue por ref cuando el
+     * operador toca «Responder» en una burbuja.
+     *
+     * @param {Object} message Mensaje del hilo al que se responde.
+     * @returns {void}
+     */
+    set_reply_to(message) {
+      const preview = reply_preview_of(message)
+      if (!preview || this.draft_sending) return
+      this.reply_to = preview
+      this.focus_textarea()
+    },
+    /**
+     * Deja de citar: el próximo mensaje sale suelto.
+     *
+     * @returns {void}
+     */
+    clear_reply() {
+      if (this.reply_to && !this.draft_sending) {
+        this.reply_to = null
+      }
+    },
     async confirm_recovered_audio(model, id) {
       if (!model || model.id == null || !(model.attachments && model.attachments.length) || id !== this.audio_draft_id) return
       this.draft_sending = true
@@ -309,6 +369,7 @@ export default {
           ? 'Audio guardado en el servidor. Su entrega falló: usá Reintentar en el mensaje de la conversación.' : ''
       }
       this.draft_sending = false
+      this.focus_textarea()
     },
     preserve_audio_on_leave() { return true },
     refresh_audio_drafts() {
@@ -650,6 +711,7 @@ export default {
       const draft_id = this.audio_draft_id
       const original_body = this.body
       const original_attachment = this.attachment
+      const original_reply = this.reply_to
       let acknowledged = false
       const on_result = async (model) => {
           if (acknowledged) return
@@ -659,6 +721,7 @@ export default {
             this.audio_notice = kind === 'audio'
               ? 'No se confirmó el envío. Tu audio sigue acá: podés reintentar con el mismo botón o descargarlo.'
               : 'No se confirmó el envío. Tu mensaje sigue acá para reintentar.'
+            this.focus_textarea()
             return
           }
           acknowledged = true
@@ -670,6 +733,7 @@ export default {
           }
           if (this.body === original_body) this.body = ''
           if (this.attachment === original_attachment) this.attachment = null
+          if (this.reply_to === original_reply) this.reply_to = null
           this.audio_draft_id = null
           this.audio_draft_partial = false
           this.reasoning_visible = false
@@ -678,6 +742,8 @@ export default {
             ? 'Audio guardado en el servidor. Su entrega falló: usá Reintentar en el mensaje de la conversación.' : ''
           this.$nextTick(() => this.ajustar_alto())
           this.draft_sending = false
+          /* Después de enviar, el operador sigue escribiendo: el foco vuelve al campo de texto. */
+          this.focus_textarea()
       }
       this._audio_result_handler = on_result
       this._audio_result_id = draft_id
@@ -687,6 +753,8 @@ export default {
         attachment: this.attachment,
         ticket_id: this.ticket_id,
         client_message_id: draft_id || new_audio_id(),
+        reply_to_message_id: original_reply ? original_reply.id : null,
+        reply_to_message: original_reply,
         on_result: on_result,
       })
       /* Con el texto ya vaciado el textarea tiene que volver a un renglón; si no, el footer se
@@ -703,6 +771,37 @@ export default {
 .support-input-bar {
   border-top: 1px solid #e9ecef;
   padding: 10px;
+}
+
+/* Barra «Respondiendo a…» sobre el campo de texto: borde verde a la izquierda, como la cita de WhatsApp. */
+.support-input-reply-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  margin-bottom: 6px;
+  background: #f0f2f5;
+  border-left: 4px solid #25d366;
+  border-radius: 6px;
+  max-width: 100%;
+}
+
+.support-input-reply-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.support-input-reply-author {
+  font-weight: 600;
+  color: #128c7e;
+}
+
+.support-input-reply-text {
+  color: #54656f;
 }
 
 .support-input-audio-notice { font-size: 12px; padding: 4px 0; overflow-wrap: anywhere; }
