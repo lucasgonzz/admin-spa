@@ -5,10 +5,12 @@
       <div>
         <h2 class="h4 mb-1">Paquetes de IA</h2>
         <p class="text-muted small mb-0">
-          Los planes de suscripción de IA ($100 / $200 / $400, tentativos). Cada paquete define el
-          tope de tokens por mes y de interacciones por día que se le envían al sistema del cliente
-          cuando se le asigna. Un tope vacío significa <strong>sin límite</strong>: el cliente nunca
-          corta. La excepción son las búsquedas por código de barras: vacío es el defecto de 30 por día.
+          Los planes de suscripción de IA ($100 / $200 / $400, tentativos). Cada paquete define los
+          topes de gasto y de tokens por mes y de interacciones por día que se le envían al sistema
+          del cliente cuando se le asigna. Un tope vacío significa <strong>sin límite</strong>: el
+          cliente nunca corta. La excepción son las búsquedas por código de barras: vacío es el defecto
+          de 30 por día. Un cliente con una versión anterior ignora el tope de gasto y sigue con el de
+          tokens.
         </p>
       </div>
       <button
@@ -67,6 +69,26 @@
                   placeholder="0"
                 />
               </div>
+            </div>
+
+            <!-- Tope de gasto del mes en dólares (misión plan-ia-por-gasto, 2/11/2026). Vacío o 0 = sin
+                 tope de gasto, y el sistema del cliente sigue con el de tokens. Con un valor, manda
+                 éste: lo que se limita es la plata, porque un token no cuesta lo mismo en cada modelo. -->
+            <div class="col-md-6">
+              <label class="form-label small mb-1 fw-semibold" for="ai-plan-tope-gasto">Tope de gasto mensual (USD)</label>
+              <div class="input-group">
+                <span class="input-group-text">US$</span>
+                <input
+                  id="ai-plan-tope-gasto"
+                  v-model="form.tope_gasto_usd_mensual"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="form-control"
+                  placeholder="Sin tope"
+                />
+              </div>
+              <div class="form-text small">Si lo cargás, reemplaza al tope de tokens.</div>
             </div>
 
             <!-- Tope de tokens del mes. Vacío = sin tope (el cliente no corta). -->
@@ -166,11 +188,14 @@
         <div class="table-responsive">
           <table class="table table-hover align-middle mb-0">
             <thead>
+              <!-- Los <wbr> dejan cortar el encabezado después de la barra: con la columna del tope de
+                   gasto, a 820px la tabla se pasaba 31px y «Dar de baja» quedaba tapado por el scroll. -->
               <tr>
                 <th>Nombre</th>
                 <th class="text-end">Precio</th>
-                <th class="text-end">Tope tokens/mes</th>
-                <th class="text-end">Tope interacciones/día</th>
+                <th class="text-end">Tope gasto/<wbr>mes</th>
+                <th class="text-end">Tope tokens/<wbr>mes</th>
+                <th class="text-end">Tope interacciones/<wbr>día</th>
                 <th class="text-end">Búsquedas código de barras/día</th>
                 <th class="text-center">Estado</th>
                 <th class="text-end">Acciones</th>
@@ -180,6 +205,7 @@
               <tr v-for="paquete in paquetes_ordenados" :key="paquete.id" :class="{ 'text-muted': !paquete.activo }">
                 <td class="fw-semibold">{{ paquete.nombre }}</td>
                 <td class="text-end">{{ precio_visible(paquete.precio_usd) }}</td>
+                <td class="text-end">{{ tope_gasto_visible(paquete.tope_gasto_usd_mensual) }}</td>
                 <td class="text-end">{{ tope_visible(paquete.tope_tokens_mensual) }}</td>
                 <td class="text-end">{{ tope_visible(paquete.tope_interacciones_diarias) }}</td>
                 <td class="text-end">{{ tope_busquedas_visible(paquete.tope_busquedas_web_diarias) }}</td>
@@ -237,6 +263,10 @@ import api, { resolve_error_message } from '@/utils/axios'
  * El tercer tope, búsquedas por código de barras por día (24/9/2026), viaja igual pero con otra
  * lectura del vacío/0: ahí es el DEFECTO de 30 que aplica el sistema del cliente, no "sin tope".
  *
+ * El cuarto, el tope de gasto mensual en dólares (misión plan-ia-por-gasto, 2/11/2026), se lee como
+ * los dos primeros: vacío/0 es SIN tope de gasto. Con un valor, del lado del cliente reemplaza al tope
+ * de tokens, que acá se sigue cargando porque conviven hasta que las dos puntas estén desplegadas.
+ *
  * Rutas asumidas (el admin-api las construye en paralelo; confirmar contra routes/api.php):
  *   GET    /api/admin/ai-plan        -> lista
  *   POST   /api/admin/ai-plan        -> alta
@@ -275,6 +305,7 @@ export default {
       form: {
         nombre: '',
         precio_usd: '',
+        tope_gasto_usd_mensual: '',
         tope_tokens_mensual: '',
         tope_interacciones_diarias: '',
         tope_busquedas_web_diarias: '',
@@ -360,6 +391,7 @@ export default {
       this.form = {
         nombre: '',
         precio_usd: '',
+        tope_gasto_usd_mensual: '',
         tope_tokens_mensual: '',
         tope_interacciones_diarias: '',
         tope_busquedas_web_diarias: '',
@@ -379,6 +411,7 @@ export default {
       this.form = {
         nombre: paquete.nombre || '',
         precio_usd: paquete.precio_usd === null || paquete.precio_usd === undefined ? '' : String(paquete.precio_usd),
+        tope_gasto_usd_mensual: this.tope_a_input(paquete.tope_gasto_usd_mensual),
         tope_tokens_mensual: this.tope_a_input(paquete.tope_tokens_mensual),
         tope_interacciones_diarias: this.tope_a_input(paquete.tope_interacciones_diarias),
         tope_busquedas_web_diarias: this.tope_a_input(paquete.tope_busquedas_web_diarias),
@@ -439,6 +472,7 @@ export default {
       const payload = {
         nombre: String(this.form.nombre).trim(),
         precio_usd: this.form.precio_usd === '' || this.form.precio_usd === null ? 0 : Number(this.form.precio_usd),
+        tope_gasto_usd_mensual: this.tope_a_payload(this.form.tope_gasto_usd_mensual),
         tope_tokens_mensual: this.tope_a_payload(this.form.tope_tokens_mensual),
         tope_interacciones_diarias: this.tope_a_payload(this.form.tope_interacciones_diarias),
         tope_busquedas_web_diarias: this.tope_a_payload(this.form.tope_busquedas_web_diarias),
@@ -481,6 +515,7 @@ export default {
       const payload = {
         nombre: paquete.nombre,
         precio_usd: paquete.precio_usd === null || paquete.precio_usd === undefined ? 0 : Number(paquete.precio_usd),
+        tope_gasto_usd_mensual: this.tope_a_payload(this.tope_a_input(paquete.tope_gasto_usd_mensual)),
         tope_tokens_mensual: this.tope_a_payload(this.tope_a_input(paquete.tope_tokens_mensual)),
         tope_interacciones_diarias: this.tope_a_payload(this.tope_a_input(paquete.tope_interacciones_diarias)),
         tope_busquedas_web_diarias: this.tope_a_payload(this.tope_a_input(paquete.tope_busquedas_web_diarias)),
@@ -528,6 +563,18 @@ export default {
         return 'Sin tope'
       }
       return Number(valor).toLocaleString('es-AR')
+    },
+
+    /**
+     * Tope de gasto mensual, listo para mostrar: null/0 se lee como "Sin tope" y el resto en dólares.
+     * @param {number|string|null} valor
+     * @returns {string}
+     */
+    tope_gasto_visible(valor) {
+      if (valor === null || valor === undefined || Number(valor) === 0) {
+        return 'Sin tope'
+      }
+      return this.precio_visible(valor)
     },
 
     /**
