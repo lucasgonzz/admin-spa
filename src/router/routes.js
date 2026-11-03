@@ -20,6 +20,21 @@ const routes_def = [
   },
   {
     /**
+     * El local (misión el-local, 3/11/2026): la vista animada del negocio como videojuego. Un
+     * mostrador con un robot por cada agente de IA, los negocios clientes que entran por la puerta
+     * y van a la estación del agente con el que hablan, la bandeja «Para Lucas» y, atrás, las
+     * oficinas con el planificador y una mesa por slot con misión. Se mueve por el estado real que
+     * devuelve GET /local/escena (cada 60 s) y por la diferencia con el estado anterior.
+     * Va pegada a Inicio porque es la otra pantalla que se deja abierta para mirar el día.
+     */
+    path: '/local',
+    name: 'local',
+    text: 'El local',
+    component: () => import('@/views/ElLocal.vue'),
+    meta: { requiresAuth: true, nav: true, icon: 'shop', title: 'El local' },
+  },
+  {
+    /**
      * Agenda (misión agenda-admin, 31/10/2026): copia de la interfaz de Structured con las tareas
      * personales del admin logueado (descripción, subpasos, fecha y hora, repetir, bandeja sin
      * fecha, marcar hechas, mover arrastrando). Claude crea y mueve tareas por `claude/agenda`.
