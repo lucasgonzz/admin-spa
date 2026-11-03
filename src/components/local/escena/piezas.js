@@ -212,10 +212,12 @@ export const LUGARES_ENTRADA = (function () {
  */
 export function columnasMesas(n) {
   if (n <= 3) {
+    // anchas: con margen a la izquierda para que el rótulo del primer ayudante no se corte contra
+    // el borde, y a la derecha para no meterse en el tabique de vidrio (x 610)
     return [
-      { x: 40, w: 160 },
-      { x: 230, w: 160 },
-      { x: 420, w: 160 },
+      { x: 50, w: 150 },
+      { x: 235, w: 150 },
+      { x: 420, w: 150 },
     ]
   }
   return [
@@ -230,28 +232,38 @@ export function columnasMesas(n) {
 /** Tope de mesas visibles en las oficinas. */
 export const MAX_MESAS = 5
 
-/** Tope de ayudantes (constructores, revisores…) parados al lado de una mesa. */
+/** Tope de ayudantes (constructores, revisores…) de una mesa ancha. */
 export const MAX_AYUDANTES = 4
 
+/** Tope de ayudantes de una mesa angosta (con 4 o 5 mesas no entran más sin taparse). */
+export const MAX_AYUDANTES_ANGOSTA = 2
+
 /**
- * Lugar del ayudante `k` de una mesa: los dos primeros a los costados, adelante (como el prototipo);
- * los otros dos un poco más afuera.
+ * Lugar del ayudante `k` de una mesa.
+ *
+ * - Mesa ancha (hasta 3 mesas): los dos primeros parados a los costados, adelante, como el
+ *   prototipo; el tercero y el cuarto detrás de la mesa, a los lados del orquestador.
+ * - Mesa angosta (4 o 5 mesas): todos detrás de la mesa, a los lados del orquestador. Adelante
+ *   tapaban la plaquita de la mesa y sus rótulos se pisaban con los de la mesa de al lado (o se
+ *   cortaban contra el borde izquierdo).
+ *
+ * `atras: true` → va en la capa de atrás (la mesa le tapa las piernas) y sin rótulo.
  *
  * @param {{x:number,w:number}} col
  * @param {number} k
- * @returns {{x:number,y:number}}
+ * @returns {{x:number,y:number,atras:boolean}}
  */
 export function lugarAyudante(col, k) {
-  if (k === 0) {
-    return { x: col.x + 4, y: 690 }
+  const angosta = col.w < 130
+  if (!angosta && k === 0) {
+    return { x: col.x + 6, y: 690, atras: false }
   }
-  if (k === 1) {
-    return { x: col.x + col.w - 4, y: 690 }
+  if (!angosta && k === 1) {
+    return { x: col.x + col.w - 6, y: 690, atras: false }
   }
-  if (k === 2) {
-    return { x: col.x + col.w * 0.3, y: 704 }
-  }
-  return { x: col.x + col.w * 0.7, y: 704 }
+  const margen = angosta ? 16 : 30
+  const izquierda = angosta ? k === 0 : k === 2
+  return { x: izquierda ? col.x + margen : col.x + col.w - margen, y: MESA_Y - 1, atras: true }
 }
 
 /* ---------------------------------------------------------------------------------------------
@@ -438,7 +450,9 @@ export function capaAtras() {
 	<rect x="-92" y="118" width="184" height="6" fill="#1B2A44"/>
 </g>`
   s += html`<g transform="translate(${PUERTA.x},138)"><rect x="-70" y="-18" width="140" height="36" rx="18" fill="#101C28"/><text x="0" y="6" text-anchor="middle" font-size="15" font-weight="700" fill="#fff" letter-spacing="3">ENTRADA</text></g>`
-  s += html`<text class="neon" x="1416" y="222" text-anchor="middle" font-size="14" font-weight="800" fill="#22C55E" letter-spacing="2">ABIERTO</text>`
+  // cartelito «ABIERTO» colgado del vidrio izquierdo: plaquita oscura y verde claro con brillo
+  // (antes era verde oscuro sobre el vidrio oscuro y casi no se leía)
+  s += html`<g transform="translate(1418,214)"><rect x="-34" y="-11" width="68" height="20" rx="10" fill="#0B1220" opacity=".9"/><text class="neon" y="3.6" text-anchor="middle" font-size="10" font-weight="700" fill="#86EFAC" letter-spacing="1.6">ABIERTO</text></g>`
   s += html`<path d="M1385 408 L1535 408 L1550 448 L1370 448 Z" fill="#8A6A4E" opacity=".9"/><path d="M1393 416 L1527 416 L1538 440 L1382 440 Z" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="2"/>`
   // los que esperan sin horario cerca de la entrada: el «+N» si no entran
   s += html`<g data-ref="entrada-extra" transform="translate(1560,470)"></g>`
@@ -784,6 +798,19 @@ export const ICONOS_GLOBO = {
   img: html`<rect x="-9" y="-8" width="18" height="16" rx="3" fill="#0B84F8"/><circle cx="-3.5" cy="-3" r="2.2" fill="#fff"/><path d="M-8 6 l5 -6 l4 4 l3 -3 l5 5z" fill="#fff"/>`,
   hola: html`<circle r="9" fill="#FA7E06"/><path d="M-3.5 4 v-7 m3.5 7 v-8 m3.5 8 v-6" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>`,
   carpeta: html`<path d="M-11 -7 h7 l3 3 h12 v13 h-22z" fill="#FA7E06"/><rect x="-11" y="-3" width="22" height="12" rx="1.5" fill="#FFB24D"/>`,
+}
+
+/**
+ * Etiqueta flotante con el nombre de un negocio (y su situación), la que aparece al tocarlo. La
+ * punta queda en (0, 0); el fondo se ajusta al texto después de insertarla (ver el director).
+ *
+ * @param {string} nombre Ya escapado.
+ * @param {string} detalle Ya escapado ('' si no hay).
+ * @returns {string}
+ */
+export function etiquetaFlotante(nombre, detalle) {
+  const alto = detalle ? 36 : 22
+  return html`<g class="etiqueta-flotante" pointer-events="none"><rect class="fondo" x="-60" y="${-6 - alto}" width="120" height="${alto}" rx="9" fill="#101C28" opacity=".94"/><path d="M-6 -6.5 L0 0 L6 -6.5 Z" fill="#101C28" opacity=".94"/><text class="t1" y="${detalle ? -26 : -13}" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">${nombre}</text>${detalle ? html`<text class="t2" y="-12" text-anchor="middle" font-size="10" font-weight="500" fill="#B9C4D6">${detalle}</text>` : ''}</g>`
 }
 
 /**
