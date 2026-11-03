@@ -45,8 +45,8 @@
           <span
             class="support-ticket-title"
             :class="{ 'support-ticket-title--escalated': is_ticket_escalated(ticket) }"
-            :title="client_name(ticket)">
-            {{ client_name(ticket) }}
+            :title="client_title_line(ticket)">
+            {{ client_name(ticket) }}<span v-if="contact_name(ticket)" class="support-ticket-contact"> - {{ contact_name(ticket) }}</span>
           </span>
           <span class="support-ticket-time" :title="last_activity_full(ticket)">{{ last_activity_label(ticket) }}</span>
         </div>
@@ -131,7 +131,7 @@
 <script>
 import moment from 'moment'
 import MessageTicks from '@/components/support/MessageTicks.vue'
-import { client_display_name, agent_is_off_on_open_ticket, last_message_author } from '@/utils/support_ticks'
+import { client_display_name, contact_display_name, agent_is_off_on_open_ticket, last_message_author } from '@/utils/support_ticks'
 
 export default {
   name: 'SupportTicketList',
@@ -391,6 +391,25 @@ export default {
       return client_display_name(ticket)
     },
     /**
+     * Nombre de la persona con la que se habla, que va después de un guión al lado del negocio.
+     *
+     * @param {Object} ticket
+     * @returns {string}
+     */
+    contact_name(ticket) {
+      return contact_display_name(ticket)
+    },
+    /**
+     * «Negocio - Persona» completo, para el tooltip de la primera línea.
+     *
+     * @param {Object} ticket
+     * @returns {string}
+     */
+    client_title_line(ticket) {
+      const contacto = this.contact_name(ticket)
+      return contacto ? this.client_name(ticket) + ' - ' + contacto : this.client_name(ticket)
+    },
+    /**
      * true si hay que mostrar el chip «Agente apagado · modo manual» (agente apagado y ticket abierto).
      *
      * @param {Object} ticket
@@ -615,6 +634,11 @@ export default {
 .support-ticket-item--escalated.active {
   background: linear-gradient(90deg, #ffd6da 0%, #ffe8ea 100%);
   box-shadow: inset 3px 0 0 #dc3545;
+}
+
+/* La persona va a continuación del negocio, con menos peso para que el negocio se lea primero. */
+.support-ticket-contact {
+  font-weight: 400;
 }
 
 .support-ticket-title--escalated {

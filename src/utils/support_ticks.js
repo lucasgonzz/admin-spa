@@ -150,6 +150,36 @@ export function client_display_name(ticket) {
 }
 
 /**
+ * Nombre de la persona con la que se habla en el ticket, para ir al lado del negocio en la fila de
+ * la bandeja. Orden: empleado del cliente, nombre del usuario remoto y, si el negocio se muestra
+ * por su empresa, el nombre del cliente (el dueño/contacto). Devuelve '' si no hay nada o si es el
+ * mismo texto que el negocio (para no repetirlo: «Kiosco - Kiosco»).
+ *
+ * @param {Object|null} ticket Ticket de la bandeja.
+ * @returns {string}
+ */
+export function contact_display_name(ticket) {
+  if (!ticket) {
+    return ''
+  }
+  const business = client_display_name(ticket).toLowerCase()
+  const candidates = [
+    ticket.client_employee ? ticket.client_employee.name : null,
+    ticket.client_user_name,
+    ticket.client ? ticket.client.name : null,
+  ]
+  for (let i = 0; i < candidates.length; i++) {
+    if (has_text(candidates[i])) {
+      const name = String(candidates[i]).trim()
+      if (name.toLowerCase() !== business) {
+        return name
+      }
+    }
+  }
+  return ''
+}
+
+/**
  * true si el ticket tiene el agente apagado y sigue abierto (para el chip «Agente apagado · modo
  * manual»). Un ticket cerrado no lo muestra. Solo cuenta el `false`/`0` explícito: si la API no
  * manda el campo, no se inventa un chip.
