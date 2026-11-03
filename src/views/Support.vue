@@ -806,15 +806,21 @@ export default {
             self.schedule_refresh_unread_badges()
           }
           const active_id = self.$store.state.support_message.active_ticket_id
+          if (message && message.private_attachments_pending === true) {
+            if (active_id != null && String(message.support_ticket_id) === String(active_id)) {
+              self.$store.dispatch('support_message/load_private_message', message).then(function (loaded) {
+                if (loaded && String(self.selected_ticket_id) === String(active_id)) {
+                  self.clear_suggestion_after_message(loaded)
+                }
+              })
+            }
+            return
+          }
           if (message && active_id && String(message.support_ticket_id) !== String(active_id)) {
             return
           }
           if (message) {
-            if (message.is_ai_suggestion_draft) {
-              self.ai_generating_ticket_id = null
-            }
-            self.suggestion_notice = ''
-            self.suggestion_error = ''
+            self.clear_suggestion_after_message(message)
             self.$store.commit('support_message/add_model', message)
           }
         },
@@ -897,6 +903,13 @@ export default {
           self.$store.commit('support_message/remove_model_by_id', payload.message_id)
         },
       })
+    },
+    clear_suggestion_after_message(message) {
+      if (message.is_ai_suggestion_draft) {
+        this.ai_generating_ticket_id = null
+      }
+      this.suggestion_notice = ''
+      this.suggestion_error = ''
     },
     /**
      * Abre ticket y carga su conversación.

@@ -299,6 +299,25 @@ export default {
     },
   },
   actions: {
+    /** Recupera una burbuja privada sin reiniciar la conversación ni las filas optimistas. */
+    load_private_message({ state, commit }, { id, support_ticket_id }) {
+      return api
+        .get('/support-ticket/' + support_ticket_id)
+        .then(function (response) {
+          if (String(state.active_ticket_id) !== String(support_ticket_id)) {
+            return null
+          }
+          const ticket = response.data.model
+          const message = ticket && ticket.messages && ticket.messages.find((row) => String(row.id) === String(id))
+          if (message) {
+            commit('add_model', message)
+          }
+          return message
+        })
+        .catch(function (error) {
+          console.log(error)
+        })
+    },
     /**
      * Carga conversación del ticket seleccionado.
      */
