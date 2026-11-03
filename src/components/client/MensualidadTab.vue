@@ -432,6 +432,34 @@
               {{ sync_no_soportado_motivo }}
             </span>
           </div>
+          <!-- Las operaciones del mes (ventas + compras + gastos) que trae «Traer datos del cliente»
+               desde la 4.3.28 del sistema (C5, programa «Prueba gratuita de 7 días», 3/11/2026) y la
+               cuota de Gestión que sale de ellas: el plan del contrato con su abono pactado (o el plan
+               que corresponde a esas operaciones, a precio de lista, si el contrato no tiene un plan
+               vigente) más las operaciones excedentes y los usuarios extra. Es una sugerencia: no se
+               guarda sola ni se factura; Lucas decide qué poner en el precio del plan. Un cliente con
+               una versión anterior no manda operaciones y este bloque no aparece. -->
+          <div v-if="operaciones_del_cliente" class="alert alert-light border small mt-3 mb-0">
+            <p class="fw-semibold mb-1">
+              Operaciones{{ operaciones_del_cliente.mes ? ' de ' + operaciones_del_cliente.mes : ' del mes' }}:
+              {{ format_numero(operaciones_del_cliente.total) }}
+              <span class="text-muted fw-normal">
+                ({{ format_numero(operaciones_del_cliente.ventas) }} ventas, {{ format_numero(operaciones_del_cliente.compras) }} compras,
+                {{ format_numero(operaciones_del_cliente.gastos) }} gastos)
+              </span>
+            </p>
+            <template v-if="cuota_sugerida">
+              <p class="mb-1">
+                Plan {{ cuota_sugerida.nombre }}<span v-if="!cuota_sugerida.plan_del_contrato" class="text-muted"> (sugerido por las operaciones; el contrato no tiene un plan vigente)</span>:
+                abono $ {{ format_numero(cuota_sugerida.abono) }}<template v-if="cuota_sugerida.excedentes > 0">
+                  + {{ format_numero(cuota_sugerida.excedentes) }} operaciones excedentes × $ {{ format_numero(cuota_sugerida.precio_excedente) }}
+                  = $ {{ format_numero(cuota_sugerida.importe_excedentes) }}</template><template v-if="cuota_sugerida.usuarios_extra > 0">
+                  + {{ cuota_sugerida.usuarios_extra }} usuario{{ cuota_sugerida.usuarios_extra === 1 ? '' : 's' }} extra × $ {{ format_numero(cuota_sugerida.precio_usuario_extra) }}
+                  = $ {{ format_numero(cuota_sugerida.importe_usuarios) }}</template>.
+              </p>
+              <p class="fw-semibold mb-0">Cuota de Gestión sugerida: $ {{ format_numero(cuota_sugerida.total) }} (no se guarda sola: cargala en el precio del plan si corresponde).</p>
+            </template>
+          </div>
           <!-- Aviso (hallazgo del chequeo independiente, 18/9/2026): mismo motivo que el de
                "Adelantar 1 mes" de más arriba — "Registrar pago" ya empuja la fecha al cliente
                solo cuando corresponde, así que usar este botón manual antes puede duplicar el
@@ -917,6 +945,13 @@ export default {
       sync_no_soportado: false,
       // Motivo devuelto por el backend cuando el cliente no soporta sincronización, para el tooltip/aviso.
       sync_no_soportado_motivo: '',
+      /**
+       * Lo último que trajo «Traer datos del cliente» sobre las operaciones del mes (C5, 3/11/2026):
+       * `{mes, ventas, compras, gastos, total}` o null si el cliente no las manda, y la cuota de
+       * Gestión sugerida a partir de ellas (ver el bloque del template). Solo en memoria.
+       */
+      operaciones_del_cliente: null,
+      cuota_sugerida: null,
       /**
        * Inputs de mensualidad + datos fiscales del receptor, precargados desde
        * el backend al montar. Se editan a mano (sin datos vivos del cliente).
@@ -1920,6 +1955,9 @@ export default {
             self.marcar_sync_no_soportado(data.error)
             return
           }
+          // Las operaciones del mes y la cuota sugerida (C5): se muestran, no se escriben en el form.
+          self.operaciones_del_cliente = data.operaciones_mes && typeof data.operaciones_mes === 'object' ? data.operaciones_mes : null
+          self.cuota_sugerida = self.operaciones_del_cliente && data.cuota_sugerida && typeof data.cuota_sugerida === 'object' ? data.cuota_sugerida : null
           // Se rellenan solo cantidad de empleados y toggles de módulos (conteos vivos);
           // los precios y datos fiscales los revisa Lucas antes de Guardar.
           self.form.cantidad_empleados = Number(data.cantidad_empleados || 0)
