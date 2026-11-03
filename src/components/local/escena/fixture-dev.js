@@ -6,14 +6,21 @@
  * lo importa desaparece y este archivo no se empaqueta.
  *
  * Devuelve estados con la forma EXACTA del contrato B del plan (`GET /api/admin/local/escena`),
- * en un ciclo de cuatro pasos pensado para ver todas las diferencias que anima el director:
+ * alineada con lo que manda la API (rutas `/soporte/ticket/<id>`, `/leads/<id>/conversacion` y
+ * `/tareas`; ids de bandeja `soporte-caso-<n>` / `soporte-mision-<n>`; `agente: null` en los
+ * eventos de login/logout; contadores de slots en null sin reporter), en un ciclo de cuatro pasos
+ * pensado para ver todas las diferencias que anima el director:
  *   0 → base: 11 abiertos (dos con Soporte, uno con el Asistente), 18 cerrados (el banco se llena
- *       y sobra un «+2»), 3 sin horario, tres mesas (construcción, plan, colgado).
- *   1 → entra un negocio nuevo, otro se levanta del banco, un tercero va a Soporte (fila de tres),
- *       una nota nueva para Lucas (Soporte la lleva), misión nueva en s15 (vuela la carpeta),
- *       eventos de todo tipo.
- *   2 → uno se va por la puerta (baja), otro cierra y va al banco, cambian estaciones, cambia una
- *       fase, se va un constructor y entra un revisor, la PC de Lucas deja de reportar.
+ *       y sobra un «+2»), 3 sin horario, tres mesas (construcción, plan, colgado sin nadie) y una
+ *       misión pendiente en la bandeja.
+ *   1 → la puerta en uso: entra un negocio nuevo, uno se levanta del banco y otro de la espera de
+ *       la entrada (los dos pasan por la puerta), uno va a Soporte (fila de tres) y otro a Facturas
+ *       (escáner prendido). Caso nuevo para Lucas (Soporte lo lleva). La misión pendiente sale de
+ *       la bandeja y aparece s15: vuela la carpeta.
+ *   2 → cinco mesas (aparece s12 huérfano, sin vuelo y sin nadie sentado), la PC de Lucas deja de
+ *       reportar (contadores de slots en null), uno cierra y va al banco, otro va al WhatsApp del
+ *       negocio, uno se va por la puerta (baja), una tarea nueva (solo sube el contador), logout
+ *       (sin globo).
  *   3 → Soporte apagado (dormido), Facturas trabajando, todo lo demás vuelve hacia la base.
  *
  * Los nombres son de clientes reales (los mismos del índice de logos) solo para ejercitar el
@@ -127,6 +134,11 @@ function ag(rol, runtime, estado, nombre) {
   return { rol: rol, runtime: runtime, estado: estado, desde_at: iso(4), nombre: nombre || null }
 }
 
+/** Evento con todos los campos. */
+function evento(id, tipo, agenteId, clientId, minutos, detalle) {
+  return { id: id, tipo: tipo, agente: agenteId, client_id: clientId, ocurrido_at: iso(minutos), detalle: detalle }
+}
+
 /**
  * Estado del paso `paso` (cíclico, de a cuatro).
  *
@@ -145,7 +157,10 @@ export function estado_de_prueba(paso) {
   extras[19] = { estacion: 'asistente', estacion_desde_at: iso(2), estacion_detalle: null, activo_reciente: true }
   if (p === 1) {
     extras[31] = { estacion: 'soporte', estacion_desde_at: iso(0.5), estacion_detalle: 'ticket #77', activo_reciente: true }
+    extras[8] = { estacion: 'facturas', estacion_desde_at: iso(0.3), estacion_detalle: 'factura de compra', activo_reciente: true }
+    // del banco y de la espera de la entrada al local: los dos pasan por la puerta
     extras[35] = { estado: 'abierto', activo_reciente: true, ultima_actividad_at: iso(0.2) }
+    extras[47] = { activo_reciente: true, ultima_actividad_at: iso(0.2) }
     nuevos.push(negocio([60, 'Golden Bike', 'golden-bike', 'abierto'], { activo_reciente: true, ultima_actividad_at: iso(0.1) }))
   }
   if (p === 2) {
@@ -153,13 +168,16 @@ export function estado_de_prueba(paso) {
     extras[33] = { estacion: 'asistente', estacion_desde_at: iso(0.4), activo_reciente: true }
     extras[23] = { estado: 'cerrado', activo_reciente: false, estacion: null }
     extras[31] = { estacion: 'soporte', estacion_desde_at: iso(1.5), estacion_detalle: 'ticket #77', activo_reciente: true }
+    extras[9] = { estacion: 'negocio', estacion_desde_at: iso(0.3), estacion_detalle: null, activo_reciente: true }
     extras[35] = { estado: 'abierto', activo_reciente: true }
+    extras[47] = { activo_reciente: true }
     nuevos.push(negocio([60, 'Golden Bike', 'golden-bike', 'abierto'], { activo_reciente: true }))
     quitar[44] = true
   }
   if (p === 3) {
     extras[23] = { estado: 'cerrado', activo_reciente: false, estacion: null }
     extras[8] = { estacion: 'asistente', estacion_desde_at: iso(0.2), activo_reciente: true }
+    extras[7] = { estacion: 'facturas', estacion_desde_at: iso(0.4), estacion_detalle: 'factura de compra', activo_reciente: true }
     quitar[44] = true
   }
 
@@ -196,23 +214,27 @@ export function estado_de_prueba(paso) {
       ultimo_evento_at: iso(1),
       detalle: p === 3 ? null : 'Martín atendiendo ' + enSoporte.length + ' tickets',
     }),
-    agente('facturas', p === 3 ? 'trabajando' : 'sin_senal', p === 3 ? { atendiendo: [8], ultimo_evento_at: iso(0.5) } : {}),
-    agente('negocio', 'sin_senal'),
+    agente('facturas', p === 1 || p === 3 ? 'trabajando' : 'sin_senal', p === 1 ? { atendiendo: [8], ultimo_evento_at: iso(0.3) } : p === 3 ? { atendiendo: [7], ultimo_evento_at: iso(0.4) } : {}),
+    agente('negocio', p === 2 ? 'trabajando' : 'sin_senal', p === 2 ? { atendiendo: [9], ultimo_evento_at: iso(0.3) } : {}),
     agente('asistente', 'trabajando', { atendiendo: [p === 2 ? 33 : 19], pendientes: 1, detalle: p === 1 ? 'generando una imagen' : null, ultimo_evento_at: iso(2) }),
     agente('informes', 'libre'),
     agente('comercial', p === 2 ? 'libre' : 'trabajando', { pendientes: 3, ultimo_evento_at: iso(4) }),
   ]
 
-  const bandeja = [
-    { id: 'soporte-caso-45', tipo: 'caso_delegado', titulo: 'Ticket #45 · Ferre Total: recargos consolidados', client_id: 12, creado_at: iso(42), ruta: '/soporte/ticket/0b9c7a52-0000-4000-8000-000000000045' },
-    { id: 'mision-pendiente-9', tipo: 'mision_pendiente', titulo: 'Misión · Masquito: medidas masivas sin datos en 31 artículos', client_id: 19, creado_at: iso(130), ruta: null },
-    { id: 'lead-msg-311', tipo: 'aprobacion', titulo: 'Mensaje a lead Distribuidora Sur', client_id: null, creado_at: iso(15), ruta: null },
-  ]
+  const bandeja = []
   if (p >= 1) {
-    bandeja.unshift({ id: 'soporte-caso-77', tipo: 'caso_delegado', titulo: 'Ticket #77 · Mayorista de Pesca: el agente no responde', client_id: 31, creado_at: iso(0.5), ruta: '/soporte/ticket/0b9c7a52-0000-4000-8000-000000000077' })
+    bandeja.push({ id: 'soporte-caso-77', tipo: 'caso_delegado', titulo: 'Ticket #77 · Mayorista de Pesca: el agente no responde', client_id: 31, creado_at: iso(0.5), ruta: '/soporte/ticket/77' })
   }
-  if (p === 3) {
-    bandeja.splice(2, 1)
+  if (p === 2) {
+    bandeja.push({ id: 'tarea-12', tipo: 'tarea', titulo: 'Revisar el informe de la tanda de actualización', client_id: null, creado_at: iso(0.4), ruta: '/tareas' })
+  }
+  bandeja.push({ id: 'soporte-caso-45', tipo: 'caso_delegado', titulo: 'Ticket #45 · Ferre Total: recargos consolidados', client_id: 12, creado_at: iso(42), ruta: '/soporte/ticket/45' })
+  // la misión pendiente: sale de la bandeja en el paso 1 (Lucas la inicia y aparece s15)
+  if (p === 0 || p === 3) {
+    bandeja.push({ id: 'soporte-mision-9', tipo: 'mision_pendiente', titulo: 'Misión · Masquito: medidas masivas sin datos en 31 artículos', client_id: 19, creado_at: iso(130), ruta: '/soporte/ticket/52' })
+  }
+  if (p !== 3) {
+    bandeja.push({ id: 'lead-mensaje-311', tipo: 'aprobacion', titulo: 'Mensaje a lead Distribuidora Sur', client_id: null, creado_at: iso(15), ruta: '/leads/88/conversacion' })
   }
 
   const conMision = {
@@ -231,6 +253,7 @@ export function estado_de_prueba(paso) {
           : [ag('orquestador', 'claude', 'busy'), ag('constructor', 'codex', 'activo', 'empresa-api'), ag('constructor', 'claude', 'activo', 'empresa-spa')],
     },
     6: { proyecto: 'admin', estado: 'trabajando', rama: 'agenda-repetir', mision: 'agenda-repetir', fase: 'plan', claim_iniciado_at: iso(20), ultima_actividad_at: iso(2), agentes: [ag('orquestador', 'claude', 'busy')] },
+    // colgado y sin nadie: mesa con su chip, sin orquestador sentado
     9: { proyecto: 'tienda', estado: 'colgado', rama: 'tienda-cupones', mision: 'tienda-cupones', fase: 'tests', claim_iniciado_at: iso(900), ultima_actividad_at: iso(800), agentes: [] },
   }
   if (p === 1 || p === 2) {
@@ -245,6 +268,10 @@ export function estado_de_prueba(paso) {
       agentes: [ag('orquestador', 'claude', 'busy'), ag('planificador', 'claude', 'activo')],
     }
   }
+  if (p === 2) {
+    // huérfano (rama de trabajo sin claim) y sin agentes: aparece sin vuelo y sin nadie sentado
+    conMision[12] = { proyecto: 'tienda', estado: 'huerfano', rama: 'arreglo-cupon', mision: 'arreglo-cupon', fase: null, claim_iniciado_at: null, ultima_actividad_at: iso(300), agentes: [] }
+  }
   const listaSlots = slots(conMision)
   const trabajando = listaSlots.filter(function (s) {
     return s.estado === 'trabajando'
@@ -252,27 +279,29 @@ export function estado_de_prueba(paso) {
   const libres = listaSlots.filter(function (s) {
     return s.estado === 'libre'
   }).length
+  // sin reporter (paso 2) la API manda los contadores de slots en null
+  const reporterOk = p !== 2
 
-  const eventos = [
-    { id: 'sm-9101', tipo: 'ticket_mensaje', agente: 'soporte', client_id: 12, ocurrido_at: iso(6), detalle: 'ticket #45' },
-    { id: 'cam-551', tipo: 'asistente_mensaje', agente: 'asistente', client_id: 19, ocurrido_at: iso(2), detalle: null },
-  ]
+  const eventos = [evento('sm-9101', 'ticket_mensaje', 'soporte', 12, 6, 'ticket #45'), evento('cam-551', 'asistente_mensaje', 'asistente', 19, 2, null)]
   if (p === 1) {
-    eventos.push({ id: 'sm-9123', tipo: 'ticket_mensaje', agente: 'soporte', client_id: 31, ocurrido_at: iso(0.6), detalle: 'ticket #77' })
-    eventos.push({ id: 'esc-77', tipo: 'delegado', agente: 'soporte', client_id: 31, ocurrido_at: iso(0.5), detalle: 'ticket #77' })
-    eventos.push({ id: 'img-88', tipo: 'imagen_pedido', agente: 'asistente', client_id: 19, ocurrido_at: iso(0.4), detalle: null })
-    eventos.push({ id: 'lm-4410', tipo: 'lead_mensaje', agente: 'comercial', client_id: null, ocurrido_at: iso(0.3), detalle: null })
-    eventos.push({ id: 'act-301', tipo: 'actividad', agente: 'facturas', client_id: 8, ocurrido_at: iso(0.2), detalle: 'escaneo' })
+    eventos.push(evento('sm-9123', 'ticket_mensaje', 'soporte', 31, 0.6, 'ticket #77'))
+    eventos.push(evento('esc-77', 'delegado', 'soporte', 31, 0.5, 'ticket #77'))
+    eventos.push(evento('img-88', 'imagen_pedido', 'asistente', 19, 0.4, null))
+    eventos.push(evento('lm-4410', 'lead_mensaje', 'comercial', null, 0.3, null))
+    eventos.push(evento('act-301', 'actividad', 'facturas', 8, 0.2, 'escaneo'))
+    eventos.push(evento('act-302', 'actividad', null, 35, 0.15, 'login'))
   }
   if (p === 2) {
-    eventos.push({ id: 'sm-9130', tipo: 'ticket_respuesta', agente: 'soporte', client_id: 12, ocurrido_at: iso(0.5), detalle: 'ticket #45' })
-    eventos.push({ id: 'cam-560', tipo: 'asistente_mensaje', agente: 'asistente', client_id: 33, ocurrido_at: iso(0.3), detalle: null })
-    eventos.push({ id: 'cam-561', tipo: 'asistente_respuesta', agente: 'asistente', client_id: 19, ocurrido_at: iso(0.2), detalle: null })
+    eventos.push(evento('sm-9130', 'ticket_respuesta', 'soporte', 12, 0.5, 'ticket #45'))
+    eventos.push(evento('cam-560', 'asistente_mensaje', 'asistente', 33, 0.3, null))
+    eventos.push(evento('act-310', 'actividad', null, 23, 0.25, 'logout'))
+    eventos.push(evento('act-311', 'actividad', 'negocio', 9, 0.2, 'agente_negocio'))
+    eventos.push(evento('cam-561', 'asistente_respuesta', 'asistente', 19, 0.1, null))
   }
   if (p === 3) {
-    eventos.push({ id: 'act-302', tipo: 'actividad', agente: 'facturas', client_id: 8, ocurrido_at: iso(0.4), detalle: 'escaneo' })
-    eventos.push({ id: 'lm-4420', tipo: 'lead_respuesta', agente: 'comercial', client_id: null, ocurrido_at: iso(0.2), detalle: null })
-    eventos.push({ id: 'act-303', tipo: 'actividad', agente: 'negocio', client_id: 33, ocurrido_at: iso(0.1), detalle: 'login' })
+    eventos.push(evento('act-320', 'actividad', 'facturas', 7, 0.4, 'escaneo'))
+    eventos.push(evento('lm-4420', 'lead_respuesta', 'comercial', null, 0.2, null))
+    eventos.push(evento('act-321', 'actividad', null, 33, 0.1, 'login'))
   }
 
   return {
@@ -283,15 +312,15 @@ export function estado_de_prueba(paso) {
       negocios_sin_horario: sinHorario,
       tickets_abiertos: enSoporte.length,
       para_lucas: bandeja.length,
-      misiones_en_curso: trabajando,
-      slots_libres: libres,
-      slots_total: listaSlots.length,
+      misiones_en_curso: reporterOk ? trabajando : null,
+      slots_libres: reporterOk ? libres : null,
+      slots_total: reporterOk ? listaSlots.length : null,
     },
     negocios: negocios,
     agentes: agentes,
     bandeja: bandeja,
     oficina: {
-      reporter: { ok: p !== 2, last_seen_at: p === 2 ? iso(9) : iso(0.4), version: '1.0.0' },
+      reporter: { ok: reporterOk, last_seen_at: reporterOk ? iso(0.4) : iso(9), version: '1.0.0' },
       planificador: { estado: p === 1 || p === 2 ? 'trabajando' : 'libre' },
       slots: listaSlots,
     },
