@@ -26,6 +26,7 @@ import {
   ROLES,
   MAX_MESAS,
   MAX_AYUDANTES,
+  MAX_AYUDANTES_ANGOSTA,
   LUGARES_SALON,
   LUGARES_BANCO,
   LUGARES_ENTRADA,
@@ -47,6 +48,7 @@ import {
   mesa,
   plaquitaMesa,
   papel,
+  etiquetaFlotante,
 } from './piezas'
 import { Actor } from './motor'
 import { logo_cliente, clientes as INDICE_LOGOS } from '@/components/demo/clientes'
@@ -73,6 +75,15 @@ const VENTANA_EVENTOS_MS = 40000
 
 /** Punto de paso para no atravesar la punta derecha del mostrador al ir o venir de la entrada. */
 const PASO_ENTRADA = { x: 1356, y: 668 }
+
+/**
+ * Tipos de la bandeja que salen de Soporte: solo estos hacen que el robot de Soporte lleve la nota
+ * caminando. Los de leads (aprobación de un mensaje) y las tareas solo suben el contador.
+ */
+const TIPOS_QUE_LLEVA_SOPORTE = ['caso_delegado', 'revision', 'mision_pendiente']
+
+/** Cuánto dura la etiqueta con el nombre de un negocio que se tocó. */
+const ETIQUETA_MS = 3000
 
 /* ---------------------------------------------------------------------------------------------
  * Logos de respaldo: el webp curado de src/assets/clients/ por slug
@@ -184,6 +195,8 @@ const ESTACION_POR_ID = (function () {
 /**
  * Zona del local donde tiene que estar un negocio:
  *   - `estacion`: tiene `estacion` (está hablando con un agente), aunque su horario diga cerrado.
+ *     El contrato manda `soporte | facturas | negocio | asistente | null`; cualquier id de las seis
+ *     estaciones del mostrador sirve, y uno desconocido se trata como sin estación.
  *   - `salon`: abierto por horario o con actividad reciente.
  *   - `banco`: cerrado por horario y sin actividad (gris, en el banco).
  *   - `entrada`: sin horario y sin actividad (gris claro, cerca de la puerta).
@@ -219,7 +232,7 @@ function horaDe(iso) {
     return ''
   }
   try {
-    return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
+    return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
   } catch (e) {
     return ''
   }
@@ -326,6 +339,10 @@ export class Director {
     this.reporterOk = true
 
     this.bandejaIds = new Set()
+    /** Tipo de cada ítem de la bandeja del refresco anterior (para saber qué se fue). */
+    this.bandejaTipos = {}
+    /** Misiones pendientes que salieron de la bandeja en el último refresco (vuelos disponibles). */
+    this.misionesSalidas = 0
     this.bandejaN = 0
     this.bandejaMostrada = 0
     this.eventosVistos = new Set()
@@ -423,13 +440,22 @@ export class Director {
     this.actualizarEscaner()
   }
 
-  /** Prende el escáner si Facturas está trabajando o si hubo un escaneo hace instantes. */
+  /**
+   * Prende el escáner si Facturas está trabajando, si hubo un escaneo hace instantes o mientras
+   * haya un negocio parado en la estación de Facturas (ya llegado, no en camino).
+   */
   actualizarEscaner() {
     const el = this.refs.escaner
     if (!el) {
       return
     }
-    el.classList.toggle('scan-on', this.agentes.facturas === 'trabajando' || this.motor.t < this.escanerHasta)
+    let clienteEnFacturas = false
+    this.negocios.forEach(function (reg) {
+      if (reg.zona === 'estacion' && reg.estacion === 'facturas' && reg.enLugar) {
+        clienteEnFacturas = true
+      }
+    })
+    el.classList.toggle('scan-on', this.agentes.facturas === 'trabajando' || this.motor.t < this.escanerHasta || clienteEnFacturas)
   }
 
   /* -------------------------------------------------------------------------------------------
@@ -493,12 +519,15 @@ export class Director {
       const fila = z.zona === 'estacion' ? indiceFila.get(id) : null
       let reg = self.negocios.get(id)
       if (!reg) {
-        reg = { id: id, actor: null, zona: null, estacion: null, lugar: null, fila: null, oculto: false, datos: n, logos: '' }
+        // enLugar: ya llegó a su lugar (no está caminando); timerEntrada: la entrada por la puerta
+        // programada que todavía no arrancó (se cancela si cambia de destino o se va)
+        reg = { id: id, actor: null, zona: null, estacion: null, lugar: null, fila: null, oculto: false, datos: n, logos: '', enLugar: false, timerEntrada: null }
         self.negocios.set(id, reg)
         const destino = self.reservar(reg, z, fila)
         if (instantaneo) {
           reg.actor = self.crearNegocio(n, destino.x, destino.y, !destino.oculto)
           reg.actor.setEscala(destino.escala)
+          reg.enLugar = true
           self.banderasFinales(reg)
         } else {
           reg.actor = self.crearNegocio(n, PUERTA.x, PUERTA.afuera, false)
@@ -523,6 +552,7 @@ export class Director {
     this.rellenar('entrada', instantaneo)
     this.pintarRef('banco-extra', this.refs['banco-extra'], masN(this.contarOcultos('banco')))
     this.pintarRef('entrada-extra', this.refs['entrada-extra'], masN(this.contarOcultos('entrada')))
+    this.actualizarEscaner()
   }
 
   /**
@@ -554,7 +584,76 @@ export class Director {
     if (reg) {
       reg.logos = logos.join('|')
     }
+    // en el teléfono no hay hover: tocar (o clickear) a un negocio muestra su nombre unos segundos
+    const self = this
+    a.g.addEventListener('click', function () {
+      self.mostrarNombre(a)
+    })
     return a
+  }
+
+  /**
+   * Etiqueta flotante con el nombre y la situación de un negocio (lo mismo que su tooltip),
+   * durante 3 s, siguiéndolo si camina. Sirve sobre todo para los grises del banco y de la entrada,
+   * que no tienen el nombre a la vista, y en el teléfono, donde no hay hover.
+   *
+   * @param {Actor} a
+   */
+  mostrarNombre(a) {
+    if (!a || !a.vivo) {
+      return
+    }
+    const texto = a.titulo.textContent || ''
+    const corte = texto.indexOf(' — ')
+    const nombre = corte === -1 ? texto : texto.slice(0, corte)
+    const detalle = corte === -1 ? '' : texto.slice(corte + 3)
+    if (this.etiqueta) {
+      this.etiqueta.tw.cancelado = true
+      this.etiqueta.g.remove()
+      this.etiqueta = null
+    }
+    const fx = this.motor.capas.fx
+    fx.insertAdjacentHTML('beforeend', etiquetaFlotante(esc(nombre), esc(detalle)))
+    const g = fx.lastElementChild
+    // el fondo se ajusta al texto real (la fuente ya está cargada)
+    let ancho = 0
+    g.querySelectorAll('text').forEach(function (t) {
+      try {
+        ancho = Math.max(ancho, t.getComputedTextLength())
+      } catch (e) {
+        ancho = Math.max(ancho, t.textContent.length * 6.5)
+      }
+    })
+    ancho = Math.max(60, ancho + 22)
+    const fondo = g.querySelector('.fondo')
+    fondo.setAttribute('x', String(-ancho / 2))
+    fondo.setAttribute('width', String(ancho))
+    // tamaño constante en pantalla, sea cual sea la cámara: unidades del mundo por píxel
+    const svg = this.motor.svg
+    const self = this
+    const seguir = function (k) {
+      const vb = self.motor.vb
+      const anchoPx = svg.getBoundingClientRect().width || 1
+      const escala = Math.max(0.8, Math.min(6, vb[2] / anchoPx))
+      const medio = (ancho / 2) * escala + 4
+      const x = Math.max(vb[0] + medio, Math.min(vb[0] + vb[2] - medio, a.x))
+      const y = a.y - 136 * a.escala
+      g.setAttribute('transform', 'translate(' + x.toFixed(1) + ',' + y.toFixed(1) + ') scale(' + escala.toFixed(3) + ')')
+      g.style.opacity = k > 0.9 ? String(Math.max(0, (1 - k) * 10)) : '1'
+    }
+    seguir(0)
+    const tw = this.motor.interpolar(
+      ETIQUETA_MS,
+      seguir,
+      function () {
+        g.remove()
+        if (self.etiqueta && self.etiqueta.g === g) {
+          self.etiqueta = null
+        }
+      },
+      true
+    )
+    this.etiqueta = { g: g, tw: tw }
   }
 
   /**
@@ -751,12 +850,15 @@ export class Director {
    * @param {Actor} a
    * @param {{x:number,y:number}} destino
    * @param {Function} [alLlegar]
+   * @param {{x:number,y:number}} [desde] De dónde sale este tramo, si no es donde está ahora (cuando
+   *   se encolan dos tramos seguidos, el segundo arranca donde termina el primero).
    */
-  caminar(a, destino, alLlegar) {
+  caminar(a, destino, alLlegar, desde) {
     const enEntrada = function (p) {
       return p.x > 1330 && p.y < 690
     }
-    if (enEntrada({ x: a.x, y: a.y }) !== enEntrada(destino)) {
+    const origen = desde || { x: a.x, y: a.y }
+    if (enEntrada(origen) !== enEntrada(destino)) {
       a.goTo(PASO_ENTRADA.x + azar(-10, 10), PASO_ENTRADA.y + azar(-6, 6))
     }
     a.goTo(destino.x, destino.y, alLlegar || null)
@@ -787,7 +889,12 @@ export class Director {
   entrar(reg, destino, retraso) {
     const self = this
     const a = reg.actor
-    this.motor.despues(retraso, function () {
+    reg.enLugar = false
+    // 🔴 el timer queda en el registro: si antes de que arranque el negocio cambia de destino o se
+    // va (p. ej. al volver de una pestaña oculta llegan dos estados juntos), mover/salir lo
+    // cancelan y no camina a un destino viejo
+    reg.timerEntrada = this.motor.despues(retraso, function () {
+      reg.timerEntrada = null
       if (!a.vivo || self.negocios.get(reg.id) !== reg) {
         return
       }
@@ -813,24 +920,58 @@ export class Director {
   mover(reg, destino, desde, instantaneo) {
     const self = this
     const a = reg.actor
+    // todavía no había empezado a entrar: entra directo al destino nuevo
+    if (reg.timerEntrada) {
+      reg.timerEntrada.cancelado = true
+      reg.timerEntrada = null
+      if (!instantaneo) {
+        this.entrar(reg, destino, 0)
+        return
+      }
+    }
+    reg.enLugar = false
+    const presente = reg.zona === 'salon' || reg.zona === 'estacion'
+    const veniaDeAfuera = !!desde && (desde.zona === 'banco' || desde.zona === 'entrada')
     // al levantarse del banco (o de la entrada) recupera el color enseguida
     a.setFlag('cerrado', false)
     a.setFlag('sin-horario', false)
-    a.setFlag('presente', reg.zona === 'salon' || reg.zona === 'estacion')
+    a.setFlag('presente', presente)
     if (a.opacidad < 1 && !destino.oculto) {
       a.fundir(1, instantaneo ? 0 : 300)
     }
     if (instantaneo) {
       a.teletransportar(destino.x, destino.y)
       a.setEscala(destino.escala)
+      reg.enLugar = true
       this.banderasFinales(reg)
+      this.actualizarEscaner()
       return
     }
     a.limpiar()
     this.escalar(a, destino.escala, false)
-    this.caminar(a, destino, function () {
-      self.alLlegar(reg, desde)
-    })
+    if (veniaDeAfuera && presente) {
+      // de ausente a presente se pasa SIEMPRE por la puerta: el que abrió (o tuvo actividad)
+      // camina desde el banco o la espera hasta la puerta, entra y recién ahí va a su lugar
+      const puerta = { x: PUERTA.x, y: PUERTA.adentro }
+      this.caminar(a, puerta, function () {
+        self.abrirPuerta(1600)
+        a.globo('hola', 1600)
+      })
+      a.pause(700)
+      this.caminar(
+        a,
+        destino,
+        function () {
+          self.alLlegar(reg, desde)
+        },
+        puerta
+      )
+    } else {
+      this.caminar(a, destino, function () {
+        self.alLlegar(reg, desde)
+      })
+    }
+    this.actualizarEscaner()
   }
 
   /** Lo que pasa cuando un negocio llega a su lugar. */
@@ -838,7 +979,9 @@ export class Director {
     if (this.negocios.get(reg.id) !== reg) {
       return
     }
+    reg.enLugar = true
     this.banderasFinales(reg)
+    this.actualizarEscaner()
     if (reg.oculto) {
       reg.actor.fundir(0, 300)
       return
@@ -857,6 +1000,14 @@ export class Director {
   salir(reg, retraso) {
     const self = this
     const a = reg.actor
+    reg.enLugar = false
+    // si todavía no había entrado (seguía detrás de la puerta, invisible), no hay nada que caminar
+    if (reg.timerEntrada) {
+      reg.timerEntrada.cancelado = true
+      reg.timerEntrada = null
+      a.quitar()
+      return
+    }
     this.motor.despues(retraso, function () {
       if (!a.vivo) {
         return
@@ -925,23 +1076,37 @@ export class Director {
   aplicarBandeja(e, instantaneo) {
     const self = this
     const ids = new Set()
+    const tipos = {}
     e.bandeja.forEach(function (b) {
       if (b && b.id !== undefined && b.id !== null) {
         ids.add(String(b.id))
+        tipos[String(b.id)] = b.tipo
       }
     })
     const total = numero(e.resumen.para_lucas)
     const n = total !== null ? total : e.bandeja.length
-    let hayNuevos = false
+    // solo un ítem nuevo de Soporte (caso delegado, revisión, misión pendiente) se lleva caminando;
+    // los de leads y las tareas solo suben el contador
+    let hayNuevosDeSoporte = false
     ids.forEach(function (id) {
-      if (!self.bandejaIds.has(id)) {
-        hayNuevos = true
+      if (!self.bandejaIds.has(id) && TIPOS_QUE_LLEVA_SOPORTE.indexOf(tipos[id]) !== -1) {
+        hayNuevosDeSoporte = true
       }
     })
+    // misiones pendientes que se fueron de la bandeja en este refresco: Lucas las inició. Si en el
+    // mismo refresco aparece un slot nuevo con misión, la carpeta vuela de la bandeja a la pizarra.
+    let misionesSalidas = 0
+    this.bandejaIds.forEach(function (id) {
+      if (!ids.has(id) && self.bandejaTipos[id] === 'mision_pendiente') {
+        misionesSalidas += 1
+      }
+    })
+    this.misionesSalidas = instantaneo ? 0 : misionesSalidas
     this.bandejaIds = ids
+    this.bandejaTipos = tipos
     this.bandejaN = n
     const r = this.robots.soporte
-    if (instantaneo || !hayNuevos || n <= this.bandejaMostrada || this.agentes.soporte === 'apagado' || this.motor.reducido) {
+    if (instantaneo || !hayNuevosDeSoporte || n <= this.bandejaMostrada || this.agentes.soporte === 'apagado' || this.motor.reducido) {
       if (!r.ocupado) {
         this.mostrarBandeja(n, !instantaneo && n > this.bandejaMostrada)
       }
@@ -1005,17 +1170,20 @@ export class Director {
     this.reporterOk = !e.sinDatos && of.reporter && of.reporter.ok === true
     const sinSenal = !e.sinDatos && !this.reporterOk
 
-    const trabajando = of.slots
+    // con mesa: todo slot que no está libre (trabajando, colgado o huérfano)
+    const conMesa = of.slots
       .filter(function (s) {
         return s && numero(s.slot) !== null && s.estado && s.estado !== 'libre'
       })
       .sort(function (a, b) {
         return numero(a.slot) - numero(b.slot)
       })
-    const visibles = trabajando.slice(0, MAX_MESAS)
+    const visibles = conMesa.slice(0, MAX_MESAS)
     const cols = columnasMesas(visibles.length)
     const vigentes = new Set()
     let retrasoMision = 0
+    let vuelos = this.misionesSalidas || 0
+    this.misionesSalidas = 0
 
     visibles.forEach(function (s, i) {
       const slot = numero(s.slot)
@@ -1050,13 +1218,17 @@ export class Director {
       self.aplicarOrquestador(m, s)
       if (instantaneo || m.visible) {
         m.visible = true
-        m.orq.fundir(1, 0)
+        m.orq.fundir(m.tieneOrq ? 1 : 0, instantaneo ? 0 : 400)
         self.aplicarAyudantes(m, s, instantaneo)
-      } else if (misionNueva) {
-        // misión nueva: la carpeta vuela de la bandeja a la pizarra, el planificador «presenta» y
-        // recién ahí se arma la mesa
+      } else if (misionNueva && vuelos > 0 && !self.motor.reducido) {
+        // Lucas inició una misión que estaba pendiente en la bandeja: la carpeta vuela de la
+        // bandeja a la pizarra, el planificador «presenta» y recién ahí se arma la mesa
+        vuelos -= 1
         self.presentarMision(m, s, retrasoMision)
         retrasoMision += 2600
+      } else if (!m.esperando) {
+        // slot nuevo sin una misión pendiente que se haya ido de la bandeja: la mesa se arma sola
+        self.armarMesa(m)
       }
     })
 
@@ -1080,12 +1252,18 @@ export class Director {
     })
 
     this.dibujarMesas()
-    this.pintarRef('oficinas-extra', this.refs['oficinas-extra'], masN(trabajando.length - visibles.length, 'mesas'))
+    this.pintarRef('oficinas-extra', this.refs['oficinas-extra'], masN(conMesa.length - visibles.length, 'mesas'))
 
-    // pizarra: las misiones en curso con su fase, y el cartel si la PC de Lucas no reporta
-    const lineas = trabajando.map(function (s) {
-      return { slot: numero(s.slot), mision: s.mision || null, proyecto: s.proyecto || null, fase: s.fase && FASES[s.fase] ? FASES[s.fase] : null }
-    })
+    // pizarra: las misiones en curso (slots con estado «trabajando», el mismo criterio que el chip
+    // `misiones_en_curso` del resumen) con su fase, y el cartel si la PC de Lucas no reporta. Los
+    // colgados y huérfanos tienen mesa con su chip, pero no cuentan como misión en curso.
+    const lineas = conMesa
+      .filter(function (s) {
+        return s.estado === 'trabajando'
+      })
+      .map(function (s) {
+        return { slot: numero(s.slot), mision: s.mision || null, proyecto: s.proyecto || null, fase: s.fase && FASES[s.fase] ? FASES[s.fase] : null }
+      })
     this.pintarRef('pizarra', this.refs.pizarra, pizarra(lineas, sinSenal, e.sinDatos))
 
     // planificador
@@ -1102,12 +1280,14 @@ export class Director {
    * colgado, antena apagada si la PC de Lucas no reporta.
    */
   aplicarOrquestador(m, s) {
-    const agentes = Array.isArray(s.agentes) ? s.agentes : []
+    const agentes = (Array.isArray(s.agentes) ? s.agentes : []).filter(Boolean)
     const orqAgente = agentes.filter(function (a) {
-      return a && a.rol === 'orquestador'
+      return a.rol === 'orquestador'
     })[0]
     const activo = orqAgente && (orqAgente.estado === 'busy' || orqAgente.estado === 'activo')
     const colgado = s.estado === 'colgado'
+    // un slot colgado o huérfano sin ningún agente tiene mesa, pero nadie sentado
+    m.tieneOrq = s.estado === 'trabajando' || agentes.length > 0
     m.orq.setEstado(activo && !colgado ? 'typing' : 'idle')
     m.orq.setFlag('dormido', colgado)
     m.orq.setFlag('sin-senal', !this.reporterOk)
@@ -1134,7 +1314,8 @@ export class Director {
     })
     const repetidos = {}
     const deseados = []
-    agentes.slice(0, MAX_AYUDANTES).forEach(function (a) {
+    const tope = m.col.w < 130 ? MAX_AYUDANTES_ANGOSTA : MAX_AYUDANTES
+    agentes.slice(0, tope).forEach(function (a) {
       const base = a.rol + '|' + (a.runtime || '') + '|' + (a.nombre || '')
       repetidos[base] = (repetidos[base] || 0) + 1
       deseados.push({ clave: base + '|' + repetidos[base], a: a })
@@ -1155,11 +1336,16 @@ export class Director {
       const activo = d.a.estado === 'busy' || d.a.estado === 'activo'
       let actor = m.ayudantes.get(d.clave)
       const titulo = rol.rotulo.charAt(0).toUpperCase() + rol.rotulo.slice(1) + (d.a.nombre ? ' · ' + d.a.nombre : '') + (d.a.runtime ? ' (' + d.a.runtime + ')' : '') + ' · s' + m.slot
+      const capa = p.atras ? 'actoresAtras' : 'actoresFrente'
+      if (actor) {
+        // si la mesa pasó de ancha a angosta (o al revés), cambia de adelante a detrás de la mesa
+        actor.setCapa(capa)
+      }
       if (!actor) {
         actor = new Actor(self.motor, {
           kind: 'robot',
           svg: robotSVG({ accent: rol.accent, badge: rol.badge }),
-          capa: 'actoresFrente',
+          capa: capa,
           x: instantaneo ? p.x : PUERTA_OFICINA.x,
           y: instantaneo ? p.y : PUERTA_OFICINA.afuera,
           speed: 120,
@@ -1188,7 +1374,23 @@ export class Director {
       actor.setTitulo(titulo)
       actor.setEstado(activo ? 'typing' : 'idle')
       actor.setFlag('sin-senal', !self.reporterOk)
+      // detrás de la mesa el rótulo quedaría medio tapado: se esconde (el tooltip lo tiene)
+      actor.setFlag('sin-rotulo', p.atras)
     })
+  }
+
+  /**
+   * Arma la mesa de un slot nuevo sin la carpeta que vuela (no salió ninguna misión pendiente de
+   * la bandeja en este refresco).
+   *
+   * @param {Object} m
+   */
+  armarMesa(m) {
+    m.visible = true
+    m.mesaNueva = true
+    m.esperando = false
+    m.orq.fundir(m.tieneOrq ? 1 : 0, 400)
+    this.aplicarAyudantes(m, m.datos, false)
   }
 
   /** Un ayudante que terminó sale por la puerta de las oficinas. */
@@ -1229,12 +1431,8 @@ export class Director {
         self.planificador.globo('carpeta', 1600)
         self.motor.despues(1500, function () {
           if (self.mesas.get(m.slot) === m) {
-            m.visible = true
-            m.mesaNueva = true
-            m.esperando = false
-            m.orq.fundir(1, 400)
+            self.armarMesa(m)
             self.dibujarMesas()
-            self.aplicarAyudantes(m, m.datos, false)
           }
         })
         self.motor.despues(3200, function () {
@@ -1279,7 +1477,7 @@ export class Director {
       s += mesa(m.col, MESA_Y, null, chip, { mesaNueva: m.mesaNueva, faseNueva: m.faseNueva, titulo: esc(titulo) })
       rotulos += plaquitaMesa(m.col, MESA_Y, esc(rotulo), m.mesaNueva)
       // los monitores de cada mesa van con la mesa
-      s += '<g transform="translate(' + (m.col.x + m.col.w / 2) + ',' + (MESA_Y - 4) + ')" class="monitor ' + (d.estado === 'colgado' ? 'apagado' : '') + '" filter="url(#ell-soft)"><rect x="-3" y="0" width="6" height="10" fill="#8FA0B8"/><rect x="-14" y="8" width="28" height="4" rx="2" fill="#8FA0B8"/><rect x="-22" y="-30" width="44" height="30" rx="4" fill="#101C28"/><rect class="pantalla screen-on" x="-19" y="-27" width="38" height="24" rx="3" fill="url(#ell-gScreen)"/><g class="lineas" fill="#7CE0FF" opacity=".8"><rect x="-15" y="-22" width="18" height="2.5" rx="1"/><rect x="-15" y="-16" width="26" height="2.5" rx="1"/><rect x="-15" y="-10" width="12" height="2.5" rx="1"/></g></g>'
+      s += '<g transform="translate(' + (m.col.x + m.col.w / 2) + ',' + (MESA_Y - 4) + ')" class="monitor ' + (d.estado === 'colgado' || !m.tieneOrq ? 'apagado' : '') + '" filter="url(#ell-soft)"><rect x="-3" y="0" width="6" height="10" fill="#8FA0B8"/><rect x="-14" y="8" width="28" height="4" rx="2" fill="#8FA0B8"/><rect x="-22" y="-30" width="44" height="30" rx="4" fill="#101C28"/><rect class="pantalla screen-on" x="-19" y="-27" width="38" height="24" rx="3" fill="url(#ell-gScreen)"/><g class="lineas" fill="#7CE0FF" opacity=".8"><rect x="-15" y="-22" width="18" height="2.5" rx="1"/><rect x="-15" y="-16" width="26" height="2.5" rx="1"/><rect x="-15" y="-10" width="12" height="2.5" rx="1"/></g></g>'
       m.mesaNueva = false
       m.faseNueva = false
     })
@@ -1377,12 +1575,15 @@ export class Director {
           decir(negocio, 'hola')
         } else if (ev.detalle === 'asistente') {
           decir(negocio || robot('asistente'), 'star')
-        } else {
-          decir(negocio, 'ok')
         }
+        // `logout`, `actividad` (uso del sistema) y `otro`: sin globo. Un «ok» ahí no dice nada y
+        // con varios negocios usando el sistema llenaría la escena de tildes.
         break
       default:
-        decir(agente, 'dots')
+        // un tipo que todavía no se conoce: los «...» sobre su agente si tiene uno; si no, nada
+        if (agente) {
+          decir(agente, 'dots')
+        }
     }
   }
 
