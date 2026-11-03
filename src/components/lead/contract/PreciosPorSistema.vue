@@ -15,13 +15,17 @@
             <input :id="id + '-abono-' + sistema.key" v-model.number="contrato.contract_precios_sistemas[sistema.key].mensualidad" type="number" min="0" step="0.01" class="form-control" />
           </div>
           <div v-if="sistema.key === 'gestion'" class="col-12">
-            <label class="form-label" :for="id + '-plan-gestion'">Plan de Gestión (ventas por mes)</label>
+            <label class="form-label" :for="id + '-plan-gestion'">Plan de Gestión (operaciones por mes: ventas + compras + gastos)</label>
             <select :id="id + '-plan-gestion'" v-model="plan_gestion" class="form-select">
               <option value="">Sin plan (importe acordado)</option>
-              <option v-for="plan in planes" :key="plan.clave" :value="plan.clave">{{ nombre_plan(plan) }}</option>
+              <!-- El plan de la política anterior (por ventas) que este contrato conserva: se muestra para
+                   que guardar no lo pierda, pero no se elige para un contrato nuevo. -->
+              <option v-if="plan_historico" :value="plan_historico.clave" disabled>{{ plan_historico.nombre }} — hasta {{ plan_historico.limite.toLocaleString('es-AR') }} ventas por mes (política anterior)</option>
+              <option v-for="plan in planes" :key="plan.clave" :value="plan.clave" :disabled="plan_historico && plan_historico.clave === plan.clave">{{ nombre_plan(plan) }}</option>
             </select>
             <div v-if="contrato.contract_plan_gestion === 'a_medida'" class="form-text">Plan a medida: cargá el importe acordado.</div>
-            <div v-else-if="contrato.contract_plan_gestion" class="form-text">Abono precargado del plan; podés editarlo.</div>
+            <div v-else-if="plan_historico" class="form-text">Plan de la política anterior (por ventas): el contrato conserva sus condiciones. Elegí uno de los planes por operaciones solo si lo acordaste con el cliente.</div>
+            <div v-else-if="contrato.contract_plan_gestion" class="form-text">Abono precargado del plan (precio final, sin IVA); podés editarlo. Los primeros 3 meses van al 50 %: la landing muestra ese precio.</div>
           </div>
         </div>
         <div v-if="resumen.tres" class="mb-3">
@@ -64,13 +68,15 @@
 
 <script>
 import { SISTEMAS } from '@/utils/contract_modalidades'
-import { PLANES_GESTION, iniciar_precios_por_sistema, elegir_plan_gestion, resumen_precios, resumen_anual, actualizar_totales } from '@/utils/contract_precios'
+import { PLANES_GESTION, iniciar_precios_por_sistema, elegir_plan_gestion, resumen_precios, resumen_anual, actualizar_totales, plan_historico_del_contrato, nombre_del_plan } from '@/utils/contract_precios'
 
 export default {
   props: { contrato: { type: Object, required: true }, id: { type: String, required: true } },
   computed: {
     sistemas() { return SISTEMAS },
     planes() { return PLANES_GESTION },
+    /** El plan histórico (por ventas) guardado en el contrato, o null si es uno vigente. */
+    plan_historico() { return plan_historico_del_contrato(this.contrato) },
     /** El select del plan: lee y escribe `contract_plan_gestion` por `elegir_plan_gestion`, que precarga el abono. */
     plan_gestion: {
       get() { return this.contrato.contract_plan_gestion || '' },
@@ -87,10 +93,9 @@ export default {
   },
   methods: {
     iniciar() { iniciar_precios_por_sistema(this.contrato) },
-    /** Texto de cada opción: «Inicial — hasta 300 ventas por mes», «A medida — más de 7.000 ventas por mes». */
+    /** Texto de cada opción: «Inicial — hasta 100 operaciones por mes», «A medida — más de 3.000 operaciones por mes». */
     nombre_plan(plan) {
-      if (plan.clave === 'a_medida') return plan.nombre + ' — más de ' + PLANES_GESTION.find(p => p.clave === 'pro').limite.toLocaleString('es-AR') + ' ventas por mes'
-      return plan.nombre + ' — hasta ' + plan.limite.toLocaleString('es-AR') + ' ventas por mes'
+      return nombre_del_plan(plan)
     },
     formato(valor) { return Number(valor).toLocaleString('es-AR', { maximumFractionDigits: 2 }) },
   },
