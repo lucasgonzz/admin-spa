@@ -193,6 +193,19 @@ const routes_def = [
   },
   {
     /**
+     * Pruebas gratuitas (misión prueba-alta-instancia, 3/11/2026): el pool de instancias `prueba-NN`
+     * del VPS, qué negocio tiene cada una, en qué etapa va la que se está armando y las acciones
+     * (dormir, despertar, reintentar, borrar con respaldo). Va pegado a Clientes porque cada prueba
+     * es un cliente en estado `prueba`; los días se editan en la ficha (solapa «Prueba»).
+     */
+    path: '/pruebas',
+    name: 'pruebas',
+    text: 'Pruebas',
+    component: () => import('@/views/Pruebas.vue'),
+    meta: { requiresAuth: true, nav: true, icon: 'hourglass-split', title: 'Pruebas gratuitas' },
+  },
+  {
+    /**
      * Módulo Cobranzas (misión modulo-cobranzas, 18/9/2026): la planilla de administración de
      * Lucas adentro del admin. Mensualidades (una fila por cliente, una columna por mes, con
      * emitir factura / registrar pago / traer empleados), Ventas (lo que se le vendió a cada

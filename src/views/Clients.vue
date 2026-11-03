@@ -21,6 +21,7 @@ import ClientCandadoSesionTab from '@/components/client/CandadoSesionTab.vue'
 import ClientExtensionesTab from '@/components/client/ExtensionesTab.vue'
 import ClientModelosIaTab from '@/components/client/ModelosIaTab.vue'
 import SubjectPipelinesTab from '@/components/pipeline/SubjectPipelinesTab.vue'
+import PruebaTab from '@/components/prueba/PruebaTab.vue'
 
 /**
  * Vista principal de clientes.
@@ -124,6 +125,14 @@ export default {
           key: 'extensiones',
           label: 'Extensiones',
           component: markRaw(ClientExtensionesTab),
+        },
+        {
+          /* Prueba gratuita (misión prueba-alta-instancia, 3/11/2026): estado, vencimiento y los días de
+             prueba editables (PUT client/{id}/prueba → C3 al sistema del cliente). La misma solapa que
+             tiene el modal del lead. En un cliente común dice que no es una prueba. */
+          key: 'prueba',
+          label: 'Prueba',
+          component: markRaw(PruebaTab),
         },
         {
           /* Oportunidades del cliente en los pipelines del CRM (misión pipelines-crm, 27/9/2026):

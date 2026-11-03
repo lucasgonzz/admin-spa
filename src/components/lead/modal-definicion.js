@@ -4,6 +4,7 @@ import LeadResumenTab from '@/components/lead/resumen/Index.vue'
 import LeadContractTab from '@/components/lead/contract/Index.vue'
 import LeadDemoTab from '@/components/lead/demo/Index.vue'
 import SubjectPipelinesTab from '@/components/pipeline/SubjectPipelinesTab.vue'
+import PruebaTab from '@/components/prueba/PruebaTab.vue'
 
 /**
  * Definición compartida del modal del lead (misión flujo-lead-landing-closer, 17/10/2026).
@@ -49,6 +50,14 @@ export const lead_model_extra_tabs = [
     component: markRaw(LeadContractTab),
   },
   {
+    /* Prueba gratuita (misión prueba-alta-instancia, 3/11/2026): los días de prueba del cliente en
+       prueba que nació de este lead, editables (PUT lead/{id}/prueba → C3). La misma solapa que tiene
+       la ficha del cliente; deduce el sujeto del `model_name` del modal. */
+    key: 'prueba',
+    label: 'Prueba',
+    component: markRaw(PruebaTab),
+  },
+  {
     /* Oportunidades del lead en los pipelines del CRM (misión pipelines-crm, 27/9/2026). La
        pestaña deduce que el sujeto es un lead del `model_name` que le pasa el modal. */
     key: 'pipelines',
@@ -69,6 +78,7 @@ export const lead_model_properties_nav_order = [
   'extra:demo',
   'group:Basico',
   'extra:contract',
+  'extra:prueba',
   'extra:pipelines',
 ]
 
