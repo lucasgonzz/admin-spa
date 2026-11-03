@@ -45,17 +45,18 @@ export const lead_model_extra_tabs = [
     component: markRaw(LeadDemoTab),
   },
   {
-    /* Prueba gratuita (misión prueba-martin-importacion, 3/11/2026): días que le quedan al negocio,
-       hitos leídos en vivo de su sistema, los WhatsApps de la prueba y «Avisar a Tomás». La pestaña
-       le pide a `admin/lead/{id}/prueba`, que cruza el lead con su cliente en prueba. */
-    key: 'prueba',
-    label: 'Prueba',
-    component: markRaw(PruebaTab),
-  },
-  {
     key: 'contract',
     label: 'Contrato',
     component: markRaw(LeadContractTab),
+  },
+  {
+    /* Prueba gratuita (misión prueba-alta-instancia, 3/11/2026): los días de prueba del cliente en
+       prueba que nació de este lead, editables (PUT lead/{id}/prueba → C3). La misma solapa que tiene
+       la ficha del cliente; deduce el sujeto del `model_name` del modal. Adentro monta el seguimiento
+       de M4 (hitos en vivo, WhatsApps de la prueba y «Avisar a Tomás», misión prueba-martin-importacion). */
+    key: 'prueba',
+    label: 'Prueba',
+    component: markRaw(PruebaTab),
   },
   {
     /* Oportunidades del lead en los pipelines del CRM (misión pipelines-crm, 27/9/2026). La
@@ -76,9 +77,9 @@ export const lead_model_properties_nav_order = [
   'extra:resumen',
   'extra:extra',
   'extra:demo',
-  'extra:prueba',
   'group:Basico',
   'extra:contract',
+  'extra:prueba',
   'extra:pipelines',
 ]
 

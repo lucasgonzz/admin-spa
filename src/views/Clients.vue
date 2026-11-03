@@ -50,15 +50,6 @@ export default {
           component: markRaw(EcommerceImplementationTab),
         },
         {
-          /* Prueba gratuita (misión prueba-martin-importacion, 3/11/2026): días que le quedan al
-             negocio, hitos leídos EN VIVO de su sistema (C3, con los eventos recibidos de respaldo),
-             los WhatsApps de la prueba y «Avisar a Tomás». A un cliente que no está en prueba se
-             lo dice y nada más. Como Imágenes e IA, la consulta en vivo sale recién al abrirla. */
-          key: 'prueba',
-          label: 'Prueba',
-          component: markRaw(PruebaTab),
-        },
-        {
           key: 'mensualidad',
           label: 'Mensualidad',
           component: markRaw(MensualidadTab),
@@ -134,6 +125,15 @@ export default {
           key: 'extensiones',
           label: 'Extensiones',
           component: markRaw(ClientExtensionesTab),
+        },
+        {
+          /* Prueba gratuita (misión prueba-alta-instancia, 3/11/2026): estado, vencimiento y los días de
+             prueba editables (PUT client/{id}/prueba → C3 al sistema del cliente). La misma solapa que
+             tiene el modal del lead. En un cliente común dice que no es una prueba. Adentro monta el
+             seguimiento de M4 (hitos en vivo, WhatsApps de la prueba y «Avisar a Tomás»). */
+          key: 'prueba',
+          label: 'Prueba',
+          component: markRaw(PruebaTab),
         },
         {
           /* Oportunidades del cliente en los pipelines del CRM (misión pipelines-crm, 27/9/2026):

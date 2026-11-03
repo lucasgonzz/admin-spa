@@ -2,317 +2,273 @@
   <div class="p-3 prueba-tab">
     <!-- Sin registro guardado todavía: no hay id al que pedirle la prueba -->
     <p v-if="!record || !record.id" class="text-muted small fst-italic mb-0">
-      Guardá primero para ver el estado de la prueba.
+      Guardá el {{ sujeto_label }} primero para ver su prueba gratuita.
     </p>
 
-    <!-- Carga inicial -->
     <div v-else-if="loading" class="text-center py-4">
       <span class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true" />
-      <p class="text-muted small mt-2 mb-0">Consultando el sistema del negocio...</p>
+      <p class="text-muted small mt-2 mb-0">Cargando...</p>
     </div>
 
-    <!-- Error de carga -->
     <div v-else-if="load_error" class="alert alert-danger py-2 small mb-0">
       {{ load_error }}
     </div>
 
-    <!-- No está en prueba -->
-    <div v-else-if="!datos || !datos.es_prueba" class="alert alert-light border small mb-0">
-      <template v-if="datos && datos.armando">
-        {{ datos.mensaje }}
-      </template>
-      <template v-else>
-        Este {{ model_name === 'lead' ? 'lead' : 'cliente' }} no está en prueba gratuita.
-      </template>
-    </div>
+    <!-- No es una prueba: lo decimos y listo (la solapa existe en toda ficha, no solo en las de prueba) -->
+    <p v-else-if="!prueba || !prueba.en_prueba" class="text-muted small mb-0">
+      Este {{ sujeto_label }} no tiene una prueba gratuita.
+    </p>
 
     <div v-else>
       <!-- ============================================================ -->
-      <!-- Encabezado: estado y días                                     -->
+      <!-- Estado de la prueba: badge, vencimiento, días restantes, URL  -->
       <!-- ============================================================ -->
       <div class="card mb-3">
         <div class="card-body">
-          <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
-            <div>
-              <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
-                <span class="fw-semibold">Prueba gratuita</span>
-                <span class="badge" :class="datos.vencida ? 'bg-danger' : 'bg-success'">
-                  {{ datos.vencida ? 'Vencida' : 'En curso' }}
-                </span>
-              </div>
-              <div class="small text-muted">
-                <template v-if="datos.vence_at">
-                  {{ datos.vencida ? 'Venció el' : 'Vence el' }} {{ fecha(datos.vence_at) }}
-                  <span v-if="datos.inicio_at"> · empezó el {{ fecha(datos.inicio_at) }}</span>
-                </template>
-                <template v-else>Sin fecha de vencimiento cargada.</template>
-              </div>
-              <div v-if="datos.lead_nombre || datos.client_nombre" class="small mt-1">
-                {{ datos.client_nombre }}<span v-if="datos.lead_nombre"> · {{ datos.lead_nombre }}</span>
-              </div>
-            </div>
-            <div class="text-center prueba-dias">
-              <div class="display-6 fw-bold lh-1" :class="datos.vencida ? 'text-danger' : 'text-primary'">
-                {{ datos.dias_restantes === null ? '—' : datos.dias_restantes }}
-              </div>
-              <div class="small text-muted">
-                {{ datos.dias_restantes === 1 ? 'día restante' : 'días restantes' }}
-                <span v-if="datos.dia_actual"> · día {{ datos.dia_actual }} de {{ datos.dias }}</span>
-              </div>
-            </div>
+          <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+            <span class="badge" :class="badge_class">{{ badge_label }}</span>
+            <span class="small text-muted">{{ texto_vencimiento }}</span>
+          </div>
+          <div v-if="prueba.url" class="small">
+            Sistema:
+            <a :href="prueba.url" target="_blank" rel="noopener">{{ prueba.url }}</a>
+          </div>
+          <div v-if="prueba.instancia" class="small text-muted mt-1">
+            Instancia <strong>{{ prueba.instancia.nombre }}</strong>
+            · {{ prueba.instancia.estado }}{{ prueba.instancia.dormida ? ' (dormida)' : '' }}
+            · versión {{ prueba.instancia.version || '?' }}
+            <span v-if="prueba.instancia.error" class="text-danger d-block mt-1">{{ prueba.instancia.error }}</span>
           </div>
         </div>
       </div>
 
-      <div class="row g-3">
-        <!-- ============================================================ -->
-        <!-- Hitos                                                         -->
-        <!-- ============================================================ -->
-        <div class="col-12 col-lg-7">
-          <div class="card h-100">
-            <div class="card-body">
-              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-                <span class="fw-semibold">Hitos</span>
-                <span class="badge bg-light text-dark border">
-                  {{ hitos_hechos }} de {{ datos.hitos_lista.length }}
-                </span>
-              </div>
-              <ul class="list-unstyled mb-2 prueba-hitos">
-                <li
-                  v-for="hito in datos.hitos_lista"
-                  :key="hito.tipo"
-                  class="d-flex align-items-start gap-2 py-1 border-bottom"
-                  :class="{ 'prueba-hito-proximo': hito.tipo === datos.proximo_hito }"
-                >
-                  <span
-                    class="badge rounded-pill prueba-hito-marca"
-                    :class="hito.at ? 'bg-success' : 'bg-secondary bg-opacity-25 text-secondary'"
-                  >{{ hito.at ? '✓' : '·' }}</span>
-                  <span class="flex-grow-1">
-                    <span :class="hito.at ? '' : 'text-muted'">{{ hito.label }}</span>
-                    <span v-if="hito.tipo === datos.proximo_hito" class="badge bg-warning text-dark ms-1">Próximo paso</span>
-                  </span>
-                  <span class="small text-muted text-nowrap">{{ hito.at ? fecha(hito.at) : '' }}</span>
-                </li>
-              </ul>
-              <p class="small text-muted mb-0">
-                <template v-if="datos.hitos_fuente === 'instancia'">
-                  Leído recién del sistema del negocio<span v-if="datos.semilla_presente === true">; todavía tiene los datos de ejemplo</span><span v-else-if="datos.semilla_presente === false">; ya importó lo suyo (sin datos de ejemplo)</span>.
-                </template>
-                <template v-else>
-                  Armado con los eventos que llegaron al admin: su sistema no contestó la consulta en vivo
-                  (versión sin la ruta, o sin respuesta).
-                </template>
-              </p>
+      <!-- ============================================================ -->
+      <!-- Los días de prueba, editables. Al guardar se recalcula el     -->
+      <!-- vencimiento desde el inicio de la prueba y se le avisa al ERP -->
+      <!-- (contrato C3). Un sistema viejo sin la ruta queda «a mano».   -->
+      <!-- ============================================================ -->
+      <div v-if="prueba.estado !== 'prueba_borrada'" class="card mb-3">
+        <div class="card-body">
+          <label class="form-label fw-semibold" :for="input_id">Días de prueba</label>
+          <div class="row g-2 align-items-center">
+            <div class="col-12 col-sm-4 col-md-3">
+              <input
+                :id="input_id"
+                v-model.number="dias"
+                type="number"
+                class="form-control form-control-sm"
+                min="1"
+                :max="prueba.max_dias || 365"
+              />
+            </div>
+            <div class="col-12 col-sm-8 col-md-9 small text-muted">
+              Se cuentan desde el inicio de la prueba ({{ formatear_fecha(prueba.inicio_at) }}). Con más días, una prueba vencida vuelve a estar activa.
             </div>
           </div>
-        </div>
 
-        <!-- ============================================================ -->
-        <!-- WhatsApps de la prueba y Tomás                                 -->
-        <!-- ============================================================ -->
-        <div class="col-12 col-lg-5">
-          <div class="card h-100">
-            <div class="card-body">
-              <div class="fw-semibold mb-2">Mensajes de la prueba</div>
-              <p class="small mb-2">
-                Bienvenida de Martín:
-                <span v-if="datos.bienvenida_enviada" class="text-success">enviada{{ datos.bienvenida_at ? ' el ' + fecha(datos.bienvenida_at) : '' }}</span>
-                <span v-else class="text-muted">todavía no salió</span>
-              </p>
-              <p class="small mb-2">
-                Último empujón:
-                <span v-if="datos.ultimo_empujon_at">{{ fecha(datos.ultimo_empujon_at) }}</span>
-                <span v-else class="text-muted">ninguno</span>
-              </p>
-              <ul v-if="datos.envios && datos.envios.length" class="list-unstyled small mb-3 prueba-envios">
-                <li v-for="envio in datos.envios" :key="envio.id" class="d-flex flex-wrap gap-2 py-1 border-bottom">
-                  <span class="badge" :class="clase_estado(envio.estado)">{{ envio.estado }}</span>
-                  <span class="flex-grow-1 text-truncate">{{ nombre_del_envio(envio) }}</span>
-                  <span class="text-muted text-nowrap">{{ fecha(envio.enviado_at || envio.created_at) }}</span>
-                </li>
-              </ul>
-              <p v-else class="small text-muted mb-3">Todavía no salió ningún mensaje.</p>
+          <div v-if="save_error" class="alert alert-danger py-2 small mt-3 mb-0">
+            {{ save_error }}
+          </div>
+          <div v-if="c3_texto" class="small mt-3 mb-0" :class="c3_estado === 'ok' ? 'text-success' : 'text-warning'">
+            {{ c3_texto }}
+          </div>
 
-              <div v-if="aviso_resultado" class="alert py-2 small" :class="aviso_resultado.ok ? 'alert-success' : 'alert-danger'">
-                {{ aviso_resultado.texto }}
-              </div>
-              <button
-                type="button"
-                class="btn btn-outline-primary btn-sm w-100"
-                :disabled="avisando"
-                @click="avisar_a_tomas"
-              >
-                {{ avisando ? 'Avisando...' : 'Avisar a Tomás' }}
-              </button>
-              <p class="text-muted small mb-0 mt-2">
-                Le manda un WhatsApp y una notificación al closer para que lo llame. Al día 5 y al vencer
-                se le avisa solo.
-              </p>
-            </div>
+          <div class="d-flex justify-content-end mt-3">
+            <button type="button" class="btn btn-primary btn-sm" :disabled="saving || !dias_validos" @click="guardar">
+              {{ saving ? 'Guardando...' : 'Guardar días' }}
+            </button>
           </div>
         </div>
       </div>
 
-      <div class="d-flex justify-content-end mt-3">
-        <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="loading" @click="cargar">
-          Actualizar
-        </button>
-      </div>
+      <!-- M4: seguimiento -->
+      <!-- Acá monta M4 (Martín e importación) su `PruebaSeguimiento.vue` — hitos, envíos y avisos a Tomás —
+           debajo de los días y de la instancia, antes del pie. Esta es la ÚNICA solapa `prueba` del modal del
+           lead y de la ficha del cliente: M4 no agrega otra, se engancha acá. -->
+      <PruebaSeguimiento :record="record" :model_name="model_name" />
+
+      <p class="text-muted small mb-0">
+        Para contratar: «Promover a cliente» desde el lead. No se reinstala nada: esta instancia es su sistema definitivo.
+        El pool completo está en <router-link to="/pruebas">Pruebas</router-link>.
+      </p>
     </div>
   </div>
 </template>
 
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
+import PruebaSeguimiento from '@/components/prueba/PruebaSeguimiento.vue'
 
 /**
- * Pestaña «Prueba» del modal del lead y de la ficha del cliente (misión cruzada
- * prueba-martin-importacion, 3/11/2026, programa «Prueba gratuita de 7 días»).
+ * Solapa «Prueba» de la ficha del cliente y del modal del lead (programa «Prueba gratuita de 7
+ * días», misión prueba-alta-instancia, 3/11/2026).
  *
- * Muestra cuántos días le quedan al negocio, en qué hito va (leído EN VIVO de su sistema por el
- * admin, con los eventos recibidos como respaldo), qué WhatsApps de la prueba le salieron (la
- * bienvenida de Martín y los empujones) y el botón «Avisar a Tomás».
- *
- * La misma pestaña sirve para los dos modales: `model_name` (`client` | `lead`) decide a qué ruta
- * pedirle (`admin/client/{id}/prueba` o `admin/lead/{id}/prueba`). Solo usa `record`.
+ * Es la MISMA solapa para los dos: deduce el sujeto del `model_name` que le pasa el modal
+ * (`client` o `lead`, como `SubjectPipelinesTab`) y le pega a `GET/PUT client/{id}/prueba` o a
+ * `GET/PUT lead/{id}/prueba`. El PUT escribe `trial_days` y `trial_ends_at` en el admin y le avisa
+ * al sistema del cliente (C3 `admin-sync/prueba/vencimiento`); el resultado de ese aviso se muestra
+ * abajo del campo.
  */
 export default {
   name: 'PruebaTab',
+  components: { PruebaSeguimiento },
   props: {
-    /** Registro abierto en el modal (cliente o lead). */
     record: { type: Object, default: null },
-    /** `client` o `lead`: decide la ruta. */
     model_name: { type: String, default: 'client' },
   },
   data() {
     return {
       loading: false,
       load_error: null,
-      datos: null,
-      avisando: false,
-      aviso_resultado: null,
+      save_error: null,
+      saving: false,
+      prueba: null,
+      dias: null,
+      c3_estado: null,
+      c3_texto: '',
     }
   },
   computed: {
-    /** Base de las rutas según el modelo abierto. */
-    base_url() {
-      const prefijo = this.model_name === 'lead' ? 'lead' : 'client'
-      return '/' + prefijo + '/' + this.record.id + '/prueba'
+    es_lead() {
+      return this.model_name === 'lead'
     },
-    /** Cuántos hitos ya pasaron. */
-    hitos_hechos() {
-      if (!this.datos || !this.datos.hitos_lista) {
-        return 0
+    sujeto_label() {
+      return this.es_lead ? 'lead' : 'cliente'
+    },
+    ruta() {
+      return (this.es_lead ? '/lead/' : '/client/') + this.record.id + '/prueba'
+    },
+    input_id() {
+      return 'prueba-dias-' + this.model_name + '-' + (this.record && this.record.id ? this.record.id : 'nuevo')
+    },
+    dias_validos() {
+      const max = this.prueba && this.prueba.max_dias ? this.prueba.max_dias : 365
+      return Number.isInteger(this.dias) && this.dias >= 1 && this.dias <= max
+    },
+    badge_label() {
+      if (!this.prueba) {
+        return ''
       }
-      return this.datos.hitos_lista.filter(function (h) {
-        return !!h.at
-      }).length
+      if (this.prueba.estado === 'prueba_vencida') {
+        return 'Prueba vencida'
+      }
+      if (this.prueba.estado === 'prueba_borrada') {
+        return 'Prueba borrada'
+      }
+      return 'Prueba activa'
+    },
+    badge_class() {
+      if (!this.prueba) {
+        return 'bg-secondary'
+      }
+      if (this.prueba.estado === 'prueba_vencida') {
+        return 'bg-warning text-dark'
+      }
+      if (this.prueba.estado === 'prueba_borrada') {
+        return 'bg-secondary'
+      }
+      return 'bg-success'
+    },
+    texto_vencimiento() {
+      if (!this.prueba || !this.prueba.trial_ends_at) {
+        return 'Sin fecha de vencimiento.'
+      }
+      const fecha = this.formatear_fecha(this.prueba.trial_ends_at)
+      if (this.prueba.dias_restantes === 0) {
+        return 'Venció el ' + fecha + '.'
+      }
+      const restantes = this.prueba.dias_restantes
+      return 'Vence el ' + fecha + ' (' + restantes + (restantes === 1 ? ' día' : ' días') + ').'
     },
   },
   watch: {
-    'record.id': {
-      immediate: true,
-      handler(id) {
-        if (id) {
-          this.cargar()
-        }
-      },
+    'record.id': function (nuevo_id, viejo_id) {
+      if (nuevo_id && nuevo_id !== viejo_id) {
+        this.cargar()
+      }
     },
   },
+  mounted() {
+    this.cargar()
+  },
   methods: {
-    /** Trae el estado de la prueba (le pega en vivo al sistema del negocio). */
     cargar() {
-      this.loading = true
-      this.load_error = null
-      api
-        .get(this.base_url)
-        .then((res) => {
-          this.datos = res.data
-        })
-        .catch((error) => {
-          this.load_error = resolve_error_message(error) || 'No se pudo leer el estado de la prueba.'
-        })
-        .finally(() => {
-          this.loading = false
-        })
-    },
-    /** Botón «Avisar a Tomás». */
-    avisar_a_tomas() {
-      if (!window.confirm('¿Avisarle a Tomás ahora por WhatsApp para que lo llame?')) {
+      const self = this
+      if (!this.record || !this.record.id) {
         return
       }
-      this.avisando = true
-      this.aviso_resultado = null
+      self.loading = true
+      self.load_error = null
       api
-        .post(this.base_url + '/avisar-a-tomas')
-        .then(() => {
-          this.aviso_resultado = { ok: true, texto: 'Aviso enviado a Tomás.' }
-          this.cargar()
+        .get(this.ruta, { silent_error: true })
+        .then(function (res) {
+          self.aplicar(res.data || {})
+          self.loading = false
         })
-        .catch((error) => {
-          this.aviso_resultado = {
-            ok: false,
-            texto: resolve_error_message(error) || 'No se pudo avisar a Tomás.',
-          }
-        })
-        .finally(() => {
-          this.avisando = false
+        .catch(function (error) {
+          self.load_error = resolve_error_message(error)
+          self.loading = false
         })
     },
-    /** Fecha corta en hora local. */
-    fecha(iso) {
-      if (!iso) {
+    aplicar(payload) {
+      this.prueba = payload || null
+      this.dias = this.prueba && this.prueba.trial_days ? this.prueba.trial_days : null
+      if (payload && payload.c3) {
+        this.c3_estado = payload.c3.estado || null
+        this.c3_texto = this.texto_de_c3(payload.c3)
+      }
+    },
+    texto_de_c3(c3) {
+      if (!c3 || !c3.estado) {
         return ''
       }
-      const d = new Date(iso)
-      if (isNaN(d.getTime())) {
-        return String(iso)
+      if (c3.estado === 'ok') {
+        return 'El sistema del cliente ya tiene el vencimiento nuevo.'
       }
-      return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+      if (c3.estado === 'sin_ruta') {
+        return 'Guardado en el admin. El sistema del cliente todavía no tiene la ruta del vencimiento: lo toma al actualizarse.'
+      }
+      return 'Guardado en el admin, pero no se le pudo avisar al sistema del cliente: ' + (c3.mensaje || c3.estado) + '.'
     },
-    /** Rótulo humano de un envío. */
-    nombre_del_envio(envio) {
-      if (envio.plantilla === 'aviso_tomas') {
-        const motivos = { dia_5: 'día 5', vencida: 'venció', manual: 'a pedido' }
-        return 'Aviso a Tomás (' + (motivos[envio.hito] || envio.hito) + ')'
+    guardar() {
+      const self = this
+      if (!this.record || !this.record.id || !this.dias_validos) {
+        return
       }
-      if (envio.plantilla === 'cc_prueba_bienvenida') {
-        return 'Bienvenida de Martín'
-      }
-      if (envio.plantilla && envio.plantilla.indexOf('cc_prueba_paso_') === 0) {
-        const hito = this.datos.hitos_catalogo ? this.datos.hitos_catalogo[envio.hito] : null
-        return 'Empujón: ' + (hito || envio.hito)
-      }
-      return envio.plantilla
+      self.saving = true
+      self.save_error = null
+      self.c3_texto = ''
+      api
+        .put(this.ruta, { trial_days: this.dias }, { silent_error: true })
+        .then(function (res) {
+          self.aplicar(res.data || {})
+          self.saving = false
+          window.dispatchEvent(new CustomEvent('admin-spa-toast', {
+            detail: { message: 'Días de prueba guardados.', variant: 'success' },
+          }))
+        })
+        .catch(function (error) {
+          self.save_error = resolve_error_message(error)
+          self.saving = false
+        })
     },
-    /** Color del badge de estado de un envío. */
-    clase_estado(estado) {
-      if (estado === 'enviado') {
-        return 'bg-success'
+    formatear_fecha(valor) {
+      if (!valor) {
+        return '—'
       }
-      if (estado === 'en_cola') {
-        return 'bg-warning text-dark'
+      const fecha = new Date(valor)
+      if (Number.isNaN(fecha.getTime())) {
+        return String(valor)
       }
-      return 'bg-danger'
+      return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        + ' ' + fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
     },
   },
 }
 </script>
 
 <style scoped>
-.prueba-hito-marca {
-  min-width: 1.6rem;
-  margin-top: 0.15rem;
-}
-.prueba-hito-proximo {
-  background: rgba(255, 193, 7, 0.08);
-}
-.prueba-dias {
-  min-width: 7rem;
-}
-.prueba-envios {
-  max-height: 14rem;
-  overflow-y: auto;
+.prueba-tab .card {
+  border-color: rgba(0, 0, 0, 0.1);
 }
 </style>
