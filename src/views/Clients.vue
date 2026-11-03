@@ -21,6 +21,7 @@ import ClientCandadoSesionTab from '@/components/client/CandadoSesionTab.vue'
 import ClientExtensionesTab from '@/components/client/ExtensionesTab.vue'
 import ClientModelosIaTab from '@/components/client/ModelosIaTab.vue'
 import SubjectPipelinesTab from '@/components/pipeline/SubjectPipelinesTab.vue'
+import PruebaTab from '@/components/prueba/PruebaTab.vue'
 
 /**
  * Vista principal de clientes.
@@ -47,6 +48,15 @@ export default {
           key: 'ecommerce',
           label: 'Ecommerce',
           component: markRaw(EcommerceImplementationTab),
+        },
+        {
+          /* Prueba gratuita (misión prueba-martin-importacion, 3/11/2026): días que le quedan al
+             negocio, hitos leídos EN VIVO de su sistema (C3, con los eventos recibidos de respaldo),
+             los WhatsApps de la prueba y «Avisar a Tomás». A un cliente que no está en prueba se
+             lo dice y nada más. Como Imágenes e IA, la consulta en vivo sale recién al abrirla. */
+          key: 'prueba',
+          label: 'Prueba',
+          component: markRaw(PruebaTab),
         },
         {
           key: 'mensualidad',

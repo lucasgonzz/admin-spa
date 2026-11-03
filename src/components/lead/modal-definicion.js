@@ -4,6 +4,7 @@ import LeadResumenTab from '@/components/lead/resumen/Index.vue'
 import LeadContractTab from '@/components/lead/contract/Index.vue'
 import LeadDemoTab from '@/components/lead/demo/Index.vue'
 import SubjectPipelinesTab from '@/components/pipeline/SubjectPipelinesTab.vue'
+import PruebaTab from '@/components/prueba/PruebaTab.vue'
 
 /**
  * Definición compartida del modal del lead (misión flujo-lead-landing-closer, 17/10/2026).
@@ -44,6 +45,14 @@ export const lead_model_extra_tabs = [
     component: markRaw(LeadDemoTab),
   },
   {
+    /* Prueba gratuita (misión prueba-martin-importacion, 3/11/2026): días que le quedan al negocio,
+       hitos leídos en vivo de su sistema, los WhatsApps de la prueba y «Avisar a Tomás». La pestaña
+       le pide a `admin/lead/{id}/prueba`, que cruza el lead con su cliente en prueba. */
+    key: 'prueba',
+    label: 'Prueba',
+    component: markRaw(PruebaTab),
+  },
+  {
     key: 'contract',
     label: 'Contrato',
     component: markRaw(LeadContractTab),
@@ -67,6 +76,7 @@ export const lead_model_properties_nav_order = [
   'extra:resumen',
   'extra:extra',
   'extra:demo',
+  'extra:prueba',
   'group:Basico',
   'extra:contract',
   'extra:pipelines',
