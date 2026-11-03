@@ -1,27 +1,49 @@
 /**
- * Planes de Gestión por ventas mensuales (misma política que el manual de precios y la API).
- * `limite` son las ventas por mes que cubre el plan; `abono` va en ARS y es null cuando el plan es
- * a medida (importe libre, se carga a mano).
+ * Planes de Gestión por OPERACIONES mensuales (ventas + compras + gastos), política del 3/11/2026
+ * (programa «Prueba gratuita de 7 días»): misma tabla que `ContractPreciosService::PLANES_GESTION` de
+ * la API y que el manual de precios. `desde`/`limite` son las operaciones por mes que cubre el plan;
+ * `abono` va en ARS, es el precio final (no se le suma IVA) y es null cuando el plan es a medida
+ * (importe libre, se carga a mano). `usuarios` son los incluidos; `excedente`, lo que cuesta cada
+ * operación por encima del límite.
  */
 export const PLANES_GESTION = [
-  { clave: 'inicial', nombre: 'Inicial', limite: 300, abono: 34200 },
-  { clave: 'estandar', nombre: 'Estándar', limite: 1500, abono: 71500 },
-  { clave: 'pro', nombre: 'Pro', limite: 7000, abono: 105600 },
-  { clave: 'a_medida', nombre: 'A medida', limite: null, abono: null },
+  { clave: 'inicial', nombre: 'Inicial', desde: 0, limite: 100, abono: 55900, usuarios: 1, excedente: 760 },
+  { clave: 'intermedio', nombre: 'Intermedio', desde: 101, limite: 250, abono: 85400, usuarios: 2, excedente: 570 },
+  { clave: 'plus', nombre: 'Plus', desde: 251, limite: 500, abono: 199400, usuarios: 2, excedente: 190 },
+  { clave: 'empresa', nombre: 'Empresa', desde: 501, limite: 3000, abono: 263000, usuarios: 3, excedente: 76 },
+  { clave: 'a_medida', nombre: 'A medida', desde: 3001, limite: null, abono: null, usuarios: 3, excedente: null },
 ]
 
 /**
- * Un contrato nuevo no trae plan elegido («Sin plan»): el abono de Gestión arranca en el del
- * plan Estándar y el operador elige el plan (que lo precarga) o carga el importe acordado.
+ * Los planes de la política anterior (26/10/2026, por VENTAS mensuales). Un contrato que los eligió
+ * los conserva: el select los muestra como opción deshabilitada para que no se pierdan al guardar,
+ * pero ya no se eligen para un contrato nuevo. El `inicial` histórico comparte la clave con el
+ * vigente; se reconoce por su abono de $34.200.
  */
-const ABONO_GESTION_POR_DEFECTO = 71500
+export const PLANES_HISTORICOS = [
+  { clave: 'inicial', nombre: 'Inicial', limite: 300, abono: 34200 },
+  { clave: 'estandar', nombre: 'Estándar', limite: 1500, abono: 71500 },
+  { clave: 'pro', nombre: 'Pro', limite: 7000, abono: 105600 },
+]
 
-/** Importes acordados para nuevos contratos; se copian para que cada contrato sea editable. */
+/**
+ * Un contrato nuevo no trae plan elegido («Sin plan»): el abono de Gestión arranca en el del plan
+ * Inicial y el operador elige el plan (que lo precarga) o carga el importe acordado.
+ */
+const ABONO_GESTION_POR_DEFECTO = 55900
+
+/**
+ * Importes acordados para nuevos contratos; se copian para que cada contrato sea editable.
+ *
+ * Desde el 3/11/2026 Gestión NO tiene licencia (el sistema de gestión y la implementación son
+ * gratis); Tienda y Agentes conservan la suya, USD 800 cada una (la mitad si se contrata durante la
+ * prueba gratuita: se edita a mano). Hasta esa fecha precargaba USD 800 / 500 / 500.
+ */
 export function precios_por_defecto() {
   return {
-    gestion: { licencia: 800, mensualidad: ABONO_GESTION_POR_DEFECTO },
-    ecommerce: { licencia: 500, mensualidad: 20000 },
-    agentes: { licencia: 500, mensualidad: 30000 },
+    gestion: { licencia: 0, mensualidad: ABONO_GESTION_POR_DEFECTO },
+    ecommerce: { licencia: 800, mensualidad: 20000 },
+    agentes: { licencia: 800, mensualidad: 30000 },
   }
 }
 
@@ -44,7 +66,9 @@ export function tiene_condiciones_guardadas(c) {
 export function iniciar_precios_por_sistema(c) {
   c.contract_precios_sistemas = precios_por_defecto()
   c.contract_plan_gestion = null
-  c.contract_descuento_conjunto = 300
+  /* Sin descuento por contratar los tres (era USD 300 cuando el conjunto valía USD 1.500 contra
+     USD 1.800 de lista; con Gestión sin licencia ya no hay conjunto que descontar). Editable. */
+  c.contract_descuento_conjunto = 0
   c.contract_mes_gratis = false
   c.contract_meses_actualizacion = 6
   c.contract_modalidad = 'licencia'
@@ -67,6 +91,31 @@ export function elegir_plan_gestion(c, clave) {
     c.contract_precios_sistemas.gestion.mensualidad = plan.abono
     actualizar_totales(c)
   }
+}
+
+/**
+ * El plan histórico (por ventas) que tiene guardado el contrato, o null si su plan es uno de los
+ * vigentes (o no tiene). `inicial` es histórico solo si el abono pactado de Gestión es el de $34.200.
+ */
+export function plan_historico_del_contrato(c) {
+  const clave = c?.contract_plan_gestion
+  const historico = PLANES_HISTORICOS.find(p => p.clave === clave)
+  if (!historico) return null
+  const vigente = PLANES_GESTION.find(p => p.clave === clave)
+  if (!vigente) return historico
+  const abono = Number(c.contract_precios_sistemas?.gestion?.mensualidad)
+  return Math.abs(abono - historico.abono) < 0.01 ? historico : null
+}
+
+/** «Inicial — hasta 100 operaciones por mes», «Plus — de 251 a 500…», «A medida — más de 3.000…». */
+export function nombre_del_plan(plan) {
+  const miles = n => n.toLocaleString('es-AR')
+  if (plan.limite == null) {
+    const ultimo = PLANES_GESTION.filter(p => p.limite != null).pop()
+    return plan.nombre + ' — más de ' + miles(ultimo.limite) + ' operaciones por mes'
+  }
+  if (!plan.desde) return plan.nombre + ' — hasta ' + miles(plan.limite) + ' operaciones por mes'
+  return plan.nombre + ' — de ' + miles(plan.desde) + ' a ' + miles(plan.limite) + ' operaciones por mes'
 }
 
 export function resumen_precios(c) {
