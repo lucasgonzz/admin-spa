@@ -81,6 +81,11 @@
         </div>
       </div>
 
+      <!-- M4: seguimiento -->
+      <!-- Acá monta M4 (Martín e importación) su `PruebaSeguimiento.vue` — hitos, envíos y avisos a Tomás —
+           debajo de los días y de la instancia, antes del pie. Esta es la ÚNICA solapa `prueba` del modal del
+           lead y de la ficha del cliente: M4 no agrega otra, se engancha acá. -->
+
       <p class="text-muted small mb-0">
         Para contratar: «Promover a cliente» desde el lead. No se reinstala nada: esta instancia es su sistema definitivo.
         El pool completo está en <router-link to="/pruebas">Pruebas</router-link>.

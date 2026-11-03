@@ -54,7 +54,8 @@
 
             <div v-if="instancia.client" class="small">
               Cliente:
-              <router-link :to="{ path: '/clientes', query: { id: instancia.client.id } }">{{ instancia.client.nombre }}</router-link>
+              <!-- La vista genérica no abre una ficha por query: el link lleva al listado, donde se busca por nombre. -->
+              <router-link to="/clientes" :title="'Buscar «' + instancia.client.nombre + '» en Clientes'">{{ instancia.client.nombre }}</router-link>
               <span class="text-muted">· {{ instancia.client.estado }}</span>
               <span v-if="instancia.client.trial_ends_at" class="text-muted d-block">Vence {{ formatear_fecha(instancia.client.trial_ends_at) }}</span>
             </div>
