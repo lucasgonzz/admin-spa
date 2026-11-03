@@ -320,8 +320,13 @@ export default {
 /* En el banco y en la entrada son muchos y muy juntos: el nombre se pisaría con el del vecino.
    Queda la cabeza (logo o iniciales) y el nombre en el tooltip. */
 .ell-svg :deep(.cerrado > .lbl),
-.ell-svg :deep(.sin-horario > .lbl) {
+.ell-svg :deep(.sin-horario > .lbl),
+.ell-svg :deep(.sin-rotulo > .lbl) {
   display: none;
+}
+/* Tocar a un negocio muestra su nombre (ver Director.mostrarNombre). */
+.ell-svg :deep(.client) {
+  cursor: pointer;
 }
 /* Los que esperan quietos no respiran: son muchos y no hace falta repintarlos en cada cuadro. */
 .ell-svg :deep(.cerrado .torso),

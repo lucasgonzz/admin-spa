@@ -250,7 +250,14 @@ export default {
         numero: n(r.slots_libres),
         rotulo: 'slots libres',
         color: '#94A3B8',
-        titulo: typeof r.slots_total === 'number' ? r.slots_libres + ' de ' + r.slots_total + ' slots libres' : null,
+        /* Sin reporter la API manda los contadores de slots en null: el chip queda en guion y sin
+           tooltip (antes decía «null de 35»). */
+        titulo:
+          typeof r.slots_libres === 'number' && typeof r.slots_total === 'number'
+            ? r.slots_libres + ' de ' + r.slots_total + ' slots libres'
+            : typeof r.slots_libres === 'number'
+              ? null
+              : 'Sin datos de la PC de Lucas',
       })
       return lista
     },
