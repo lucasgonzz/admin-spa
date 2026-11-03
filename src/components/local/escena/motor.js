@@ -152,6 +152,20 @@ export class Actor {
   }
 
   /**
+   * Pasa el personaje a otra capa (un ayudante que va de adelante de la mesa a detrás).
+   *
+   * @param {string} nombre Nombre de la capa del motor.
+   */
+  setCapa(nombre) {
+    const capa = this.motor.capas[nombre]
+    if (!capa || capa === this.capa) {
+      return
+    }
+    this.capa = capa
+    capa.appendChild(this.g)
+  }
+
+  /**
    * Fundido de opacidad en tiempo de motor.
    *
    * @param {number} hasta 0..1
@@ -396,15 +410,17 @@ export class Motor {
   }
 
   /**
-   * Interpolación genérica en tiempo de motor (vuelos, cámara).
+   * Interpolación genérica en tiempo de motor (vuelos, cámara, etiquetas que siguen a alguien).
    *
    * @param {number} ms
-   * @param {Function} alPaso Recibe k (0..1, ya con easing).
+   * @param {Function} alPaso Recibe k (0..1).
    * @param {Function} [alFin]
+   * @param {boolean} [siempre] Corre aunque se haya pedido menos movimiento (para lo que tiene que
+   *   durar un tiempo, como la etiqueta con el nombre, y no es una animación).
    * @returns {{cancelado:boolean}}
    */
-  interpolar(ms, alPaso, alFin) {
-    if (this.reducido || ms <= 0) {
+  interpolar(ms, alPaso, alFin, siempre) {
+    if ((this.reducido && !siempre) || ms <= 0) {
       alPaso(1)
       if (alFin) {
         alFin()
@@ -533,18 +549,24 @@ export class Motor {
 
   /**
    * Orden por profundidad: en la capa del piso, el que está más abajo tapa al que está más
-   * arriba. Solo se re-insertan los nodos si el orden cambió.
+   * arriba.
+   *
+   * 🔴 Mover un nodo en el DOM le reinicia las animaciones CSS (un globo vuelve a hacer «pop»).
+   * Por eso, cuando el orden cambia, se mueven SOLO los nodos fuera de lugar: se busca la
+   * subsecuencia creciente de mayor peso del orden actual (los que se quedan quietos) y el resto se
+   * reubica con `insertBefore`. Un personaje que camina pesa mucho menos que uno quieto, así que
+   * cuando dos se cruzan se mueve el que camina (su animación de caminar no se nota reiniciada).
    */
   ordenar() {
     const capa = this.capas.actoresFrente
     const piso = this.actores
       .filter(function (a) {
-        return a.capa === capa
+        return a.capa === capa && a.g.parentNode === capa
       })
       .sort(function (a, b) {
         return a.y - b.y
       })
-    const actual = capa.children
+    const actual = Array.prototype.slice.call(capa.children)
     let distinto = piso.length !== actual.length
     let i = 0
     for (i = 0; !distinto && i < piso.length; i = i + 1) {
@@ -552,10 +574,57 @@ export class Motor {
         distinto = true
       }
     }
-    if (distinto) {
-      piso.forEach(function (a) {
-        capa.appendChild(a.g)
-      })
+    if (!distinto) {
+      return
+    }
+    // posición deseada de cada nodo
+    const deseada = new Map()
+    piso.forEach(function (a, k) {
+      deseada.set(a.g, k)
+    })
+    const porNodo = new Map()
+    piso.forEach(function (a) {
+      porNodo.set(a.g, a)
+    })
+    // secuencia del orden actual expresada en posiciones deseadas, con su peso
+    const seq = []
+    actual.forEach(function (nodo) {
+      if (deseada.has(nodo)) {
+        const a = porNodo.get(nodo)
+        seq.push({ nodo: nodo, pos: deseada.get(nodo), peso: a.estado === 'walk' ? 1 : 1000 })
+      }
+    })
+    // subsecuencia creciente (por posición deseada) de mayor peso: O(n²), n chico
+    const mejor = []
+    const previo = []
+    let fin = -1
+    let j = 0
+    for (i = 0; i < seq.length; i = i + 1) {
+      mejor[i] = seq[i].peso
+      previo[i] = -1
+      for (j = 0; j < i; j = j + 1) {
+        if (seq[j].pos < seq[i].pos && mejor[j] + seq[i].peso > mejor[i]) {
+          mejor[i] = mejor[j] + seq[i].peso
+          previo[i] = j
+        }
+      }
+      if (fin === -1 || mejor[i] > mejor[fin]) {
+        fin = i
+      }
+    }
+    const quietos = new Set()
+    while (fin !== -1) {
+      quietos.add(seq[fin].nodo)
+      fin = previo[fin]
+    }
+    // de atrás para adelante: cada nodo que no está en la subsecuencia va antes del siguiente
+    let siguiente = null
+    for (i = piso.length - 1; i >= 0; i = i - 1) {
+      const nodo = piso[i].g
+      if (!quietos.has(nodo)) {
+        capa.insertBefore(nodo, siguiente)
+      }
+      siguiente = nodo
     }
   }
 
