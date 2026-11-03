@@ -67,6 +67,9 @@
     <div v-if="suggestion_error" class="support-input-suggestion-error">
       {{ suggestion_error }}
     </div>
+    <div v-if="suggestion_notice" class="alert alert-info py-1 px-2 small mb-2" role="status">
+      {{ suggestion_notice }}
+    </div>
     <!-- Una sola fila: campo de texto y los cuatro botones -->
     <div class="support-input-composer">
       <textarea
@@ -185,6 +188,7 @@ export default {
     ai_suggestion_send_at: { type: String, default: null },
     /** Motivo por el que falló la última sugerencia IA (la pide el header). */
     suggestion_error: { type: String, default: '' },
+    suggestion_notice: { type: String, default: '' },
     /** Razonamiento devuelto por Claude en la última sugerencia. */
     ai_reasoning: { type: String, default: '' },
   },

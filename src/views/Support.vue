@@ -101,6 +101,7 @@
           :can_send="can_send_message"
           :ai_suggestion_send_at="selected_ticket_ai_send_at"
           :suggestion_error="suggestion_error"
+          :suggestion_notice="suggestion_notice"
           :ai_reasoning="ai_reasoning"
           @send-message="send_message" />
       </div>
@@ -165,6 +166,7 @@ export default {
       loading_suggestion: false,
       /** Motivo del último fallo al pedir sugerencia; se muestra arriba del composer. */
       suggestion_error: '',
+      suggestion_notice: '',
       /** Razonamiento devuelto por Claude en la última sugerencia. */
       ai_reasoning: '',
       /** Umbral de alerta de demora (minutos). */
@@ -658,6 +660,7 @@ export default {
       const ticket_id = self.selected_ticket_id
       self.loading_suggestion = true
       self.suggestion_error = ''
+      self.suggestion_notice = ''
       api
         .post('/support-ticket/' + ticket_id + '/suggest')
         .then(function (res) {
@@ -667,6 +670,17 @@ export default {
           const suggested = (res.data && res.data.suggested_message) || ''
           const reasoning = (res.data && res.data.reasoning) || ''
           const suggested_title = (res.data && res.data.suggested_title) || ''
+          const attention = res.data && res.data.codex_attention
+          if (attention) {
+            // El backend distingue cola, reserva y aprobación; un clic aceptado no implica envío.
+            if (attention.status === 'blocked') {
+              self.suggestion_error = attention.message || reasoning
+            } else {
+              self.suggestion_notice = attention.message || reasoning
+            }
+            self.ai_reasoning = ''
+            return
+          }
           if (suggested) {
             self.push_body_to_input(suggested)
           }
@@ -799,6 +813,8 @@ export default {
             if (message.is_ai_suggestion_draft) {
               self.ai_generating_ticket_id = null
             }
+            self.suggestion_notice = ''
+            self.suggestion_error = ''
             self.$store.commit('support_message/add_model', message)
           }
         },
@@ -836,6 +852,8 @@ export default {
             return
           }
           self.ai_generating_ticket_id = null
+          self.suggestion_notice = ''
+          self.suggestion_error = ''
           /* Ya NO se vuelca la sugerencia al input: desde esta misión se aprueba, se edita o
              se descarta desde la propia burbuja. Tenerla en los dos lados hacía ambiguo qué
              se mandaba al apretar Enviar. */
@@ -892,6 +910,7 @@ export default {
          operador leyera un motivo de fallo que no tiene nada que ver con el hilo que abrió. */
       this.loading_suggestion = false
       this.suggestion_error = ''
+      this.suggestion_notice = ''
       this.ai_reasoning = ''
       this.$store.dispatch('support_message/load_ticket_messages', ticket_id)
       const ticket = this.tickets.find((t) => t.id == ticket_id)
@@ -1146,6 +1165,7 @@ export default {
       this.ai_generating_ticket_id = null
       this.loading_suggestion = false
       this.suggestion_error = ''
+      this.suggestion_notice = ''
       this.ai_reasoning = ''
       this.ticket_name_draft = ''
       this.ticket_status_draft = 'open'
@@ -1207,6 +1227,7 @@ export default {
       /* La sugerencia que había en pantalla ya se mandó o se descartó al escribir arriba: dejar
          su error o su razonamiento visibles después del envío no explica nada del mensaje nuevo. */
       this.suggestion_error = ''
+      this.suggestion_notice = ''
       this.ai_reasoning = ''
       this.$store.dispatch('support_message/send_message', payload).then(function (model) {
         if (payload.on_result) payload.on_result(model)
