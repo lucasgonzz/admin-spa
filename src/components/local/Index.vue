@@ -70,32 +70,54 @@
         :style="{ width: marco.w + 'px', height: marco.h + 'px' }"
       >
         <el-local-escena
+          ref="plano"
           :estado="estado"
           :camara="camara_efectiva"
           :aspecto="aspecto"
           @bandeja="on_abrir_bandeja"
         />
 
+        <div class="ell-zoom" role="group" aria-label="Zoom del plano">
+          <button type="button" title="Alejar" aria-label="Alejar plano" @click="zoom_plano(1.25)">−</button>
+          <button type="button" title="Acercar" aria-label="Acercar plano" @click="zoom_plano(0.8)">+</button>
+          <button type="button" title="Restablecer vista" aria-label="Restablecer vista del plano" @click="restablecer_plano">
+            <i class="bi bi-arrows-fullscreen" aria-hidden="true" />
+          </button>
+        </div>
+
         <div v-if="primera_carga" class="ell-cargando" role="status">
           <span class="spinner-border spinner-border-sm" aria-hidden="true" />
           <span>Abriendo el local…</span>
         </div>
 
-        <!-- Lo que espera en la bandeja «Para Lucas», con link a su pantalla cuando la hay. -->
+        <!-- Misiones por iniciar, con acceso separado a la conversación de soporte. -->
         <section v-if="mostrar_bandeja" class="ell-bandeja" aria-label="Para Lucas">
           <div class="ell-bandeja__cabecera">
-            <span>Para Lucas <b>{{ bandeja.length }}</b></span>
+            <span>Para Lucas <b>{{ resumen.para_lucas ?? bandeja.length }}</b></span>
             <button type="button" class="ell-bandeja__cerrar" aria-label="Cerrar" @click="mostrar_bandeja = false">
               <i class="bi bi-x-lg" aria-hidden="true" />
             </button>
           </div>
-          <p v-if="bandeja.length === 0" class="ell-bandeja__vacia">No hay nada esperando.</p>
+          <p v-if="bandeja.length === 0" class="ell-bandeja__vacia">No hay misiones por iniciar.</p>
           <ul v-else class="ell-bandeja__lista">
             <li v-for="item in bandeja" :key="'ell-b-' + item.id" class="ell-bandeja__item">
-              <span class="ell-bandeja__tipo" :style="{ background: item.color }">{{ item.tipo_texto }}</span>
-              <router-link v-if="item.ruta" :to="item.ruta" class="ell-bandeja__titulo">{{ item.titulo }}</router-link>
-              <span v-else class="ell-bandeja__titulo">{{ item.titulo }}</span>
-              <span class="ell-bandeja__hace">{{ item.hace }}</span>
+              <button
+                type="button"
+                class="ell-bandeja__titulo"
+                :disabled="!item.ticket_id || item.estado_inicio !== 'pendiente'"
+                :aria-label="'Iniciar en Codex: ' + item.titulo"
+                title="Iniciar misión en Codex"
+                @click="iniciar_mision(item)"
+              >
+                {{ item.titulo }}
+                <i v-if="item.ticket_id && item.estado_inicio === 'pendiente'" class="bi bi-box-arrow-up-right" aria-hidden="true" />
+              </button>
+              <div class="ell-bandeja__acciones">
+                <span class="ell-bandeja__hace">{{ item.hace }}</span>
+                <router-link v-if="item.ruta" :to="item.ruta" class="ell-bandeja__ver">Ver conversación</router-link>
+              </div>
+              <span v-if="item.detalle_inicio" class="ell-bandeja__estado" role="status">{{ item.detalle_inicio }}</span>
+              <span v-if="item.error_inicio" class="ell-bandeja__error" role="alert">{{ item.error_inicio }}</span>
             </li>
           </ul>
         </section>
@@ -145,13 +167,11 @@ const SUSCRIPCIONES_VIVO = [
   ['leads.admins', '.LeadSuggestionCreated'],
 ]
 
-/** Rótulo y color de cada tipo de ítem de la bandeja (contrato B: `bandeja[].tipo`). */
-const TIPOS_BANDEJA = {
-  caso_delegado: { texto: 'Caso', color: '#25D366' },
-  revision: { texto: 'Revisión', color: '#8B5CF6' },
-  mision_pendiente: { texto: 'Misión', color: '#3A31FC' },
-  aprobacion: { texto: 'Aprobar', color: '#FA7E06' },
-  tarea: { texto: 'Tarea', color: '#0B84F8' },
+const ESTADOS_DE_INICIO = {
+  enviando: 'Pidiendo el inicio…',
+  solicitada: 'Esperando que la PC de Lucas abra Codex.',
+  iniciando: 'Abriendo una conversación en Codex…',
+  iniciada: 'La misión ya tiene una conversación en Codex.',
 }
 
 /** Botones de cámara (solo en vertical). */
@@ -194,6 +214,7 @@ export default {
       marco: { w: 0, h: 0 },
       /** Lista de la bandeja abierta. */
       mostrar_bandeja: false,
+      solicitudes_inicio: {},
     }
   },
   computed: {
@@ -296,8 +317,10 @@ export default {
     bandeja() {
       const lista = (this.estado && Array.isArray(this.estado.bandeja) && this.estado.bandeja) || []
       const ahora = this.ahora
-      return lista.filter(Boolean).map(function (b) {
-        const tipo = TIPOS_BANDEJA[b.tipo] || { texto: 'Otro', color: '#64748B' }
+      return lista.map((b) => {
+        const ticket_id = Number.isSafeInteger(b.ticket_id) && b.ticket_id > 0 ? b.ticket_id : null
+        const solicitud = this.solicitudes_inicio[b.id]
+        const estado_inicio = (solicitud && solicitud.estado) || b.estado_inicio || 'pendiente'
         const t = new Date(b.creado_at).getTime()
         let hace = ''
         if (!isNaN(t)) {
@@ -307,8 +330,11 @@ export default {
         return {
           id: b.id,
           titulo: b.titulo || 'Sin título',
-          tipo_texto: tipo.texto,
-          color: tipo.color,
+          ticket_id: ticket_id,
+          mission_sha256: b.mission_sha256 || null,
+          estado_inicio: estado_inicio,
+          detalle_inicio: ticket_id ? ESTADOS_DE_INICIO[estado_inicio] : 'Inicio desde El local todavía no disponible.',
+          error_inicio: solicitud && solicitud.error,
           ruta: typeof b.ruta === 'string' && b.ruta.charAt(0) === '/' ? b.ruta : null,
           hace: hace,
         }
@@ -411,7 +437,7 @@ export default {
           if (!data || typeof data !== 'object' || !Array.isArray(data.negocios)) {
             throw new Error('respuesta sin la forma de la escena')
           }
-          self.estado = Object.freeze(data)
+          self.aplicar_escena(data)
           self.aviso = ''
           self.conexion = 'ok'
           self.ahora = Date.now()
@@ -436,6 +462,65 @@ export default {
         .finally(function () {
           self.cargando = false
           self.primera_carga = false
+        })
+    },
+    aplicar_escena(data) {
+      const items = Array.isArray(data.bandeja) ? data.bandeja : []
+      const bandeja = items.filter((item) => item && item.tipo === 'mision_pendiente')
+      const contrato_actual = items.length === bandeja.length && bandeja.every((item) => Number.isSafeInteger(item.ticket_id))
+      const resumen = { ...data.resumen }
+      if (!contrato_actual || typeof resumen.para_lucas !== 'number') {
+        resumen.para_lucas = bandeja.length
+      }
+
+      // Un GET anterior al clic puede devolver el último estado cacheado.
+      const vigentes = {}
+      bandeja.forEach((item) => {
+        const local = this.solicitudes_inicio[item.id]
+        if (!local || local.huella !== (item.mission_sha256 || null)) {
+          return
+        }
+        const pendiente = !item.estado_inicio || item.estado_inicio === 'pendiente'
+        if (local.estado === 'enviando' || (pendiente && (local.error || Date.now() - local.aceptada_at < POLL_MS))) {
+          vigentes[item.id] = local
+        }
+      })
+      this.solicitudes_inicio = vigentes
+      this.estado = Object.freeze({ ...data, resumen, bandeja })
+    },
+    iniciar_mision(item) {
+      const actual = this.solicitudes_inicio[item.id]
+      if (!item.ticket_id || item.estado_inicio !== 'pendiente' || (actual && actual.estado)) {
+        return
+      }
+      const huella = item.mission_sha256
+      const body = huella ? { mission_sha256: huella } : {}
+      this.solicitudes_inicio[item.id] = { estado: 'enviando', huella }
+      return api.post('/local/misiones/' + item.ticket_id + '/iniciar', body, { silent_error: true })
+        .then(({ data }) => {
+          if (!this.montado || this.solicitudes_inicio[item.id]?.huella !== huella) {
+            return
+          }
+          const estado = data && data.estado_inicio
+          if (!['solicitada', 'iniciando', 'iniciada'].includes(estado)) {
+            throw new Error('respuesta sin estado de inicio')
+          }
+          this.solicitudes_inicio[item.id] = { estado, huella, aceptada_at: Date.now() }
+          this.on_evento_vivo()
+        })
+        .catch((error) => {
+          if (!this.montado || this.solicitudes_inicio[item.id]?.huella !== huella) {
+            return
+          }
+          const respuesta = error && error.response
+          let mensaje = 'No se pudo confirmar el pedido. Podés volver a intentar.'
+          if (respuesta && [404, 405].includes(respuesta.status)) {
+            mensaje = 'Todavía no se puede iniciar esta misión desde El local.'
+          } else if (respuesta && respuesta.status === 409) {
+            mensaje = respuesta.data?.message || 'El estado de la misión cambió.'
+            this.on_evento_vivo()
+          }
+          this.solicitudes_inicio[item.id] = { error: mensaje, huella }
         })
     },
     /**
@@ -614,7 +699,16 @@ export default {
       const s = Math.min(aw / 1600, ah / 1000)
       this.marco = { w: Math.floor(1600 * s), h: Math.floor(1000 * s) }
     },
+    zoom_plano(factor) {
+      this.$refs.plano.zoom_centrado(factor)
+    },
+    restablecer_plano() {
+      this.$refs.plano.ajustar_camara(true)
+    },
     on_camara(id) {
+      if (id === this.camara) {
+        this.restablecer_plano()
+      }
       this.camara = id
       this.camara_elegida = true
     },
@@ -808,6 +902,36 @@ export default {
   flex-shrink: 0;
   max-width: 100%;
 }
+.ell-zoom {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: #101c28;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+.ell-zoom button {
+  min-width: 36px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #fff;
+  font: 600 18px/1 Geist, system-ui, sans-serif;
+}
+.ell-zoom button:hover {
+  background: #304156;
+}
+.ell-zoom button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -2px;
+}
+.ell-zoom .bi {
+  font-size: 13px;
+}
 .ell-cargando {
   position: absolute;
   inset: 0;
@@ -874,36 +998,59 @@ export default {
 }
 .ell-bandeja__item {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 2px 8px;
+  gap: 5px;
   padding: 8px 6px;
   border-radius: 10px;
 }
 .ell-bandeja__item + .ell-bandeja__item {
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
-.ell-bandeja__tipo {
-  grid-row: span 2;
-  align-self: start;
-  font-size: 10.5px;
-  font-weight: 700;
-  color: #fff;
-  padding: 2px 8px;
-  border-radius: 999px;
-  white-space: nowrap;
-}
 .ell-bandeja__titulo {
-  color: #fff;
-  text-decoration: none;
-  overflow-wrap: anywhere;
+  padding: 0;
   min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-weight: 600;
+  text-align: left;
+  overflow-wrap: anywhere;
 }
-a.ell-bandeja__titulo:hover {
+.ell-bandeja__titulo:enabled:hover {
   text-decoration: underline;
 }
-.ell-bandeja__hace {
-  color: #8fa0b8;
+.ell-bandeja__titulo .bi {
+  margin-left: 4px;
+  color: #a9d2ff;
+  font-size: 11px;
+}
+.ell-bandeja__titulo:disabled {
+  opacity: 0.72;
+}
+.ell-bandeja__acciones {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+.ell-bandeja__ver {
+  padding: 4px 8px;
+  border: 1px solid #50647d;
+  border-radius: 6px;
+  color: #e5edf8;
+  text-decoration: none;
+}
+.ell-bandeja__ver:hover {
+  background: #304156;
+  color: #fff;
+}
+.ell-bandeja__hace,
+.ell-bandeja__estado,
+.ell-bandeja__error {
+  color: #aab9cf;
   font-size: 11.5px;
+}
+.ell-bandeja__error {
+  color: #ffc5c5;
 }
 
 /* ---------- Cámaras (solo en vertical) ---------- */

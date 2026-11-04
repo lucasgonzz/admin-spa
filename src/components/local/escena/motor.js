@@ -34,6 +34,9 @@ const PASO_MS = 50
 /** Lo máximo que se recupera de golpe después de un tiempo en segundo plano. */
 const RECUPERO_MAX_MS = 20000
 
+/** Máximo acercamiento con respecto al encuadre del local entero. */
+const ZOOM_MAXIMO = 5
+
 /**
  * Personaje de la escena (robot o negocio).
  */
@@ -658,28 +661,63 @@ export class Motor {
       y = Math.max(0, Math.min(H - h, y))
     }
     const destino = [x, y, w, h]
-    const svg = this.svg
-    const self = this
-    const aplicar = function (vb) {
-      self.vb = vb
-      svg.setAttribute('viewBox', vb.map(function (n) {
-        return n.toFixed(1)
-      }).join(' '))
+    this.cancelar_camara()
+    if (!animar || this.reducido || !this.raf) {
+      this.aplicar_camara(destino)
+      return
     }
+    const origen = this.vb.slice()
+    this.camTween = this.interpolar(380, (k) => {
+      const e = 1 - Math.pow(1 - k, 3)
+      this.aplicar_camara(origen.map((v, i) => v + (destino[i] - v) * e))
+    })
+  }
+
+  cancelar_camara() {
     if (this.camTween) {
       this.camTween.cancelado = true
       this.camTween = null
     }
-    if (!animar || this.reducido || !this.raf) {
-      aplicar(destino)
+  }
+
+  aplicar_camara(vb) {
+    this.vb = vb
+    this.svg.setAttribute('viewBox', vb.map((n) => n.toFixed(1)).join(' '))
+  }
+
+  /**
+   * Mueve el punto de la escena que está debajo de `origen` hasta `destino`, con zoom
+   * opcional. Los dos puntos están en píxeles de la ventana. Sirve tanto para la rueda
+   * (los dos puntos coinciden) como para arrastrar o pellizcar.
+   */
+  mover_camara(origen, destino, factor = 1) {
+    const matriz = this.svg.getScreenCTM()
+    if (!matriz || !Number.isFinite(factor) || factor <= 0) {
       return
     }
-    const origen = this.vb.slice()
-    this.camTween = this.interpolar(380, function (k) {
-      const e = 1 - Math.pow(1 - k, 3)
-      aplicar(origen.map(function (v, i) {
-        return v + (destino[i] - v) * e
-      }))
-    })
+    const inversa = matriz.inverse()
+    const punto = this.svg.createSVGPoint()
+    punto.x = origen.x
+    punto.y = origen.y
+    const ancla = punto.matrixTransform(inversa)
+    punto.x = destino.x
+    punto.y = destino.y
+    const objetivo = punto.matrixTransform(inversa)
+    const [x, y, w, h] = this.vb
+    const ancho_total = Math.max(W, H * w / h)
+    const ancho = Math.max(ancho_total / ZOOM_MAXIMO, Math.min(ancho_total, w * factor))
+    const escala = ancho / w
+    const alto = h * escala
+    const ajustar = (inicio, largo, total) => largo >= total
+      ? (total - largo) / 2
+      : Math.max(0, Math.min(total - largo, inicio))
+
+    this.cancelar_camara()
+    this.aplicar_camara([
+      ajustar(ancla.x - (objetivo.x - x) * escala, ancho, W),
+      ajustar(ancla.y - (objetivo.y - y) * escala, alto, H),
+      ancho,
+      alto,
+    ])
   }
 }

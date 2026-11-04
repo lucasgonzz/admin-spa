@@ -10,8 +10,17 @@
     class="ell-svg"
     viewBox="0 0 1600 1000"
     preserveAspectRatio="xMidYMid meet"
-    role="img"
-    aria-label="El local: el mostrador con los agentes de IA, los negocios clientes y las oficinas"
+    role="group"
+    tabindex="0"
+    aria-label="Plano de El local. Usá más y menos para el zoom, las flechas para moverlo y cero para restablecer la vista."
+    @wheel.prevent="on_rueda"
+    @pointerdown="on_puntero_abajo"
+    @pointermove="on_puntero_mover"
+    @pointerup="on_puntero_fin"
+    @pointercancel="on_puntero_fin"
+    @lostpointercapture="on_puntero_fin"
+    @click.capture="on_clic_plano"
+    @keydown.self="on_tecla_plano"
   />
 </template>
 
@@ -46,6 +55,7 @@ export default {
   },
   mounted() {
     const svg = this.$refs.svg
+    this.punteros = new Map()
     svg.insertAdjacentHTML('beforeend', defs())
     /* Capas, de atrás hacia adelante: escenografía; robots detrás del mostrador y de los
        escritorios; mostrador y escritorios (tapan los pies de quien está detrás); los que andan
@@ -104,6 +114,90 @@ export default {
       const rect = CAMARAS[this.camara] || CAMARAS.todo
       this.motor.setCam(rect, this.aspecto, animar)
     },
+    centro_plano() {
+      const { left, top, width, height } = this.$refs.svg.getBoundingClientRect()
+      return { x: left + width / 2, y: top + height / 2 }
+    },
+    zoom_centrado(factor) {
+      const centro = this.centro_plano()
+      this.motor.mover_camara(centro, centro, factor)
+    },
+    on_rueda(ev) {
+      const punto = { x: ev.clientX, y: ev.clientY }
+      const delta = ev.deltaY * (ev.deltaMode === 0 ? 1 : 16)
+      const factor = Math.exp(Math.max(-0.35, Math.min(0.35, delta * 0.002)))
+      this.motor.mover_camara(punto, punto, factor)
+    },
+    on_puntero_abajo(ev) {
+      if (ev.button !== 0) {
+        return
+      }
+      const punto = { x: ev.clientX, y: ev.clientY }
+      if (!this.punteros.size) {
+        this.origen_puntero = punto
+        this.movio_puntero = false
+      } else {
+        this.movio_puntero = true
+      }
+      this.punteros.set(ev.pointerId, punto)
+      // Capturar en el nodo tocado mantiene el clic de la bandeja si el puntero no se arrastra.
+      ev.target.setPointerCapture(ev.pointerId)
+    },
+    gesto_actual() {
+      const [a, b] = this.punteros.values()
+      if (!b) {
+        return { centro: a, distancia: 0 }
+      }
+      return {
+        centro: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+        distancia: Math.hypot(a.x - b.x, a.y - b.y),
+      }
+    },
+    on_puntero_mover(ev) {
+      if (!this.punteros.has(ev.pointerId)) {
+        return
+      }
+      const antes = this.gesto_actual()
+      this.punteros.set(ev.pointerId, { x: ev.clientX, y: ev.clientY })
+      const ahora = this.gesto_actual()
+      let origen = antes.centro
+      if (!this.movio_puntero) {
+        origen = this.origen_puntero
+        if (Math.hypot(ahora.centro.x - origen.x, ahora.centro.y - origen.y) < 5) {
+          return
+        }
+        this.movio_puntero = true
+      }
+      const factor = antes.distancia > 0 && ahora.distancia > 0 ? antes.distancia / ahora.distancia : 1
+      this.motor.mover_camara(origen, ahora.centro, factor)
+    },
+    on_puntero_fin(ev) {
+      this.punteros.delete(ev.pointerId)
+    },
+    on_clic_plano(ev) {
+      if (this.movio_puntero && ev.detail > 0) {
+        ev.preventDefault()
+        ev.stopPropagation()
+      }
+    },
+    on_tecla_plano(ev) {
+      const paso = 48
+      const direcciones = { ArrowUp: [0, paso], ArrowDown: [0, -paso], ArrowLeft: [paso, 0], ArrowRight: [-paso, 0] }
+      const direccion = direcciones[ev.key]
+      if (direccion) {
+        const centro = this.centro_plano()
+        this.motor.mover_camara(centro, { x: centro.x + direccion[0], y: centro.y + direccion[1] })
+      } else if (ev.key === '+' || ev.key === '=') {
+        this.zoom_centrado(0.8)
+      } else if (ev.key === '-') {
+        this.zoom_centrado(1.25)
+      } else if (ev.key === '0') {
+        this.ajustar_camara(true)
+      } else {
+        return
+      }
+      ev.preventDefault()
+    },
     /** Tocar la bandeja «Para Lucas» abre la lista de lo que espera. */
     on_bandeja() {
       this.$emit('bandeja')
@@ -128,6 +222,15 @@ export default {
   font-family: Geist, Inter, system-ui, sans-serif;
   user-select: none;
   -webkit-user-select: none;
+  touch-action: none;
+  cursor: grab;
+}
+.ell-svg:active {
+  cursor: grabbing;
+}
+.ell-svg:focus-visible {
+  outline: 2px solid #0b84f8;
+  outline-offset: -3px;
 }
 
 /* ---------- Animación de los personajes (portada tal cual del prototipo) ---------- */

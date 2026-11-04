@@ -506,7 +506,7 @@ export function capaMedio() {
 	<g data-ref="bandeja-notas"></g>
 	<g data-ref="bandeja-badge" transform="translate(28,-30)"><g class="badge-pop"><circle r="12" fill="#FA7E06" stroke="#fff" stroke-width="3"/><text data-ref="bandeja-cuenta" y="4.5" text-anchor="middle" font-size="13" font-weight="800" fill="#fff">0</text></g></g>
 	<text x="0" y="36" text-anchor="middle" font-size="12" font-weight="700" fill="#fff" letter-spacing="1.5">PARA LUCAS</text>
-	<text x="0" y="49" text-anchor="middle" font-size="9.5" fill="#8FA0B8">casos delegados · misiones</text>
+	<text x="0" y="49" text-anchor="middle" font-size="9.5" fill="#8FA0B8">misiones por iniciar</text>
 </g>`
   // escritorio del planificador (fijo) y las mesas de los slots (vivas)
   s += mesa({ x: 120, w: 200 }, 452, 'PLANIFICADOR', null)
