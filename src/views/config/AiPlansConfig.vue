@@ -3,7 +3,7 @@
     <!-- Encabezado -->
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
       <div>
-        <h2 class="h4 mb-1">Paquetes de IA</h2>
+        <h2 class="h4 mb-1">Paquetes de IA para el chat</h2>
         <p class="text-muted small mb-0">
           Los planes de suscripción de IA ($100 / $200 / $400, tentativos). Cada paquete define los
           topes de gasto y de tokens por mes y de interacciones por día que se le envían al sistema
@@ -242,11 +242,13 @@
         </div>
       </div>
     </template>
+    <AiImagePlansConfig />
   </div>
 </template>
 
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
+import AiImagePlansConfig from './AiImagePlansConfig.vue'
 
 /**
  * Configuración de paquetes de IA (planes de suscripción) del admin.
@@ -277,6 +279,7 @@ import api, { resolve_error_message } from '@/utils/axios'
  */
 export default {
   name: 'ViewAiPlansConfig',
+  components: { AiImagePlansConfig },
 
   data() {
     return {

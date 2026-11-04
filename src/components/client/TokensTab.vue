@@ -17,7 +17,7 @@
       <!-- ============================================================ -->
       <div class="card border-0 tokens-panel mb-4">
         <div class="card-body">
-          <p class="tokens-panel__titulo mb-3">Paquete de IA</p>
+          <p class="tokens-panel__titulo mb-3">Paquete de IA para el chat</p>
 
           <div v-if="cargando_paquetes" class="text-muted small">
             <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" />
@@ -145,6 +145,8 @@
           </template>
         </div>
       </div>
+
+      <ImagePlanCard :key="record.id" :client-id="record.id" />
 
     <!-- Carga inicial -->
     <div v-if="loading" class="text-center py-4">
@@ -534,6 +536,7 @@
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
 import { nombre_proveedor, nombre_pensamiento } from '@/utils/ia'
+import ImagePlanCard from './ImagePlanCard.vue'
 
 /**
  * Pestaña "Tokens" del detalle del cliente (admin-spa).
@@ -565,6 +568,7 @@ import { nombre_proveedor, nombre_pensamiento } from '@/utils/ia'
  */
 export default {
   name: 'ClientTokensTab',
+  components: { ImagePlanCard },
   props: {
     /** Cliente actualmente abierto en el modal de detalle de ResourceView. */
     record: { type: Object, default: null },
