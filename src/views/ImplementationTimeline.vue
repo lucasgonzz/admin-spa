@@ -1,20 +1,6 @@
 <template>
   <section class="timeline-page" aria-labelledby="timeline-title">
-    <header class="timeline-header">
-      <div>
-        <p class="timeline-eyebrow"><i class="bi bi-bezier2" aria-hidden="true"></i> Seguimiento de negocios</p>
-        <h1 id="timeline-title">Implementaciones</h1>
-        <p class="timeline-intro">Revisá el avance de gestión, ecommerce y agentes en una misma línea de tiempo.</p>
-      </div>
-      <nav class="timeline-actions" aria-label="Operación de implementaciones">
-        <RouterLink :to="{ name: 'implementations_sistema' }" class="btn btn-sm btn-outline-secondary">
-          Gestionar sistema <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
-        </RouterLink>
-        <RouterLink :to="{ name: 'implementations_ecommerce' }" class="btn btn-sm btn-outline-secondary">
-          Gestionar ecommerce <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
-        </RouterLink>
-      </nav>
-    </header>
+    <h1 id="timeline-title" class="visually-hidden">Implementaciones</h1>
 
     <p v-if="loading" class="timeline-empty" role="status">Cargando implementaciones…</p>
     <div v-else-if="error" class="timeline-empty">
@@ -34,9 +20,9 @@
             <i class="legend-dot" :class="'stage--' + state" aria-hidden="true"></i>{{ states[state] }}
           </span>
         </div>
-        <div v-if="undated_width" class="timeline-jumps" aria-label="Desplazamiento por la línea de tiempo">
-          <button type="button" class="btn btn-sm btn-link" @click="scroll_to(false)">Ver fechas</button>
-          <button type="button" class="btn btn-sm btn-link" @click="scroll_to(true)">Etapas sin fecha <i class="bi bi-arrow-right" aria-hidden="true"></i></button>
+        <div class="timeline-scale btn-group btn-group-sm" role="group" aria-label="Escala de fechas">
+          <button type="button" class="btn btn-outline-secondary" :aria-pressed="scale === 'activity'" @click="scale = 'activity'">Solo días con actividad</button>
+          <button type="button" class="btn btn-outline-secondary" :aria-pressed="scale === 'daily'" @click="scale = 'daily'">Todos los días</button>
         </div>
       </div>
       <p class="timeline-hint">
@@ -47,21 +33,22 @@
       <p v-if="!visible_businesses.length" class="timeline-empty">No hay negocios que coincidan con la búsqueda.</p>
       <div
         v-else
-        ref="timeline_scroll"
+        :ref="observe_timeline"
         class="timeline-scroll"
         role="region"
         aria-label="Línea de tiempo por negocio"
         tabindex="0"
-        :style="{ '--dates-width': axis.width + 'px', '--undated-width': undated_width + 'px' }"
+        :style="{ '--dates-width': axis.width + 'px', '--day-width': day_width + 'px', '--undated-width': undated_width + 'px' }"
+        @scroll.passive="update_scroll"
       >
         <div class="timeline-grid timeline-axis">
           <div class="timeline-sticky">Negocio</div>
           <div class="timeline-dates">
-            <span v-for="tick in axis.ticks" :key="tick.day" class="timeline-tick" :style="{ left: tick.x + 'px' }" :title="tick.full_label">
+            <span v-for="tick in visible_ticks" :key="tick.day" class="timeline-tick" :style="{ left: tick.x + 'px' }" :title="tick.full_label">
               {{ tick.label }}
             </span>
           </div>
-          <div v-if="undated_width" class="undated-heading">Etapas sin fecha</div>
+          <div v-if="undated_width" class="undated-heading">Sin fecha registrada</div>
         </div>
 
         <article v-for="business in visible_businesses" :key="business.id" class="timeline-business">
@@ -88,9 +75,8 @@
               </div>
             </div>
             <div class="timeline-dates branch-history">
-              <span v-for="tick in axis.ticks" :key="tick.day" class="branch-gridline" :style="{ left: tick.x + 'px' }" aria-hidden="true"></span>
               <span v-if="branch.start !== null" class="branch-start" :style="{ left: branch.start + 'px' }" :title="'Inicio: ' + format_date(branch.created_at)" aria-hidden="true"></span>
-              <span class="branch-line" aria-hidden="true" :style="{ left: (branch.line_start ?? 0) + 'px' }"></span>
+              <span v-if="branch.line_start !== null" class="branch-line" aria-hidden="true" :style="{ left: branch.line_start + 'px', width: (branch.line_end - branch.line_start) + 'px' }"></span>
               <span
                 v-for="stage in branch.offset_stages"
                 :key="stage.number"
@@ -106,6 +92,11 @@
                 type="button"
                 :style="{ left: stage.x + 'px', '--stage-offset': stage.offset + 'px' }"
                 :aria-label="stage.name + ' · ' + states[stage.state]"
+                :aria-describedby="tooltip?.stage.key === stage.key ? 'implementation-stage-tooltip' : undefined"
+                @pointerenter="open_stage_tooltip($event, stage)"
+                @pointerleave="leave_stage_tooltip"
+                @focus="open_stage_tooltip($event, stage)"
+                @blur="leave_stage_tooltip"
                 @click="show_stage(business, branch, stage)"
               >
                 <span class="stage-marker"><i class="bi" :class="stage.icon" aria-hidden="true"></i></span>
@@ -120,6 +111,11 @@
                 :class="'stage--' + stage.state"
                 type="button"
                 :aria-label="stage.name + ' · ' + states[stage.state]"
+                :aria-describedby="tooltip?.stage.key === stage.key ? 'implementation-stage-tooltip' : undefined"
+                @pointerenter="open_stage_tooltip($event, stage)"
+                @pointerleave="leave_stage_tooltip"
+                @focus="open_stage_tooltip($event, stage)"
+                @blur="leave_stage_tooltip"
                 @click="show_stage(business, branch, stage)"
               >
                 <span class="stage-marker"><i class="bi" :class="stage.icon" aria-hidden="true"></i></span>
@@ -130,6 +126,28 @@
         </article>
       </div>
     </template>
+
+    <Teleport to="body">
+      <div
+        v-if="tooltip"
+        id="implementation-stage-tooltip"
+        ref="stage_tooltip"
+        class="stage-tooltip"
+        role="tooltip"
+        :style="tooltip_position"
+        @pointerenter="cancel_tooltip_close"
+        @pointerleave="leave_stage_tooltip"
+      >
+        <strong>{{ tooltip.stage.name }}</strong>
+        <dl v-if="tooltip_dates.length">
+          <template v-for="entry in tooltip_dates" :key="entry.key">
+            <dt>{{ entry.label }}</dt>
+            <dd>{{ format_date(entry.at) }}</dd>
+          </template>
+        </dl>
+        <span v-else>Sin fecha registrada</span>
+      </div>
+    </Teleport>
 
     <dialog ref="stage_dialog" class="stage-dialog" aria-labelledby="stage-dialog-title" @close="detail = null" @click.self="$refs.stage_dialog.close()">
       <div v-if="detail" class="stage-dialog-body">
@@ -148,7 +166,7 @@
               <RouterLink v-if="entry.ticket" :to="{ name: 'support_ticket_conversation', params: { ticket_id: entry.ticket } }" @click="$refs.stage_dialog.close()">
                 Ver ticket #{{ entry.ticket }} <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
               </RouterLink>
-              <span v-if="!entry.ticket && !entry.source" class="evidence-missing">{{ entry.empty }}</span>
+              <span v-if="entry.empty && !entry.ticket && !entry.source" class="evidence-missing">{{ entry.empty }}</span>
             </dd>
           </template>
         </dl>
@@ -168,7 +186,14 @@ const TYPES = {
 const TYPE_ORDER = Object.keys(TYPES)
 const STATES = { pending: 'Pendiente', sent: 'Información enviada', completed: 'Completada', skipped: 'Omitida' }
 const BRANCH_STATES = { pending: 'Pendiente', completed: 'Completada', paused: 'Pausada', cancelled: 'Cancelada' }
+const STAGE_DATES = [
+  { key: 'started', label: 'Inicio', field: 'started_at' },
+  { key: 'sent', label: 'Información enviada', field: 'sent_at' },
+  { key: 'completed', label: 'Finalización', field: 'completed_at' },
+]
 const DAY_MS = 86400000
+const DAY_WIDTH = 118
+const STAGE_HEIGHT = 90
 const AR_TIME_ZONE = 'America/Argentina/Buenos_Aires'
 const day_format = new Intl.DateTimeFormat('es-AR', { timeZone: AR_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' })
 const tick_format = new Intl.DateTimeFormat('es-AR', { timeZone: 'UTC', day: 'numeric', month: 'short', year: '2-digit' })
@@ -192,64 +217,52 @@ function state_for(stage) {
   return stage.sent_at || stage.sent_ticket_id || stage.sent_source ? 'sent' : 'pending'
 }
 
-function stage_day(stage) {
-  return day(stage.status === 'completed' ? stage.completed_at : stage.sent_at)
+function stage_dates(stage) {
+  return STAGE_DATES.map((entry) => ({ ...entry, at: stage[entry.field] }))
 }
 
-function make_axis(businesses) {
-  const days = []
-  for (const business of businesses) {
-    for (const branch of business.implementations) {
-      days.push(day(branch.created_at), ...branch.stages.map(stage_day))
-    }
+function make_axis(days, scale) {
+  const first = days[0]
+  const last = days[days.length - 1]
+  const daily = scale === 'daily'
+  const count = days.length && daily ? last - first + 1 : days.length
+  const day_indexes = new Map(days.map((date, index) => [date, index]))
+  const index_for = (date) => daily ? date - first : day_indexes.get(date)
+  return {
+    count,
+    width: count * DAY_WIDTH,
+    multiple_years: new Date(first * DAY_MS).getUTCFullYear() !== new Date(last * DAY_MS).getUTCFullYear(),
+    day_at: (index) => daily ? first + index : days[index],
+    x: (date) => (index_for(date) + 0.5) * DAY_WIDTH,
+    closest_index: (date) => {
+      if (!Number.isFinite(date) || count === 0) return 0
+      if (daily) return Math.min(count - 1, Math.max(0, index_for(date)))
+      const next = days.findIndex((day) => day >= date)
+      return next === -1 ? count - 1 : next
+    },
   }
-  const recorded_days = days.filter(Number.isFinite)
-  const first = recorded_days.length ? Math.min(...recorded_days) : day(new Date().toISOString())
-  const span = Math.max(6, recorded_days.length ? Math.max(...recorded_days) - first : 0)
-  const width = Math.min(880, Math.max(500, span * 24))
-  const padding = 56
-  const x = (point) => padding + (point - first) * (width - padding * 2) / span
-  const multiple_years = new Date(first * DAY_MS).getUTCFullYear() !== new Date((first + span) * DAY_MS).getUTCFullYear()
-  const ticks = Array.from({ length: 5 }, (_, index) => {
-    const point = first + Math.round(index * span / 4)
-    const date = point * DAY_MS
-    const parts = Object.fromEntries(tick_format.formatToParts(date).map(({ type, value }) => [type, value]))
-    const label = parts.day + ' ' + parts.month + (multiple_years ? ' ' + parts.year : '')
-    return { day: point, x: x(point), label, full_label: full_tick_format.format(date) }
-  })
-  return { width, x, ticks }
 }
 
 function make_branch(branch, axis) {
-  const kind = TYPES[branch.type]
-  const created_day = day(branch.created_at)
-  const stages = branch.stages.map((stage) => ({
-    ...stage,
-    state: state_for(stage),
-    day: stage_day(stage),
-    icon: 'bi-' + (kind.stages[stage.number - 1] || 'circle'),
-  }))
-  const lanes = []
-  const dated = stages.filter((stage) => Number.isFinite(stage.day)).sort((left, right) => left.day - right.day)
-  for (const stage of dated) {
-    stage.x = axis.x(stage.day)
-    // Los hitos del mismo día mantienen la misma X y se apilan para que todos puedan abrirse.
-    const available_lane = lanes.findIndex((last_x) => stage.x - last_x >= 98)
-    const lane = available_lane === -1 ? lanes.length : available_lane
-    lanes[lane] = stage.x
-    stage.offset = lane * 78
-  }
-  const created_x = created_day === null ? null : axis.x(created_day)
+  const lanes = new Map()
+  const dated = branch.stages.filter((stage) => stage.day !== null).sort((left, right) => left.day - right.day).map((stage) => {
+    // Los hitos del mismo día mantienen la misma X. Se apilan sin representar el orden horario.
+    const lane = lanes.get(stage.day) ?? 0
+    lanes.set(stage.day, lane + 1)
+    return { ...stage, x: axis.x(stage.day), offset: lane * STAGE_HEIGHT }
+  })
+  const created_x = branch.created_day === null ? null : axis.x(branch.created_day)
   return {
     ...branch,
     dated,
     offset_stages: dated.filter((stage) => stage.offset > 0),
-    undated: stages.filter((stage) => !Number.isFinite(stage.day)),
-    height: 90 + 78 * Math.max(0, lanes.length - 1),
+    undated: branch.stages.filter((stage) => stage.day === null),
+    height: STAGE_HEIGHT * Math.max(1, ...lanes.values()),
     start: created_x,
-    line_start: created_x === null ? dated[0]?.x ?? null : Math.min(created_x, dated[0]?.x ?? created_x),
-    completed_count: stages.filter((stage) => stage.state === 'completed').length,
-    required_count: stages.filter((stage) => stage.state !== 'skipped').length,
+    line_start: branch.activity_days.length ? axis.x(branch.activity_days[0]) : null,
+    line_end: branch.activity_days.length ? axis.x(branch.activity_days[branch.activity_days.length - 1]) : null,
+    completed_count: branch.stages.filter((stage) => stage.state === 'completed').length,
+    required_count: branch.stages.filter((stage) => stage.state !== 'skipped').length,
   }
 }
 
@@ -259,7 +272,24 @@ function search_key(value) {
 
 function normalize_businesses(businesses) {
   return businesses.map((business) => {
-    const implementations = business.implementations.filter((branch) => Object.hasOwn(TYPES, branch.type))
+    const implementations = business.implementations.filter((branch) => Object.hasOwn(TYPES, branch.type)).map((branch) => {
+      const kind = TYPES[branch.type]
+      const created_day = day(branch.created_at)
+      const activity_days = new Set()
+      if (created_day !== null) activity_days.add(created_day)
+      const stages = branch.stages.map((stage) => {
+        const dates = stage_dates(stage).map((entry) => day(entry.at)).filter(Number.isFinite)
+        dates.forEach((date) => activity_days.add(date))
+        return {
+          ...stage,
+          key: branch.type + '-' + branch.id + '-' + stage.number,
+          state: state_for(stage),
+          day: dates[dates.length - 1] ?? null,
+          icon: 'bi-' + (kind.stages[stage.number - 1] || 'circle'),
+        }
+      })
+      return { ...branch, created_day, activity_days: [...activity_days].sort((left, right) => left - right), stages }
+    })
     const newest = Math.max(0, ...implementations.map((branch) => timestamp(branch.created_at) ?? 0))
     implementations.sort((left, right) => TYPE_ORDER.indexOf(left.type) - TYPE_ORDER.indexOf(right.type))
     return { ...business, implementations, newest }
@@ -275,17 +305,47 @@ export default {
       types: TYPES,
       states: STATES,
       branch_states: BRANCH_STATES,
+      day_width: DAY_WIDTH,
       businesses: [],
       invalid_logos: {},
       search: '',
+      scale: 'activity',
       loading: true,
       error: false,
       detail: null,
+      timeline: null,
+      timeline_observer: null,
+      scroll_left: 0,
+      viewport_width: 0,
+      tooltip: null,
+      tooltip_position: { visibility: 'hidden' },
+      tooltip_timer: null,
     }
   },
   computed: {
+    activity_days() {
+      const days = new Set()
+      for (const business of this.businesses) {
+        for (const branch of business.implementations) branch.activity_days.forEach((day) => days.add(day))
+      }
+      return [...days].sort((left, right) => left - right)
+    },
     axis() {
-      return make_axis(this.businesses)
+      return make_axis(this.activity_days, this.scale)
+    },
+    visible_ticks() {
+      // El eje completo conserva su ancho. Solo se dibujan rótulos alrededor del área visible.
+      const start = Math.min(this.axis.count, Math.max(0, Math.floor(this.scroll_left / DAY_WIDTH) - 2))
+      const end = Math.min(this.axis.count, Math.ceil((this.scroll_left + this.viewport_width) / DAY_WIDTH) + 3)
+      const ticks = []
+      for (let index = start; index < end; index++) {
+        const day = this.axis.day_at(index)
+        const date = day * DAY_MS
+        const parts = Object.fromEntries(tick_format.formatToParts(date).map(({ type, value }) => [type, value]))
+        const label = parts.day + ' ' + parts.month + (this.axis.multiple_years ? ' ' + parts.year : '')
+        ticks.push({ day, x: this.axis.x(day), label, full_label: full_tick_format.format(date) })
+      }
+      return ticks
     },
     visible_businesses() {
       const query = search_key(this.search)
@@ -301,11 +361,15 @@ export default {
       for (const business of this.visible_businesses) {
         for (const branch of business.branches) count = Math.max(count, branch.undated.length)
       }
-      return count ? 22 + count * 98 : 0
+      return count ? 22 + count * DAY_WIDTH : 0
+    },
+    tooltip_dates() {
+      return this.tooltip ? stage_dates(this.tooltip.stage).filter((entry) => timestamp(entry.at) !== null) : []
     },
     evidence() {
       const stage = this.detail.stage
       return [
+        { key: 'started', label: 'Inicio', at: stage.started_at },
         {
           key: 'sent', label: 'Información enviada',
           at: stage.sent_at, source: stage.sent_source, ticket: stage.sent_ticket_id,
@@ -316,16 +380,33 @@ export default {
           at: stage.completed_at, source: stage.completed_source, ticket: stage.completed_ticket_id,
           empty: stage.state === 'completed' ? 'Origen sin registrar' : 'Sin finalización registrada',
         },
-      ]
+      ].filter((entry) => entry.key !== 'started' || timestamp(entry.at) !== null)
     },
   },
   watch: {
     search() {
-      this.$nextTick(() => this.scroll_to(false))
+      this.hide_stage_tooltip()
+      this.$nextTick(this.focus_latest_business)
+    },
+    scale(value, previous) {
+      const old_axis = make_axis(this.activity_days, previous)
+      const first_day = old_axis.day_at(Math.min(old_axis.count - 1, Math.floor(this.scroll_left / DAY_WIDTH)))
+      this.hide_stage_tooltip()
+      this.$nextTick(() => {
+        if (!this.timeline) return
+        this.timeline.scrollLeft = this.axis.closest_index(first_day) * DAY_WIDTH
+        this.update_scroll()
+      })
     },
   },
   mounted() {
     this.load()
+    window.addEventListener('keydown', this.dismiss_tooltip)
+  },
+  beforeUnmount() {
+    window.removeEventListener('keydown', this.dismiss_tooltip)
+    this.timeline_observer?.disconnect()
+    this.cancel_tooltip_close()
   },
   methods: {
     async load() {
@@ -340,34 +421,88 @@ export default {
         this.error = true
       } finally {
         this.loading = false
-        this.$nextTick(() => this.scroll_to(false))
+        this.$nextTick(this.focus_latest_business)
       }
     },
     initials(name) {
       return name.trim().split(/\s+/).slice(0, 2).map((word) => word.charAt(0)).join('').toUpperCase()
     },
-    scroll_to(undated) {
-      const timeline = this.$refs.timeline_scroll
+    observe_timeline(timeline) {
+      if (timeline === this.timeline) return
+      this.timeline_observer?.disconnect()
+      this.timeline = timeline
       if (!timeline) return
-      if (undated) {
-        timeline.scrollLeft = this.axis.width
-        return
-      }
+      this.timeline_observer = new ResizeObserver(this.update_scroll)
+      this.timeline_observer.observe(timeline)
+      this.update_scroll()
+    },
+    update_scroll() {
+      if (!this.timeline) return
+      this.scroll_left = this.timeline.scrollLeft
+      this.viewport_width = this.timeline.clientWidth
+      this.position_stage_tooltip()
+    },
+    focus_latest_business() {
+      const timeline = this.timeline
       const first_business = this.visible_businesses[0]
+      if (!timeline || !first_business) return
       const sticky_width = timeline.querySelector('.timeline-sticky').offsetWidth
-      const recorded_positions = first_business.branches.flatMap((branch) => [branch.start, ...branch.dated.map((stage) => stage.x)])
+      const recorded_positions = first_business.branches.map((branch) => branch.line_end)
       const recent_x = Math.max(0, ...recorded_positions.filter(Number.isFinite))
       const visible_dates_width = timeline.clientWidth - sticky_width
-      // Deja a la vista los hitos del negocio más reciente al abrir en una pantalla angosta.
-      timeline.scrollLeft = recent_x > visible_dates_width - 56 ? recent_x - visible_dates_width * 0.68 : 0
+      timeline.scrollLeft = recent_x > visible_dates_width - DAY_WIDTH / 2 ? recent_x - visible_dates_width * 0.68 : 0
+      timeline.scrollTop = 0
+      this.update_scroll()
     },
     format_date(value) {
       const date = timestamp(value)
       return date === null ? '' : detail_format.format(date)
     },
     show_stage(business, branch, stage) {
+      this.hide_stage_tooltip()
       this.detail = { business: business.name, branch: TYPES[branch.type].label, stage }
       this.$nextTick(() => this.$refs.stage_dialog?.showModal())
+    },
+    open_stage_tooltip(event, stage) {
+      const anchor = event.currentTarget
+      if (this.detail || event.pointerType === 'touch' || (event.type === 'focus' && !anchor.matches(':focus-visible'))) return
+      this.cancel_tooltip_close()
+      this.tooltip = { anchor, stage }
+      this.$nextTick(this.position_stage_tooltip)
+    },
+    leave_stage_tooltip(event) {
+      const anchor = this.tooltip?.anchor
+      if (!anchor || anchor.matches(':focus-visible') || (event.type === 'blur' && anchor.matches(':hover'))) return
+      this.cancel_tooltip_close()
+      this.tooltip_timer = setTimeout(this.hide_stage_tooltip, 140)
+    },
+    cancel_tooltip_close() {
+      clearTimeout(this.tooltip_timer)
+    },
+    hide_stage_tooltip() {
+      this.cancel_tooltip_close()
+      this.tooltip = null
+      this.tooltip_position = { visibility: 'hidden' }
+    },
+    dismiss_tooltip(event) {
+      if (event.key === 'Escape' && this.tooltip) this.hide_stage_tooltip()
+    },
+    position_stage_tooltip() {
+      const element = this.$refs.stage_tooltip
+      if (!this.tooltip || !element || !this.timeline) return
+      const anchor = this.tooltip.anchor.getBoundingClientRect()
+      const timeline = this.timeline.getBoundingClientRect()
+      const sticky = this.timeline.querySelector('.timeline-axis .timeline-sticky').getBoundingClientRect()
+      const center = (anchor.left + anchor.right) / 2
+      if (center < sticky.right || center > timeline.right || anchor.bottom < sticky.bottom || anchor.top > timeline.bottom) {
+        this.hide_stage_tooltip()
+        return
+      }
+      const margin = 8
+      const left = Math.max(margin, Math.min(center - element.offsetWidth / 2, window.innerWidth - element.offsetWidth - margin))
+      const above = anchor.top - element.offsetHeight - margin
+      const top = above >= margin ? above : Math.min(anchor.bottom + margin, window.innerHeight - element.offsetHeight - margin)
+      this.tooltip_position = { left: left + 'px', top: top + 'px' }
     },
   },
 }
@@ -379,20 +514,11 @@ export default {
   --muted: #52647c;
   --border: #dce5ef;
   --side-width: 206px;
-  color: var(--ink);
-  padding: clamp(14px, 2.3vw, 34px);
-}
-.timeline-header {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: end;
-  gap: 18px;
-  margin-bottom: 24px;
-  padding: clamp(16px, 2.2vw, 30px);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  background: linear-gradient(112deg, #edf5ff, #f7fafe 68%, #fff8ed);
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  color: var(--ink);
 }
 .timeline-eyebrow {
   margin: 0 0 7px;
@@ -400,22 +526,14 @@ export default {
   font-size: 0.76rem;
   font-weight: 700;
 }
-.timeline-header h1 {
-  margin: 0 0 7px;
-  font-size: clamp(1.6rem, 3vw, 2.25rem);
-  letter-spacing: -0.035em;
-}
-.timeline-intro { margin: 0; color: var(--muted); }
-.timeline-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.timeline-actions a { background: #fff; color: #344963; border-color: #bdcddd; }
-.timeline-actions a:hover { background: #eaf2fa; color: var(--ink); }
 .timeline-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .timeline-search { position: relative; width: min(100%, 290px); }
 .timeline-search i { position: absolute; left: 12px; top: 8px; color: var(--muted); }
 .timeline-search input { padding-left: 36px; border-color: var(--border); }
 .timeline-legend { display: flex; flex-wrap: wrap; gap: 7px 16px; }
-.timeline-jumps { display: flex; flex-wrap: wrap; gap: 8px; }
-.timeline-jumps button { padding: 0; text-decoration: none; }
+.timeline-scale button { background: #fff; color: #344963; border-color: #afc2d7; }
+.timeline-scale button:hover { background: #f0f5fb; color: #263e5e; }
+.timeline-scale button[aria-pressed='true'] { background: #e3eefc; color: #163d70; font-weight: 700; }
 .timeline-legend span, .stage-dialog-state { display: inline-flex; align-items: center; gap: 7px; font-size: 0.84rem; }
 .legend-dot {
   width: 11px;
@@ -428,7 +546,11 @@ export default {
 .timeline-hint { margin: 10px 0; color: var(--muted); font-size: 0.78rem; }
 .timeline-empty { padding: 36px 18px; text-align: center; color: var(--muted); border: 1px dashed var(--border); border-radius: 14px; }
 .timeline-scroll {
-  overflow-x: auto;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scroll-padding-top: 42px;
+  scroll-padding-left: var(--side-width);
   border: 1px solid var(--border);
   border-radius: 15px;
   background: white;
@@ -447,6 +569,9 @@ export default {
   border-right: 1px solid var(--border);
 }
 .timeline-axis {
+  position: sticky;
+  top: 0;
+  z-index: 4;
   min-height: 40px;
   background: #eff5fb;
   color: #455b76;
@@ -454,7 +579,10 @@ export default {
   font-weight: 700;
 }
 .timeline-axis .timeline-sticky, .undated-heading { padding: 12px 16px; background: #eff5fb; }
-.timeline-dates { position: relative; }
+.timeline-dates {
+  position: relative;
+  background-image: repeating-linear-gradient(to right, transparent 0 calc(var(--day-width) - 1px), #dce7f2 calc(var(--day-width) - 1px) var(--day-width));
+}
 .timeline-tick {
   position: absolute;
   top: 12px;
@@ -526,8 +654,7 @@ export default {
 .branch-name strong { color: var(--branch-ink); font-size: 0.82rem; }
 .branch-name small { color: var(--muted); font-size: 0.72rem; }
 .branch-name .branch-state { font-weight: 700; }
-.branch-gridline { position: absolute; top: 0; bottom: 0; border-left: 1px solid #eaf0f7; }
-.branch-line { position: absolute; top: 28px; right: 0; border-top: 2px solid var(--branch-color); }
+.branch-line { position: absolute; top: 28px; border-top: 2px solid var(--branch-color); }
 .branch-connector { position: absolute; top: 28px; border-left: 2px solid var(--branch-color); }
 .branch-start {
   position: absolute;
@@ -562,8 +689,8 @@ export default {
   align-items: center;
   flex-direction: column;
   gap: 4px;
-  width: 98px;
-  flex: 0 0 98px;
+  width: calc(var(--day-width) - 12px);
+  flex: 0 0 var(--day-width);
   padding: 0 3px;
   border: 0;
   background: none;
@@ -588,8 +715,12 @@ export default {
 }
 .stage-button:hover .stage-marker { box-shadow: 0 0 0 4px color-mix(in srgb, var(--stage-color) 23%, transparent); }
 .stage-label {
-  max-width: 92px;
+  display: -webkit-box;
+  max-width: 100%;
   padding: 1px 3px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
   border-radius: 3px;
   background: #ffffffef;
   font-size: 0.71rem;
@@ -598,6 +729,22 @@ export default {
   overflow-wrap: anywhere;
 }
 .branch-undated .stage-label { background: #f8fafc; }
+.stage-tooltip {
+  position: fixed;
+  z-index: 1050;
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 9px 12px;
+  border: 1px solid #38506b;
+  border-radius: 9px;
+  background: #17243a;
+  color: #fff;
+  box-shadow: 0 4px 14px #17243a33;
+  font-size: 0.78rem;
+}
+.stage-tooltip strong { display: block; margin-bottom: 3px; }
+.stage-tooltip dl { display: grid; grid-template-columns: auto auto; gap: 2px 8px; margin: 0; }
+.stage-tooltip dt { font-weight: 600; }
+.stage-tooltip dd { margin: 0; }
 .stage-dialog {
   width: min(480px, calc(100% - 24px));
   max-height: calc(100% - 24px);
@@ -619,7 +766,7 @@ export default {
 @media (max-width: 767px) {
   .timeline-page { --side-width: 126px; }
   .timeline-toolbar { gap: 10px; }
-  .timeline-legend span, .timeline-jumps button { font-size: 0.76rem; }
+  .timeline-legend span, .timeline-scale button { font-size: 0.76rem; }
   .timeline-hint { line-height: 1.3; }
   .business-identity { padding-inline: 8px; gap: 6px; }
   .business-identity img, .business-avatar { width: 28px; height: 28px; flex-basis: 28px; }
