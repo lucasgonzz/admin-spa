@@ -411,28 +411,25 @@ const routes_def = [
     meta: { requiresAuth: true, nav: false },
   },
   {
-    // Ítem padre con submenú: Sistema / Ecommerce. Redirige a Sistema por compatibilidad.
     path: '/implementaciones',
     name: 'implementations',
     text: 'Implementaciones',
-    redirect: '/implementaciones/sistema',
+    component: () => import('@/views/ImplementationTimeline.vue'),
     meta: { requiresAuth: true, nav: true, icon: 'gear' },
-    children: [
-      {
-        path: '/implementaciones/sistema',
-        name: 'implementations_sistema',
-        text: 'Sistema',
-        component: () => import('@/views/Implementations.vue'),
-        meta: { requiresAuth: true, nav: false },
-      },
-      {
-        path: '/implementaciones/ecommerce',
-        name: 'implementations_ecommerce',
-        text: 'Ecommerce',
-        component: () => import('@/views/EcommerceImplementations.vue'),
-        meta: { requiresAuth: true, nav: false },
-      },
-    ],
+  },
+  {
+    path: '/implementaciones/sistema',
+    name: 'implementations_sistema',
+    text: 'Gestión de implementaciones',
+    component: () => import('@/views/Implementations.vue'),
+    meta: { requiresAuth: true, nav: false },
+  },
+  {
+    path: '/implementaciones/ecommerce',
+    name: 'implementations_ecommerce',
+    text: 'Gestión de ecommerce',
+    component: () => import('@/views/EcommerceImplementations.vue'),
+    meta: { requiresAuth: true, nav: false },
   },
   {
     // Ítem padre con submenú: Sistema / Ecommerce (Grupo 190, Prompt 02), calcado del
