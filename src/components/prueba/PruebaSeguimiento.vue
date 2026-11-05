@@ -15,6 +15,48 @@
     <p v-else-if="datos && datos.armando" class="text-muted small mb-3">{{ datos.mensaje }}</p>
 
     <div v-else-if="datos && datos.es_prueba" class="row g-3 mb-3">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-body">
+            <label class="form-label fw-semibold mb-1" :for="cupo_input_id">Cupo de imágenes automáticas</label>
+            <template v-if="datos.imagenes">
+              <p class="text-muted small mb-2">
+                {{ datos.imagenes.usadas }} búsquedas usadas · {{ datos.imagenes.restantes }} disponibles.
+                El cupo es para toda la prueba. Cambiarlo conserva las búsquedas ya usadas.
+              </p>
+              <div class="row g-2 align-items-center">
+                <div class="col-12 col-sm-auto">
+                  <input
+                    :id="cupo_input_id"
+                    v-model.number="cupo_total"
+                    type="number"
+                    class="form-control form-control-sm"
+                    min="0"
+                    max="10000"
+                    step="1"
+                    :disabled="guardando_cupo"
+                  />
+                </div>
+                <div class="col-12 col-sm-auto">
+                  <button
+                    type="button"
+                    class="btn btn-primary btn-sm"
+                    :disabled="guardando_cupo || avisando || !cupo_valido"
+                    @click="guardar_cupo"
+                  >
+                    {{ guardando_cupo ? 'Guardando...' : 'Guardar cupo' }}
+                  </button>
+                </div>
+              </div>
+            </template>
+            <p v-else class="text-muted small mb-0">
+              {{ cupo_sin_datos }}
+            </p>
+            <p v-if="cupo_error" class="text-danger small mt-2 mb-0" role="alert">{{ cupo_error }}</p>
+            <p v-if="cupo_guardado" class="text-success small mt-2 mb-0" role="status">Cupo guardado.</p>
+          </div>
+        </div>
+      </div>
       <!-- ============================================================ -->
       <!-- Hitos                                                         -->
       <!-- ============================================================ -->
@@ -93,12 +135,12 @@
               <button
                 type="button"
                 class="btn btn-outline-primary btn-sm flex-grow-1"
-                :disabled="avisando"
+                :disabled="avisando || guardando_cupo"
                 @click="avisar_a_tomas"
               >
                 {{ avisando ? 'Avisando...' : 'Avisar a Tomás' }}
               </button>
-              <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="loading" @click="cargar">
+              <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="loading || guardando_cupo" @click="cargar">
                 Actualizar
               </button>
             </div>
@@ -124,7 +166,8 @@ import api, { resolve_error_message } from '@/utils/axios'
  * Muestra en qué hito va el negocio (leído EN VIVO de su sistema por el admin, con los eventos
  * recibidos como respaldo), en qué día de la prueba está, qué WhatsApps de la prueba le salieron (la
  * bienvenida de Martín y los empujones) y el botón «Avisar a Tomás». El estado, la URL, la instancia y
- * los días editables los muestra la solapa que lo monta: acá no se repiten.
+ * los días editables los muestra la solapa que lo monta. El cupo de imágenes se lee de la misma
+ * consulta al sistema del negocio.
  *
  * Sirve para los dos modales: `model_name` (`client` | `lead`) decide a qué ruta pedirle
  * (`admin/client/{id}/prueba/seguimiento` o `admin/lead/{id}/prueba/seguimiento`). Solo usa `record`.
@@ -144,13 +187,31 @@ export default {
       datos: null,
       avisando: false,
       aviso_resultado: null,
+      cupo_total: null,
+      guardando_cupo: false,
+      cupo_error: null,
+      cupo_guardado: false,
     }
   },
   computed: {
     /** Base de las rutas según el modelo abierto. */
     base_url() {
       const prefijo = this.model_name === 'lead' ? 'lead' : 'client'
-      return '/' + prefijo + '/' + this.record.id + '/prueba'
+      return this.record && this.record.id ? '/' + prefijo + '/' + this.record.id + '/prueba' : null
+    },
+    cupo_input_id() {
+      return 'prueba-cupo-imagenes-' + this.model_name + '-' + this.record.id
+    },
+    cupo_valido() {
+      return this.datos && this.datos.imagenes
+        && Number.isInteger(this.cupo_total) && this.cupo_total >= 0 && this.cupo_total <= 10000
+        && this.cupo_total !== this.datos.imagenes.tope
+    },
+    cupo_sin_datos() {
+      if (!this.datos.cupo_imagenes_estado || this.datos.cupo_imagenes_estado === 'version_vieja') {
+        return 'Disponible cuando se actualice el sistema del negocio.'
+      }
+      return 'No se pudo consultar el cupo en el sistema del negocio. Probá actualizar la prueba.'
     },
     /** Cuántos hitos ya pasaron. */
     hitos_hechos() {
@@ -163,10 +224,11 @@ export default {
     },
   },
   watch: {
-    'record.id': {
+    base_url: {
       immediate: true,
-      handler(id) {
-        if (id) {
+      handler(ruta) {
+        this.guardando_cupo = false
+        if (ruta) {
           this.cargar()
         }
       },
@@ -175,21 +237,64 @@ export default {
   methods: {
     /** Trae el seguimiento (le pega en vivo al sistema del negocio). */
     cargar() {
-      if (!this.record || !this.record.id) {
+      const ruta = this.base_url
+      if (!ruta) {
         return
       }
       this.loading = true
       this.load_error = null
+      this.cupo_error = null
+      this.cupo_guardado = false
       api
-        .get(this.base_url + '/seguimiento', { silent_error: true })
+        .get(ruta + '/seguimiento', { silent_error: true })
         .then((res) => {
-          this.datos = res.data
+          if (ruta === this.base_url) {
+            this.datos = res.data
+            this.cupo_total = res.data.imagenes ? res.data.imagenes.tope : null
+          }
         })
         .catch((error) => {
-          this.load_error = resolve_error_message(error) || 'No se pudo leer el seguimiento de la prueba.'
+          if (ruta === this.base_url) {
+            this.load_error = resolve_error_message(error) || 'No se pudo leer el seguimiento de la prueba.'
+          }
         })
         .finally(() => {
-          this.loading = false
+          if (ruta === this.base_url) {
+            this.loading = false
+          }
+        })
+    },
+    guardar_cupo() {
+      const ruta = this.base_url
+      if (!ruta || !this.cupo_valido || this.guardando_cupo) {
+        return
+      }
+      this.guardando_cupo = true
+      this.cupo_error = null
+      this.cupo_guardado = false
+      api
+        .put(ruta + '/cupo-imagenes', { tope: this.cupo_total }, { silent_error: true })
+        .then((res) => {
+          if (ruta === this.base_url) {
+            this.datos.imagenes = res.data.imagenes
+            this.cupo_total = res.data.imagenes.tope
+            this.cupo_guardado = true
+          }
+        })
+        .catch((error) => {
+          if (ruta === this.base_url) {
+            if (error.response && error.response.data && error.response.data.estado === 'version_vieja') {
+              this.datos.imagenes = null
+              this.datos.cupo_imagenes_estado = 'version_vieja'
+            } else {
+              this.cupo_error = resolve_error_message(error) || 'No se pudo guardar el cupo.'
+            }
+          }
+        })
+        .finally(() => {
+          if (ruta === this.base_url) {
+            this.guardando_cupo = false
+          }
         })
     },
     /** Botón «Avisar a Tomás». */
