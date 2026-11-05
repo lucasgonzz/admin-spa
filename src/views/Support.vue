@@ -49,11 +49,13 @@
       </div>
       <ticket-list
         :tickets="tickets_visibles"
+        :all_tickets="tickets"
         :loading="tickets_loading"
         :selected_ticket_id="selected_ticket_id"
         :support_alert_minutes="support_alert_minutes"
         :now_tick="now_tick"
         @select-ticket="on_ticket_list_select"
+        @close-ticket="close_ticket_from_list"
         @create-ticket="create_ticket" />
     </div>
 
@@ -1221,6 +1223,13 @@ export default {
             self.saving_header = false
           })
       })
+    },
+    close_ticket_from_list(id) {
+      return this.$store.dispatch('support_ticket/update_ticket', { id, status: 'closed' })
+        .then(() => {
+          if (String(this.selected_ticket_id) === String(id)) this.ticket_status_draft = 'closed'
+        })
+        .catch((error) => this.mostrar_error_de_borrador(error, 'No se pudo cerrar el ticket.'))
     },
     /**
      * El operador tocó «Responder» en una burbuja: el input pasa a citar ese mensaje.

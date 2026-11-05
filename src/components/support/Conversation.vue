@@ -135,16 +135,21 @@
                     </template>
                     <!-- Video: #t=0.001 hace que iOS muestre el primer cuadro con preload="metadata" -->
                     <template v-else-if="attachment_media_type(message, attachment) === 'video'">
-                      <video
-                        v-if="!has_media_error(attachment)"
-                        controls
-                        playsinline
-                        preload="metadata"
-                        class="support-message-video"
-                        :src="attachment_open_url(attachment) + '#t=0.001'"
-                        @error="on_media_error(attachment)">
-                        Tu navegador no soporta la reproducción de video.
-                      </video>
+                      <template v-if="!has_media_error(attachment)">
+                        <video
+                          controls
+                          playsinline
+                          preload="metadata"
+                          class="support-message-video"
+                          :src="attachment_open_url(attachment) + '#t=0.001'"
+                          @error="on_media_error(attachment)">
+                          Tu navegador no soporta la reproducción de video.
+                        </video>
+                        <button type="button" class="btn btn-sm btn-link"
+                          @click="open_video_preview(attachment_open_url(attachment), $event)">
+                          Ver video en grande
+                        </button>
+                      </template>
                       <div v-else class="support-media-error">
                         <i class="bi bi-camera-video-off" aria-hidden="true" />
                         <span>No se pudo reproducir el video</span>
@@ -372,6 +377,7 @@
       :zoom_enabled="true"
       :show="image_preview_visible"
       :image_url="image_preview_url"
+      :video_url="video_preview_url"
       @update:show="image_preview_visible = $event"
       @close="on_image_preview_close" />
 
@@ -444,6 +450,7 @@ export default {
       image_preview_visible: false,
       /** URL de la imagen mostrada en el visor. */
       image_preview_url: '',
+      video_preview_url: '',
       /** Id del borrador que se está editando, o null. */
       editing_draft_id: null,
       /** Texto en edición del borrador. El original no se toca hasta aprobar. */
@@ -1424,11 +1431,16 @@ export default {
       this.image_preview_url = url
       this.image_preview_visible = true
     },
-    /**
-     * Limpia la URL al cerrar el visor.
-     */
+    open_video_preview(url, event) {
+      if (!url) return
+      const video = event.currentTarget.previousElementSibling
+      if (video) video.pause()
+      this.video_preview_url = url + '#t=0.001'
+      this.image_preview_visible = true
+    },
     on_image_preview_close() {
       this.image_preview_url = ''
+      this.video_preview_url = ''
     },
     /**
      * Diferir scroll: DOM y layout; doble rAF atasca contenido que aún mide 0 p. ej. fuentes.

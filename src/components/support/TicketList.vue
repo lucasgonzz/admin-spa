@@ -32,6 +32,7 @@
       role="listitem"
       tabindex="0"
       @click="$emit('select-ticket', ticket.id)"
+      @contextmenu="open_ticket_menu($event, ticket)"
       @keydown.enter.prevent="$emit('select-ticket', ticket.id)">
       <span class="support-ticket-avatar" aria-hidden="true">
         {{ ticket_initial(ticket) }}
@@ -125,6 +126,18 @@
         </small>
       </div>
     </div>
+    <teleport to="body">
+      <div v-if="ticket_menu" class="support-ticket-menu-overlay"
+        @click.self="ticket_menu = null"
+        @contextmenu.self.prevent="ticket_menu = null"
+        @keydown.esc.stop.prevent="dismiss_ticket_menu">
+        <button ref="close_ticket_action" type="button" class="btn btn-light shadow support-ticket-menu-action"
+          :style="{ left: ticket_menu.x + 'px', top: ticket_menu.y + 'px' }"
+          @blur="ticket_menu = null" @click="request_ticket_close">
+          Cerrar ticket
+        </button>
+      </div>
+    </teleport>
   </div>
 </template>
 
@@ -140,6 +153,7 @@ export default {
   },
   props: {
     tickets: { type: Array, default: () => [] },
+    all_tickets: { type: Array, default: null },
     selected_ticket_id: { type: [String, Number], default: null },
     /**
      * Indicador de carga de la bandeja (GET /support-ticket con filtro).
@@ -154,28 +168,78 @@ export default {
      */
     now_tick: { type: Number, default: 0 },
   },
+  emits: ['select-ticket', 'create-ticket', 'close-ticket'],
+  data() {
+    return { ticket_menu: null, ticket_order: new Map() }
+  },
+  watch: {
+    order_source: {
+      immediate: true,
+      handler(tickets) {
+        const order = new Map()
+        for (const ticket of tickets || []) {
+          const previous = this.ticket_order.get(ticket.id)
+          const closed = this.ticket_status_class(ticket) === 'closed'
+          const message = ticket.last_message && ticket.last_message.id
+          // El cierre cambia updated_at y quita el aviso de intervención, pero no es actividad del hilo.
+          const preserve = closed && previous && previous.message === message
+          order.set(ticket.id, {
+            message,
+            escalated: preserve ? previous.escalated : Number(this.is_ticket_escalated(ticket)),
+            time: preserve ? previous.time : new Date((closed
+              ? (ticket.last_message && ticket.last_message.created_at) || ticket.created_at
+              : ticket.updated_at) || 0).getTime(),
+          })
+        }
+        this.ticket_order = order
+      },
+    },
+  },
   computed: {
+    order_source() {
+      return this.all_tickets || this.tickets
+    },
     /**
      * Tickets ordenados: intervención humana primero, luego por updated_at descendente.
      *
      * @returns {Array<Object>}
      */
     display_tickets() {
-      const self = this
       const list = this.tickets || []
-      return list.slice().sort(function (a, b) {
-        const a_escalated = self.is_ticket_escalated(a) ? 1 : 0
-        const b_escalated = self.is_ticket_escalated(b) ? 1 : 0
-        if (a_escalated !== b_escalated) {
-          return b_escalated - a_escalated
-        }
-        const da = a && a.updated_at ? new Date(a.updated_at).getTime() : 0
-        const db = b && b.updated_at ? new Date(b.updated_at).getTime() : 0
-        return db - da
+      return list.slice().sort((a, b) => {
+        const first = this.ticket_order.get(a.id)
+        const second = this.ticket_order.get(b.id)
+        return second.escalated - first.escalated || second.time - first.time || Number(b.id) - Number(a.id)
       })
     },
   },
   methods: {
+    open_ticket_menu(event, ticket) {
+      if (this.ticket_status_class(ticket) === 'closed') return
+      event.preventDefault()
+      const row = event.currentTarget
+      const bounds = row.getBoundingClientRect()
+      this.ticket_menu = {
+        id: ticket.id,
+        row,
+        x: Math.max(0, Math.min(event.clientX || bounds.left, window.innerWidth - 152)),
+        y: Math.max(0, Math.min(event.clientY || bounds.top, window.innerHeight - 48)),
+      }
+      this.$nextTick(() => {
+        if (this.$refs.close_ticket_action) this.$refs.close_ticket_action.focus()
+      })
+    },
+    dismiss_ticket_menu() {
+      const menu = this.ticket_menu
+      this.ticket_menu = null
+      if (menu && menu.row.isConnected) menu.row.focus({ preventScroll: true })
+    },
+    request_ticket_close() {
+      if (!this.ticket_menu) return
+      const id = this.ticket_menu.id
+      this.dismiss_ticket_menu()
+      this.$emit('close-ticket', id)
+    },
     /**
      * Una misión pendiente no equivale a una atención bloqueada. El dato aditivo del API
      * decide la intervención; escalated_at queda como respaldo para servidores anteriores.
@@ -818,6 +882,16 @@ export default {
     height: 2.5rem;
     font-size: 1rem;
   }
+}
+.support-ticket-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1080;
+}
+
+.support-ticket-menu-action {
+  position: absolute;
+  width: 152px;
 }
 </style>
 
