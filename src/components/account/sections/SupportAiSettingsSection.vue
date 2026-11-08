@@ -1,9 +1,7 @@
 <template>
   <div class="support-ai-settings-section">
     <!--
-      Va arriba de todo y no al final a propósito: este interruptor decide si el canal de soporte por
-      WhatsApp EXISTE. Con esto apagado, nada de lo que viene abajo (sugerencias, demoras, régimen de
-      verificación) llega a correr nunca, porque no hay ticket donde correr.
+      Este interruptor decide si un mensaje abre un ticket desde el número de WhatsApp de soporte.
     -->
     <div class="support-ai-settings-section__canal mb-4">
       <h3 class="h6 mb-2">Canal de soporte por WhatsApp</h3>
@@ -78,9 +76,9 @@
       </label>
     </div>
     <p class="text-muted small mb-3">
-      Cuando está activado, cada mensaje nuevo de un cliente por WhatsApp puede generar una sugerencia de respuesta
-      vía Claude tras la demora configurada. Si el cliente envía varios mensajes seguidos, el temporizador se reinicia
-      con el último mensaje.
+      Cada mensaje nuevo en el sistema actualizado puede generar una respuesta de ayuda después de la demora
+      configurada. Lo mismo vale para los tickets de WhatsApp atendidos por el agente de sugerencias. Si el cliente
+      manda varios mensajes seguidos, el temporizador se reinicia con el último.
     </p>
 
     <p class="text-muted small mb-3">
@@ -139,11 +137,8 @@
       salga; si el operador responde a mano antes, se cancela el envío automático.
     </p>
     <p class="form-text small text-muted mb-2">
-      «Activar sugerencias automáticas de IA para soporte» es el corte maestro: apagado, el agente no genera nada en
-      ningún ticket. Prendido, cada conversación manda con sus dos botones propios, en el encabezado del ticket: uno
-      prende o apaga el agente para ese cliente, y el otro decide si sus respuestas necesitan tu aprobación antes de
-      salir. Los tickets nuevos siempre nacen para contestar solos; la verificación se activa solamente desde
-      esa conversación.
+      Cada conversación tiene dos controles en el encabezado del ticket. Uno prende o apaga el agente en esa
+      conversación y el otro pide tu aprobación antes de enviar la respuesta.
     </p>
 
     <p v-if="loading" class="text-muted small mt-2 mb-0">Cargando…</p>

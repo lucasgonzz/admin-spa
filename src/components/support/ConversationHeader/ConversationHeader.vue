@@ -66,6 +66,7 @@
         :disabled="ai_suggestion_disabled"
         :consult_timer="ai_consult_timer"
         @request-suggestion="$emit('request-suggestion')" />
+      <ticket-tours v-if="has_ticket" :key="selected_ticket.id" :ticket_id="selected_ticket.id" />
       <div class="ms-auto d-flex align-items-center gap-2 flex-shrink-0 ticket-header-actions-end">
         <button
           type="button"
@@ -92,6 +93,7 @@ import TicketConversationActions from './TicketConversationActions.vue'
 import TicketAgentControls from './TicketAgentControls.vue'
 import TicketAiSuggestionButton from './TicketAiSuggestionButton.vue'
 import TicketContactInfo from './TicketContactInfo.vue'
+import TicketTours from './TicketTours.vue'
 
 /**
  * Agrupa controles del hilo y un único guardado HTTP para nombre y estado.
@@ -106,6 +108,7 @@ export default {
     TicketAgentControls,
     TicketAiSuggestionButton,
     TicketContactInfo,
+    TicketTours,
   },
   /**
    * Vue 3: v-model:prop requiere emitir update:prop; se declara para evitar fallos de two-way.
