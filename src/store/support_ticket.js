@@ -5,6 +5,17 @@ import { keep_best_delivery, merge_status_payload, payload_matches_message, unre
 
 /** Los eventos públicos no llevan el resumen privado de atención: se refresca por HTTP autenticado. */
 let attention_refresh_timer = null
+/** Instante (ms) del último `get_models` disparado por `schedule_attention_refresh`. */
+let attention_refresh_last_run = 0
+/** Temporizador de `schedule_unread_badges`. */
+let unread_badges_timer = null
+
+/** Agrupa los eventos seguidos de Pusher. */
+const ATTENTION_REFRESH_DEBOUNCE_MS = 800
+/** Separación mínima entre dos `get_models`: cada uno trae la bandeja entera. */
+const ATTENTION_REFRESH_MIN_GAP_MS = 4000
+/** Agrupa los pedidos de badges de operaciones seguidas (cerrar tickets, marcar leído). */
+const UNREAD_BADGES_DEBOUNCE_MS = 500
 
 /**
  * Pide los contadores de la bandeja y los vuelca al store. Nunca rechaza.
@@ -337,6 +348,23 @@ export default __base_store({
       return pedir_unread_badges(commit, true)
     },
     /**
+     * Pide los badges una sola vez al terminar una tanda: cerrar varios tickets seguidos o pasar
+     * marcando leídos disparaba un GET por cada uno, y sumaba a lo que agotaba el limitador.
+     * Devuelve enseguida, sin esperar el GET: el que la llama no depende de ese resultado.
+     *
+     * @param {Object} contexto Contexto Vuex.
+     * @returns {void}
+     */
+    schedule_unread_badges({ dispatch }) {
+      if (unread_badges_timer) {
+        clearTimeout(unread_badges_timer)
+      }
+      unread_badges_timer = setTimeout(function () {
+        unread_badges_timer = null
+        dispatch('fetch_unread_badges')
+      }, UNREAD_BADGES_DEBOUNCE_MS)
+    },
+    /**
      * Igual que `fetch_unread_badges`, pero se engancha al GET que ya esté en vuelo en vez de
      * abrir uno propio. Lo usa el Nav, que se desmonta y se remonta al entrar y salir de la
      * conversación de un lead (ver el comentario largo en `lead.js`).
@@ -384,15 +412,23 @@ export default __base_store({
       }
       commit('patch_last_message_status', payload)
     },
-    /** Agrupa mensajes/lecturas parciales y trae el resumen vigente sin agregarlo al canal público. */
+    /**
+     * Agrupa mensajes/lecturas parciales y trae el resumen vigente sin agregarlo al canal público.
+     *
+     * Además del debounce, no corre más de una vez cada 4 s: `get_models` trae la bandeja entera y
+     * con actividad sostenida salía uno atrás del otro. La espera se recalcula con cada evento, así
+     * que el último siempre termina saliendo: se atrasa, no se pierde.
+     */
     schedule_attention_refresh({ dispatch }) {
       if (attention_refresh_timer) {
         clearTimeout(attention_refresh_timer)
       }
+      const falta_para_el_tope = attention_refresh_last_run + ATTENTION_REFRESH_MIN_GAP_MS - Date.now()
       attention_refresh_timer = setTimeout(function () {
         attention_refresh_timer = null
+        attention_refresh_last_run = Date.now()
         dispatch('get_models')
-      }, 800)
+      }, Math.max(ATTENTION_REFRESH_DEBOUNCE_MS, falta_para_el_tope))
     },
     /**
      * Desde un SupportMessage (Pusher) con relación ticket embebida.
@@ -429,7 +465,7 @@ export default __base_store({
       return api.put('/support-ticket/' + payload.id, payload).then(function (response) {
         /* Cerrar, reabrir o reasignar cambia los badges de tickets abiertos: se refrescan acá
            sin esperar el SupportTicketUpdated de Pusher (que puede no estar configurado). */
-        dispatch('fetch_unread_badges')
+        dispatch('schedule_unread_badges')
         if (response.data && response.data.model) {
           return dispatch('apply_ticket_row', response.data.model).then(function () {
             return response.data.model

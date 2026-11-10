@@ -321,7 +321,7 @@ export default {
     /**
      * Carga conversación del ticket seleccionado.
      */
-    load_ticket_messages({ commit, dispatch }, ticket_id) {
+    load_ticket_messages({ state, commit, dispatch }, ticket_id) {
       commit('set_active_ticket_id', ticket_id)
       commit('set_models', [])
       commit('set_messages_loading', true)
@@ -340,8 +340,15 @@ export default {
             ticket_row = Object.assign({}, response.data.model)
             delete ticket_row.messages
           }
-          commit('set_models', messages)
-          commit('set_messages_loading', false)
+          /* Si el operador ya pasó a otro ticket, este hilo no se escribe: pisaría al que tiene
+             abierto, y con el spinner apagado parecería el suyo. Con reintentos por throttle la
+             respuesta puede llegar mucho después. Lo que sigue (fila de la bandeja, marcar leído)
+             va igual: está atado a este ticket, y es justamente lo que busca el que pasa por los
+             tickets para sacar los no leídos. */
+          if (String(state.active_ticket_id) === String(ticket_id)) {
+            commit('set_models', messages)
+            commit('set_messages_loading', false)
+          }
           if (ticket_row && ticket_row.id != null) {
             dispatch('support_ticket/apply_ticket_row', ticket_row, { root: true })
           }
@@ -359,17 +366,20 @@ export default {
             )
             return mark_messages_read(unread_ids)
               .then(function () {
-                return dispatch('support_ticket/fetch_unread_badges', null, { root: true })
+                return dispatch('support_ticket/schedule_unread_badges', null, { root: true })
               })
               .catch(function (err) {
                 console.log(err)
-                return dispatch('support_ticket/fetch_unread_badges', null, { root: true })
+                return dispatch('support_ticket/schedule_unread_badges', null, { root: true })
               })
           }
           return Promise.resolve()
         })
         .catch(function (error) {
-          commit('set_messages_loading', false)
+          /* Mismo criterio que arriba: el error de un ticket que ya se dejó no apaga el spinner del vigente. */
+          if (String(state.active_ticket_id) === String(ticket_id)) {
+            commit('set_messages_loading', false)
+          }
           console.log(error)
         })
     },
