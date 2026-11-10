@@ -138,6 +138,11 @@ function is_throttle_error(error) {
  */
 export function localize_throttle_error(error) {
   const response = error && error.response
+  /* Las pantallas de PDF leen el Blob y muestran el `message` de adentro: se reemplaza entero. */
+  if (response && response.status === 429 && typeof Blob !== 'undefined' && response.data instanceof Blob) {
+    response.data = new Blob([JSON.stringify({ message: THROTTLE_USER_MESSAGE })], { type: 'application/json' })
+    return
+  }
   if (response && response.status === 429 && response.data && response.data.message === THROTTLE_LARAVEL_MESSAGE) {
     response.data = Object.assign({}, response.data, { message: THROTTLE_USER_MESSAGE })
   }
