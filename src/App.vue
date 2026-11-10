@@ -583,6 +583,19 @@ export default {
      * @returns {void}
      */
     push_toast(message, variant) {
+      /*
+       * El mismo aviso ya en pantalla no se apila: se le reinicia el autocierre. Cuando varios
+       * pedidos fallan por la misma causa cada uno emite su toast, y terminaban tapando la pantalla
+       * con una columna de carteles idénticos (misión admin-too-many-attempts, 10/11/2026).
+       */
+      const toast_repetida = this.toasts.find(function (toast) {
+        return toast.message === message && toast.variant === variant
+      })
+      if (toast_repetida) {
+        this.schedule_toast_close(toast_repetida.id)
+        return
+      }
+
       /** Id único local para controlar render y cierre. */
       const toast_id = this.next_toast_id
       this.next_toast_id += 1
@@ -593,7 +606,18 @@ export default {
         variant,
       })
 
-      /** Timeout de autocierre para no dejar toasts eternas en pantalla. */
+      this.schedule_toast_close(toast_id)
+    },
+    /**
+     * Programa (o reprograma) el autocierre de una toast para no dejarla eterna en pantalla.
+     *
+     * @param {number} toast_id
+     * @returns {void}
+     */
+    schedule_toast_close(toast_id) {
+      if (this.toast_timeout_by_id[toast_id]) {
+        window.clearTimeout(this.toast_timeout_by_id[toast_id])
+      }
       this.toast_timeout_by_id[toast_id] = window.setTimeout(() => {
         this.remove_toast(toast_id)
       }, 5000)

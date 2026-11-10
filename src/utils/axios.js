@@ -80,6 +80,78 @@ function extract_laravel_validation_messages(errors_payload) {
   return validation_messages
 }
 
+/** Texto exacto con el que el middleware `throttle` de Laravel rechaza un pedido. */
+const THROTTLE_LARAVEL_MESSAGE = 'Too Many Attempts.'
+/** Lo que ve el operador si el pedido sigue rebotando después de los reintentos. */
+const THROTTLE_USER_MESSAGE =
+  'El sistema recibió muchos pedidos seguidos. Esperá un momento y volvé a intentar.'
+/** Reintentos automáticos de un mismo pedido rechazado por el throttle. */
+const THROTTLE_MAX_RETRIES = 2
+/** Espera de cada reintento cuando la respuesta no trae `Retry-After`. */
+const THROTTLE_WAIT_WITHOUT_HEADER_MS = [5000, 10000]
+/** Cotas de la espera: la ventana del limitador es de un minuto, nunca tiene sentido más. */
+const THROTTLE_MIN_WAIT_MS = 1000
+const THROTTLE_MAX_WAIT_MS = 65000
+/** Dispersión al salir de la pausa, para que los pedidos en espera no vuelvan todos juntos. */
+const THROTTLE_JITTER_MS = 400
+
+/**
+ * Instante (ms) hasta el que no sale ningún pedido. Es de todo el cliente y no por pedido: con la
+ * cubeta agotada, cualquier pedido nuevo rebotaría igual y encima alargaría el problema.
+ */
+let throttle_pause_until = 0
+
+/**
+ * Indica si el error es el rechazo del middleware `throttle` de Laravel.
+ *
+ * 🔴 Status Y mensaje: un 429 con texto propio de un controller (por ejemplo, un tope de negocio)
+ * no es esto, puede ser una respuesta después de haber hecho algo y su texto hay que mostrarlo.
+ *
+ * @param {import('axios').AxiosError} error
+ * @returns {boolean}
+ */
+function is_throttle_error(error) {
+  if (!error || !error.response || error.response.status !== 429) {
+    return false
+  }
+  const response_data = error.response.data
+  return !!response_data && response_data.message === THROTTLE_LARAVEL_MESSAGE
+}
+
+/**
+ * Calcula cuánto esperar antes de volver a pegarle a la API tras un rechazo del throttle.
+ *
+ * @param {import('axios').AxiosResponse} response
+ * @param {number} retry_count Reintentos ya hechos de este pedido.
+ * @returns {number} Milisegundos.
+ */
+function throttle_wait_ms(response, retry_count) {
+  const headers = response.headers || {}
+  const retry_after =
+    typeof headers.get === 'function' ? headers.get('retry-after') : headers['retry-after']
+  const retry_after_seconds = parseInt(retry_after, 10)
+  if (isNaN(retry_after_seconds)) {
+    const last_index = THROTTLE_WAIT_WITHOUT_HEADER_MS.length - 1
+    return THROTTLE_WAIT_WITHOUT_HEADER_MS[Math.min(retry_count, last_index)]
+  }
+  return Math.min(THROTTLE_MAX_WAIT_MS, Math.max(THROTTLE_MIN_WAIT_MS, retry_after_seconds * 1000))
+}
+
+/**
+ * Resuelve cuando termina la pausa compartida, incluso si se alargó mientras se esperaba.
+ *
+ * @returns {Promise<void>}
+ */
+function wait_for_throttle_pause() {
+  const remaining_ms = throttle_pause_until - Date.now()
+  if (remaining_ms <= 0) {
+    return Promise.resolve()
+  }
+  return new Promise(function (resolve) {
+    window.setTimeout(resolve, remaining_ms + Math.random() * THROTTLE_JITTER_MS)
+  }).then(wait_for_throttle_pause)
+}
+
 /**
  * Obtiene el mensaje de error más útil desde la respuesta de admin-api.
  * Prioriza errores de validación por campo sobre el mensaje genérico "The given data was invalid."
@@ -145,6 +217,10 @@ export function resolve_error_message(error) {
     return 'El archivo es demasiado grande para el servidor. Probá con uno más chico.'
   }
 
+  if (is_throttle_error(error)) {
+    return THROTTLE_USER_MESSAGE
+  }
+
   /** Payload de error devuelto por Laravel/admin-api. */
   const response_data = error.response.data || {}
 
@@ -192,11 +268,15 @@ function emit_api_error_toast(message) {
 
 api.interceptors.request.use(
   (config) => {
-    const token = window.localStorage.getItem('admin_token')
-    if (token) {
-      config.headers.Authorization = 'Bearer ' + token
-    }
-    return config
+    /* Durante la pausa del throttle el pedido espera acá en vez de salir a rebotar. El token se lee
+       después de esperar, porque la pausa puede durar un minuto y en el medio cambiar la sesión. */
+    return wait_for_throttle_pause().then(function () {
+      const token = window.localStorage.getItem('admin_token')
+      if (token) {
+        config.headers.Authorization = 'Bearer ' + token
+      }
+      return config
+    })
   },
   (err) => Promise.reject(err)
 )
@@ -204,6 +284,34 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    /*
+     * Rechazo del throttle: reintento automático y sin avisar (misión admin-too-many-attempts,
+     * 10/11/2026). Vale para cualquier método, POST incluido, porque el throttle corta antes de
+     * llegar al controller: nada se ejecutó, no hay riesgo de duplicar. El reintento pasa por el
+     * interceptor de request, que es el que hace la espera.
+     */
+    if (is_throttle_error(error) && error.config) {
+      const retry_count = error.config.throttle_retry_count || 0
+      throttle_pause_until = Math.max(
+        throttle_pause_until,
+        Date.now() + throttle_wait_ms(error.response, retry_count)
+      )
+      if (retry_count < THROTTLE_MAX_RETRIES) {
+        return api.request(
+          Object.assign({}, error.config, {
+            throttle_retry_count: retry_count + 1,
+            /* `error.config.data` ya salió transformado del primer intento (JSON hecho string, o
+               el mismo FormData): se reenvía tal cual para no volver a codificarlo. */
+            transformRequest: [
+              function (data) {
+                return data
+              },
+            ],
+          })
+        )
+      }
+    }
+
     /** Status HTTP para evitar toasts en errores de autenticación no relevantes para UX global. */
     const status_code = error && error.response ? error.response.status : null
     /** Peticiones con silent_error: true no muestran toast (p. ej. debug/virtual-time 404 en producción). */
