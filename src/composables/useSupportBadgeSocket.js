@@ -19,22 +19,15 @@ export function useSupportBadgeSocket(options) {
   const echo = window.admin_support_echo
   // Único canal global escuchado aquí (evita triple dispatch por mismo evento en admin+admins).
   const channels_to_leave = []
-  // Timer para agrupar fetch_unread_badges (inbox_nav + unread_totals).
-  let unread_badges_debounce_timer = null
-  // Timer para agrupar el refresco de la bandeja cuando el payload llegó sin el ticket.
-  let inbox_refresh_debounce_timer = null
 
   /**
    * Programa GET /support-ticket/unread-badges (totales + filas por operador).
+   *
+   * Pasa por el temporizador único del store: con uno por componente, cerrar un ticket terminaba
+   * en tres GET de badges casi juntos.
    */
   function schedule_refresh_unread_badges() {
-    if (unread_badges_debounce_timer) {
-      clearTimeout(unread_badges_debounce_timer)
-    }
-    unread_badges_debounce_timer = setTimeout(function () {
-      unread_badges_debounce_timer = null
-      store.dispatch('support_ticket/fetch_unread_badges')
-    }, 450)
+    store.dispatch('support_ticket/schedule_unread_badges')
   }
 
   /**
@@ -42,19 +35,13 @@ export function useSupportBadgeSocket(options) {
    *
    * No hay nada que inventar acá: `get_models` es el mismo GET del listado que el store ya
    * usa como reserva cuando una respuesta no trae `model` (ver `update_ticket` y `store` en
-   * src/store/support_ticket.js). Va con debounce porque un cambio de cabecera puede emitir
-   * varios eventos seguidos y no tiene sentido pedir el listado una vez por cada uno.
+   * src/store/support_ticket.js). Va por el refresco agrupado del store porque un cambio de
+   * cabecera puede emitir varios eventos seguidos y cada listado trae la bandeja entera.
    *
    * @returns {void}
    */
   function schedule_refresh_inbox() {
-    if (inbox_refresh_debounce_timer) {
-      clearTimeout(inbox_refresh_debounce_timer)
-    }
-    inbox_refresh_debounce_timer = setTimeout(function () {
-      inbox_refresh_debounce_timer = null
-      store.dispatch('support_ticket/get_models')
-    }, 800)
+    store.dispatch('support_ticket/schedule_attention_refresh')
   }
 
   /**
@@ -195,17 +182,9 @@ export function useSupportBadgeSocket(options) {
 
   return {
     /**
-     * Deja canal support.admins y cancela debounce (no desconecta Echo global).
+     * Deja canal support.admins (no desconecta Echo global).
      */
     disconnect() {
-      if (unread_badges_debounce_timer) {
-        clearTimeout(unread_badges_debounce_timer)
-        unread_badges_debounce_timer = null
-      }
-      if (inbox_refresh_debounce_timer) {
-        clearTimeout(inbox_refresh_debounce_timer)
-        inbox_refresh_debounce_timer = null
-      }
       let i = 0
       for (i = 0; i < channels_to_leave.length; i = i + 1) {
         echo.leave(channels_to_leave[i])

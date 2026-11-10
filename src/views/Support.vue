@@ -160,10 +160,6 @@ export default {
        * Mientras se persiste nombre y estado del header vía API.
        */
       saving_header: false,
-      /**
-       * Timer para agrupar refrescos de badges tras varios mark-read seguidos.
-       */
-      unread_badges_debounce_timer: null,
       /** POST de sugerencia IA en curso (el botón vive en el header). */
       loading_suggestion: false,
       /** Motivo del último fallo al pedir sugerencia; se muestra arriba del composer. */
@@ -497,9 +493,6 @@ export default {
   beforeUnmount() {
     window.removeEventListener('support-ticket-alert', this.on_support_ticket_alert)
     window.removeEventListener('resize', this.on_window_resize)
-    if (this.unread_badges_debounce_timer) {
-      clearTimeout(this.unread_badges_debounce_timer)
-    }
     if (this.now_tick_interval_id) {
       clearInterval(this.now_tick_interval_id)
     }
@@ -775,14 +768,7 @@ export default {
      * Actualiza el contador de no leídos con una petición ligera, agrupada en ráfagas.
      */
     schedule_refresh_unread_badges() {
-      const self = this
-      if (this.unread_badges_debounce_timer) {
-        clearTimeout(this.unread_badges_debounce_timer)
-      }
-      this.unread_badges_debounce_timer = setTimeout(function () {
-        self.unread_badges_debounce_timer = null
-        self.$store.dispatch('support_ticket/fetch_unread_badges')
-      }, 450)
+      this.$store.dispatch('support_ticket/schedule_unread_badges')
     },
     /**
      * Cierra listeners previos de soporte.

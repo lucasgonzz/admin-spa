@@ -4,6 +4,7 @@
  * Se usa exclusivamente en vistas públicas como el formulario de configuración del cliente.
  */
 import axios from 'axios'
+import { localize_throttle_error } from '@/utils/axios'
 
 /**
  * Base URL pública: elimina /admin del final de VITE_API_URL.
@@ -18,5 +19,15 @@ const api_public = axios.create({
     'Content-Type': 'application/json',
   },
 })
+
+/* Las vistas públicas muestran `err.response.data.message` tal cual: sin esto, el 429 del
+   limitador salía en inglés en el formulario del cliente. */
+api_public.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    localize_throttle_error(error)
+    return Promise.reject(error)
+  }
+)
 
 export default api_public

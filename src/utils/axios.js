@@ -101,11 +101,17 @@ const THROTTLE_JITTER_MS = 400
  */
 let throttle_pause_until = 0
 
+/** Ruta y fin de espera del último rechazo: dos rutas distintas en la misma espera son la cubeta general. */
+let throttle_last_path = null
+let throttle_last_until = 0
+
 /**
  * Indica si el error es el rechazo del middleware `throttle` de Laravel.
  *
  * 🔴 Status Y mensaje: un 429 con texto propio de un controller (por ejemplo, un tope de negocio)
  * no es esto, puede ser una respuesta después de haber hecho algo y su texto hay que mostrarlo.
+ * La excepción son las descargas: con `responseType: 'blob'` el cuerpo no se puede leer acá, y
+ * ningún controller que descarga archivos contesta un 429 propio.
  *
  * @param {import('axios').AxiosError} error
  * @returns {boolean}
@@ -115,7 +121,46 @@ function is_throttle_error(error) {
     return false
   }
   const response_data = error.response.data
+  if (typeof Blob !== 'undefined' && response_data instanceof Blob) {
+    return true
+  }
   return !!response_data && response_data.message === THROTTLE_LARAVEL_MESSAGE
+}
+
+/**
+ * Cambia el texto en inglés del throttle por el de la interfaz, en la respuesta misma.
+ *
+ * Va en el error y no solo en el toast porque hay decenas de pantallas que muestran directamente
+ * `err.response.data.message`: así ninguna puede dejar pasar el inglés.
+ *
+ * @param {import('axios').AxiosError} error
+ * @returns {void}
+ */
+export function localize_throttle_error(error) {
+  const response = error && error.response
+  if (response && response.status === 429 && response.data && response.data.message === THROTTLE_LARAVEL_MESSAGE) {
+    response.data = Object.assign({}, response.data, { message: THROTTLE_USER_MESSAGE })
+  }
+}
+
+/**
+ * Registra un rechazo y decide si frena a todo el panel o solo a ese pedido.
+ *
+ * Una ruta con tope propio chico (`throttle:20,1`) rechaza sola mientras todo lo demás anda: ahí
+ * frenar el panel entero dejaba sin responder a soporte por culpa de un botón. Cuando rebotan dos
+ * rutas distintas dentro de la misma espera, en cambio, es la cubeta general y sí se frena todo.
+ *
+ * @param {Object} config Config del pedido rechazado.
+ * @param {number} until Instante (ms) hasta el que tiene que esperar ese pedido.
+ * @returns {void}
+ */
+function register_throttle_rejection(config, until) {
+  const path = String(config.url || '').split('?')[0]
+  if (throttle_last_path !== null && throttle_last_path !== path && Date.now() < throttle_last_until) {
+    throttle_pause_until = Math.max(throttle_pause_until, until)
+  }
+  throttle_last_path = path
+  throttle_last_until = Math.max(throttle_last_until, until)
 }
 
 /**
@@ -142,14 +187,16 @@ function throttle_wait_ms(response, retry_count) {
  *
  * @returns {Promise<void>}
  */
-function wait_for_throttle_pause() {
-  const remaining_ms = throttle_pause_until - Date.now()
+function wait_for_throttle_pause(not_before) {
+  const remaining_ms = Math.max(throttle_pause_until, not_before || 0) - Date.now()
   if (remaining_ms <= 0) {
     return Promise.resolve()
   }
   return new Promise(function (resolve) {
     window.setTimeout(resolve, remaining_ms + Math.random() * THROTTLE_JITTER_MS)
-  }).then(wait_for_throttle_pause)
+  }).then(function () {
+    return wait_for_throttle_pause(not_before)
+  })
 }
 
 /**
@@ -270,7 +317,7 @@ api.interceptors.request.use(
   (config) => {
     /* Durante la pausa del throttle el pedido espera acá en vez de salir a rebotar. El token se lee
        después de esperar, porque la pausa puede durar un minuto y en el medio cambiar la sesión. */
-    return wait_for_throttle_pause().then(function () {
+    return wait_for_throttle_pause(config.throttle_not_before).then(function () {
       const token = window.localStorage.getItem('admin_token')
       if (token) {
         config.headers.Authorization = 'Bearer ' + token
@@ -292,14 +339,13 @@ api.interceptors.response.use(
      */
     if (is_throttle_error(error) && error.config) {
       const retry_count = error.config.throttle_retry_count || 0
-      throttle_pause_until = Math.max(
-        throttle_pause_until,
-        Date.now() + throttle_wait_ms(error.response, retry_count)
-      )
+      const wait_until = Date.now() + throttle_wait_ms(error.response, retry_count)
+      register_throttle_rejection(error.config, wait_until)
       if (retry_count < THROTTLE_MAX_RETRIES) {
         return api.request(
           Object.assign({}, error.config, {
             throttle_retry_count: retry_count + 1,
+            throttle_not_before: wait_until,
             /* `error.config.data` ya salió transformado del primer intento (JSON hecho string, o
                el mismo FormData): se reenvía tal cual para no volver a codificarlo. */
             transformRequest: [
@@ -311,6 +357,8 @@ api.interceptors.response.use(
         )
       }
     }
+
+    localize_throttle_error(error)
 
     /** Status HTTP para evitar toasts en errores de autenticación no relevantes para UX global. */
     const status_code = error && error.response ? error.response.status : null
