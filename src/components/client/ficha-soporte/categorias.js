@@ -104,7 +104,23 @@ export function esta_vencida(entrada) {
 	if (entrada.vencida === true || entrada.vencida === false) {
 		return entrada.vencida
 	}
-	return moment(entrada.vigente_hasta).isBefore(moment(), 'day')
+	return moment(fecha_para_input(entrada.vigente_hasta), 'YYYY-MM-DD').isBefore(moment(), 'day')
+}
+
+/**
+ * Una fecha sin hora (`vigente_hasta`) en dd/mm/aaaa. Se lee solo AAAA-MM-DD: Laravel la manda
+ * como medianoche UTC y, pasada a la hora de Argentina, caería el día anterior.
+ *
+ * @param {string|null} valor
+ * @returns {string}
+ */
+export function fecha_sin_hora(valor) {
+	const dia = fecha_para_input(valor)
+	if (!dia) {
+		return ''
+	}
+	const m = moment(dia, 'YYYY-MM-DD')
+	return m.isValid() ? m.format('DD/MM/YYYY') : ''
 }
 
 /**

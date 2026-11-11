@@ -1,10 +1,10 @@
 <template>
-  <!--
-    Una entrada de la ficha: el texto, y abajo quién la escribió, en qué ticket, cuándo y hasta
-    cuándo vale. Las vigentes se pueden editar (= reemplazar) y dar de baja con motivo; las del
-    historial (reemplazadas o dadas de baja) se muestran apagadas y sin acciones.
-  -->
   <li class="ficha-entrada" :class="{ 'ficha-entrada--historial': !es_vigente, 'ficha-entrada--vencida': vencida }">
+    <!--
+      Una entrada de la ficha: el texto, y abajo quién la escribió, en qué ticket, cuándo y hasta
+      cuándo vale. Las vigentes se pueden editar (= reemplazar) y dar de baja con motivo; las del
+      historial (reemplazadas o dadas de baja) se muestran apagadas y sin acciones.
+    -->
     <entrada-form
       v-if="modo === 'editar'"
       :entrada="entrada"
@@ -92,7 +92,7 @@
 <script>
 import api, { resolve_error_message } from '@/utils/axios'
 import EntradaForm from './EntradaForm.vue'
-import { MOTIVO_MAX, autor_de, categoria_de, esta_vencida, fecha_corta, fecha_hora } from './categorias'
+import { MOTIVO_MAX, autor_de, categoria_de, esta_vencida, fecha_corta, fecha_hora, fecha_sin_hora } from './categorias'
 
 /**
  * Una entrada de la ficha de soporte del cliente, con sus dos acciones:
@@ -141,7 +141,7 @@ export default {
       return fecha_hora(this.entrada.created_at || this.entrada.updated_at)
     },
     vencimiento() {
-      return fecha_corta(this.entrada.vigente_hasta)
+      return fecha_sin_hora(this.entrada.vigente_hasta)
     },
     vencida() {
       return this.es_vigente && esta_vencida(this.entrada)

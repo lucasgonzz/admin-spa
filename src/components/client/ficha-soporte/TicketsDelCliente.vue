@@ -1,10 +1,10 @@
 <template>
-  <!--
-    Índice de los tickets del cliente: número, título y resumen (los pone Martín con `titular`).
-    Es lo mismo que Martín ve como `indice_tickets`: para encontrar a qué conversación vieja
-    volver. Cada fila abre la conversación en otra pestaña, para no perder la ficha.
-  -->
   <div class="ficha-tickets">
+    <!--
+      Índice de los tickets del cliente: número, título y resumen (los pone Martín con `titular`).
+      Es lo mismo que Martín ve como `indice_tickets`: para encontrar a qué conversación vieja
+      volver. Cada fila abre la conversación en otra pestaña, para no perder la ficha.
+    -->
     <div v-if="cargando" class="text-center py-3">
       <span class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true" />
     </div>

@@ -1,10 +1,10 @@
 <template>
-  <!--
-    Formulario de una entrada de la ficha: lo usa «Agregar» (sin `entrada`) y «Editar» (con
-    `entrada`). Editar NO pisa la entrada: admin-api crea una nueva vigente que reemplaza a la
-    vieja (queda como «reemplazada» en el historial), igual que cuando lo hace Martín.
-  -->
   <form class="ficha-form" @submit.prevent="enviar">
+    <!--
+      Formulario de una entrada de la ficha: lo usa «Agregar» (sin `entrada`) y «Editar» (con
+      `entrada`). Editar NO pisa la entrada: admin-api crea una nueva vigente que reemplaza a la
+      vieja (queda como «reemplazada» en el historial), igual que cuando lo hace Martín.
+    -->
     <div class="row g-2">
       <div class="col-12 col-sm-6 col-lg-4">
         <label class="form-label small mb-1" :for="id_base + '-categoria'">Categoría</label>
