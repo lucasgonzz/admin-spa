@@ -37,12 +37,19 @@
          ticket sin leer la conversación. Sin título queda solo el número; sin resumen, nada más. -->
     <div v-if="has_ticket" class="support-conversation-heading min-w-0 w-100">
       <div class="support-conversation-heading-title text-truncate" :title="ticket_heading_text">{{ ticket_heading_text }}</div>
-      <!-- Con los controles a la vista el resumen se lee (y se edita) en su campo, más abajo. -->
+      <!-- Con los controles a la vista el resumen se lee (y se edita) en su campo, justo debajo. -->
       <div
         v-if="ticket_summary_text && show_back && !controles_abiertos"
         class="support-conversation-heading-summary support-conversation-heading-summary--compact"
         :title="ticket_summary_text">{{ ticket_summary_text }}</div>
     </div>
+    <!-- El resumen va pegado al título, arriba de los controles: el Guardar de abajo lo guarda junto con el nombre y el estado. -->
+    <ticket-summary-field
+      v-if="has_ticket"
+      :class="{ 'd-none': show_back && !controles_abiertos }"
+      :has_ticket="has_ticket"
+      :ticket_summary_draft="ticket_summary_draft"
+      @update:ticket_summary_draft="$emit('update:ticket_summary_draft', $event)" />
     <!-- d-none y no v-show: el display:none en línea de v-show pierde contra el d-flex !important. -->
     <div
       class="d-flex align-items-center flex-wrap gap-2 w-100"
@@ -89,12 +96,6 @@
         <ticket-conversation-actions :has_ticket="has_ticket" @exit-ticket="$emit('exit-ticket')" />
       </div>
     </div>
-    <ticket-summary-field
-      v-if="has_ticket"
-      :class="{ 'd-none': show_back && !controles_abiertos }"
-      :has_ticket="has_ticket"
-      :ticket_summary_draft="ticket_summary_draft"
-      @update:ticket_summary_draft="$emit('update:ticket_summary_draft', $event)" />
     <p v-if="has_ticket && !verification_on && selected_ticket.ai_pending_suggestion" class="small text-muted mb-0">
       El borrador pendiente sigue esperando que lo envíes o descartes. Las próximas respuestas salen solas.
     </p>
