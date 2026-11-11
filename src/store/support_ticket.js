@@ -42,6 +42,7 @@ function pedir_unread_badges(commit, force) {
         /* Total de no leídos de TODA la bandeja (sin operadores): `unread_total` de la API nueva,
            o la suma de `unread_totals` si la API es vieja. */
         commit('set_unread_total', unread_total_from_response(response.data))
+        commit('set_unread_total_prueba', response.data ? response.data.unread_total_prueba : null)
         if (response.data && response.data.inbox_nav) {
           commit('set_inbox_nav', response.data.inbox_nav)
         }
@@ -110,6 +111,18 @@ export default __base_store({
      */
     unread_total: 0,
     /**
+     * No leídos de los tickets de PRUEBA GRATUITA (misión prueba-ayuda-unificada-en-soporte, 10/11/2026).
+     * La API los saca de `unread_total` y los manda aparte en `unread_total_prueba`; con una API vieja
+     * queda en 0.
+     */
+    unread_total_prueba: 0,
+    /**
+     * Qué tickets muestra la bandeja: `clientes` (por defecto, sin los de prueba) o `prueba` (solo los de
+     * prueba). Se filtra por el flag `es_prueba` de cada fila; con una API vieja que no lo manda, la
+     * bandeja se ve completa.
+     */
+    filtro_prueba: 'clientes',
+    /**
      * Tickets abiertos (status open) para los badges: { all, mine, unassigned }.
      * Queda en null mientras la API no lo mande (API vieja): los badges caen a no leídos.
      */
@@ -144,6 +157,22 @@ export default __base_store({
       }
       const parsed = parseInt(value, 10)
       state.unread_total = isNaN(parsed) || parsed < 0 ? 0 : parsed
+    },
+    /**
+     * No leídos de los tickets de prueba. Nulo o ausente (API vieja) deja el valor que había.
+     */
+    set_unread_total_prueba(state, value) {
+      if (value === null || value === undefined) {
+        return
+      }
+      const parsed = parseInt(value, 10)
+      state.unread_total_prueba = isNaN(parsed) || parsed < 0 ? 0 : parsed
+    },
+    /**
+     * Cambia la bandeja entre `clientes` y `prueba`. Cualquier otro valor vuelve a `clientes`.
+     */
+    set_filtro_prueba(state, value) {
+      state.filtro_prueba = value === 'prueba' ? 'prueba' : 'clientes'
     },
     /**
      * Totales de tickets abiertos (API index o /support-ticket/unread-badges).
@@ -326,6 +355,7 @@ export default __base_store({
             commit('set_unread_totals', response.data.unread_totals)
           }
           commit('set_unread_total', unread_total_from_response(response.data))
+          commit('set_unread_total_prueba', response.data.unread_total_prueba)
           if (response.data.inbox_nav) {
             commit('set_inbox_nav', response.data.inbox_nav)
           }

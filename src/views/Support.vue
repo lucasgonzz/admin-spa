@@ -297,11 +297,34 @@ export default {
      */
     tickets_visibles() {
       const clave = this.clave_del_filtro
+      const de_la_bandeja = this.tickets_de_la_bandeja
       if (!clave || !this.api_manda_indicadores) {
-        return this.tickets
+        return de_la_bandeja
       }
-      return (this.tickets || []).filter(function (ticket) {
+      return de_la_bandeja.filter(function (ticket) {
         return !!(ticket && ticket[clave])
+      })
+    },
+    /**
+     * Tickets de la bandeja elegida en «Clientes» / «Prueba» (misión prueba-ayuda-unificada-en-soporte,
+     * 10/11/2026): por defecto, sin los de prueba gratuita, que es el mismo criterio con el que la API
+     * cuenta las tarjetas de inicio, así que el deep link sigue mostrando las filas que dice la tarjeta.
+     *
+     * 🔴 Compatibilidad: con una API vieja ninguna fila trae `es_prueba` y se muestra la lista completa.
+     *
+     * @returns {Array<Object>}
+     */
+    tickets_de_la_bandeja() {
+      const tickets = this.tickets || []
+      const marcados = tickets.some(function (ticket) {
+        return !!ticket && ticket.es_prueba !== undefined
+      })
+      if (!marcados) {
+        return tickets
+      }
+      const solo_prueba = this.$store.state.support_ticket.filtro_prueba === 'prueba'
+      return tickets.filter(function (ticket) {
+        return !!ticket && !!ticket.es_prueba === solo_prueba
       })
     },
     /**
