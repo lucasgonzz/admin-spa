@@ -19,9 +19,6 @@ export const CATEGORIAS = [
 	{ key: 'otro', label: 'Otro', singular: 'Otro', icon: 'three-dots', ayuda: 'Lo que no entra en las otras.' },
 ]
 
-/** Tope de entradas vigentes por cliente (la 61 la rechaza admin-api con `ficha_llena`). */
-export const TOPE_VIGENTES = 60
-
 /** Largo máximo del texto de una entrada (columna string(600)). */
 export const TEXTO_MAX = 600
 

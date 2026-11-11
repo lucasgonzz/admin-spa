@@ -15,6 +15,12 @@
     </div>
 
     <div v-else class="row g-3" :class="{ 'ficha-soporte--actualizando': cargando }">
+      <!-- Todo se guarda al tocar el botón de cada cosa: el «Guardar» del pie del modal es de los
+           datos del cliente, no de esta solapa. -->
+      <p class="col-12 ficha-soporte__aviso mb-0">
+        <i class="bi bi-info-circle" aria-hidden="true"></i>
+        La ficha se guarda sola con el botón de cada cambio; el «Guardar» del modal no hace falta.
+      </p>
       <div class="col-12 col-xl-8">
         <!-- ============================================================ -->
         <!-- Ficha operativa: la prosa de Lucas. Le llega a Martín en     -->
@@ -63,7 +69,7 @@
         <section class="ficha-panel">
           <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
             <h6 class="ficha-panel__titulo mb-0">Memoria del soporte</h6>
-            <span class="badge rounded-pill" :class="cerca_del_tope ? 'text-bg-warning' : 'text-bg-light border'"
+            <span v-if="tope" class="badge rounded-pill" :class="cerca_del_tope ? 'text-bg-warning' : 'text-bg-light border'"
               :title="'Entradas vigentes: ' + vigentes.length + ' de ' + tope + '. Con la ficha llena, Martín tiene que consolidar.'">
               {{ vigentes.length }} / {{ tope }}
             </span>
@@ -81,7 +87,7 @@
               v-if="!agregando"
               type="button"
               class="btn btn-sm btn-primary ficha-soporte__agregar"
-              :disabled="vigentes.length >= tope"
+              :disabled="ficha_llena"
               @click="abrir_agregar('decision')">
               <i class="bi bi-plus-lg" aria-hidden="true"></i>
               <span class="ms-1">Agregar</span>
@@ -131,6 +137,7 @@
                 :key="e.id"
                 :client_id="record.id"
                 :entrada="e"
+                :reemplazo="e.reemplazada_por ? entradas_por_id[e.reemplazada_por] || null : null"
                 mostrar_categoria />
             </ul>
           </div>
@@ -143,7 +150,7 @@
       <div class="col-12 col-xl-4">
         <section class="ficha-panel">
           <h6 class="ficha-panel__titulo mb-2">Tickets de soporte</h6>
-          <tickets-del-cliente :tickets="tickets" :cargando="cargando_tickets" :error="error_tickets" />
+          <tickets-del-cliente :tickets="tickets" @resumen-guardado="on_resumen_guardado" />
         </section>
       </div>
     </div>
@@ -155,7 +162,7 @@ import api from '@/utils/axios'
 import EntradaForm from './EntradaForm.vue'
 import EntradaFicha from './EntradaFicha.vue'
 import TicketsDelCliente from './TicketsDelCliente.vue'
-import { CATEGORIAS, TOPE_VIGENTES, error_legible } from './categorias'
+import { CATEGORIAS, error_legible } from './categorias'
 
 /**
  * Pestaña «Soporte» del detalle del cliente: la ficha de soporte (misión ficha-del-cliente,
@@ -168,6 +175,7 @@ import { CATEGORIAS, TOPE_VIGENTES, error_legible } from './categorias'
  *   PUT  client/{id}/support-memory/{entry}                  reemplazar (lo hace EntradaFicha)
  *   POST client/{id}/support-memory/{entry}/archive          dar de baja (lo hace EntradaFicha)
  *   GET|PUT client/{id}/support-memory/ficha-operativa       {ficha_operativa}
+ *   PUT  support-ticket/{id}  {summary}                      resumen de un ticket (lo hace TicketsDelCliente)
  */
 export default {
   name: 'ClientFichaSoporteTab',
@@ -183,7 +191,8 @@ export default {
       error_carga: '',
       entradas: [],
       ver_historial: false,
-      tope: TOPE_VIGENTES,
+      // Tope de vigentes: lo manda admin-api (`tope_vigentes`); null hasta la primera carga.
+      tope: null,
 
       ficha_operativa: '',
       editando_operativa: false,
@@ -197,8 +206,6 @@ export default {
       error_nueva: '',
 
       tickets: [],
-      cargando_tickets: false,
-      error_tickets: '',
     }
   },
   computed: {
@@ -238,7 +245,18 @@ export default {
       })
     },
     cerca_del_tope() {
-      return this.vigentes.length >= this.tope - 5
+      return !!this.tope && this.vigentes.length >= this.tope - 5
+    },
+    ficha_llena() {
+      return !!this.tope && this.vigentes.length >= this.tope
+    },
+    /** Entradas por id, para mostrar en el historial por cuál se reemplazó cada una. */
+    entradas_por_id() {
+      const mapa = {}
+      this.entradas.forEach(function (e) {
+        mapa[e.id] = e
+      })
+      return mapa
     },
     operativa_cambio() {
       return String(this.borrador_operativa || '').trim() !== String(this.ficha_operativa || '').trim()
@@ -304,14 +322,9 @@ export default {
         lista = cuerpo.models
       }
       this.entradas = lista
-      // El índice de tickets viaja en la misma respuesta (`tickets`); si un admin-api no lo
-      // manda, se arma con la lista de la bandeja.
+      // El índice de tickets viaja en la misma respuesta (`tickets`).
       if (!Array.isArray(cuerpo) && Array.isArray(cuerpo.tickets)) {
         this.tickets = cuerpo.tickets
-        this.cargando_tickets = false
-        this.error_tickets = ''
-      } else if (!this.tickets.length && !this.cargando_tickets) {
-        this.cargar_tickets_de_la_bandeja()
       }
       if (!Array.isArray(cuerpo) && Number(cuerpo.tope_vigentes) > 0) {
         this.tope = Number(cuerpo.tope_vigentes)
@@ -335,33 +348,14 @@ export default {
         })
     },
     /**
-     * Respaldo para un admin-api que no manda `tickets` en la ficha: la lista de la bandeja
-     * (GET support-ticket, la misma que usa Soporte) filtrada por este cliente. Trae `name` y,
-     * con la columna nueva, `summary`.
+     * Se corrigió el resumen de un ticket desde la lista: se actualiza en el lugar.
+     * @param {{id: number, resumen: string}} evento
      */
-    cargar_tickets_de_la_bandeja() {
-      const self = this
-      const client_id = Number(self.record.id)
-      self.cargando_tickets = true
-      self.error_tickets = ''
-      api
-        .get('/support-ticket', { silent_error: true })
-        .then(function (res) {
-          const cuerpo = res.data || {}
-          const lista = Array.isArray(cuerpo.models) ? cuerpo.models : []
-          self.tickets = lista
-            .filter(function (t) {
-              return Number(t.client_id) === client_id
-            })
-            .sort(function (a, b) {
-              return Number(b.id) - Number(a.id)
-            })
-          self.cargando_tickets = false
-        })
-        .catch(function (err) {
-          self.cargando_tickets = false
-          self.error_tickets = error_legible(err)
-        })
+    on_resumen_guardado(evento) {
+      this.tickets = this.tickets.map(function (t) {
+        return Number(t.id) === Number(evento.id) ? Object.assign({}, t, { resumen: evento.resumen, summary: evento.resumen }) : t
+      })
+      this.avisar('Resumen del ticket #' + evento.id + ' guardado.')
     },
     editar_operativa() {
       const self = this
@@ -493,6 +487,11 @@ function comparar_mas_nueva_primero(a, b) {
 
 .ficha-grupo--historial {
 	border-style: dashed;
+}
+
+.ficha-soporte__aviso {
+	font-size: 0.78rem;
+	color: var(--bs-secondary-color);
 }
 
 .ficha-soporte--actualizando {

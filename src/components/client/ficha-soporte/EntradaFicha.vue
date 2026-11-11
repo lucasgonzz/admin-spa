@@ -58,6 +58,12 @@
           {{ vencida ? 'Venció el' : 'Vence el' }} {{ vencimiento }}
         </span>
       </div>
+      <p v-if="entrada.status === 'reemplazada'" class="ficha-entrada__motivo mb-0" :title="reemplazo ? reemplazo.texto : ''">
+        <i class="bi bi-arrow-return-right" aria-hidden="true"></i>
+        <template v-if="reemplazo">Reemplazada por: «{{ reemplazo.texto }}»</template>
+        <template v-else-if="entrada.reemplazada_por">Reemplazada por otra entrada.</template>
+        <template v-else>Reemplazada.</template>
+      </p>
       <p v-if="entrada.status === 'archivada' && entrada.archived_reason" class="ficha-entrada__motivo mb-0">
         Motivo de la baja: {{ entrada.archived_reason }}
       </p>
@@ -111,6 +117,8 @@ export default {
     client_id: { type: [Number, String], required: true },
     /** La entrada (fila de client_support_memory_entries). */
     entrada: { type: Object, required: true },
+    /** En el historial: la entrada que reemplazó a esta (por `reemplazada_por`), si está en la lista. */
+    reemplazo: { type: Object, default: null },
     /** Muestra el chip de categoría (en el historial, donde no hay agrupado). */
     mostrar_categoria: { type: Boolean, default: false },
   },
