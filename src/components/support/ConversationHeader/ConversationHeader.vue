@@ -36,7 +36,11 @@
     <!-- «#89 · título» y el resumen que deja Martín (misión ficha-del-cliente): de qué se trata el
          ticket sin leer la conversación. Sin título queda solo el número; sin resumen, nada más. -->
     <div v-if="has_ticket" class="support-conversation-heading min-w-0 w-100">
-      <div class="support-conversation-heading-title text-truncate" :title="ticket_heading_text">{{ ticket_heading_text }}</div>
+      <!-- Junto al título, el punto con lo que hizo Martín en el ticket (misión auditoria-de-martin). -->
+      <div class="support-conversation-heading-row d-flex align-items-center gap-1 min-w-0">
+        <div class="support-conversation-heading-title text-truncate" :title="ticket_heading_text">{{ ticket_heading_text }}</div>
+        <martin-activity-indicator :ticket="selected_ticket" />
+      </div>
       <!-- Con los controles a la vista el resumen se lee (y se edita) en su campo, justo debajo. -->
       <div
         v-if="ticket_summary_text && show_back && !controles_abiertos"
@@ -112,6 +116,7 @@ import TicketAiSuggestionButton from './TicketAiSuggestionButton.vue'
 import TicketContactInfo from './TicketContactInfo.vue'
 import TicketTours from './TicketTours.vue'
 import TicketSummaryField from './TicketSummaryField.vue'
+import MartinActivityIndicator from '@/components/support/MartinActivity/MartinActivityIndicator.vue'
 import { ticket_heading, ticket_summary } from '@/utils/support_ticket_title'
 
 /**
@@ -129,6 +134,7 @@ export default {
     TicketContactInfo,
     TicketTours,
     TicketSummaryField,
+    MartinActivityIndicator,
   },
   /**
    * Vue 3: v-model:prop requiere emitir update:prop; se declara para evitar fallos de two-way.
