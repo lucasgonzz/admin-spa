@@ -22,6 +22,7 @@ import ClientExtensionesTab from '@/components/client/ExtensionesTab.vue'
 import ClientModelosIaTab from '@/components/client/ModelosIaTab.vue'
 import SubjectPipelinesTab from '@/components/pipeline/SubjectPipelinesTab.vue'
 import PruebaTab from '@/components/prueba/PruebaTab.vue'
+import ClientFichaSoporteTab from '@/components/client/ficha-soporte/Index.vue'
 
 /**
  * Vista principal de clientes.
@@ -69,6 +70,15 @@ export default {
           key: 'ventas',
           label: 'Ventas',
           component: markRaw(VentasTab),
+        },
+        {
+          /* Ficha de soporte (misión ficha-del-cliente, 11/11/2026): la memoria persistente que
+             Martín lee en cada ticket de este cliente y va escribiendo (decisiones, preferencias,
+             problemas, compromisos), con la ficha operativa de Lucas arriba y el índice de sus
+             tickets con título y resumen. Acá Lucas la ve y la corrige. */
+          key: 'soporte',
+          label: 'Soporte',
+          component: markRaw(ClientFichaSoporteTab),
         },
         {
           key: 'horarios',
