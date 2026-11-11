@@ -33,6 +33,16 @@
       @click="$emit('back')">
       <i class="bi bi-arrow-left" aria-hidden="true"></i>
     </button>
+    <!-- «#89 · título» y el resumen que deja Martín (misión ficha-del-cliente): de qué se trata el
+         ticket sin leer la conversación. Sin título queda solo el número; sin resumen, nada más. -->
+    <div v-if="has_ticket" class="support-conversation-heading min-w-0 w-100">
+      <div class="support-conversation-heading-title text-truncate" :title="ticket_heading_text">{{ ticket_heading_text }}</div>
+      <div
+        v-if="ticket_summary_text"
+        class="support-conversation-heading-summary"
+        :class="{ 'support-conversation-heading-summary--compact': show_back }"
+        :title="ticket_summary_text">{{ ticket_summary_text }}</div>
+    </div>
     <!-- d-none y no v-show: el display:none en línea de v-show pierde contra el d-flex !important. -->
     <div
       class="d-flex align-items-center flex-wrap gap-2 w-100"
@@ -94,6 +104,7 @@ import TicketAgentControls from './TicketAgentControls.vue'
 import TicketAiSuggestionButton from './TicketAiSuggestionButton.vue'
 import TicketContactInfo from './TicketContactInfo.vue'
 import TicketTours from './TicketTours.vue'
+import { ticket_heading, ticket_summary } from '@/utils/support_ticket_title'
 
 /**
  * Agrupa controles del hilo y un único guardado HTTP para nombre y estado.
@@ -217,6 +228,22 @@ export default {
       return this.selected_ticket && this.selected_ticket.support_attention ? (this.selected_ticket.support_attention.reason || '') : ''
     },
     /**
+     * «#89 · título» del ticket guardado (sin título, «Ticket #89»).
+     *
+     * @returns {string}
+     */
+    ticket_heading_text() {
+      return ticket_heading(this.selected_ticket)
+    },
+    /**
+     * Resumen del ticket (support_tickets.summary); vacío si no tiene.
+     *
+     * @returns {string}
+     */
+    ticket_summary_text() {
+      return ticket_summary(this.selected_ticket)
+    },
+    /**
      * Atajo para condicionar hijos.
      *
      * @returns {boolean}
@@ -322,6 +349,32 @@ export default {
 </script>
 
 <style scoped>
+.support-conversation-heading {
+  line-height: 1.25;
+}
+
+.support-conversation-heading-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--bs-secondary-color);
+}
+
+/* El resumen entra en dos renglones; el texto entero queda en el tooltip. */
+.support-conversation-heading-summary {
+  font-size: 0.8rem;
+  color: var(--bs-secondary-color);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* En teléfono, un renglón: la conversación necesita la pantalla. */
+.support-conversation-heading-summary--compact {
+  -webkit-line-clamp: 1;
+}
+
 .support-conversation-header-back {
   font-size: 1.35rem;
   line-height: 1;

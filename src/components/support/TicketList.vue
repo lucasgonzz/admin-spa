@@ -52,7 +52,12 @@
           <span class="support-ticket-time" :title="last_activity_full(ticket)">{{ last_activity_label(ticket) }}</span>
         </div>
         <div class="support-ticket-line support-ticket-line--sub">
-          <span class="support-ticket-number">Ticket #{{ ticket.id }}</span>
+          <!-- «#89 · título» cuando el ticket tiene título (lo pone Martín o Lucas); si no, «Ticket #89»
+               como siempre. El resumen va en el tooltip. -->
+          <span
+            class="support-ticket-number"
+            :class="{ 'support-ticket-number--titled': has_ticket_title(ticket) }"
+            :title="ticket_number_tooltip(ticket)">{{ ticket_heading(ticket) }}</span>
           <!-- Agente apagado en un ticket abierto: nadie contesta solo, hay que escribir a mano. -->
           <span
             v-if="agent_is_off(ticket)"
@@ -145,6 +150,7 @@
 import moment from 'moment'
 import MessageTicks from '@/components/support/MessageTicks.vue'
 import { client_display_name, contact_display_name, agent_is_off_on_open_ticket, last_message_author } from '@/utils/support_ticks'
+import { ticket_heading, ticket_title, ticket_summary } from '@/utils/support_ticket_title'
 
 export default {
   name: 'SupportTicketList',
@@ -214,6 +220,20 @@ export default {
     },
   },
   methods: {
+    ticket_heading,
+    /** true si el ticket tiene título guardado (cambia el recorte de la segunda línea). */
+    has_ticket_title(ticket) {
+      return ticket_title(ticket) !== ''
+    },
+    /** Tooltip de «#89 · título»: el título entero y, si hay, el resumen. */
+    ticket_number_tooltip(ticket) {
+      const partes = [ticket_heading(ticket)]
+      const resumen = ticket_summary(ticket)
+      if (resumen !== '') {
+        partes.push(resumen)
+      }
+      return partes.join(' — ')
+    },
     open_ticket_menu(event, ticket) {
       if (this.ticket_status_class(ticket) === 'closed') return
       event.preventDefault()
@@ -726,6 +746,14 @@ export default {
   font-size: 0.78rem;
   color: var(--bs-secondary-color);
   white-space: nowrap;
+}
+
+/* Con título la línea puede ser larga: se recorta con puntos y le deja lugar al chip del agente. */
+.support-ticket-number--titled {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Chip «Agente apagado · modo manual»: gris tenue con el robot tachado. No depende solo del color:
