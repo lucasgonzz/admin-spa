@@ -151,6 +151,38 @@
           </div>
         </div>
       </div>
+
+      <!-- ============================================================ -->
+      <!-- Encuesta de fin de prueba (solo lectura)                       -->
+      <!-- ============================================================ -->
+      <div v-if="datos.encuesta" class="col-12">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+              <span class="fw-semibold">Encuesta de fin de prueba</span>
+              <span v-if="datos.encuesta.respondida_at" class="prueba-encuesta-estrellas" :aria-label="datos.encuesta.estrellas + ' de 5 estrellas'">
+                <span v-for="n in 5" :key="n" :class="n <= datos.encuesta.estrellas ? 'text-warning' : 'text-muted opacity-25'">★</span>
+              </span>
+            </div>
+            <p v-if="!datos.encuesta.respondida_at" class="small text-muted mb-0">
+              <template v-if="datos.encuesta.enviada_at">Enviada el {{ fecha(datos.encuesta.enviada_at) }}. Todavía no la contestó.</template>
+              <template v-else>Creada, todavía no salió por ningún canal.</template>
+            </p>
+            <template v-else>
+              <p class="small text-muted mb-2">
+                Contestada el {{ fecha(datos.encuesta.respondida_at) }}{{ datos.encuesta.contrato_al_responder ? ' · ya había contratado' : '' }}.
+              </p>
+              <ul class="list-unstyled small mb-2 row g-1">
+                <li v-for="pregunta in preguntas_de_la_encuesta" :key="pregunta.campo" class="col-12 col-md-6 d-flex gap-2">
+                  <span class="badge" :class="clase_respuesta(datos.encuesta[pregunta.campo])">{{ texto_respuesta(datos.encuesta[pregunta.campo]) }}</span>
+                  <span>{{ pregunta.label }}</span>
+                </li>
+              </ul>
+              <p v-if="datos.encuesta.comentario" class="small mb-0 prueba-encuesta-comentario">«{{ datos.encuesta.comentario }}»</p>
+            </template>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -212,6 +244,17 @@ export default {
         return 'Disponible cuando se actualice el sistema del negocio.'
       }
       return 'No se pudo consultar el cupo en el sistema del negocio. Probá actualizar la prueba.'
+    },
+    /** Las seis preguntas de sí/no de la encuesta, con el rótulo corto que ve el equipo. */
+    preguntas_de_la_encuesta() {
+      return [
+        { campo: 'implementacion_practica', label: 'La puesta en marcha le resultó práctica' },
+        { campo: 'soporte_sirvio', label: 'Le sirvió el soporte' },
+        { campo: 'probo_gestion', label: 'Entendió y probó la gestión' },
+        { campo: 'probo_tienda', label: 'Entendió y probó la tienda' },
+        { campo: 'probo_agentes', label: 'Entendió y probó los agentes' },
+        { campo: 'atencion_buena', label: 'La atención fue buena' },
+      ]
     },
     /** Cuántos hitos ya pasaron. */
     hitos_hechos() {
@@ -320,6 +363,13 @@ export default {
           this.avisando = false
         })
     },
+    /** Sí / No / sin contestar de una pregunta de la encuesta. */
+    texto_respuesta(valor) {
+      return valor === true ? 'Sí' : valor === false ? 'No' : '—'
+    },
+    clase_respuesta(valor) {
+      return valor === true ? 'bg-success' : valor === false ? 'bg-danger' : 'bg-secondary bg-opacity-25 text-secondary'
+    },
     /** Fecha corta en hora local. */
     fecha(iso) {
       if (!iso) {
@@ -337,8 +387,23 @@ export default {
         const motivos = { dia_5: 'día 5', vencida: 'venció', manual: 'a pedido' }
         return 'Aviso a Tomás (' + (motivos[envio.hito] || envio.hito) + ')'
       }
-      if (envio.plantilla === 'cc_prueba_bienvenida') {
+      if (envio.plantilla && envio.plantilla.indexOf('cc_prueba_bienvenida') === 0) {
         return 'Bienvenida de Martín'
+      }
+      /* Envíos de la misión prueba-e2e-campana-imperio: encuesta, día 5, correos y lo que queda en el sistema. */
+      const fijos = {
+        cc_prueba_fin_encuesta: 'Encuesta de fin de prueba (WhatsApp)',
+        cc_prueba_dia_5: 'Aviso de que le quedan pocos días (WhatsApp)',
+        correo_fin_encuesta: 'Encuesta de fin de prueba (correo)',
+        correo_dia_5: 'Aviso de que le quedan pocos días (correo)',
+        sistema_bienvenida: 'Bienvenida en Soporte de su sistema',
+      }
+      if (fijos[envio.plantilla]) {
+        return fijos[envio.plantilla]
+      }
+      if (envio.plantilla && envio.plantilla.indexOf('correo_paso_') === 0) {
+        const hito_correo = this.datos.hitos_catalogo ? this.datos.hitos_catalogo[envio.hito] : null
+        return 'Correo del paso: ' + (hito_correo || envio.hito)
       }
       if (envio.plantilla && envio.plantilla.indexOf('cc_prueba_paso_') === 0) {
         const hito = this.datos.hitos_catalogo ? this.datos.hitos_catalogo[envio.hito] : null
@@ -371,5 +436,14 @@ export default {
 .prueba-envios {
   max-height: 14rem;
   overflow-y: auto;
+}
+.prueba-encuesta-estrellas {
+  font-size: 1.15rem;
+  letter-spacing: 0.1rem;
+  white-space: nowrap;
+}
+.prueba-encuesta-comentario {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
 }
 </style>
