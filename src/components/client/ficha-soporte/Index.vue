@@ -1,5 +1,5 @@
 <template>
-  <div class="p-3 ficha-soporte">
+  <div class="p-2 p-sm-3 ficha-soporte">
     <p v-if="!record || !record.id" class="text-muted small fst-italic mb-0">
       Guardá el cliente primero para ver su ficha de soporte.
     </p>
@@ -151,11 +151,11 @@
 </template>
 
 <script>
-import api, { resolve_error_message } from '@/utils/axios'
+import api from '@/utils/axios'
 import EntradaForm from './EntradaForm.vue'
 import EntradaFicha from './EntradaFicha.vue'
 import TicketsDelCliente from './TicketsDelCliente.vue'
-import { CATEGORIAS, TOPE_VIGENTES } from './categorias'
+import { CATEGORIAS, TOPE_VIGENTES, error_legible } from './categorias'
 
 /**
  * Pestaña «Soporte» del detalle del cliente: la ficha de soporte (misión ficha-del-cliente,
@@ -163,12 +163,11 @@ import { CATEGORIAS, TOPE_VIGENTES } from './categorias'
  * este cliente y va escribiendo; acá Lucas la ve y la corrige.
  *
  * Rutas del panel (admin-api, grupo admin):
- *   GET  client/{id}/support-memory[?incluir_historial=1]   entradas (y, si vienen, los tickets)
+ *   GET  client/{id}/support-memory?incluir_historial=0|1   entradas, ficha_operativa, tope y `tickets`
  *   POST client/{id}/support-memory                          agregar {categoria, texto, vigente_hasta}
  *   PUT  client/{id}/support-memory/{entry}                  reemplazar (lo hace EntradaFicha)
  *   POST client/{id}/support-memory/{entry}/archive          dar de baja (lo hace EntradaFicha)
  *   GET|PUT client/{id}/support-memory/ficha-operativa       {ficha_operativa}
- *   GET  client/{id}/support-memory/tickets                  índice de tickets (número, título, resumen)
  */
 export default {
   name: 'ClientFichaSoporteTab',
@@ -265,7 +264,6 @@ export default {
       }
       this.cargar()
       this.cargar_operativa()
-      this.cargar_tickets()
     },
     /** Entradas de la ficha; con el interruptor prendido, también las no vigentes. */
     cargar() {
@@ -275,7 +273,8 @@ export default {
       }
       self.cargando = true
       self.error_carga = ''
-      const params = self.ver_historial ? { incluir_historial: 1 } : {}
+      // Explícito: sin el parámetro, admin-api devuelve también el historial.
+      const params = { incluir_historial: self.ver_historial ? 1 : 0 }
       api
         .get(self.url_base, { params: params, silent_error: true })
         .then(function (res) {
@@ -285,7 +284,7 @@ export default {
         })
         .catch(function (err) {
           self.cargando = false
-          self.error_carga = resolve_error_message(err)
+          self.error_carga = error_legible(err)
         })
     },
     /**
@@ -305,6 +304,18 @@ export default {
         lista = cuerpo.models
       }
       this.entradas = lista
+      // El índice de tickets viaja en la misma respuesta (`tickets`); si un admin-api no lo
+      // manda, se arma con la lista de la bandeja.
+      if (!Array.isArray(cuerpo) && Array.isArray(cuerpo.tickets)) {
+        this.tickets = cuerpo.tickets
+        this.cargando_tickets = false
+        this.error_tickets = ''
+      } else if (!this.tickets.length && !this.cargando_tickets) {
+        this.cargar_tickets_de_la_bandeja()
+      }
+      if (!Array.isArray(cuerpo) && Number(cuerpo.tope_vigentes) > 0) {
+        this.tope = Number(cuerpo.tope_vigentes)
+      }
       if (!Array.isArray(cuerpo) && Object.prototype.hasOwnProperty.call(bloque, 'ficha_operativa') && !this.editando_operativa) {
         this.ficha_operativa = bloque.ficha_operativa || ''
       }
@@ -323,35 +334,16 @@ export default {
           // Sin la ruta todavía la prosa queda vacía; las entradas se siguen viendo.
         })
     },
-    /** Índice de tickets del cliente (número, título y resumen). */
-    cargar_tickets() {
-      const self = this
-      self.cargando_tickets = true
-      self.error_tickets = ''
-      api
-        .get(self.url_base + '/tickets', { silent_error: true })
-        .then(function (res) {
-          const cuerpo = res.data || {}
-          self.tickets = Array.isArray(cuerpo) ? cuerpo : (cuerpo.tickets || cuerpo.models || [])
-          self.cargando_tickets = false
-        })
-        .catch(function (err) {
-          if (err && err.response && err.response.status === 404) {
-            self.cargar_tickets_de_la_bandeja()
-            return
-          }
-          self.cargando_tickets = false
-          self.error_tickets = resolve_error_message(err)
-        })
-    },
     /**
-     * Respaldo para un admin-api sin la ruta del índice: la lista de la bandeja
+     * Respaldo para un admin-api que no manda `tickets` en la ficha: la lista de la bandeja
      * (GET support-ticket, la misma que usa Soporte) filtrada por este cliente. Trae `name` y,
      * con la columna nueva, `summary`.
      */
     cargar_tickets_de_la_bandeja() {
       const self = this
       const client_id = Number(self.record.id)
+      self.cargando_tickets = true
+      self.error_tickets = ''
       api
         .get('/support-ticket', { silent_error: true })
         .then(function (res) {
@@ -368,7 +360,7 @@ export default {
         })
         .catch(function (err) {
           self.cargando_tickets = false
-          self.error_tickets = resolve_error_message(err)
+          self.error_tickets = error_legible(err)
         })
     },
     editar_operativa() {
@@ -398,7 +390,7 @@ export default {
         })
         .catch(function (err) {
           self.guardando_operativa = false
-          self.error_operativa = resolve_error_message(err)
+          self.error_operativa = error_legible(err)
         })
     },
     abrir_agregar(categoria) {
@@ -421,7 +413,7 @@ export default {
         })
         .catch(function (err) {
           self.guardando_nueva = false
-          self.error_nueva = resolve_error_message(err)
+          self.error_nueva = error_legible(err)
         })
     },
     /** Una entrada se editó o se dio de baja: se recarga la lista entera. */
@@ -510,6 +502,10 @@ function comparar_mas_nueva_primero(a, b) {
 
 /* En teléfono el interruptor y «Agregar» bajan a su propio renglón, a todo el ancho. */
 @media (max-width: 575.98px) {
+	.ficha-panel {
+		padding: 0.75rem 0.6rem;
+	}
+
 	.ficha-soporte__agregar {
 		width: 100%;
 	}

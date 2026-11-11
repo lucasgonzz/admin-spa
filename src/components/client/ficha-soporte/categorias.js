@@ -7,6 +7,7 @@
  * `client_support_memory_entries.categoria`.
  */
 import moment from 'moment'
+import { resolve_error_message } from '@/utils/axios'
 
 export const CATEGORIAS = [
 	{ key: 'compromiso', label: 'Compromisos', singular: 'Compromiso', icon: 'calendar-check', ayuda: 'Algo con fecha: «el lunes 17 arrancamos la carga». Poné el vencimiento.' },
@@ -134,4 +135,22 @@ export function fecha_para_input(valor) {
 		return ''
 	}
 	return String(valor).substring(0, 10)
+}
+
+/**
+ * Mensaje de error para mostrar en la ficha. Los rechazos propios de la ficha llegan como
+ * `{error: "dato_sensible", message: "dato_sensible: El texto…"}`: el código es para Martín, así
+ * que acá se saca del principio y queda solo la explicación.
+ *
+ * @param {Error} err
+ * @returns {string}
+ */
+export function error_legible(err) {
+	const mensaje = resolve_error_message(err)
+	const cuerpo = err && err.response && err.response.data ? err.response.data : {}
+	const codigo = typeof cuerpo.error === 'string' ? cuerpo.error : ''
+	if (codigo !== '' && mensaje.indexOf(codigo + ': ') === 0) {
+		return mensaje.slice(codigo.length + 2)
+	}
+	return mensaje
 }

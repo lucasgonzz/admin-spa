@@ -90,9 +90,9 @@
 </template>
 
 <script>
-import api, { resolve_error_message } from '@/utils/axios'
+import api from '@/utils/axios'
 import EntradaForm from './EntradaForm.vue'
-import { MOTIVO_MAX, autor_de, categoria_de, esta_vencida, fecha_corta, fecha_hora, fecha_sin_hora } from './categorias'
+import { MOTIVO_MAX, autor_de, categoria_de, esta_vencida, fecha_corta, fecha_hora, fecha_sin_hora, error_legible } from './categorias'
 
 /**
  * Una entrada de la ficha de soporte del cliente, con sus dos acciones:
@@ -186,7 +186,7 @@ export default {
         })
         .catch(function (err) {
           self.guardando = false
-          self.error = resolve_error_message(err)
+          self.error = error_legible(err)
         })
     },
     /** Da de baja la entrada con el motivo escrito. */
@@ -207,7 +207,7 @@ export default {
         })
         .catch(function (err) {
           self.guardando = false
-          self.error = resolve_error_message(err)
+          self.error = error_legible(err)
         })
     },
   },
