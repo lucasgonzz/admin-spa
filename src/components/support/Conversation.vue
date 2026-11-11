@@ -345,9 +345,21 @@
                   </span>
                 </template>
               </div>
+              <!-- Recorrido de Martín de la atención que terminó con este mensaje (auditoria-de-martin). -->
+              <martin-activity-card
+                v-for="atencion in martin_atenciones_bajo(message)"
+                :key="'martin-' + atencion.run_id"
+                :atencion="atencion" />
             </div>
           </div>
         </div>
+      </div>
+      <!-- Atenciones de Martín que no se pueden ubicar bajo un mensaje suyo: al pie del hilo. -->
+      <div v-if="martin_ubicacion.al_pie.length" class="support-martin-al-pie">
+        <martin-activity-card
+          v-for="atencion in martin_ubicacion.al_pie"
+          :key="'martin-' + atencion.run_id"
+          :atencion="atencion" />
       </div>
       <!-- Aviso de ventana vencida. Va al final del hilo y no en el pie de la pantalla para que
            quede pegado a lo último que se dijo: es la respuesta a "por qué no puedo contestar
@@ -396,6 +408,8 @@ import AudioPlayer from '@/components/lead/conversation/AudioPlayer.vue'
 import BorderProgressWrap from '@/components/support/BorderProgressWrap.vue'
 import MessageTicks from '@/components/support/MessageTicks.vue'
 import SupportTemplatePickerModal from '@/components/support/SupportTemplatePickerModal.vue'
+import MartinActivityCard from '@/components/support/MartinActivity/MartinActivityCard.vue'
+import { martin_activity_state, ubicar_atenciones, programar_recarga_de_actividad } from '@/utils/martin_activity'
 import lead_conversation_date_dividers from '@/mixins/lead_conversation_date_dividers'
 import {
   media_type_of,
@@ -425,6 +439,7 @@ export default {
     BorderProgressWrap,
     MessageTicks,
     SupportTemplatePickerModal,
+    MartinActivityCard,
   },
   /* Secciones por día (message_date_sections) a partir del computed sorted_messages. */
   mixins: [lead_conversation_date_dividers],
@@ -475,9 +490,34 @@ export default {
       reaction_bar_message_id: null,
       /** Id del mensaje con un POST de reacción en vuelo, o null (bloquea los demás botones). */
       reacting_message_id: null,
+      /** Actividad de Martín del ticket abierto (estado compartido con el encabezado). */
+      martin_actividad: martin_activity_state,
     }
   },
   computed: {
+    /**
+     * Dónde va cada atención de Martín: bajo el último mensaje del soporte de su rango, o al pie.
+     * Solo con la actividad del ticket que está abierto.
+     *
+     * @returns {{por_mensaje: Object<string, Array<Object>>, al_pie: Array<Object>}}
+     */
+    martin_ubicacion() {
+      const estado = this.martin_actividad
+      if (this.loading || !estado.cargado || String(estado.ticket_id) !== String(this.active_ticket_id)) {
+        return { por_mensaje: {}, al_pie: [] }
+      }
+      return ubicar_atenciones(estado.atenciones, this.messages)
+    },
+    /**
+     * «ticket:último mensaje»: cuando cambia dentro del mismo ticket, llegó un mensaje nuevo.
+     *
+     * @returns {string}
+     */
+    martin_ultimo_mensaje() {
+      const list = Array.isArray(this.messages) ? this.messages : []
+      const ultimo = list.length ? list[list.length - 1] : null
+      return String(this.active_ticket_id) + ':' + (ultimo && ultimo.id != null ? String(ultimo.id) : '')
+    },
     /**
      * Mensajes del hilo para el mixin de divisores de fecha, en el orden en que vienen del store.
      *
@@ -576,6 +616,25 @@ export default {
     /**
      * deep: el store muta el mismo array (push/splice); sin deep el watcher no corre.
      */
+    /**
+     * Mensaje nuevo en el ticket abierto: se recarga la actividad de Martín (con demora, ver
+     * programar_recarga_de_actividad). Al cambiar de ticket la pide el encabezado.
+     */
+    martin_ultimo_mensaje(nuevo, viejo) {
+      const ticket = String(this.active_ticket_id) + ':'
+      if (!viejo || nuevo === viejo || nuevo === ticket || viejo === ticket || viejo.indexOf(ticket) !== 0) {
+        return
+      }
+      programar_recarga_de_actividad(this.active_ticket_id)
+    },
+    /**
+     * Si aparecen tarjetas nuevas con el hilo al pie, se mantiene al pie.
+     */
+    martin_ubicacion() {
+      if (this.cerca_del_pie()) {
+        this.schedule_scroll_to_bottom()
+      }
+    },
     messages: {
       deep: true,
       handler() {
@@ -986,6 +1045,30 @@ export default {
     /**
      * Clave para v-for: id persistido o token de optimista.
      */
+    /**
+     * Atenciones de Martín que van bajo este mensaje.
+     *
+     * @param {Object} message
+     * @returns {Array<Object>}
+     */
+    martin_atenciones_bajo(message) {
+      if (!message || message.id == null) {
+        return []
+      }
+      return this.martin_ubicacion.por_mensaje[String(message.id)] || []
+    },
+    /**
+     * true si el hilo está mirando el final (a menos de 160px del pie).
+     *
+     * @returns {boolean}
+     */
+    cerca_del_pie() {
+      const container = this.$refs.conversation_body
+      if (!container) {
+        return false
+      }
+      return container.scrollHeight - container.scrollTop - container.clientHeight < 160
+    },
     message_key(message) {
       if (message.id != null) {
         return 'm-' + message.id
@@ -1474,6 +1557,16 @@ export default {
 </script>
 
 <style scoped>
+/* Tarjetas de Martín que no se pudieron ubicar bajo un mensaje suyo: a la derecha, como el soporte. */
+.support-martin-al-pie {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  margin: 0 0 8px auto;
+  max-width: 80%;
+}
+
 /*
   Contenedor en columna: el bloque central (support-right-middle) es flex;
   la cuerpo con overflow hace scroll; el conjunto ocupa verticalmente el espacio restante.
