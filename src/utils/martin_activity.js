@@ -172,7 +172,9 @@ export function contar_acciones(atenciones) {
 }
 
 /**
- * Escrituras de una lista de atenciones (del resumen, o contando las acciones).
+ * Escrituras EN EL SISTEMA DEL CLIENTE de una lista de atenciones (del resumen, o contando las
+ * acciones). Lo que Martín anota del lado del soporte (ficha, título, notas internas) es `registro`
+ * y no cuenta: es lo mismo que `martin_writes_count` del ticket.
  *
  * @param {Array<Object>} atenciones
  * @returns {number}
@@ -183,7 +185,7 @@ export function contar_escrituras(atenciones) {
       return total + (Number(atencion.resumen.escrituras) || 0)
     }
     const acciones = Array.isArray(atencion.acciones) ? atencion.acciones : []
-    return total + acciones.filter(function (accion) { return accion.kind === 'escritura' }).length
+    return total + acciones.filter(function (accion) { return accion.kind === 'escritura' && accion.ok !== false && accion.ok !== 0 }).length
   }, 0)
 }
 
@@ -191,7 +193,9 @@ export function contar_escrituras(atenciones) {
 const TIPOS = {
   lectura: { icono: 'bi-eye', rotulo: 'Lectura' },
   consulta: { icono: 'bi-journal-text', rotulo: 'Consulta' },
-  escritura: { icono: 'bi-pencil-square', rotulo: 'Escritura' },
+  escritura: { icono: 'bi-pencil-square', rotulo: 'Escritura en el sistema' },
+  /* Ficha, título, notas internas: lo que Martín anota del lado del soporte, sin tocar el sistema del cliente. */
+  registro: { icono: 'bi-bookmark', rotulo: 'Registro interno' },
   envio: { icono: 'bi-send', rotulo: 'Envío' },
   plan: { icono: 'bi-list-check', rotulo: 'Plan' },
   error: { icono: 'bi-exclamation-triangle', rotulo: 'Error' },
@@ -361,6 +365,19 @@ export function ubicar_atenciones(atenciones, mensajes) {
   })
   return { por_mensaje: por_mensaje, al_pie: al_pie }
 }
+
+/**
+ * true si la atención es de un seguimiento proactivo (Martín escribió sin que el cliente preguntara).
+ *
+ * @param {Object} atencion
+ * @returns {boolean}
+ */
+export function es_seguimiento(atencion) {
+  return !!(atencion && atencion.origen === 'seguimiento')
+}
+
+/** Rótulo de las atenciones de seguimiento. */
+export const ROTULO_SEGUIMIENTO = 'Seguimiento proactivo'
 
 /** Aclaración que acompaña al panel y a las tarjetas. */
 export const ACLARACION_ACTIVIDAD = 'Registra lo que Martín hizo con las herramientas del soporte; lo que leyó del manual o del código no aparece.'

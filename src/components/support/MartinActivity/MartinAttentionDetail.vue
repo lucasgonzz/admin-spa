@@ -214,6 +214,11 @@ export default {
 	color: var(--bs-warning-text-emphasis);
 }
 
+/* Registro interno (ficha, título, notas): otro color que la escritura en el sistema del cliente. */
+.martin-accion--registro .martin-accion-icono {
+	color: var(--bs-info-text-emphasis);
+}
+
 .martin-accion--envio .martin-accion-icono {
 	color: var(--bs-primary);
 }

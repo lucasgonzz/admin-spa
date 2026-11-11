@@ -28,14 +28,17 @@
       <p class="small mb-0">
         <strong>{{ total }}</strong> {{ total === 1 ? 'acción' : 'acciones' }}
         en {{ atenciones.length }} {{ atenciones.length === 1 ? 'atención' : 'atenciones' }}<template v-if="escrituras > 0">,
-          <span class="martin-panel-escrituras">{{ escrituras }} {{ escrituras === 1 ? 'escritura' : 'escrituras' }}</span></template>.
+          <span class="martin-panel-escrituras">{{ escrituras }} {{ escrituras === 1 ? 'escritura' : 'escrituras' }} en el sistema</span></template>.
       </p>
       <article
         v-for="atencion in atenciones"
         :key="atencion.run_id"
         class="border rounded p-3 martin-panel-atencion">
         <header class="d-flex flex-wrap align-items-baseline gap-2 justify-content-between mb-2">
-          <h3 class="fs-6 mb-0">Atención del {{ rango(atencion) }}</h3>
+          <h3 class="fs-6 mb-0">
+            Atención del {{ rango(atencion) }}
+            <span v-if="seguimiento(atencion)" class="badge rounded-pill text-bg-info martin-panel-origen">{{ rotulo_seguimiento }}</span>
+          </h3>
           <span class="martin-panel-resumen small text-muted">{{ resumen(atencion) }}</span>
         </header>
         <martin-attention-detail :atencion="atencion" :acciones_abiertas="true" />
@@ -53,14 +56,20 @@ import {
   programar_recarga_de_actividad,
   contar_escrituras,
   rango_de_atencion,
+  es_seguimiento,
+  ROTULO_SEGUIMIENTO,
   ACLARACION_ACTIVIDAD,
 } from '@/utils/martin_activity'
 
-/** Rótulos del resumen de una atención, en el orden en que se muestran. */
+/**
+ * Rótulos del resumen de una atención, en el orden en que se muestran. Las escrituras son las del
+ * sistema del cliente; los registros internos (ficha, título, notas) van aparte.
+ */
 const RESUMEN = [
   ['lecturas', 'lectura', 'lecturas'],
   ['consultas', 'consulta', 'consultas'],
-  ['escrituras', 'escritura', 'escrituras'],
+  ['escrituras', 'escritura en el sistema', 'escrituras en el sistema'],
+  ['registros', 'registro interno', 'registros internos'],
   ['envios', 'envío', 'envíos'],
   ['errores', 'error', 'errores'],
 ]
@@ -90,6 +99,7 @@ export default {
       /** Estado compartido con las tarjetas de la conversación. */
       estado: martin_activity_state,
       aclaracion: ACLARACION_ACTIVIDAD,
+      rotulo_seguimiento: ROTULO_SEGUIMIENTO,
     }
   },
   computed: {
@@ -121,7 +131,9 @@ export default {
       return Number(this.ticket.martin_activity_count) || 0
     },
     /**
-     * Escrituras: igual que el total.
+     * Escrituras en el sistema del cliente (las que pintan el punto de amarillo): igual que el
+     * total, lo cargado manda y antes de cargar, `martin_writes_count`. Los registros internos no
+     * cuentan.
      *
      * @returns {number}
      */
@@ -143,7 +155,7 @@ export default {
       }
       const acciones = this.total + (this.total === 1 ? ' acción' : ' acciones')
       if (this.escrituras > 0) {
-        return 'Martín: ' + acciones + ', ' + this.escrituras + (this.escrituras === 1 ? ' escritura' : ' escrituras')
+        return 'Martín: ' + acciones + ', ' + this.escrituras + (this.escrituras === 1 ? ' escritura' : ' escrituras') + ' en el sistema'
       }
       return 'Martín: ' + acciones
     },
@@ -185,6 +197,9 @@ export default {
     },
     rango(atencion) {
       return rango_de_atencion(atencion)
+    },
+    seguimiento(atencion) {
+      return es_seguimiento(atencion)
     },
     /**
      * «3 lecturas · 1 escritura · 1 envío» de una atención.
@@ -260,6 +275,13 @@ export default {
 .martin-panel-escrituras {
 	color: var(--bs-warning-text-emphasis);
 	font-weight: 600;
+}
+
+.martin-panel-origen {
+	margin-left: 0.25rem;
+	font-size: 0.7rem;
+	font-weight: 500;
+	vertical-align: middle;
 }
 
 .martin-panel-atencion {

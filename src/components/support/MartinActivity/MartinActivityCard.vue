@@ -11,6 +11,7 @@
       @click="abierta = !abierta">
       <i class="bi bi-signpost-2 martin-tarjeta-icono" aria-hidden="true"></i>
       <span class="martin-tarjeta-titulo">Recorrido de Martín</span>
+      <span v-if="seguimiento" class="badge rounded-pill text-bg-info martin-tarjeta-origen">{{ rotulo_seguimiento }}</span>
       <span class="martin-tarjeta-meta">{{ meta }}</span>
       <i class="bi martin-tarjeta-chevron" :class="abierta ? 'bi-chevron-up' : 'bi-chevron-down'" aria-hidden="true"></i>
     </button>
@@ -23,7 +24,7 @@
 
 <script>
 import MartinAttentionDetail from './MartinAttentionDetail.vue'
-import { rango_de_atencion, ACLARACION_ACTIVIDAD } from '@/utils/martin_activity'
+import { rango_de_atencion, es_seguimiento, ROTULO_SEGUIMIENTO, ACLARACION_ACTIVIDAD } from '@/utils/martin_activity'
 
 /**
  * Tarjeta del recorrido de una atención de Martín en la conversación.
@@ -45,11 +46,20 @@ export default {
       /** Tarjeta desplegada. */
       abierta: false,
       aclaracion: ACLARACION_ACTIVIDAD,
+      rotulo_seguimiento: ROTULO_SEGUIMIENTO,
     }
   },
   computed: {
     /**
-     * «11/11/26 14:02 a 14:20 · 3 de 5 pasos» (o la cantidad de acciones si no hay plan).
+     * true si la atención es de un seguimiento proactivo.
+     *
+     * @returns {boolean}
+     */
+    seguimiento() {
+      return es_seguimiento(this.atencion)
+    },
+    /**
+     * «11/11/26, 14:02 a 14:20 · 3 de 5 pasos» (o la cantidad de acciones si no hay plan).
      *
      * @returns {string}
      */
@@ -104,6 +114,11 @@ export default {
 
 .martin-tarjeta-titulo {
 	font-weight: 600;
+}
+
+.martin-tarjeta-origen {
+	font-size: 0.68rem;
+	font-weight: 500;
 }
 
 .martin-tarjeta-meta {
