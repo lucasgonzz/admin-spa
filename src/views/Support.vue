@@ -67,6 +67,7 @@
           :selected_ticket="selected_ticket"
           :ticket_name_draft="ticket_name_draft"
           :ticket_status_draft="ticket_status_draft"
+          :ticket_summary_draft="ticket_summary_draft"
           :saving_header="saving_header"
           :saving_agent_controls="saving_agent_controls"
           :ai_suggestion_loading="loading_suggestion"
@@ -75,6 +76,7 @@
           :show_back="is_mobile && is_conversation_route"
           @update:ticket_name_draft="set_header_ticket_name_draft"
           @update:ticket_status_draft="set_header_ticket_status_draft"
+          @update:ticket_summary_draft="ticket_summary_draft = $event"
           @save-header="save_header"
           @exit-ticket="on_exit_ticket"
           @back="volver_a_la_lista"
@@ -156,6 +158,11 @@ export default {
        * Estado local del ticket (open | closed) antes del PUT del header.
        */
       ticket_status_draft: 'open',
+      /**
+       * Borrador del resumen del ticket (support_tickets.summary, misión ficha-del-cliente). Se
+       * guarda con el mismo PUT del header que el nombre y el estado.
+       */
+      ticket_summary_draft: '',
       /**
        * Mientras se persiste nombre y estado del header vía API.
        */
@@ -444,6 +451,17 @@ export default {
     },
   },
   watch: {
+    /**
+     * Martín puede escribir el resumen (`titular`) mientras el ticket está abierto acá: llega por
+     * Pusher al ticket de la lista. Si el borrador no se tocó (era el resumen anterior), se pone
+     * al día; si Lucas lo estaba editando, se respeta lo suyo.
+     */
+    'selected_ticket.summary': function (nuevo, viejo) {
+      const borrador = String(this.ticket_summary_draft || '').trim()
+      if (borrador === String(viejo == null ? '' : viejo).trim()) {
+        this.ticket_summary_draft = nuevo == null ? '' : String(nuevo)
+      }
+    },
     /**
      * En la ruta de conversación, si cambia el ticket de la URL (otro ticket desde la bandeja
      * en escritorio, o atrás/adelante del navegador) se abre ese.
@@ -941,9 +959,11 @@ export default {
       if (ticket) {
         this.ticket_name_draft = ticket.name == null ? '' : String(ticket.name)
         this.ticket_status_draft = ticket.status === 'closed' ? 'closed' : 'open'
+        this.ticket_summary_draft = ticket.summary == null ? '' : String(ticket.summary)
       } else {
         this.ticket_name_draft = ''
         this.ticket_status_draft = 'open'
+        this.ticket_summary_draft = ''
       }
     },
     /**
@@ -1193,6 +1213,7 @@ export default {
       this.ai_reasoning = ''
       this.ticket_name_draft = ''
       this.ticket_status_draft = 'open'
+      this.ticket_summary_draft = ''
       this.$store.commit('support_message/set_active_ticket_id', null)
       this.$store.commit('support_message/set_models', [])
       this.$store.commit('support_message/set_messages_loading', false)
@@ -1212,17 +1233,26 @@ export default {
         }
         const name_trimmed = String(self.ticket_name_draft).trim()
         const status_value = self.ticket_status_draft === 'closed' ? 'closed' : 'open'
+        const cuerpo = {
+          id: self.selected_ticket.id,
+          name: name_trimmed || null,
+          status: status_value,
+        }
+        /* El resumen viaja solo si cambió: si no, un borrador viejo podría pisar el que Martín
+           acaba de escribir con `titular`. */
+        const summary_trimmed = String(self.ticket_summary_draft).trim()
+        const summary_stored = self.selected_ticket.summary == null ? '' : String(self.selected_ticket.summary).trim()
+        if (summary_trimmed !== summary_stored) {
+          cuerpo.summary = summary_trimmed || null
+        }
         self.saving_header = true
         self.$store
-          .dispatch('support_ticket/update_ticket', {
-            id: self.selected_ticket.id,
-            name: name_trimmed || null,
-            status: status_value,
-          })
+          .dispatch('support_ticket/update_ticket', cuerpo)
           .then(function (model) {
             if (model) {
               self.ticket_name_draft = model.name == null ? '' : String(model.name)
               self.ticket_status_draft = model.status === 'closed' ? 'closed' : 'open'
+              self.ticket_summary_draft = model.summary == null ? '' : String(model.summary)
             }
           })
           .catch(function () {

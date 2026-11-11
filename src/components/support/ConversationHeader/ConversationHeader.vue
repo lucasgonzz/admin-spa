@@ -37,10 +37,10 @@
          ticket sin leer la conversación. Sin título queda solo el número; sin resumen, nada más. -->
     <div v-if="has_ticket" class="support-conversation-heading min-w-0 w-100">
       <div class="support-conversation-heading-title text-truncate" :title="ticket_heading_text">{{ ticket_heading_text }}</div>
+      <!-- Con los controles a la vista el resumen se lee (y se edita) en su campo, más abajo. -->
       <div
-        v-if="ticket_summary_text"
-        class="support-conversation-heading-summary"
-        :class="{ 'support-conversation-heading-summary--compact': show_back }"
+        v-if="ticket_summary_text && show_back && !controles_abiertos"
+        class="support-conversation-heading-summary support-conversation-heading-summary--compact"
         :title="ticket_summary_text">{{ ticket_summary_text }}</div>
     </div>
     <!-- d-none y no v-show: el display:none en línea de v-show pierde contra el d-flex !important. -->
@@ -89,6 +89,12 @@
         <ticket-conversation-actions :has_ticket="has_ticket" @exit-ticket="$emit('exit-ticket')" />
       </div>
     </div>
+    <ticket-summary-field
+      v-if="has_ticket"
+      :class="{ 'd-none': show_back && !controles_abiertos }"
+      :has_ticket="has_ticket"
+      :ticket_summary_draft="ticket_summary_draft"
+      @update:ticket_summary_draft="$emit('update:ticket_summary_draft', $event)" />
     <p v-if="has_ticket && !verification_on && selected_ticket.ai_pending_suggestion" class="small text-muted mb-0">
       El borrador pendiente sigue esperando que lo envíes o descartes. Las próximas respuestas salen solas.
     </p>
@@ -104,6 +110,7 @@ import TicketAgentControls from './TicketAgentControls.vue'
 import TicketAiSuggestionButton from './TicketAiSuggestionButton.vue'
 import TicketContactInfo from './TicketContactInfo.vue'
 import TicketTours from './TicketTours.vue'
+import TicketSummaryField from './TicketSummaryField.vue'
 import { ticket_heading, ticket_summary } from '@/utils/support_ticket_title'
 
 /**
@@ -120,6 +127,7 @@ export default {
     TicketAiSuggestionButton,
     TicketContactInfo,
     TicketTours,
+    TicketSummaryField,
   },
   /**
    * Vue 3: v-model:prop requiere emitir update:prop; se declara para evitar fallos de two-way.
@@ -127,6 +135,7 @@ export default {
   emits: [
     'update:ticket_name_draft',
     'update:ticket_status_draft',
+    'update:ticket_summary_draft',
     'save-header',
     'exit-ticket',
     'toggle-agent',
@@ -147,6 +156,13 @@ export default {
      * Borrador del nombre en el input.
      */
     ticket_name_draft: {
+      type: String,
+      default: '',
+    },
+    /**
+     * Borrador del resumen del ticket (support_tickets.summary).
+     */
+    ticket_summary_draft: {
       type: String,
       default: '',
     },
@@ -301,6 +317,17 @@ export default {
       return String(this.ticket_name_draft).trim() !== String(stored).trim()
     },
     /**
+     * Diferencia en el resumen respecto al modelo.
+     *
+     * @returns {boolean}
+     */
+    summary_is_changed() {
+      if (!this.selected_ticket) {
+        return false
+      }
+      return String(this.ticket_summary_draft).trim() !== ticket_summary(this.selected_ticket)
+    },
+    /**
      * Diferencia de estado open/closed.
      *
      * @returns {boolean}
@@ -322,7 +349,7 @@ export default {
       if (!this.selected_ticket || this.saving_header) {
         return false
       }
-      return this.name_is_changed || this.status_is_changed
+      return this.name_is_changed || this.status_is_changed || this.summary_is_changed
     },
   },
   methods: {
@@ -359,18 +386,16 @@ export default {
   color: var(--bs-secondary-color);
 }
 
-/* El resumen entra en dos renglones; el texto entero queda en el tooltip. */
+/* En teléfono, con los controles plegados, el resumen en un renglón; el texto entero queda en el tooltip. */
 .support-conversation-heading-summary {
   font-size: 0.8rem;
   color: var(--bs-secondary-color);
   overflow-wrap: anywhere;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-/* En teléfono, un renglón: la conversación necesita la pantalla. */
 .support-conversation-heading-summary--compact {
   -webkit-line-clamp: 1;
 }
