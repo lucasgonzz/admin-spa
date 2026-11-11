@@ -229,15 +229,21 @@ export function estado_de_paso(paso) {
   return Object.assign({ estado: estado }, ESTADOS_DE_PASO[estado])
 }
 
+/* Reloj de 24 horas explícito: con el formato corto de es-AR el navegador mezclaba «4:12 p. m.» y «04:21 p. m.». */
 const FECHA = new Intl.DateTimeFormat('es-AR', {
-  dateStyle: 'short',
-  timeStyle: 'short',
+  day: '2-digit',
+  month: '2-digit',
+  year: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
   timeZone: 'America/Argentina/Buenos_Aires',
 })
 
 const HORA = new Intl.DateTimeFormat('es-AR', {
   hour: '2-digit',
   minute: '2-digit',
+  hourCycle: 'h23',
   timeZone: 'America/Argentina/Buenos_Aires',
 })
 
@@ -264,7 +270,7 @@ export function hora_corta(valor) {
 }
 
 /**
- * «11/11/26 14:02 a 14:20» de una atención (sin la segunda hora si es una sola acción).
+ * «11/11/26, 14:02 a 14:20» de una atención (sin la segunda hora si es una sola acción).
  *
  * @param {Object} atencion
  * @returns {string}
