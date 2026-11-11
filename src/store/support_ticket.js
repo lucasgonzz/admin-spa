@@ -289,6 +289,14 @@ export default __base_store({
       if (!ticket || !ticket.id) {
         return
       }
+      /* Filtro «Prueba» (misión prueba-ayuda-unificada-en-soporte): si la fila llega sin `es_prueba` pero con el
+         cliente, se clasifica por `client.estado` con el mismo criterio de la API. Sin ninguno de los dos, el
+         merge conserva la marca que ya tenía la fila. */
+      if (ticket.es_prueba === undefined && ticket.client && ticket.client.estado !== undefined) {
+        ticket = Object.assign({}, ticket, {
+          es_prueba: ['prueba', 'prueba_vencida'].indexOf(ticket.client.estado) !== -1,
+        })
+      }
       const tid = ticket.id
       let idx = -1
       let i = 0
