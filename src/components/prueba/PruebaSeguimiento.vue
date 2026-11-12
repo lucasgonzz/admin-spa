@@ -84,6 +84,8 @@
                 <span class="flex-grow-1">
                   <span :class="hito.at ? '' : 'text-muted'">{{ hito.label }}</span>
                   <span v-if="hito.tipo === datos.proximo_hito" class="badge bg-warning text-dark ms-1">Próximo paso</span>
+                  <!-- La versión del sistema del negocio todavía no informa este hito: no es que no lo haya hecho. -->
+                  <span v-else-if="hito.soportado === false && !hito.at" class="badge bg-light text-secondary border ms-1">no disponible en su versión</span>
                 </span>
                 <span class="small text-muted text-nowrap">{{ hito.at ? fecha(hito.at) : '' }}</span>
               </li>
@@ -248,7 +250,7 @@ export default {
     /** Las seis preguntas de sí/no de la encuesta, con el rótulo corto que ve el equipo. */
     preguntas_de_la_encuesta() {
       return [
-        { campo: 'implementacion_practica', label: 'La puesta en marcha le resultó práctica' },
+        { campo: 'implementacion_practica', label: 'Le resultó fácil empezar a usar el sistema' },
         { campo: 'soporte_sirvio', label: 'Le sirvió el soporte' },
         { campo: 'probo_gestion', label: 'Entendió y probó la gestión' },
         { campo: 'probo_tienda', label: 'Entendió y probó la tienda' },
@@ -393,10 +395,10 @@ export default {
       /* Envíos de la misión prueba-e2e-campana-imperio: encuesta, día 5, correos y lo que queda en el sistema. */
       const fijos = {
         cc_prueba_fin_encuesta: 'Encuesta de fin de prueba (WhatsApp)',
+        cc_prueba_encuesta_contrato: 'Encuesta al que contrató (WhatsApp)',
         cc_prueba_dia_5: 'Aviso de que le quedan pocos días (WhatsApp)',
         correo_fin_encuesta: 'Encuesta de fin de prueba (correo)',
         correo_dia_5: 'Aviso de que le quedan pocos días (correo)',
-        sistema_bienvenida: 'Bienvenida en Soporte de su sistema',
       }
       if (fijos[envio.plantilla]) {
         return fijos[envio.plantilla]
