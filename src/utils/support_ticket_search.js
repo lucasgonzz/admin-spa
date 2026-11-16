@@ -14,7 +14,7 @@ export function ticket_matches_search(ticket, query) {
 
   // Un número identifica el ticket completo: buscar 12 no debe traer también el 123.
   const number = query.match(/^#?\s*(\d+)$/)
-  if (number && String(ticket.id) === number[1].replace(/^0+(?=\d)/, '')) return true
+  if (number) return String(ticket.id) === number[1].replace(/^0+(?=\d)/, '')
   if (query.startsWith('#')) return false
 
   const client = ticket.client || {}
