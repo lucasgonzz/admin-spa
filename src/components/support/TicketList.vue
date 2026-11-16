@@ -1,6 +1,6 @@
 <template>
   <!-- Cuerpo scrollable: crece bajo el bloque de filtros en support-left. -->
-  <div class="support-ticket-list flex-grow-1 min-h-0 position-relative">
+  <div ref="ticket_list" class="support-ticket-list flex-grow-1 min-h-0 position-relative">
     <div
       v-if="loading"
       class="support-ticket-list-loading d-flex align-items-center justify-content-center"
@@ -10,9 +10,31 @@
       <span class="spinner-border text-primary" aria-hidden="true"></span>
       <span class="visually-hidden">Cargando tickets…</span>
     </div>
-    <div class="px-2 py-2 border-bottom">
-      <button class="btn btn-sm btn-outline-primary w-100" @click="$emit('create-ticket')">Nuevo ticket</button>
+    <div class="support-ticket-toolbar d-flex align-items-center gap-2 px-2 py-2 border-bottom">
+      <div class="support-ticket-search" role="search" aria-label="Buscar tickets de soporte">
+        <input
+          ref="ticket_search"
+          v-model="search_query"
+          type="search"
+          class="form-control form-control-sm"
+          :class="{ 'support-ticket-search--filled': search_query }"
+          placeholder="Nº, negocio o persona"
+          aria-label="Buscar por número de ticket, negocio o persona"
+          title="Buscar por número de ticket, negocio o persona"
+          autocomplete="off"
+          @keydown.esc.stop.prevent="clear_search" />
+        <button v-if="search_query" type="button" class="support-ticket-search-clear"
+          aria-label="Limpiar búsqueda" title="Limpiar búsqueda" @click="clear_search">
+          <i class="bi bi-x" aria-hidden="true"></i>
+        </button>
+      </div>
+      <button type="button" class="btn btn-sm btn-outline-primary support-ticket-create"
+        @click="$emit('create-ticket')">Nuevo ticket</button>
     </div>
+    <p v-if="normalized_search && !loading && !display_tickets.length"
+      class="text-muted small px-3 py-3 mb-0" role="status" aria-live="polite">
+      No hay tickets que coincidan en esta bandeja. Probá con otro número, negocio o persona.
+    </p>
     <!-- Fila con el formato de la lista de chats de leads (lead/chats/ChatRow.vue): avatar con
          inicial y tres líneas. 1) nombre del CLIENTE en negrita y la hora del último mensaje;
          2) "Ticket #id" (más el chip de agente apagado, si corresponde); 3) último mensaje, con
@@ -151,6 +173,7 @@ import moment from 'moment'
 import MessageTicks from '@/components/support/MessageTicks.vue'
 import { client_display_name, contact_display_name, agent_is_off_on_open_ticket, last_message_author } from '@/utils/support_ticks'
 import { ticket_heading, ticket_title, ticket_summary } from '@/utils/support_ticket_title'
+import { normalize_ticket_search, ticket_matches_search } from '@/utils/support_ticket_search'
 
 export default {
   name: 'SupportTicketList',
@@ -176,9 +199,12 @@ export default {
   },
   emits: ['select-ticket', 'create-ticket', 'close-ticket'],
   data() {
-    return { ticket_menu: null, ticket_order: new Map() }
+    return { ticket_menu: null, ticket_order: new Map(), search_query: '' }
   },
   watch: {
+    search_query() {
+      if (this.$refs.ticket_list) this.$refs.ticket_list.scrollTop = 0
+    },
     order_source: {
       immediate: true,
       handler(tickets) {
@@ -202,6 +228,9 @@ export default {
     },
   },
   computed: {
+    normalized_search() {
+      return normalize_ticket_search(this.search_query)
+    },
     order_source() {
       return this.all_tickets || this.tickets
     },
@@ -211,8 +240,8 @@ export default {
      * @returns {Array<Object>}
      */
     display_tickets() {
-      const list = this.tickets || []
-      return list.slice().sort((a, b) => {
+      const list = (this.tickets || []).filter((ticket) => ticket_matches_search(ticket, this.normalized_search))
+      return list.sort((a, b) => {
         const first = this.ticket_order.get(a.id)
         const second = this.ticket_order.get(b.id)
         return second.escalated - first.escalated || second.time - first.time || Number(b.id) - Number(a.id)
@@ -221,6 +250,10 @@ export default {
   },
   methods: {
     ticket_heading,
+    clear_search() {
+      this.search_query = ''
+      this.$refs.ticket_search.focus()
+    },
     /** true si el ticket tiene título guardado (cambia el recorte de la segunda línea). */
     has_ticket_title(ticket) {
       return ticket_title(ticket) !== ''
@@ -571,6 +604,50 @@ export default {
   height: 100%;
   overflow-y: auto;
   border-right: 1px solid #e9ecef;
+}
+
+.support-ticket-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #fff;
+}
+
+.support-ticket-search {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.support-ticket-search--filled {
+  padding-right: 1.75rem;
+}
+
+/* El botón explícito permite limpiar también con teclado, sin duplicar la cruz nativa. */
+.support-ticket-search input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+.support-ticket-search-clear {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 1.75rem;
+  border: 0;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: var(--bs-secondary-color);
+}
+
+.support-ticket-search-clear:focus-visible {
+  outline: 2px solid var(--bs-primary);
+  outline-offset: -2px;
+}
+
+.support-ticket-create {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 /* Capa bloquea interacción mientras Vuex carga el listado. */
