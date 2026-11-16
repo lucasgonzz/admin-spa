@@ -8,12 +8,14 @@
     /soporte/ticket/:id, donde se ve solo la conversación a pantalla completa, como en leads.
     Escritorio: bandeja y conversación lado a lado en las dos rutas.
   -->
-  <div class="support-view d-flex w-100" :class="support_view_class">
+  <div class="support-view d-flex w-100" :class="support_view_class" :style="conversation_viewport_style">
 
     <!-- Parte izquierda -->
     <div class="support-left d-flex flex-column min-h-0">
       <div class="support-left-top flex-shrink-0">
         <user-tickets-nav />
+        <support-overview v-if="is_mobile && !selected_ticket_id" compact :cards="summary_cards"
+          :filter="filtro_activo" :loading="tickets_loading" @filter="apply_summary_filter" />
         <!--
           Chip del filtro que llegó por deep link desde el panel de inicio. Sin él el operador ve
           una bandeja corta y no sabe por qué.
@@ -62,7 +64,9 @@
 
     <!-- Parte derecha -->
     <div class="support-right d-flex flex-column min-h-0 min-w-0 flex-grow-1">
-      <div class="support-right-top flex-shrink-0">
+      <support-overview v-if="!selected_ticket_id" :cards="summary_cards" :filter="filtro_activo"
+        :loading="tickets_loading" @filter="apply_summary_filter" />
+      <div v-if="selected_ticket_id" class="support-right-top flex-shrink-0">
         <conversation-header
           :selected_ticket="selected_ticket"
           :ticket_name_draft="ticket_name_draft"
@@ -85,7 +89,7 @@
           @toggle-attention="toggle_attention"
           @request-suggestion="request_suggestion" />
       </div>
-      <div class="support-right-middle flex-grow-1 min-h-0 d-flex flex-column overflow-hidden">
+      <div v-if="selected_ticket_id" class="support-right-middle flex-grow-1 min-h-0 d-flex flex-column overflow-hidden">
         <conversation
           :messages="messages"
           :loading="messages_loading"
@@ -97,7 +101,7 @@
           @send-draft="on_send_draft"
           @discard-draft="on_discard_draft" />
       </div>
-      <div class="support-right-bottom flex-shrink-0">
+      <div v-if="selected_ticket_id" class="support-right-bottom flex-shrink-0">
         <message-input
           :key="String(current_admin_id) + ':' + String(selected_ticket_id || 'sin-ticket')"
           ref="message_input"
@@ -120,6 +124,8 @@
 </template>
 
 <script>
+import SupportOverview from '@/components/support/SupportOverview.vue'
+import { support_summary, support_filter_tickets, support_filter_available } from '@/utils/support_summary'
 import TicketList from '@/components/support/TicketList.vue'
 import Conversation from '@/components/support/Conversation.vue'
 import ConversationHeader from '@/components/support/ConversationHeader/ConversationHeader.vue'
@@ -133,6 +139,7 @@ import { cached_get, MAX_AGE_SETTINGS } from '@/common-vue/helpers/request_cache
 export default {
   name: 'ViewSupport',
   components: {
+    SupportOverview,
     TicketList,
     Conversation,
     ConversationHeader,
@@ -146,6 +153,7 @@ export default {
        * Ticket seleccionado en la bandeja lateral.
        */
       selected_ticket_id: null,
+      visible_viewport_height: null,
       /**
        * Cleanup de canales Pusher (se reemplaza al cambiar admin o ticket).
        */
@@ -200,6 +208,11 @@ export default {
      *
      * @returns {boolean}
      */
+    summary_cards() { return support_summary(this.tickets_de_la_bandeja) },
+    conversation_viewport_style() {
+      return this.is_mobile && this.is_conversation_route && this.visible_viewport_height
+        ? { '--support-visible-height': this.visible_viewport_height + 'px' } : {}
+    },
     is_conversation_route() {
       return !!(this.$route && this.$route.name === 'support_ticket_conversation')
     },
@@ -242,7 +255,7 @@ export default {
     filtro_activo() {
       const valor = this.$route && this.$route.query ? this.$route.query.filtro : null
       const normalizado = String(valor == null ? '' : valor)
-      if (normalizado === 'sin-responder' || normalizado === 'hoy') {
+      if (['sin-responder', 'hoy', 'abiertos'].includes(normalizado)) {
         return normalizado
       }
       return null
@@ -253,6 +266,7 @@ export default {
      * @returns {string}
      */
     filtro_rotulo() {
+      if (this.filtro_activo === 'abiertos') return 'Solo abiertos'
       if (this.filtro_activo === 'sin-responder') {
         return 'Solo sin responder'
       }
@@ -289,13 +303,7 @@ export default {
      * @returns {boolean}
      */
     api_manda_indicadores() {
-      const clave = this.clave_del_filtro
-      if (!clave) {
-        return false
-      }
-      return (this.tickets || []).some(function (ticket) {
-        return !!ticket && ticket[clave] !== undefined
-      })
+      return support_filter_available(this.tickets_de_la_bandeja, this.filtro_activo)
     },
     /**
      * Tickets que se muestran en la bandeja: la lista completa, o acotada al filtro del deep link.
@@ -303,14 +311,7 @@ export default {
      * @returns {Array<Object>}
      */
     tickets_visibles() {
-      const clave = this.clave_del_filtro
-      const de_la_bandeja = this.tickets_de_la_bandeja
-      if (!clave || !this.api_manda_indicadores) {
-        return de_la_bandeja
-      }
-      return de_la_bandeja.filter(function (ticket) {
-        return !!(ticket && ticket[clave])
-      })
+      return support_filter_tickets(this.tickets_de_la_bandeja, this.filtro_activo)
     },
     /**
      * Tickets de la bandeja elegida en «Clientes» / «Prueba» (misión prueba-ayuda-unificada-en-soporte,
@@ -338,7 +339,7 @@ export default {
      * Mensajes del ticket activo.
      */
     messages() {
-      return this.$store.state.support_message.models
+      return this.$store.getters['support_message/visible_messages']
     },
     /**
      * Listado de tickets en carga (get_models / filtro).
@@ -467,6 +468,7 @@ export default {
      * en escritorio, o atrás/adelante del navegador) se abre ese.
      */
     route_ticket_id(value) {
+      if (!value) { this.deselect_ticket(); return }
       if (!value || String(value) === String(this.selected_ticket_id)) {
         return
       }
@@ -515,31 +517,43 @@ export default {
       if (self.abrir_ticket_del_query_param()) {
         return
       }
-      /* En teléfono /soporte es solo la bandeja: abrir un ticket solo no tiene sentido porque
-         la conversación no se ve hasta que el operador toca uno. */
-      if (self.is_mobile) {
-        return
-      }
-      /* El auto-seleccionado va sobre la lista YA filtrada: con el filtro puesto, abrir un
-         ticket que no cumple sería contradecir lo que se está mostrando. */
-      if (self.tickets_visibles.length) {
-        self.select_ticket(self.tickets_visibles[0].id)
-      }
+      // La bandeja empieza en el resumen; sólo un enlace o un clic elige un ticket.
     })
   },
   mounted() {
     window.addEventListener('support-ticket-alert', this.on_support_ticket_alert)
     window.addEventListener('resize', this.on_window_resize)
+    window.addEventListener('keydown', this.on_conversation_escape)
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', this.update_visible_viewport)
+    this.update_visible_viewport()
   },
   beforeUnmount() {
     window.removeEventListener('support-ticket-alert', this.on_support_ticket_alert)
     window.removeEventListener('resize', this.on_window_resize)
+    window.removeEventListener('keydown', this.on_conversation_escape)
+    if (window.visualViewport) window.visualViewport.removeEventListener('resize', this.update_visible_viewport)
     if (this.now_tick_interval_id) {
       clearInterval(this.now_tick_interval_id)
     }
     this.teardown_support_socket()
   },
   methods: {
+    update_visible_viewport() {
+      this.visible_viewport_height = Math.round(window.visualViewport ? window.visualViewport.height : window.innerHeight)
+    },
+    on_conversation_escape(event) {
+      if (event.key !== 'Escape' || event.defaultPrevented || !this.selected_ticket_id || event.isComposing) return
+      // Los modales consumen Escape en captura. Una grabación/editor activo conserva su contexto.
+      const input = this.$refs.message_input
+      if (input && (input.audio_busy || input.image_editor_visible)) return
+      if (document.querySelector('[aria-modal="true"], .modal.show')) return
+      event.preventDefault()
+      this.on_exit_ticket()
+    },
+    apply_summary_filter(filter) {
+      this.deselect_ticket()
+      this.$router.replace({ name: 'support', query: { filtro: filter } }).catch(() => {})
+    },
     /**
      * Recalcula si el ancho es de teléfono al redimensionar o rotar.
      *
@@ -600,6 +614,7 @@ export default {
      * @returns {void}
      */
     volver_a_la_lista() {
+      this.deselect_ticket()
       this.$router.push({ name: 'support', query: this.query_del_filtro() }).catch(function () {})
     },
     /**
@@ -955,6 +970,9 @@ export default {
       this.suggestion_notice = ''
       this.ai_reasoning = ''
       this.$store.dispatch('support_message/load_ticket_messages', ticket_id)
+      this.$nextTick(() => {
+        if (String(this.selected_ticket_id) === String(ticket_id) && this.$refs.message_input) this.$refs.message_input.focus_textarea()
+      })
       const ticket = this.tickets.find((t) => t.id == ticket_id)
       if (ticket) {
         this.ticket_name_draft = ticket.name == null ? '' : String(ticket.name)
@@ -1189,11 +1207,7 @@ export default {
           self.select_ticket(model.id)
         })
         .catch(function () {
-          /* Si no se pudo traer, al menos que no quede el panel vacío: se abre el primero de
-             la bandeja (ya filtrada) en vez de dejar la conversación en blanco sin explicación. */
-          if (self.tickets_visibles.length) {
-            self.select_ticket(self.tickets_visibles[0].id)
-          }
+          self.deselect_ticket()
         })
         .then(limpiar_query)
 
@@ -1345,8 +1359,8 @@ export default {
 /* Ruta de conversación (hide_app_nav): <main> va sin padding, así que ocupa todo el alto.
    100dvh y no 100vh: en el teléfono deja el input de mensaje arriba de la barra del navegador. */
 .support-view--fullscreen {
-  height: 100dvh;
-  max-height: 100dvh;
+  height: var(--support-visible-height, 100dvh);
+  max-height: var(--support-visible-height, 100dvh);
 }
 
 /* Teléfono en /soporte: solo la bandeja, a todo el ancho. */
@@ -1389,11 +1403,22 @@ export default {
 .support-right-top {
   min-height: 56px;
   border-bottom: 1px solid #e9ecef;
-  padding: 8px;
+  padding: 12px 14px;
+  background: var(--bs-body-bg, #fff);
+  opacity: 1;
+  filter: none;
+  backdrop-filter: none;
 }
 
 .support-right-bottom {
   border-top: 1px solid #e9ecef;
 }
 
+@media (max-width: 767px) {
+  .support-view--fullscreen .support-right-top {
+    padding: max(14px, env(safe-area-inset-top)) 14px 12px;
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+  }
+}
 </style>

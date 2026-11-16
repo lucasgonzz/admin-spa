@@ -472,10 +472,19 @@ export default __base_store({
      * Desde un SupportMessage (Pusher) con relación ticket embebida.
      */
     apply_ticket_from_message({ dispatch }, message) {
-      if (!message || !message.ticket) {
+      if (!message) {
+        return
+      }
+      if (!message.ticket) {
+        // Los adjuntos privados avisan sólo id/ticket: el resumen se pide autenticado,
+        // sin deducir «respondido» del cuerpo ni exponer datos del ticket por el canal público.
+        if (message.support_ticket_id != null) dispatch('schedule_attention_refresh')
         return
       }
       const ticket = Object.assign({}, message.ticket)
+      if (ticket.sin_responder === undefined || ticket.abierto_hoy === undefined) {
+        dispatch('schedule_attention_refresh')
+      }
       /**
        * El payload del mensaje es el último evento; fija preview de bandeja aunque el ticket venga con muchas relaciones.
        */

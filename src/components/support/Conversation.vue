@@ -2,7 +2,7 @@
   <div class="support-conversation">
     <div class="support-conversation-body whatsapp-conversation-wallpaper" ref="conversation_body">
       <div
-        v-if="loading"
+        v-if="loading && !messages.length"
         class="support-conversation-loading d-flex align-items-center justify-content-center"
         role="status"
         aria-live="polite"
@@ -316,12 +316,13 @@
                 </button>
               </div>
               <div
-                v-else-if="is_mine(message) && is_last_mine_message(message)"
+                v-else-if="is_mine(message) && (message._client_pending || is_last_mine_message(message))"
                 class="support-message-meta">
                 <span
                   v-if="message._client_pending"
                   class="support-meta-sending"
-                  aria-label="Enviando">Enviando…</span>
+                  role="status"
+                  :aria-label="message._queue_status === 'queued' ? 'En cola' : 'Enviando'">{{ message._queue_status === 'queued' ? 'En cola…' : 'Enviando…' }}</span>
                 <template v-else>
                   <span
                     v-if="message.whatsapp_message_id"
@@ -1198,7 +1199,7 @@ export default {
       if (message.is_ai_suggestion_draft) {
         return false
       }
-      if (message._delivery_error === 'not_sent') {
+      if (message._delivery_error) {
         return true
       }
       if (message.remote_delivery_status === 'not_received') {
@@ -1222,8 +1223,8 @@ export default {
      * @returns {string}
      */
     delivery_error_label(message) {
-      if (message._delivery_error === 'not_sent') {
-        return 'No enviado'
+      if (message._delivery_error) {
+        return message._delivery_error === 'session_changed' ? 'La sesión cambió. Volvé con tu usuario para reintentar.' : 'No se confirmó el envío. Podés reintentar.'
       }
       if (this.ticket_source === 'whatsapp' && !message.whatsapp_message_id) {
         return 'No enviado por WhatsApp'
@@ -1643,7 +1644,7 @@ export default {
   max-width: 100%;
   background: #fff;
   border: 1px solid #e6e6e6;
-  border-radius: 10px;
+  border-radius: 14px;
   padding: 8px 10px;
   cursor: help;
 }
@@ -2045,6 +2046,9 @@ export default {
   border: none;
   background: transparent;
   line-height: 0;
+  max-width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
   cursor: pointer;
 }
 
@@ -2057,11 +2061,13 @@ export default {
 /* Miniatura de imagen; clic abre visor en la misma página */
 .support-message-image {
   display: block;
-  max-width: 220px;
-  max-height: 180px;
-  border-radius: 6px;
-  margin-top: 4px;
-  object-fit: cover;
+  width: auto;
+  height: auto;
+  max-width: min(320px, 100%);
+  max-height: 480px;
+  border-radius: 12px;
+  margin-top: 2px;
+  object-fit: contain;
   cursor: pointer;
 }
 

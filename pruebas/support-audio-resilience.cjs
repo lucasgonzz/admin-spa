@@ -91,16 +91,17 @@ async function wrapper_tests() {
   ok(!h.events.some((e) => e[0] === 'data') && h.events.some((e) => e[0] === 'error'), 'done sin páginas de audio no confirma una nota vacía')
 }
 
-function input_harness() {
+function input_harness(options = {}) {
   const saved = new Map(), emitted = []
   const source = fs.readFileSync(path.join(__dirname, '../src/components/support/MessageInput.vue'), 'utf8')
     .split('<script>')[1].split('</script>')[0].replace(/^import .*$/gm, '').replace('export default', 'return')
   const component = new Function('ImageAnnotationEditor', 'OggOpusRecorder', 'audio_recorder_button', 'extension_of',
-    'new_audio_id', 'check_audio_storage', 'save_audio_draft', 'load_audio_drafts', 'remove_audio_draft', source)(
+    'new_audio_id', 'check_audio_storage', 'save_audio_draft', 'load_audio_drafts', 'remove_audio_draft',
+    'reply_author_label', 'reply_preview_text', 'reply_preview_of', source)(
     {}, {}, {}, () => '', () => 'draft_12345678', () => Promise.resolve(),
-    async (draft) => saved.set(draft.id, draft), async () => [...saved.values()], async (id) => saved.delete(id))
+    async (draft) => saved.set(draft.id, draft), options.load_audio_drafts || (async () => [...saved.values()]), async (id) => saved.delete(id), () => '', () => '', (message) => message)
   const input = { ...component.data(), ticket_id: 7, can_send: true, audio_recording: false, audio_starting: false, audio_closing: false,
-    $store: { state: { auth: { admin: { id: 5 } } } }, $refs: { file_input: { value: '' } },
+    $store: { state: { auth: { admin: { id: 5 } }, support_message: { composer_drafts: {}, outbox: [] } }, commit() {} }, _composer_live: true, $refs: { file_input: { value: '' } },
     $nextTick: () => {}, $emit: (name, payload) => emitted.push(payload) }
   for (const [name, method] of Object.entries(component.methods)) input[name] = method.bind(input)
   for (const [name, getter] of Object.entries(component.computed)) Object.defineProperty(input, name, { get: getter.bind(input) })
@@ -111,34 +112,48 @@ function input_harness() {
 
 async function input_tests() {
   let h = input_harness()
-  await h.input.emit_send()
-  ok(h.input.attachment && h.saved.size === 1, 'emitir conserva adjunto y copia durable hasta confirmar servidor')
+  const original_audio = h.input.attachment
+  h.input.emit_send()
+  await h.emitted[0].prepared
+  ok(h.input.attachment && h.saved.size === 1, 'sin aceptación del buzón conserva adjunto y copia durable')
   ok(h.saved.values().next().value.name === 'nota.mp3', 'borrador conserva nombre y contenedor original del adjunto')
-  ok(h.saved.values().next().value.partial === true, 'reintento conserva advertencia de audio recuperado parcial')
-  await h.emitted[0].on_result(null)
-  ok(h.input.attachment && h.saved.size === 1 && !h.input.draft_sending, 'fallo de red permite reintentar sin borrar audio')
-  await h.input.emit_send()
-  ok(h.emitted[0].client_message_id === h.emitted[1].client_message_id, 'todos los reintentos conservan la misma identidad')
-  await h.emitted[1].on_result({ id: 12, attachments: [] })
-  ok(h.saved.size === 1 && h.input.attachment, 'un modelo sin adjunto no confirma audio')
-  await h.emitted[1].on_result({ id: 12, attachments: [{ id: 4 }], remote_delivery_status: 'not_received' })
-  ok(h.saved.size === 0 && !h.input.attachment, 'sólo modelo con archivo durable confirma y limpia borrador')
-  ok(h.input.audio_notice.includes('Reintentar'), 'fallo remoto mantiene indicación de reintento del mensaje guardado')
-  h.input.audio_draft_id = 'nota_nueva'; h.input.attachment = new Blob(['otra nota'])
-  await h.emitted[1].on_result(null)
-  ok(h.input.audio_draft_id === 'nota_nueva' && h.input.attachment, 'ack duplicado tardío no modifica una nota nueva')
+  ok(h.saved.values().next().value.partial === true, 'el checkpoint conserva advertencia de audio recuperado parcial')
+  ok(h.emitted[0].attachment === original_audio && h.emitted[0].client_message_id === 'draft_12345678', 'el buzón recibe File e identidad del audio durable')
+  h.emitted[0].on_queued()
+  ok(!h.input.attachment && h.input.body === '' && h.saved.size === 1, 'aceptar libera el compositor sin borrar copia durable; la confirmación la procesa el store')
+  h.input.body = 'mensaje siguiente'; h.input.audio_draft_id = 'nota_nueva'; h.input.attachment = new Blob(['otra nota'])
+  h.emitted[0].on_queued()
+  ok(h.input.body === 'mensaje siguiente' && h.input.audio_draft_id === 'nota_nueva' && h.input.attachment, 'una aceptación duplicada no toca el borrador siguiente')
   h = input_harness(); const original = h.input.attachment; h.input.attachment = null
   h.input.restore_audio({ id: 'otro', scope: '9:7', blob: original, name: 'audio.mp3' })
   ok(h.input.attachment === null, 'no restaura audio de otro usuario aunque comparta ticket')
   h = input_harness()
   await h.input.persist_audio(h.input.attachment, false)
   const confirmed = h.input.confirm_recovered_audio({ id: 12, attachments: [{ id: 4 }] }, h.input.audio_draft_id)
-  ok(h.input.draft_sending === true, 'ack de reintento externo mantiene bloqueado el input mientras limpia')
+  ok(!h.input.draft_sending, 'confirmar recuperación no bloquea la redacción mientras limpia IndexedDB')
   await confirmed
   ok(!h.input.attachment && h.saved.size === 0, 'reintento desde la fila también limpia un borrador recuperado sin handler previo')
   h = input_harness(); h.input.audio_owner_scope = '5:7'; h.input.$store.state.auth.admin = { id: 6 }
   await h.input.persist_audio(h.input.attachment, true)
   ok(h.saved.values().next().value.scope === '5:7', 'callback tardío conserva dueño original tras cambiar sesión')
+  let deliver_rows
+  h = input_harness({ load_audio_drafts: () => new Promise((resolve) => { deliver_rows = resolve }) })
+  h.input.body = ''; h.input.attachment = null; h.input.audio_draft_id = null
+  const refresh = h.input.refresh_audio_drafts()
+  h.input.body = 'Estoy escribiendo una consulta nueva'; h.input.on_text_input()
+  deliver_rows([{ id: 'audio-viejo', scope: '5:7', blob: new Blob(['voz']), name: 'viejo.ogg', body: 'Comentario viejo' }])
+  await refresh
+  ok(h.input.body === 'Estoy escribiendo una consulta nueva' && !h.input.attachment && h.input.recovered_drafts.length === 1,
+    'IndexedDB demorado ofrece recuperar sin pisar texto escrito desde el montaje')
+  h.input.reply_to = { id: 77, body: 'Cita actual' }
+  h.input.restore_audio(h.input.recovered_drafts[0])
+  ok(h.input.body === 'Estoy escribiendo una consulta nueva' && h.input.reply_to.id === 77 && h.input.attachment,
+    'recuperar explícitamente adjunta audio conservando texto y cita vigentes')
+  h = input_harness({ load_audio_drafts: async () => [{ id: 'audio-viejo', scope: '5:7', blob: new Blob(['voz']), name: 'viejo.ogg', body: 'Comentario viejo' }] })
+  h.input.body = ''; h.input.attachment = null; h.input.audio_draft_id = null; h.input._composer_edited = true
+  await h.input.refresh_audio_drafts()
+  ok(!h.input.attachment && h.input.body === '', 'escribir y borrar también impide auto-recuperación tardía')
+
 }
 
 async function mixin_tests() {

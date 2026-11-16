@@ -1,5 +1,5 @@
 <template>
-  <div class="support-input-bar">
+  <div class="support-input-bar" :data-draft-busy="audio_busy || image_editor_visible ? 'true' : null">
     <!-- Editor de anotaciones sobre imagen (pegado o adjunto) antes de enviar -->
     <image-annotation-editor
       :show="image_editor_visible"
@@ -71,19 +71,20 @@
       {{ suggestion_notice }}
     </div>
     <!-- Una sola fila: campo de texto y los cuatro botones -->
-    <div class="support-input-composer">
+    <div class="support-input-composer" :class="{ 'support-input-composer--recording': audio_busy }">
       <textarea
         ref="textarea"
         class="form-control support-input-textarea"
         rows="1"
         placeholder="Escribir mensaje..."
-        :disabled="!can_send || draft_sending"
+        :disabled="!can_send"
         v-model="body"
-        @input="ajustar_alto"
+        @input="on_text_input"
         @paste="on_paste"
-        @keydown.enter.exact.prevent="emit_send"
-        @keydown.esc="clear_reply" />
-      <input ref="file_input" class="d-none" type="file" accept="audio/*,image/*,.m4a,.mp3,.ogg,.oga,.opus,.aac,.amr,.webm" @change="on_file_change" />
+        @keydown="on_textarea_keydown"
+        aria-label="Escribir mensaje"
+        enterkeyhint="send" />
+      <input ref="file_input" class="d-none" type="file" @change="on_file_change" />
       <!-- Botón de grabación: rojo mientras graba; muestra tiempo en tooltip -->
       <button
         type="button"
@@ -140,11 +141,11 @@
       <button
         type="button"
         class="btn btn-success btn-sm support-input-icon-btn support-input-icon-btn--send"
-        :disabled="!can_send || audio_busy || draft_sending"
+        :disabled="!can_send || audio_busy || draft_sending || (!body.trim() && !attachment)"
         title="Enviar mensaje"
         aria-label="Enviar mensaje"
         @click="emit_send">
-        <i class="bi bi-send-fill" aria-hidden="true" />
+        <i class="bi bi-arrow-up" aria-hidden="true" />
       </button>
     </div>
     <div v-if="ai_reasoning" class="support-input-reasoning mt-2">
@@ -227,7 +228,7 @@ export default {
     audio_busy() { return this.audio_recording || this.audio_starting || this.audio_closing },
     draft_scope() {
       const admin = this.$store.state.auth.admin
-      return admin && admin.id && this.ticket_id ? String(admin.id) + ':' + String(this.ticket_id) : null
+      return this._composer_scope || (admin && admin.id && this.ticket_id ? String(admin.id) + ':' + String(this.ticket_id) : null)
     },
     /**
      * Indica si el adjunto pendiente es audio (para el ícono del preview).
@@ -271,7 +272,11 @@ export default {
     },
   },
   watch: {
+    body() { this.save_composer_draft() },
+    reply_to() { this.save_composer_draft() },
+    audio_draft_id() { this.save_composer_draft() },
     attachment(file) {
+      this.save_composer_draft()
       this.audio_preview_failed = false
       if (this.attachment_preview_url) URL.revokeObjectURL(this.attachment_preview_url)
       this.attachment_preview_url = file && this.file_media_kind(file) === 'audio' ? URL.createObjectURL(file) : ''
@@ -289,7 +294,14 @@ export default {
       this.reasoning_visible = !!texto
     },
   },
+  created() {
+    this._composer_scope = this.draft_scope
+    const saved = this.$store.state.support_message.composer_drafts[this._composer_scope]
+    if (saved) Object.assign(this, saved)
+  },
   mounted() {
+    this._composer_live = true
+    this.focus_textarea()
     this.ajustar_alto()
     this._draft_save_chain = Promise.resolve()
     this._audio_visibility_listener = () => {
@@ -314,12 +326,29 @@ export default {
     })
   },
   beforeUnmount() {
+    this._composer_live = false
+    this.save_composer_draft()
     document.removeEventListener('visibilitychange', this._audio_visibility_listener)
     window.removeEventListener('pagehide', this._audio_pagehide_listener)
     window.removeEventListener('support-audio-confirmed', this._audio_confirmed_listener)
     if (this.attachment_preview_url) URL.revokeObjectURL(this.attachment_preview_url)
   },
   methods: {
+    on_text_input() { this._composer_edited = true; this.ajustar_alto() },
+    save_composer_draft() {
+      if (!this._composer_scope) return
+      this.$store.commit('support_message/set_composer_draft', { scope: this._composer_scope, draft: {
+        body: this.body, attachment: this.attachment, reply_to: this.reply_to,
+        audio_draft_id: this.audio_draft_id, audio_draft_partial: this.audio_draft_partial,
+        audio_owner_scope: this.audio_owner_scope,
+      } })
+    },
+    on_textarea_keydown(event) {
+      if (event.key === 'Enter' && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey && !event.isComposing && event.keyCode !== 229) {
+        event.preventDefault()
+        this.emit_send()
+      }
+    },
     reply_author_label,
     reply_preview_text,
     /**
@@ -332,7 +361,7 @@ export default {
       const self = this
       this.$nextTick(function () {
         const el = self.$refs.textarea
-        if (el && !el.disabled && typeof el.focus === 'function') {
+        if (self._composer_live && el && !el.disabled && typeof el.focus === 'function') {
           el.focus({ preventScroll: true })
         }
       })
@@ -362,25 +391,26 @@ export default {
     },
     async confirm_recovered_audio(model, id) {
       if (!model || model.id == null || !(model.attachments && model.attachments.length) || id !== this.audio_draft_id) return
-      this.draft_sending = true
+      const original_body = this.body
+      const original_attachment = this.attachment
       try { await remove_audio_draft(id) } catch (err) { /* la API ya confirmó la copia durable */ }
       if (id === this.audio_draft_id) {
-        this.attachment = null
-        this.body = ''
+        if (this.attachment === original_attachment) this.attachment = null
+        if (this.body === original_body) this.body = ''
         this.audio_draft_id = null
         this.audio_draft_partial = false
         this.audio_notice = model.remote_delivery_status === 'not_received'
           ? 'Audio guardado en el servidor. Su entrega falló: usá Reintentar en el mensaje de la conversación.' : ''
       }
-      this.draft_sending = false
-      this.focus_textarea()
     },
     preserve_audio_on_leave() { return true },
     refresh_audio_drafts() {
       if (!this.draft_scope) return Promise.resolve()
       return load_audio_drafts(this.draft_scope).then((rows) => {
-        this.recovered_drafts = rows.filter((row) => row.id !== this.audio_draft_id)
-        if (!this.attachment && this.recovered_drafts.length) this.restore_audio(this.recovered_drafts[0])
+        if (!this._composer_live) return
+        const queued = this.$store.state.support_message.outbox
+        this.recovered_drafts = rows.filter((row) => row.id !== this.audio_draft_id && !queued.some((entry) => entry.scope === row.scope && entry.key === row.id))
+        if (!this.attachment && !this.body && !this.reply_to && !this._composer_edited && !this.image_editor_visible && this.recovered_drafts.length) this.restore_audio(this.recovered_drafts[0])
       })
     },
     restore_audio(draft) {
@@ -389,7 +419,7 @@ export default {
       this.audio_owner_scope = draft.scope
       this.audio_draft_partial = !!draft.partial
       this.attachment = new File([draft.blob], draft.name, { type: draft.blob.type || '' })
-      this.body = draft.body || ''
+      if (!this.body && !this.reply_to) this.body = draft.body || ''
       this.recovered_drafts = this.recovered_drafts.filter((row) => row.id !== draft.id)
       this.audio_notice = draft.partial
         ? 'Se recuperó el audio guardado antes de una interrupción. Puede faltar el final; podés descargar una copia antes de enviar.'
@@ -609,6 +639,7 @@ export default {
     on_audio_blob(blob, origin) {
       this.audio_draft_partial = origin === 'rescate'
       this.attachment = new File([blob], 'audio_' + this.audio_draft_id + '.ogg', { type: 'audio/ogg' })
+      this.save_composer_draft()
       this.persist_audio(blob, origin === 'rescate').then(() => {
         this.audio_notice = origin === 'rescate'
           ? 'Audio recuperado tras una interrupción. Puede faltar el final; podés descargar una copia antes de enviar.'
@@ -690,81 +721,42 @@ export default {
     /**
      * Emite mensaje al padre con tipo detectado por mime (o por extensión si el mime viene vacío).
      */
-    async emit_send() {
-      if (!this.can_send || this.audio_busy || this.draft_sending || (!this.body && !this.attachment)) {
-        return
-      }
-      const self = this
-      let kind = 'text'
-      if (this.attachment) {
-        const detected_kind = this.file_media_kind(this.attachment)
-        if (detected_kind === 'audio' || detected_kind === 'image') {
-          kind = detected_kind
-        }
-      }
-      this.draft_sending = true
-      if (kind === 'audio') {
-        if (!this.audio_draft_id) this.audio_draft_id = new_audio_id()
-        try {
-          await this.persist_audio(this.attachment, this.audio_draft_partial)
-        } catch (err) {
-          // El File sigue en memoria y se puede enviar; el aviso ofrece copia fuera del navegador.
-          this.audio_notice = 'No pudimos guardar la copia local. Conservá esta pantalla o descargá el audio mientras intentamos enviarlo.'
-        }
-      }
-      const draft_id = this.audio_draft_id
+    emit_send() {
+      if (!this.can_send || this.audio_busy || this.draft_sending || (!this.body.trim() && !this.attachment)) return
       const original_body = this.body
       const original_attachment = this.attachment
       const original_reply = this.reply_to
-      let acknowledged = false
-      const on_result = async (model) => {
-          if (acknowledged) return
-          // La API confirma el archivo durable; un timeout/422/500 conserva el borrador entero.
-          if (!model || model.id == null || (kind === 'audio' && !(model.attachments && model.attachments.length))) {
-            this.draft_sending = false
-            this.audio_notice = kind === 'audio'
-              ? 'No se confirmó el envío. Tu audio sigue acá: podés reintentar con el mismo botón o descargarlo.'
-              : 'No se confirmó el envío. Tu mensaje sigue acá para reintentar.'
-            this.focus_textarea()
-            return
-          }
-          acknowledged = true
-          this.draft_sending = true
-          if (draft_id) {
-            try { await remove_audio_draft(draft_id) } catch (err) {
-              this.audio_notice = 'El audio se guardó en el servidor, pero quedó una copia local pendiente de limpiar.'
-            }
-          }
+      const kind = original_attachment ? this.file_media_kind(original_attachment) : 'text'
+      let prepared = null
+      if (kind === 'audio') {
+        if (!this.audio_draft_id) this.audio_draft_id = new_audio_id()
+        // El consumidor espera el checkpoint; el operador puede escribir en el mismo instante.
+        prepared = this.persist_audio(original_attachment, this.audio_draft_partial).catch(() => {})
+      }
+      if (!this._composer_live) return
+      let accepted = false
+      this.$emit('send-message', {
+        prepared, body: original_body, kind: kind === 'other' ? 'file' : kind, attachment: original_attachment,
+        ticket_id: this.ticket_id, client_message_id: this.audio_draft_id || new_audio_id(),
+        reply_to_message_id: original_reply ? original_reply.id : null, reply_to_message: original_reply,
+        // La aceptación local limpia el compositor. La respuesta HTTP sólo modifica la burbuja:
+        // puede llegar con otro borrador o con otro ticket abierto y no debe tocar ese campo.
+        on_queued: () => {
+          if (accepted) return
+          accepted = true
           if (this.body === original_body) this.body = ''
           if (this.attachment === original_attachment) this.attachment = null
           if (this.reply_to === original_reply) this.reply_to = null
           this.audio_draft_id = null
+          this.audio_owner_scope = null
           this.audio_draft_partial = false
+          this.audio_notice = ''
           this.reasoning_visible = false
           if (this.$refs.file_input) this.$refs.file_input.value = ''
-          this.audio_notice = model.remote_delivery_status === 'not_received'
-            ? 'Audio guardado en el servidor. Su entrega falló: usá Reintentar en el mensaje de la conversación.' : ''
+          this.save_composer_draft()
           this.$nextTick(() => this.ajustar_alto())
-          this.draft_sending = false
-          /* Después de enviar, el operador sigue escribiendo: el foco vuelve al campo de texto. */
           this.focus_textarea()
-      }
-      this._audio_result_handler = on_result
-      this._audio_result_id = draft_id
-      this.$emit('send-message', {
-        body: this.body,
-        kind: kind,
-        attachment: this.attachment,
-        ticket_id: this.ticket_id,
-        client_message_id: draft_id || new_audio_id(),
-        reply_to_message_id: original_reply ? original_reply.id : null,
-        reply_to_message: original_reply,
-        on_result: on_result,
-      })
-      /* Con el texto ya vaciado el textarea tiene que volver a un renglón; si no, el footer se
-         queda del alto que tenía el mensaje que se acaba de mandar. */
-      this.$nextTick(function () {
-        self.ajustar_alto()
+        },
       })
     },
   },
@@ -774,7 +766,9 @@ export default {
 <style scoped>
 .support-input-bar {
   border-top: 1px solid #e9ecef;
-  padding: 10px;
+  padding: 12px 14px;
+  padding-bottom: max(14px, env(safe-area-inset-bottom));
+  background: var(--bs-tertiary-bg, #f6f7f9);
 }
 
 /* Barra «Respondiendo a…» sobre el campo de texto: borde verde a la izquierda, como la cita de WhatsApp. */
@@ -877,8 +871,15 @@ export default {
   flex-direction: row;
   align-items: flex-end;
   flex-wrap: nowrap;
-  gap: 6px;
+  gap: 8px;
+  padding: 8px 8px 8px 18px;
+  border: 1px solid var(--bs-border-color, #e1e5eb);
+  border-radius: 28px;
+  background: var(--bs-body-bg, white);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .06), 0 4px 18px rgba(0, 0, 0, .06);
 }
+
+.support-input-composer:focus-within { border-color: #88bfa5; box-shadow: 0 0 0 3px rgba(25, 135, 84, 0.1); }
 
 .support-input-textarea {
   /* flex: 1 1 auto + min-width: 0 es lo que deja que el textarea se achique cuando el botón de
@@ -890,6 +891,14 @@ export default {
      maneja el componente: la manija del navegador pelearía con él. */
   resize: none;
   overflow-y: hidden;
+  border: none;
+  box-shadow: none !important;
+  border-radius: 18px;
+  background: transparent;
+  padding: 6px 0;
+  min-height: 36px;
+  font-size: 16px;
+  line-height: 24px;
 }
 
 /* Botones cuadrados solo con icono */
@@ -897,16 +906,24 @@ export default {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
+  font-size: 18px;
+  border: none;
+  border-radius: 50%;
   padding: 0;
   flex-shrink: 0;
 }
 
 .support-input-icon-btn--send {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
+  background: var(--bs-emphasis-color, #0d0d0d);
+  color: var(--bs-body-bg, #fff);
 }
+
+.support-input-icon-btn--send:hover:not(:disabled) { background: var(--bs-emphasis-color, #0d0d0d); opacity: .85; }
+.support-input-icon-btn--send:disabled { background: var(--bs-secondary-bg, #d7d7d7); color: var(--bs-secondary-color, #888); }
 
 /* Durante grabación el botón se ensancha para mostrar el tiempo */
 .support-input-icon-btn--recording {
@@ -950,5 +967,12 @@ export default {
   background: #f8f9fa;
   border-radius: 6px;
   border: 1px solid #e9ecef;
+}
+@media (max-width: 767px) {
+  .support-input-bar { padding: 12px 10px max(16px, env(safe-area-inset-bottom)); }
+  .support-input-composer--recording { flex-wrap: wrap; }
+  .support-input-icon-btn { width: 40px; height: 40px; }
+  .support-input-icon-btn--recording { width: auto; }
+  .support-input-cancel-btn { order: 5; }
 }
 </style>
