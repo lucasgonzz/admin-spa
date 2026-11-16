@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { createStore } from 'vuex'
 import * as ticks from '../../src/utils/support_ticks.js'
 
-const { es_ticket_de_ensayo } = ticks
+const { es_ticket_de_ensayo, ticket_esta_en_la_bandeja } = ticks
 
 /**
  * Los tickets de un cliente de ensayo no entran a la bandeja de Soporte (misión soporte-ocultar-tickets-ensayo,
@@ -28,10 +28,12 @@ function base_store(options) {
 }
 
 function harness() {
-  const gets = []
+  const gets = [], posts = []
   let respuesta_del_listado = { models: [] }
+  let respuesta_del_alta = {}
   const api = {
     get(url) { gets.push(url); return Promise.resolve({ data: respuesta_del_listado }) },
+    post(url, data) { posts.push({ url, data }); return Promise.resolve({ data: respuesta_del_alta }) },
   }
   const run_once = (clave, runner) => Promise.resolve(runner(() => true))
   const source = readFileSync(new URL('../../src/store/support_ticket.js', import.meta.url), 'utf8')
@@ -43,8 +45,10 @@ function harness() {
   return {
     store,
     gets,
+    posts,
     ids: () => store.state.support_ticket.models.map((ticket) => ticket.id),
     listado: (data) => { respuesta_del_listado = data },
+    alta: (data) => { respuesta_del_alta = data },
     listados_pedidos: () => gets.filter((url) => url.indexOf('/support-ticket?') === 0).length,
   }
 }
@@ -135,4 +139,45 @@ test('la respuesta de una acción sobre un ticket de ensayo tampoco lo mete en l
   /* Lo que devuelven store/update/attention de la API nueva: la fila con `es_ensayo: true`. */
   await store.dispatch('support_ticket/apply_ticket_row', ensayo_por_fila(8, { support_attention: { needs_human: false, mission: null } }))
   assert.deepEqual(ids(), [1])
+})
+
+test('ticket_esta_en_la_bandeja compara el id como texto y no inventa filas', () => {
+  const models = [comun(1), comun(22)]
+  assert.equal(ticket_esta_en_la_bandeja(models, 1), true)
+  assert.equal(ticket_esta_en_la_bandeja(models, '22'), true)
+  assert.equal(ticket_esta_en_la_bandeja(models, 2), false)
+  assert.equal(ticket_esta_en_la_bandeja(models, null), false)
+  assert.equal(ticket_esta_en_la_bandeja(models, undefined), false)
+  assert.equal(ticket_esta_en_la_bandeja([], 1), false)
+  assert.equal(ticket_esta_en_la_bandeja(null, 1), false)
+  assert.equal(ticket_esta_en_la_bandeja([null, comun(3)], 3), true)
+})
+
+/**
+ * Lo que mira `on_ticket_created` de Support.vue: el modal emite `created` con el id DESPUÉS de que
+ * `store_whatsapp` fusionó la fila, y la vista solo abre el ticket si quedó en la bandeja. Acá se prueba esa
+ * condición con el store real; el método de la vista (tres líneas) no se monta.
+ */
+test('después del alta, un ticket de ensayo no quedó en la bandeja y uno común sí', async () => {
+  const { store, ids, alta, posts } = harness()
+  store.commit('support_ticket/set_models', [comun(1)])
+
+  /* La API nueva devuelve la fila marcada. */
+  alta({ model: ensayo_por_fila(70), whatsapp: { delivery: 'sent' }, reused: false })
+  const creado = await store.dispatch('support_ticket/store_whatsapp', { client_id: 2, whatsapp_phone: '+5493410000001', body: 'Hola' })
+  assert.equal(creado.model.id, 70, 'El modal sigue recibiendo el modelo: cierra y no muestra error.')
+  assert.equal(posts[0].data.source, 'whatsapp')
+  assert.equal(ticket_esta_en_la_bandeja(store.state.support_ticket.models, creado.model.id), false)
+  assert.deepEqual(ids(), [1])
+
+  /* Una API vieja solo trae el cliente embebido: alcanza. */
+  alta({ model: ensayo_por_cliente(71), whatsapp: { delivery: 'sent' } })
+  const con_api_vieja = await store.dispatch('support_ticket/store_whatsapp', { client_id: 2, whatsapp_phone: '+5493410000001', body: 'Hola' })
+  assert.equal(ticket_esta_en_la_bandeja(store.state.support_ticket.models, con_api_vieja.model.id), false)
+
+  /* Control: el alta de un ticket común queda en la bandeja y se abre como siempre. */
+  alta({ model: comun(72, { updated_at: '2026-11-16T12:00:00Z', support_attention: { needs_human: false, mission: null } }), whatsapp: { delivery: 'sent' } })
+  const comun_creado = await store.dispatch('support_ticket/store_whatsapp', { client_id: 1, whatsapp_phone: '+5493410000002', body: 'Hola' })
+  assert.equal(ticket_esta_en_la_bandeja(store.state.support_ticket.models, comun_creado.model.id), true)
+  assert.deepEqual(ids(), [72, 1])
 })

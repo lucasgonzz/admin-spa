@@ -134,7 +134,7 @@ import UserTicketsNav from '@/components/support/UserTicketsNav.vue'
 import CreateTicketModal from '@/components/support/CreateTicketModal.vue'
 import { useSupportSocket } from '@/composables/useSupportSocket'
 import api from '@/utils/axios'
-import { es_ticket_de_ensayo } from '@/utils/support_ticks'
+import { es_ticket_de_ensayo, ticket_esta_en_la_bandeja } from '@/utils/support_ticks'
 import { cached_get, MAX_AGE_SETTINGS } from '@/common-vue/helpers/request_cache_helper'
 
 export default {
@@ -661,10 +661,13 @@ export default {
           if (!model || String(self.route_ticket_id) !== String(ticket_id)) {
             return
           }
-          /* Ticket de un cliente de ensayo: no va a la bandeja ni se abre. Se trata igual que un id que
-             no existe (el catch de abajo): vuelta a la bandeja, sin conversación a medias. */
+          /* Ticket de un cliente de ensayo: no va a la bandeja ni se abre. Vuelta a la bandeja, sin
+             conversación a medias. Va por `replace` y no por `push` (que es lo que hace
+             volver_a_la_lista): si `/soporte/ticket/N` quedara en el historial, el botón de atrás
+             volvería a caer acá y rebotaría de nuevo. */
           if (es_ticket_de_ensayo(model)) {
-            self.volver_a_la_lista()
+            self.deselect_ticket()
+            self.$router.replace({ name: 'support', query: self.query_del_filtro() }).catch(function () {})
             return
           }
           self.$store.commit('support_ticket/upsert_from_broadcast', model)
@@ -1349,11 +1352,19 @@ export default {
      * @returns {void}
      */
     on_ticket_created(ticket_id) {
-      if (ticket_id != null) {
-        /* Mismo camino que tocar la fila: en teléfono la conversación vive en su propia ruta y
-           seleccionar en el lugar la dejaba abierta detrás de la lista, sin que se viera. */
-        this.on_ticket_list_select(ticket_id)
+      if (ticket_id == null) {
+        return
       }
+      /* El modal avisa después de que el store fusionó la fila que devolvió la API. Si el ticket no
+         quedó en la bandeja —un cliente de ensayo, que el store nunca inserta— no hay nada que abrir:
+         la bandeja queda como estaba, en escritorio y en teléfono. Seleccionarlo igual dejaba en
+         escritorio una conversación sin su ticket, y en teléfono navegaba a una ruta que rebota. */
+      if (!ticket_esta_en_la_bandeja(this.$store.state.support_ticket.models, ticket_id)) {
+        return
+      }
+      /* Mismo camino que tocar la fila: en teléfono la conversación vive en su propia ruta y
+         seleccionar en el lugar la dejaba abierta detrás de la lista, sin que se viera. */
+      this.on_ticket_list_select(ticket_id)
     },
   },
 }

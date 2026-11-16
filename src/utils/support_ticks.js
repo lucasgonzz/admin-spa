@@ -224,6 +224,27 @@ export function es_ticket_de_ensayo(row) {
 }
 
 /**
+ * true si el ticket está en la lista de la bandeja (`state.models` del store de soporte).
+ *
+ * Lo usa la vista después de crear un ticket: si la fila no quedó en la bandeja (el caso real es un ticket de
+ * un cliente de ensayo, que el store nunca inserta) no hay nada que abrir, y seleccionarlo igual dejaba una
+ * conversación sin su ticket. Compara como texto: el id llega como número desde la API y como string desde la
+ * ruta.
+ *
+ * @param {Array<Object>|null|undefined} models Lista de tickets de la bandeja.
+ * @param {number|string|null|undefined} ticket_id Id a buscar.
+ * @returns {boolean}
+ */
+export function ticket_esta_en_la_bandeja(models, ticket_id) {
+  if (!Array.isArray(models) || ticket_id === null || ticket_id === undefined) {
+    return false
+  }
+  return models.some(function (ticket) {
+    return !!ticket && String(ticket.id) === String(ticket_id)
+  })
+}
+
+/**
  * Prefijo de quién mandó el último mensaje: 'Vos' si fue el operador logueado, el nombre del
  * operador si fue otro, 'Agente' si lo mandó el agente (mensaje saliente sin operador) y el
  * nombre del cliente si lo escribió el cliente.
