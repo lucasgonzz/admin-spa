@@ -47,6 +47,7 @@
         class="support-conversation-heading-summary support-conversation-heading-summary--compact"
         :title="ticket_summary_text">{{ ticket_summary_text }}</div>
     </div>
+    <ticket-missions v-if="has_ticket" :ticket="selected_ticket" />
     <!-- El resumen va pegado al título, arriba de los controles: el Guardar de abajo lo guarda junto con el nombre y el estado. -->
     <ticket-summary-field
       v-if="has_ticket"
@@ -117,6 +118,7 @@ import TicketContactInfo from './TicketContactInfo.vue'
 import TicketTours from './TicketTours.vue'
 import TicketSummaryField from './TicketSummaryField.vue'
 import MartinActivityIndicator from '@/components/support/MartinActivity/MartinActivityIndicator.vue'
+import TicketMissions from '@/components/support/TicketMissions.vue'
 import { ticket_heading, ticket_summary } from '@/utils/support_ticket_title'
 
 /**
@@ -135,6 +137,7 @@ export default {
     TicketTours,
     TicketSummaryField,
     MartinActivityIndicator,
+    TicketMissions,
   },
   /**
    * Vue 3: v-model:prop requiere emitir update:prop; se declara para evitar fallos de two-way.

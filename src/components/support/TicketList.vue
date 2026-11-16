@@ -124,13 +124,21 @@
         <!-- La misión puede seguir su curso mientras Martín atiende otras consultas. Solo una
              intervención pendiente pinta la fila de rojo; los dos avisos pueden coexistir. -->
         <div
-          v-if="is_ticket_escalated(ticket) || ticket_mission(ticket)"
+          v-if="is_ticket_escalated(ticket) || mission_groups(ticket)?.length || ticket_mission(ticket)"
           class="support-ticket-attention">
           <span
             v-if="is_ticket_escalated(ticket)"
             class="badge rounded-pill support-escalated-badge"
             :title="escalation_badge_title(ticket)">
             Necesita tu intervención
+          </span>
+          <span
+            v-for="group in mission_groups(ticket) || []"
+            :key="group.type"
+            class="badge rounded-pill support-mission-badge"
+            :class="group.completed === group.total ? 'support-mission-badge--completed' : 'support-mission-badge--started'"
+            :title="mission_count_title(group)">
+            {{ group.label }} {{ group.total }} ({{ group.completed }})
           </span>
           <span
             v-if="ticket_mission(ticket)"
@@ -174,6 +182,7 @@ import MessageTicks from '@/components/support/MessageTicks.vue'
 import { client_display_name, contact_display_name, agent_is_off_on_open_ticket, last_message_author } from '@/utils/support_ticks'
 import { ticket_heading, ticket_title, ticket_summary } from '@/utils/support_ticket_title'
 import { normalize_ticket_search, ticket_matches_search } from '@/utils/support_ticket_search'
+import { mission_groups, mission_count_title } from '@/utils/support_missions'
 
 export default {
   name: 'SupportTicketList',
@@ -249,6 +258,8 @@ export default {
     },
   },
   methods: {
+    mission_groups,
+    mission_count_title,
     ticket_heading,
     clear_search() {
       this.search_query = ''
@@ -312,6 +323,8 @@ export default {
       return attention && typeof attention === 'object' && !Array.isArray(attention) ? attention : null
     },
     ticket_mission(ticket) {
+      // Una colección vacía es explícita. Solo la API anterior usa el aviso de misión única.
+      if (mission_groups(ticket) !== null) return null
       if (this.ticket_status_class(ticket) !== 'open') {
         return null
       }
@@ -769,6 +782,12 @@ export default {
   color: #084298;
   background: #cfe2ff;
   border-color: #b6d4fe;
+}
+
+.support-mission-badge--completed {
+  color: #0f5132;
+  background: #d1e7dd;
+  border-color: #badbcc;
 }
 
 .support-ticket-mission-reason {
