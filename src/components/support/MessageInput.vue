@@ -899,7 +899,9 @@ export default {
      en vez de simular un cursor que se desincronizaría al seleccionar o escribir en iOS. */
   padding: 3px 0;
   min-height: 32px;
-  font-size: 18px;
+  /* La regla global móvil fuerza 16px !important; este campo necesita conservar el
+     tamaño del cursor y sigue por encima de los 16px que evitan el zoom de Safari. */
+  font-size: 18px !important;
   line-height: 26px;
 }
 
