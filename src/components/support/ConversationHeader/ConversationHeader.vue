@@ -88,6 +88,7 @@
         :disabled="ai_suggestion_disabled"
         :consult_timer="ai_consult_timer"
         @request-suggestion="$emit('request-suggestion')" />
+      <ticket-message-notifications v-if="has_ticket" :key="selected_ticket.id" :ticket_id="selected_ticket.id" />
       <ticket-tours v-if="has_ticket" :key="selected_ticket.id" :ticket_id="selected_ticket.id" />
       <div class="ms-auto d-flex align-items-center gap-2 flex-shrink-0 ticket-header-actions-end">
         <button
@@ -116,6 +117,7 @@ import TicketAgentControls from './TicketAgentControls.vue'
 import TicketAiSuggestionButton from './TicketAiSuggestionButton.vue'
 import TicketContactInfo from './TicketContactInfo.vue'
 import TicketTours from './TicketTours.vue'
+import TicketMessageNotifications from './TicketMessageNotifications.vue'
 import TicketSummaryField from './TicketSummaryField.vue'
 import MartinActivityIndicator from '@/components/support/MartinActivity/MartinActivityIndicator.vue'
 import TicketMissions from '@/components/support/TicketMissions.vue'
@@ -135,6 +137,7 @@ export default {
     TicketAiSuggestionButton,
     TicketContactInfo,
     TicketTours,
+    TicketMessageNotifications,
     TicketSummaryField,
     MartinActivityIndicator,
     TicketMissions,
