@@ -14,7 +14,7 @@
     <div class="support-left d-flex flex-column min-h-0">
       <div class="support-left-top flex-shrink-0">
         <user-tickets-nav />
-        <support-overview v-if="is_mobile && !selected_ticket_id" compact :cards="summary_cards"
+        <support-overview v-if="is_mobile && !selected_ticket_id && !route_ticket_id" compact :cards="summary_cards"
           :filter="filtro_activo" :loading="tickets_loading" @filter="apply_summary_filter" />
         <!--
           Chip del filtro que llegó por deep link desde el panel de inicio. Sin él el operador ve
@@ -64,9 +64,9 @@
 
     <!-- Parte derecha -->
     <div class="support-right d-flex flex-column min-h-0 min-w-0 flex-grow-1">
-      <support-overview v-if="!selected_ticket_id" :cards="summary_cards" :filter="filtro_activo"
+      <support-overview v-if="!selected_ticket_id && !route_ticket_id" :cards="summary_cards" :filter="filtro_activo"
         :loading="tickets_loading" @filter="apply_summary_filter" />
-      <div v-if="selected_ticket_id" class="support-right-top flex-shrink-0">
+      <div v-if="selected_ticket_id || route_ticket_id" class="support-right-top flex-shrink-0">
         <conversation-header
           :selected_ticket="selected_ticket"
           :ticket_name_draft="ticket_name_draft"
@@ -89,7 +89,7 @@
           @toggle-attention="toggle_attention"
           @request-suggestion="request_suggestion" />
       </div>
-      <div v-if="selected_ticket_id" class="support-right-middle flex-grow-1 min-h-0 d-flex flex-column overflow-hidden">
+      <div v-if="selected_ticket_id || route_ticket_id" class="support-right-middle flex-grow-1 min-h-0 d-flex flex-column overflow-hidden">
         <conversation
           :messages="messages"
           :loading="messages_loading"
@@ -155,6 +155,8 @@ export default {
        */
       selected_ticket_id: null,
       visible_viewport_height: null,
+      visible_viewport_top: 0,
+      viewport_keyboard_open: false,
       /**
        * Cleanup de canales Pusher (se reemplaza al cambiar admin o ticket).
        */
@@ -212,7 +214,11 @@ export default {
     summary_cards() { return support_summary(this.tickets_de_la_bandeja) },
     conversation_viewport_style() {
       return this.is_mobile && this.is_conversation_route && this.visible_viewport_height
-        ? { '--support-visible-height': this.visible_viewport_height + 'px' } : {}
+        ? {
+          '--support-visible-height': this.visible_viewport_height + 'px',
+          '--support-visible-top': this.visible_viewport_top + 'px',
+          '--support-safe-bottom': this.viewport_keyboard_open ? '0px' : 'env(safe-area-inset-bottom, 0px)',
+        } : {}
     },
     is_conversation_route() {
       return !!(this.$route && this.$route.name === 'support_ticket_conversation')
@@ -340,6 +346,9 @@ export default {
      * Mensajes del ticket activo.
      */
     messages() {
+      // La URL ya eligió un hilo aunque falte traer la bandeja: no mostrar el resumen ni
+      // mensajes del ticket anterior mientras se resuelve esa selección.
+      if (this.route_ticket_id && String(this.route_ticket_id) !== String(this.selected_ticket_id)) return []
       return this.$store.getters['support_message/visible_messages']
     },
     /**
@@ -352,6 +361,7 @@ export default {
      * Mensajes del ticket activo en carga (GET conversación).
      */
     messages_loading() {
+      if (this.route_ticket_id && String(this.route_ticket_id) !== String(this.selected_ticket_id)) return true
       return this.$store.state.support_message.messages_loading
     },
     /**
@@ -525,14 +535,20 @@ export default {
     window.addEventListener('support-ticket-alert', this.on_support_ticket_alert)
     window.addEventListener('resize', this.on_window_resize)
     window.addEventListener('keydown', this.on_conversation_escape)
-    if (window.visualViewport) window.visualViewport.addEventListener('resize', this.update_visible_viewport)
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', this.update_visible_viewport)
+      window.visualViewport.addEventListener('scroll', this.update_visible_viewport)
+    }
     this.update_visible_viewport()
   },
   beforeUnmount() {
     window.removeEventListener('support-ticket-alert', this.on_support_ticket_alert)
     window.removeEventListener('resize', this.on_window_resize)
     window.removeEventListener('keydown', this.on_conversation_escape)
-    if (window.visualViewport) window.visualViewport.removeEventListener('resize', this.update_visible_viewport)
+    if (window.visualViewport) {
+      window.visualViewport.removeEventListener('resize', this.update_visible_viewport)
+      window.visualViewport.removeEventListener('scroll', this.update_visible_viewport)
+    }
     if (this.now_tick_interval_id) {
       clearInterval(this.now_tick_interval_id)
     }
@@ -540,7 +556,11 @@ export default {
   },
   methods: {
     update_visible_viewport() {
-      this.visible_viewport_height = Math.round(window.visualViewport ? window.visualViewport.height : window.innerHeight)
+      const viewport = window.visualViewport
+      this.visible_viewport_height = viewport ? viewport.height : window.innerHeight
+      this.visible_viewport_top = viewport ? viewport.offsetTop : 0
+      // El zoom también reduce el viewport: no se interpreta como teclado ni se bloquea el gesto.
+      this.viewport_keyboard_open = !!(viewport && viewport.scale === 1 && window.innerHeight - viewport.height > 120)
     },
     on_conversation_escape(event) {
       if (event.key !== 'Escape' || event.defaultPrevented || !this.selected_ticket_id || event.isComposing) return
@@ -562,6 +582,7 @@ export default {
      */
     on_window_resize() {
       this.is_mobile = window.innerWidth < 768
+      this.update_visible_viewport()
     },
     /**
      * Query a conservar al ir y volver entre la bandeja y la conversación: solo el `filtro`
@@ -1439,6 +1460,15 @@ export default {
 }
 
 @media (max-width: 767px) {
+  /* Safari desplaza el viewport al enfocar. Ajustar sólo la altura deja el pie arriba y un
+     hueco hasta el teclado; anclamos el chat al área visible, también durante ese desplazamiento. */
+  .support-view--mobile-conversation {
+    position: fixed;
+    top: var(--support-visible-top, 0px);
+    left: 0;
+    right: 0;
+  }
+
   .support-view--fullscreen .support-right-top {
     padding: max(14px, env(safe-area-inset-top)) 14px 12px;
     padding-left: max(14px, env(safe-area-inset-left));

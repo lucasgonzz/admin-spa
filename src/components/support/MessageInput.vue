@@ -766,8 +766,8 @@ export default {
 <style scoped>
 .support-input-bar {
   border-top: 1px solid #e9ecef;
-  padding: 12px 14px;
-  padding-bottom: max(14px, env(safe-area-inset-bottom));
+  padding: 6px 8px;
+  padding-bottom: max(6px, var(--support-safe-bottom, env(safe-area-inset-bottom, 0px)));
   background: var(--bs-tertiary-bg, #f6f7f9);
 }
 
@@ -871,8 +871,8 @@ export default {
   flex-direction: row;
   align-items: flex-end;
   flex-wrap: nowrap;
-  gap: 8px;
-  padding: 8px 8px 8px 18px;
+  gap: 6px;
+  padding: 4px 6px 4px 12px;
   border: 1px solid var(--bs-border-color, #e1e5eb);
   border-radius: 28px;
   background: var(--bs-body-bg, white);
@@ -895,10 +895,12 @@ export default {
   box-shadow: none !important;
   border-radius: 18px;
   background: transparent;
-  padding: 6px 0;
-  min-height: 36px;
-  font-size: 16px;
-  line-height: 24px;
+  /* El cursor nativo toma el tamaño de fuente: agrandamos el texto y quitamos relleno,
+     en vez de simular un cursor que se desincronizaría al seleccionar o escribir en iOS. */
+  padding: 3px 0;
+  min-height: 32px;
+  font-size: 18px;
+  line-height: 26px;
 }
 
 /* Botones cuadrados solo con icono */
@@ -969,9 +971,8 @@ export default {
   border: 1px solid #e9ecef;
 }
 @media (max-width: 767px) {
-  .support-input-bar { padding: 12px 10px max(16px, env(safe-area-inset-bottom)); }
+  .support-input-bar { padding-left: max(6px, env(safe-area-inset-left)); padding-right: max(6px, env(safe-area-inset-right)); }
   .support-input-composer--recording { flex-wrap: wrap; }
-  .support-input-icon-btn { width: 40px; height: 40px; }
   .support-input-icon-btn--recording { width: auto; }
   .support-input-cancel-btn { order: 5; }
 }
