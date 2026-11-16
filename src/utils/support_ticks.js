@@ -199,6 +199,31 @@ export function agent_is_off_on_open_ticket(ticket) {
 }
 
 /**
+ * true si el ticket es de un cliente de ENSAYO (`clients.es_ensayo`): los negocios de prueba que atiende Martín
+ * y que el operador nunca usa. No van a la bandeja de Soporte por ningún camino (misión
+ * soporte-ocultar-tickets-ensayo, 16/11/2026).
+ *
+ * La marca puede venir de dos lados y alcanza con cualquiera:
+ *  - `row.es_ensayo`: la columna calculada que manda la API nueva en la fila del ticket.
+ *  - `row.client.es_ensayo`: el cliente embebido, que viaja desde antes (también con una API vieja y en los
+ *    mensajes en vivo de Pusher).
+ *
+ * Sin ninguna de las dos (un payload que no trae cliente) devuelve false: no se esconde lo que no se sabe.
+ *
+ * @param {Object|null|undefined} row Fila de ticket (o cualquier payload con la misma forma).
+ * @returns {boolean}
+ */
+export function es_ticket_de_ensayo(row) {
+  if (!row) {
+    return false
+  }
+  if (row.es_ensayo === true || row.es_ensayo === 1) {
+    return true
+  }
+  return !!(row.client && (row.client.es_ensayo === true || row.client.es_ensayo === 1))
+}
+
+/**
  * Prefijo de quién mandó el último mensaje: 'Vos' si fue el operador logueado, el nombre del
  * operador si fue otro, 'Agente' si lo mandó el agente (mensaje saliente sin operador) y el
  * nombre del cliente si lo escribió el cliente.

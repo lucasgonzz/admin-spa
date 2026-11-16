@@ -134,6 +134,7 @@ import UserTicketsNav from '@/components/support/UserTicketsNav.vue'
 import CreateTicketModal from '@/components/support/CreateTicketModal.vue'
 import { useSupportSocket } from '@/composables/useSupportSocket'
 import api from '@/utils/axios'
+import { es_ticket_de_ensayo } from '@/utils/support_ticks'
 import { cached_get, MAX_AGE_SETTINGS } from '@/common-vue/helpers/request_cache_helper'
 
 export default {
@@ -658,6 +659,12 @@ export default {
           const model = response.data && response.data.model
           /* La respuesta puede llegar con otro ticket ya en la URL. */
           if (!model || String(self.route_ticket_id) !== String(ticket_id)) {
+            return
+          }
+          /* Ticket de un cliente de ensayo: no va a la bandeja ni se abre. Se trata igual que un id que
+             no existe (el catch de abajo): vuelta a la bandeja, sin conversación a medias. */
+          if (es_ticket_de_ensayo(model)) {
+            self.volver_a_la_lista()
             return
           }
           self.$store.commit('support_ticket/upsert_from_broadcast', model)
@@ -1201,6 +1208,12 @@ export default {
         .then(function (response) {
           const model = response.data && response.data.model
           if (!model) {
+            return
+          }
+          /* Ticket de un cliente de ensayo: igual que un id que no existe (el catch de abajo). No se
+             inserta ni queda seleccionado; el query param se limpia como siempre. */
+          if (es_ticket_de_ensayo(model)) {
+            self.deselect_ticket()
             return
           }
           self.$store.commit('support_ticket/upsert_from_broadcast', model)

@@ -1,7 +1,7 @@
 import __base_store from '@/common-vue/store/__base_store'
 import api from '@/utils/axios'
 import { run_once } from '@/common-vue/helpers/request_cache_helper'
-import { keep_best_delivery, merge_status_payload, payload_matches_message, unread_total_from_response } from '@/utils/support_ticks'
+import { es_ticket_de_ensayo, keep_best_delivery, merge_status_payload, payload_matches_message, unread_total_from_response } from '@/utils/support_ticks'
 
 /** Los eventos públicos no llevan el resumen privado de atención: se refresca por HTTP autenticado. */
 let attention_refresh_timer = null
@@ -289,6 +289,18 @@ export default __base_store({
       if (!ticket || !ticket.id) {
         return
       }
+      /* Un ticket de un cliente de ENSAYO nunca entra a la bandeja (misión soporte-ocultar-tickets-ensayo): no
+         se inserta, y si por algún motivo ya estaba en la lista (el cliente se marcó después, o una API vieja
+         lo trajo), se saca. Es el último filtro: todos los caminos que agregan filas pasan por acá. */
+      if (es_ticket_de_ensayo(ticket)) {
+        const sin_el_de_ensayo = state.models.filter(function (m) {
+          return m.id != ticket.id
+        })
+        if (sin_el_de_ensayo.length !== state.models.length) {
+          state.models = sin_el_de_ensayo
+        }
+        return
+      }
       /* Filtro «Prueba» (misión prueba-ayuda-unificada-en-soporte): si la fila llega sin `es_prueba` pero con el
          cliente, se clasifica por `client.estado` con el mismo criterio de la API. Sin ninguno de los dos, el
          merge conserva la marca que ya tenía la fila. */
@@ -358,7 +370,14 @@ export default __base_store({
         .get('/support-ticket?assigned_filter=all')
         .then(function (response) {
           commit('set_loading', false)
-          commit('set_models', response.data.models || [])
+          /* La API nueva ya manda la lista sin los tickets de ensayo; el filtro de acá es la defensa para
+             cuando el SPA sale antes que la API (el cliente embebido trae `es_ensayo` desde antes). */
+          commit(
+            'set_models',
+            (response.data.models || []).filter(function (ticket) {
+              return !es_ticket_de_ensayo(ticket)
+            })
+          )
           if (response.data.unread_totals) {
             commit('set_unread_totals', response.data.unread_totals)
           }
@@ -429,6 +448,12 @@ export default __base_store({
       if (!ticket || !ticket.id) {
         return
       }
+      /* Ticket de ensayo: no entra a la bandeja ni dispara el refresco de la lista (que tampoco lo traería).
+         Va igual por la mutación, que no lo inserta y lo saca si había quedado de antes. */
+      if (es_ticket_de_ensayo(ticket)) {
+        commit('upsert_from_broadcast', ticket)
+        return
+      }
       // El evento público no trae el resumen privado de atención: se refresca por HTTP autenticado.
       if (ticket.support_attention == null) {
         dispatch('schedule_attention_refresh')
@@ -480,6 +505,11 @@ export default __base_store({
         // sin deducir «respondido» del cuerpo ni exponer datos del ticket por el canal público.
         if (message.support_ticket_id != null) dispatch('schedule_attention_refresh')
         return
+      }
+      /* Mensaje en vivo de un ticket de ensayo: no toca la bandeja ni programa el refresco. El mensaje trae
+         el cliente embebido (`ticket.client.es_ensayo`), así que esto vale también contra una API vieja. */
+      if (es_ticket_de_ensayo(message.ticket)) {
+        return dispatch('apply_ticket_row', message.ticket)
       }
       const ticket = Object.assign({}, message.ticket)
       if (ticket.sin_responder === undefined || ticket.abierto_hoy === undefined) {

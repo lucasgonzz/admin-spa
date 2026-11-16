@@ -1,4 +1,17 @@
 import store from '@/store'
+import { es_ticket_de_ensayo } from '@/utils/support_ticks'
+
+/**
+ * Si el payload de una alerta dice que el ticket es de un cliente de ensayo (misión
+ * soporte-ocultar-tickets-ensayo). Es DEFENSA: el corte real es de la API, que no emite estas alertas para un
+ * ensayo. Hoy el payload no trae cliente ni marca, y en ese caso no se toca nada: el toast sale como siempre.
+ *
+ * @param {Object} event_data Payload Echo de la alerta.
+ * @returns {boolean}
+ */
+function alerta_de_un_ensayo(event_data) {
+  return es_ticket_de_ensayo(event_data) || es_ticket_de_ensayo(event_data && event_data.ticket)
+}
 
 /**
  * Suscripción Pusher al canal compartido `support.admins`.
@@ -112,7 +125,7 @@ export function useSupportBadgeSocket(options) {
    * @param {Object} event_data Payload Echo (.SupportTicketAlert).
    */
   function handle_ticket_alert(event_data) {
-    if (!event_data) {
+    if (!event_data || alerta_de_un_ensayo(event_data)) {
       return
     }
     const name = event_data.ticket_name || ('Ticket #' + event_data.ticket_id)
@@ -140,7 +153,7 @@ export function useSupportBadgeSocket(options) {
    * @param {Object} event_data Payload Echo (.SupportTicketEscalated).
    */
   function handle_ticket_escalated(event_data) {
-    if (!event_data) {
+    if (!event_data || alerta_de_un_ensayo(event_data)) {
       return
     }
     /* Nombre visible del ticket con fallback por id. */
