@@ -27,13 +27,11 @@ export function visible_support_messages(models, outbox, scope) {
     if (index < 0) rows.push(row)
     else rows.splice(index, 1, entry.model ? { ...rows[index], ...entry.model } : row)
   }
-  // El GET y el eco pueden llegar en cualquier orden. Los ids durables fijan el orden real
-  // del hilo; la fecha de encolado ubica lo que todavía espera confirmación, sin invertir FIFO.
+  // El GET y el eco pueden llegar en cualquier orden. Los confirmados siguen su id y
+  // los pendientes quedan después en FIFO. Mezclar fechas del dispositivo y del servidor
+  // hacía saltar el tercero delante del primero al confirmar una subida con latencia.
   return rows.sort((a, b) => {
     if (a.id != null && b.id != null) return Number(a.id) - Number(b.id)
-    const at = new Date(a.created_at || a.delivered_at).getTime()
-    const bt = new Date(b.created_at || b.delivered_at).getTime()
-    if (Number.isFinite(at) && Number.isFinite(bt) && at !== bt) return at - bt
     if (a.id != null && b.id == null) return -1
     if (b.id != null && a.id == null) return 1
     return 0

@@ -63,6 +63,25 @@ test('tres Enter se aceptan al instante y los POST salen en FIFO, de a uno', asy
   assert.deepEqual(h.visible().map((row) => row.body), ['uno', 'dos', 'tres'])
 })
 
+test('la latencia y las fechas del servidor no adelantan al tercero pendiente al confirmar los anteriores', async () => {
+  const h = harness(); h.select(40)
+  const results = ['primero', 'segundo', 'tercero'].map((text) => h.send(text))
+  const order = () => assert.deepEqual(h.visible().map((row) => row.body), ['primero', 'segundo', 'tercero'])
+  order()
+  const later = new Date(Date.now() + 60000).toISOString()
+  h.acknowledge(0, { created_at: later }); await turn()
+  order()
+  h.store.commit('support_message/add_model', {
+    id: 101, support_ticket_id: 40, client_message_id: 'mensaje-segundo', body: 'segundo',
+    sender_type: 'admin', created_at: later,
+  })
+  order()
+  h.acknowledge(1, { created_at: later }); await turn()
+  order()
+  h.acknowledge(2, { created_at: later }); await Promise.all(results)
+  order()
+})
+
 test('un fallo conserva File y cita; reintentar usa la misma identidad sin duplicar la fila', async () => {
   const h = harness(); h.select(40)
   const file = new Blob(['audio'], { type: 'audio/ogg' }); file.name = 'nota.ogg'
