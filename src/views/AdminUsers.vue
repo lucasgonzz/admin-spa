@@ -38,6 +38,7 @@
             <th>Es setter</th>
             <!-- Misión ventas-y-comisiones (28/10/2026): a quién se le liquida comisión. -->
             <th>Es vendedor</th>
+            <th>Sólo Leads</th>
             <th style="width: 100px">Acciones</th>
           </tr>
         </thead>
@@ -73,6 +74,15 @@
                 :class="admin.es_vendedor ? 'bg-success' : 'bg-light text-muted'"
               >
                 {{ admin.es_vendedor ? 'Sí' : 'No' }}
+              </span>
+            </td>
+            <td>
+              <!-- Indicador visual del flag solo_leads (misión embudo-whatsapp-precios, E5) -->
+              <span
+                class="badge"
+                :class="admin.solo_leads ? 'bg-success' : 'bg-light text-muted'"
+              >
+                {{ admin.solo_leads ? 'Sí' : 'No' }}
               </span>
             </td>
             <td>
@@ -236,6 +246,24 @@
               <div class="form-text text-muted">
                 Se le liquida comisión por las ventas que se le asignan. Si hay un solo vendedor,
                 las ventas nuevas se le asignan solas. Ve sus comisiones en "Mis comisiones".
+              </div>
+            </div>
+
+            <!-- Campo: Sólo Leads (misión embudo-whatsapp-precios, E5). El flag vive en
+                 `admins.solo_leads` y lo guarda `AdminProperties` (entrada "Sólo Leads"). -->
+            <div class="mb-3 form-check">
+              <input
+                v-model="form.solo_leads"
+                type="checkbox"
+                class="form-check-input"
+                id="solo_leads_check"
+              />
+              <label class="form-check-label" for="solo_leads_check">
+                Sólo Leads
+              </label>
+              <div class="form-text text-muted">
+                Sólo ve el módulo de Leads: las conversaciones (sin escribirle al lead), el estado y la nota.
+                No ve ni puede abrir nada más del admin. Le llegan los avisos de las tareas del embudo.
               </div>
             </div>
 
@@ -415,6 +443,8 @@ export default {
         es_setter: false,
         /* Flag que indica si el admin es vendedor: se le liquida comisión por sus ventas. */
         es_vendedor: false,
+        /* Flag de perfil restringido a Leads (misión embudo-whatsapp-precios, E5). */
+        solo_leads: false,
         /* Flag que indica si el admin debe preseleccionarse por defecto al crear tareas manuales. */
         is_default_task_assignee: false,
         /* Teléfono en formato E.164; requerido para notificar al closer por WhatsApp. */
@@ -481,6 +511,8 @@ export default {
         is_closer: false,
         es_setter: false,
         es_vendedor: false,
+        /* Flag de perfil restringido a Leads (misión embudo-whatsapp-precios, E5). */
+        solo_leads: false,
         is_default_task_assignee: false,
         phone_number: '',
         notify_lead_escalation_whatsapp: false,
@@ -511,6 +543,8 @@ export default {
         es_setter:    !!admin.es_setter,
         /* Flag de vendedor (misión ventas-y-comisiones, 28/10/2026). */
         es_vendedor:  !!admin.es_vendedor,
+        /* Flag de perfil restringido a Leads (misión embudo-whatsapp-precios, E5). */
+        solo_leads:   !!admin.solo_leads,
         is_default_task_assignee: !!admin.is_default_task_assignee,
         /* Cargar teléfono existente para que el setter pueda editarlo. */
         phone_number: admin.phone_number || '',
@@ -555,6 +589,8 @@ export default {
         es_setter:    self.form.es_setter,
         /* Flag de vendedor: se envía siempre para poder desmarcarlo. */
         es_vendedor:  self.form.es_vendedor,
+        /* Flag de perfil Sólo Leads: se envía siempre para poder desmarcarlo. */
+        solo_leads:   self.form.solo_leads,
         is_default_task_assignee: self.form.is_default_task_assignee,
         /* Teléfono del admin; se envía siempre (puede estar vacío para borrarlo). */
         phone_number: self.form.phone_number,
