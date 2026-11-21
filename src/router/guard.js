@@ -1,4 +1,5 @@
 import { get_first_nav_location } from './nav'
+import { redireccion_solo_leads } from '@/utils/solo_leads'
 
 /**
  * Destino por defecto autenticado: la ruta de entrada según el perfil.
@@ -47,6 +48,17 @@ function resolve_navigation(to, from, next, store) {
     // Basta el token: el perfil puede restaurarse desde localStorage o /me en bootstrap.
     if (!store.state.auth.token) {
       next({ name: 'login', query: { redirect: to.fullPath } })
+      return
+    }
+
+    /*
+     * Perfil «Sólo Leads» (misión embudo-whatsapp-precios, E5): cualquier ruta autenticada que no sea
+     * Leads, su conversación o Cuenta lo manda a Leads. Corre acá, con el bootstrap ya resuelto, así
+     * que vale al escribir la URL a mano, al entrar y al recargar (el perfil ya viene fresco de /me).
+     */
+    const redireccion = redireccion_solo_leads(store.state.auth.admin, to.name)
+    if (redireccion) {
+      next(redireccion)
       return
     }
   }
