@@ -413,6 +413,7 @@ import {
   lead_model_properties_nav_order,
   ocultar_grupo_demo_del_meta,
 } from '@/components/lead/modal-definicion'
+import { es_solo_leads } from '@/utils/solo_leads'
 
 /**
  * Status del lead que representan el ciclo de vida completo de una demo agendada, desde que se
@@ -463,8 +464,11 @@ export default {
   },
   data() {
     return {
-      /** Pestañas extra del modal de leads. */
-      model_extra_tabs: lead_model_extra_tabs,
+      /**
+       * Pestañas extra del modal de leads. El perfil «Sólo Leads» (misión embudo-whatsapp-precios, E5) no
+       * tiene ninguna: ve sólo los datos base, donde están el estado y la nota.
+       */
+      model_extra_tabs: es_solo_leads(this.$store.state.auth.admin) ? [] : lead_model_extra_tabs,
       /** Orden de la barra de pestañas del modal (Resumen → Operaciones → Demo → Basico → Contrato → Pipelines). */
       model_properties_nav_order: lead_model_properties_nav_order,
       /** Controla visibilidad del panel de demos agendadas. */
