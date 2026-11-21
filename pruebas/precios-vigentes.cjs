@@ -144,6 +144,153 @@ if (texto !== null) {
   igual('dólares con 4 decimales', modulo.format_usd(0.0618), 'USD 0,0618')
   igual('dólares sin ceros de relleno', modulo.format_usd(0.026), 'USD 0,026')
 
+  /* ---- Notación por «clave» y topes idénticos a los del servidor (corrección de la revisión de E1) ----
+     El servidor arma las claves de `errors` con la `clave` del elemento (gestion.planes.inicial.usuarios),
+     no con su posición. La pantalla valida y lee errores con esas mismas claves, y sus topes son los de
+     PreciosVigentesSettings::validar() de admin-api. */
+  const extra = new Function(texto + '\nreturn { validate_precios: typeof validate_precios === "function" ? validate_precios : undefined,'
+    + ' resolve_server_errors: typeof resolve_server_errors === "function" ? resolve_server_errors : undefined }')()
+
+  /** Contrato de partida: los DEFAULTS de la API (válidos). */
+  function contrato_base() {
+    return {
+      version: 1,
+      moneda: 'ARS',
+      gestion: {
+        planes: [
+          { clave: 'inicial', nombre: 'Inicial', desde: 0, hasta: 200, usuarios: 1, abono: 55900, excedente: 760 },
+          { clave: 'intermedio', nombre: 'Intermedio', desde: 201, hasta: 600, usuarios: 2, abono: 85400, excedente: 570 },
+          { clave: 'empresa', nombre: 'Empresa', desde: 601, hasta: null, usuarios: 3, abono: 263000, excedente: null },
+        ],
+        usuario_extra: 30400,
+        descuento_bienvenida: { porcentaje: 50, meses: 3 },
+      },
+      tienda: { mensualidad: 44900 },
+      agentes: { lite: { mensualidad: 30000, implementacion: 0 }, full: { mensualidad: 94700 } },
+      implementaciones: {
+        anticipo_porcentaje: 50,
+        reembolsable: false,
+        items: [
+          { clave: 'gestion', nombre: 'Sistema de gestión', precio: 628400 },
+          { clave: 'gestion_tienda_agentes_full', nombre: 'Sistema + tienda + Agentes Full', precio: 1574300 },
+        ],
+      },
+      costos_meta: {
+        vigente_desde: '2026-10-01',
+        mensajes_libres_gratis_por_mes: 1000,
+        tarifas: [
+          { clave: 'marketing', nombre: 'Plantilla de marketing', usd: 0.0618, ars: 89.56 },
+          { clave: 'utilidad', nombre: 'Plantilla de utilidad', usd: 0.026, ars: 37.68 },
+        ],
+      },
+    }
+  }
+
+  /** Claves de los errores locales de un contrato (o [] si la función todavía no existe). */
+  function claves_de(contrato) {
+    return typeof extra.validate_precios === 'function' ? Object.keys(extra.validate_precios(contrato)).sort() : ['(no existe validate_precios)']
+  }
+
+  igual('los DEFAULTS de la API son válidos en la pantalla', claves_de(contrato_base()), [])
+
+  const rango_roto = contrato_base()
+  rango_roto.gestion.planes[1].desde = 150
+  igual('un rango inválido en Intermedio marca gestion.planes.intermedio.desde', claves_de(rango_roto), ['gestion.planes.intermedio.desde'])
+
+  const mil_uno = contrato_base()
+  mil_uno.gestion.planes[0].usuarios = 1001
+  igual('1001 usuarios en Inicial es inválido con la clave gestion.planes.inicial.usuarios', claves_de(mil_uno), ['gestion.planes.inicial.usuarios'])
+
+  const mil = contrato_base()
+  mil.gestion.planes[0].usuarios = 1000
+  igual('1000 usuarios en Inicial es válido (tope del servidor: 1..1000)', claves_de(mil), [])
+
+  const cero_usuarios = contrato_base()
+  cero_usuarios.gestion.planes[2].usuarios = 0
+  igual('0 usuarios es inválido (mínimo del servidor: 1)', claves_de(cero_usuarios), ['gestion.planes.empresa.usuarios'])
+
+  const usuarios_decimales = contrato_base()
+  usuarios_decimales.gestion.planes[0].usuarios = 1.5
+  igual('usuarios con decimales es inválido (entero)', claves_de(usuarios_decimales), ['gestion.planes.inicial.usuarios'])
+
+  const item_roto = contrato_base()
+  item_roto.implementaciones.items[0].precio = -1
+  igual('un precio de implementación negativo marca implementaciones.items.gestion.precio', claves_de(item_roto), ['implementaciones.items.gestion.precio'])
+
+  const tarifa_rota = contrato_base()
+  tarifa_rota.costos_meta.tarifas[0].usd = 0.00001
+  igual('una tarifa con 5 decimales en USD marca costos_meta.tarifas.marketing.usd', claves_de(tarifa_rota), ['costos_meta.tarifas.marketing.usd'])
+
+  const ars_roto = contrato_base()
+  ars_roto.costos_meta.tarifas[1].ars = 1.234
+  igual('una tarifa con 3 decimales en pesos marca costos_meta.tarifas.utilidad.ars', claves_de(ars_roto), ['costos_meta.tarifas.utilidad.ars'])
+
+  const desde_tope = contrato_base()
+  desde_tope.gestion.planes[2].desde = 100000001
+  cierto('un «desde» por encima de 100.000.000 es inválido',
+    claves_de(desde_tope).indexOf('gestion.planes.empresa.desde') !== -1)
+
+  const mensajes_tope = contrato_base()
+  mensajes_tope.costos_meta.mensajes_libres_gratis_por_mes = 100000000
+  igual('mensajes libres gratis: 100.000.000 es válido (tope del servidor)', claves_de(mensajes_tope), [])
+  mensajes_tope.costos_meta.mensajes_libres_gratis_por_mes = 100000001
+  igual('mensajes libres gratis: 100.000.001 es inválido', claves_de(mensajes_tope), ['costos_meta.mensajes_libres_gratis_por_mes'])
+
+  const meses_roto = contrato_base()
+  meses_roto.gestion.descuento_bienvenida.meses = 25
+  igual('25 meses de descuento es inválido (tope 24)', claves_de(meses_roto), ['gestion.descuento_bienvenida.meses'])
+
+  const fecha_rota = contrato_base()
+  fecha_rota.costos_meta.vigente_desde = '2026-02-30'
+  igual('una fecha inexistente marca costos_meta.vigente_desde', claves_de(fecha_rota), ['costos_meta.vigente_desde'])
+  fecha_rota.costos_meta.vigente_desde = ''
+  igual('una fecha vacía marca costos_meta.vigente_desde', claves_de(fecha_rota), ['costos_meta.vigente_desde'])
+  fecha_rota.costos_meta.vigente_desde = '01/10/2026'
+  igual('una fecha con otro formato marca costos_meta.vigente_desde', claves_de(fecha_rota), ['costos_meta.vigente_desde'])
+
+  const inicial_sin_excedente = contrato_base()
+  inicial_sin_excedente.gestion.planes[0].excedente = null
+  igual('Inicial sin precio de excedente es inválido (el servidor lo exige)', claves_de(inicial_sin_excedente), ['gestion.planes.inicial.excedente'])
+
+  /* ---- El objeto `errors` del servidor se resuelve al campo correcto ---- */
+  const errores_servidor = {
+    'gestion.planes.intermedio.desde': ['Los rangos de operaciones tienen que ser continuos.'],
+    'gestion.planes.inicial.usuarios': ['Plan Inicial: los usuarios incluidos tiene que estar entre 1 y 1.000.'],
+    'implementaciones.items.gestion.precio': ['El precio de la implementación «Sistema de gestión» tiene que estar entre 0 y 99.999.999.'],
+    'costos_meta.tarifas.marketing.usd': ['La tarifa «Plantilla de marketing» en USD admite hasta 4 decimales.'],
+    'costos_meta.vigente_desde': ['La fecha de vigencia tiene que tener el formato AAAA-MM-DD.'],
+    'implementaciones.reembolsable': ['El dato «reembolsable» tiene que ser verdadero o falso.'],
+    'agentes.lite.implementacion': ['La implementación de Agentes Lite tiene que ser un número.'],
+    'gestion.planes.inicial.nombre': ['El nombre del plan inicial tiene que ser un texto de 1 a 80 caracteres.'],
+  }
+  const resuelto = typeof extra.resolve_server_errors === 'function' ? extra.resolve_server_errors(errores_servidor, contrato_base()) : null
+  cierto('existe resolve_server_errors', resuelto !== null)
+  if (resuelto !== null) {
+    igual('Intermedio «desde» queda en su campo', resuelto.por_campo['gestion.planes.intermedio.desde'], 'Los rangos de operaciones tienen que ser continuos.')
+    igual('usuarios de Inicial queda en su campo', Object.keys(resuelto.por_campo).indexOf('gestion.planes.inicial.usuarios') !== -1, true)
+    igual('el precio de «gestion» queda en su campo', Object.keys(resuelto.por_campo).indexOf('implementaciones.items.gestion.precio') !== -1, true)
+    igual('la tarifa USD de marketing queda en su campo', Object.keys(resuelto.por_campo).indexOf('costos_meta.tarifas.marketing.usd') !== -1, true)
+    igual('la fecha de vigencia queda en su campo', Object.keys(resuelto.por_campo).indexOf('costos_meta.vigente_desde') !== -1, true)
+    igual('lo que no tiene campo visible va al resumen general', resuelto.generales.slice().sort(), [
+      'El dato «reembolsable» tiene que ser verdadero o falso.',
+      'El nombre del plan inicial tiene que ser un texto de 1 a 80 caracteres.',
+      'La implementación de Agentes Lite tiene que ser un número.',
+    ].sort())
+    igual('un mensaje suelto (string) también se acepta', extra.resolve_server_errors({ 'tienda.mensualidad': 'Mal' }, contrato_base()).por_campo['tienda.mensualidad'], 'Mal')
+    igual('una clave de un plan que no existe en la pantalla va al resumen general',
+      extra.resolve_server_errors({ 'gestion.planes.platino.usuarios': ['No'] }, contrato_base()).generales, ['No'])
+  }
+
+  /* ---- Ningún componente busca errores por posición, y la fecha de Meta es editable ---- */
+  const carpeta_vistas = path.join(RAIZ, 'src', 'components', 'account', 'sections', 'precios-vigentes')
+  ;['PlanesGestion.vue', 'Adicionales.vue', 'Implementaciones.vue', 'CostosMeta.vue'].forEach(function (archivo) {
+    const contenido = fs.readFileSync(path.join(carpeta_vistas, archivo), 'utf8')
+    cierto(archivo + ' no arma claves de error con el índice', !/errors\['[a-z_.]+\.'\s*\+\s*index/.test(contenido))
+  })
+  cierto('CostosMeta.vue edita costos_meta.vigente_desde con un campo de fecha',
+    /v-model="precios\.costos_meta\.vigente_desde"/.test(fs.readFileSync(path.join(carpeta_vistas, 'CostosMeta.vue'), 'utf8'))
+    && /type="date"/.test(fs.readFileSync(path.join(carpeta_vistas, 'CostosMeta.vue'), 'utf8')))
+
   /* ---- La pantalla: sus archivos y su registro en Cuenta ---- */
   const carpeta = path.join(RAIZ, 'src', 'components', 'account', 'sections', 'precios-vigentes')
   ;['Index.vue', 'PlanesGestion.vue', 'Adicionales.vue', 'Implementaciones.vue', 'CostosMeta.vue']
