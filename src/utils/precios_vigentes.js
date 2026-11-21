@@ -10,11 +10,22 @@
  * Node, así que no puede depender de Vue ni de axios.
  */
 
-/** Techo de cualquier monto en pesos que acepta el backend. */
+/*
+ * Topes de cada campo: son una COPIA de los que aplica admin-api en
+ * `PreciosVigentesSettings::validar()` (misma fuente de verdad: si allá cambia uno, se cambia acá).
+ */
+
+/** Techo de cualquier monto en pesos (y de la tarifa en USD) que acepta el backend. */
 export const MAX_MONTO = 99999999
 
 /** Techo de meses de descuento de bienvenida que acepta el backend. */
 export const MAX_MESES_DESCUENTO = 24
+
+/** Techo de usuarios incluidos en un plan (el mínimo es 1). */
+export const MAX_USUARIOS = 1000
+
+/** Techo de las operaciones de un rango de plan y de los mensajes libres gratis por mes. */
+export const MAX_OPERACIONES = 100000000
 
 /**
  * Redondea a 2 decimales (el redondeo del contrato para la mitad y el abono con descuento).
@@ -72,7 +83,8 @@ export function is_missing_number(valor) {
  */
 function has_at_most_decimals(valor, decimals) {
   const factor = Math.pow(10, decimals)
-  return Math.abs(Math.round(valor * factor) - valor * factor) < 1e-6
+  /* Misma tolerancia que el servidor: abs(n * factor - round(n * factor)) > 0.0001 es inválido. */
+  return Math.abs(valor * factor - Math.round(valor * factor)) <= 0.0001
 }
 
 /**
@@ -248,9 +260,30 @@ export function build_save_payload(precios) {
 }
 
 /**
- * Valida todo el contrato antes de guardar. Devuelve un mapa «ruta del campo → mensaje» con la misma
- * notación de puntos que usa Laravel en `errors` (ej. `gestion.planes.1.desde`), así el servidor y la
- * pantalla marcan el mismo campo.
+ * Indica si un texto es una fecha real en formato `AAAA-MM-DD` (lo mismo que valida el servidor con
+ * `DateTime::createFromFormat('Y-m-d')` y comparando el resultado con el texto original).
+ *
+ * @param {*} valor Texto a revisar (lo que entrega un `<input type="date">`).
+ * @returns {boolean} true si es una fecha existente con ese formato exacto.
+ */
+export function is_valid_iso_date(valor) {
+  if (typeof valor !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) {
+    return false
+  }
+  const partes = valor.split('-')
+  const anio = Number(partes[0])
+  const mes = Number(partes[1])
+  const dia = Number(partes[2])
+  const fecha = new Date(Date.UTC(anio, mes - 1, dia))
+  return fecha.getUTCFullYear() === anio && fecha.getUTCMonth() === mes - 1 && fecha.getUTCDate() === dia
+}
+
+/**
+ * Valida todo el contrato antes de guardar. Devuelve un mapa «ruta del campo → mensaje» con las MISMAS
+ * claves que arma el servidor en el `errors` de un 422: notación de puntos donde cada elemento de una
+ * lista se nombra con su `clave`, no con su posición (ej. `gestion.planes.intermedio.desde`,
+ * `implementaciones.items.gestion.precio`, `costos_meta.tarifas.marketing.usd`). Así la validación local
+ * y la del servidor marcan el mismo campo, y los topes son los de `PreciosVigentesSettings::validar()`.
  *
  * @param {Object} precios Contrato de precios editado.
  * @returns {Object<string, string>} Errores por ruta; objeto vacío si se puede guardar.
@@ -280,21 +313,26 @@ export function validate_precios(precios) {
   const planes = gestion.planes || []
 
   planes.forEach(function (plan, indice) {
-    const base = 'gestion.planes.' + indice
+    const base = 'gestion.planes.' + plan.clave
+    const es_ultimo = indice === planes.length - 1
     check(base + '.abono', plan.abono, 0, MAX_MONTO, 2)
-    check(base + '.usuarios', plan.usuarios, 1, MAX_MONTO, 0)
+    check(base + '.usuarios', plan.usuarios, 1, MAX_USUARIOS, 0)
+    check(base + '.desde', plan.desde, 0, MAX_OPERACIONES, 0)
+    /* El «hasta» del último plan es null (ilimitado) y lo revisa validate_plan_ranges. */
+    if (plan.hasta !== null) {
+      check(base + '.hasta', plan.hasta, 0, MAX_OPERACIONES, 0)
+    }
+    /* El excedente sólo puede faltar en el último plan (Empresa); en los demás es obligatorio. */
     if (plan.excedente !== null) {
       check(base + '.excedente', plan.excedente, 0, MAX_MONTO, 2)
+    } else if (!es_ultimo) {
+      errores[base + '.excedente'] = 'Completá el precio de la operación excedente.'
     }
   })
 
   /* Los rangos se validan en conjunto: un «desde» depende del «hasta» del plan anterior. */
   validate_plan_ranges(planes).forEach(function (error) {
-    planes.forEach(function (plan, indice) {
-      if (plan.clave === error.clave) {
-        errores['gestion.planes.' + indice + '.' + error.campo] = error.mensaje
-      }
-    })
+    errores['gestion.planes.' + error.clave + '.' + error.campo] = error.mensaje
   })
 
   check('gestion.usuario_extra', gestion.usuario_extra, 0, MAX_MONTO, 2)
@@ -310,16 +348,88 @@ export function validate_precios(precios) {
 
   const implementaciones = precios.implementaciones || {}
   check('implementaciones.anticipo_porcentaje', implementaciones.anticipo_porcentaje, 0, 100, 2)
-  ;(implementaciones.items || []).forEach(function (item, indice) {
-    check('implementaciones.items.' + indice + '.precio', item.precio, 0, MAX_MONTO, 2)
+  ;(implementaciones.items || []).forEach(function (item) {
+    check('implementaciones.items.' + item.clave + '.precio', item.precio, 0, MAX_MONTO, 2)
   })
 
   const costos_meta = precios.costos_meta || {}
-  check('costos_meta.mensajes_libres_gratis_por_mes', costos_meta.mensajes_libres_gratis_por_mes, 0, MAX_MONTO, 0)
-  ;(costos_meta.tarifas || []).forEach(function (tarifa, indice) {
-    check('costos_meta.tarifas.' + indice + '.usd', tarifa.usd, 0, MAX_MONTO, 4)
-    check('costos_meta.tarifas.' + indice + '.ars', tarifa.ars, 0, MAX_MONTO, 2)
+  if (!is_valid_iso_date(costos_meta.vigente_desde)) {
+    errores['costos_meta.vigente_desde'] = 'Elegí una fecha válida (día/mes/año).'
+  }
+  check('costos_meta.mensajes_libres_gratis_por_mes', costos_meta.mensajes_libres_gratis_por_mes, 0, MAX_OPERACIONES, 0)
+  ;(costos_meta.tarifas || []).forEach(function (tarifa) {
+    check('costos_meta.tarifas.' + tarifa.clave + '.usd', tarifa.usd, 0, MAX_MONTO, 4)
+    check('costos_meta.tarifas.' + tarifa.clave + '.ars', tarifa.ars, 0, MAX_MONTO, 2)
   })
 
   return errores
+}
+
+/**
+ * Lista las rutas de error que tienen un campo visible en la pantalla para un contrato dado: las que
+ * puede marcar la validación local y las que el servidor puede devolver sobre algo que se edita.
+ * Quedan afuera, a propósito, lo que la pantalla no edita (los `nombre` de planes, ítems y tarifas,
+ * `agentes.lite.implementacion`, `implementaciones.reembolsable`) y los errores de estructura
+ * (`contrato.…`): esos van al resumen general.
+ *
+ * @param {Object} precios Contrato de precios que se está editando.
+ * @returns {string[]} Rutas con campo visible.
+ */
+export function list_field_error_keys(precios) {
+  /** Rutas acumuladas. */
+  const rutas = [
+    'gestion.usuario_extra',
+    'gestion.descuento_bienvenida.porcentaje',
+    'gestion.descuento_bienvenida.meses',
+    'tienda.mensualidad',
+    'agentes.lite.mensualidad',
+    'agentes.full.mensualidad',
+    'implementaciones.anticipo_porcentaje',
+    'costos_meta.vigente_desde',
+    'costos_meta.mensajes_libres_gratis_por_mes',
+  ]
+
+  ;((precios.gestion || {}).planes || []).forEach(function (plan) {
+    ;['desde', 'hasta', 'usuarios', 'abono', 'excedente'].forEach(function (campo) {
+      rutas.push('gestion.planes.' + plan.clave + '.' + campo)
+    })
+  })
+  ;((precios.implementaciones || {}).items || []).forEach(function (item) {
+    rutas.push('implementaciones.items.' + item.clave + '.precio')
+  })
+  ;((precios.costos_meta || {}).tarifas || []).forEach(function (tarifa) {
+    rutas.push('costos_meta.tarifas.' + tarifa.clave + '.usd')
+    rutas.push('costos_meta.tarifas.' + tarifa.clave + '.ars')
+  })
+
+  return rutas
+}
+
+/**
+ * Resuelve el objeto `errors` de un 422 del servidor: lo que tiene un campo visible va a `por_campo`
+ * (la clave es la misma que usan los componentes, porque el servidor y la pantalla comparten la
+ * notación por `clave`) y el resto va a `generales`, para mostrarlo en el resumen de la pantalla en
+ * vez de perderlo.
+ *
+ * @param {Object<string, string[]|string>|undefined} errors Campo `errors` de la respuesta de Laravel.
+ * @param {Object} precios Contrato de precios que se está editando.
+ * @returns {{por_campo: Object<string, string>, generales: string[]}} Errores por campo y mensajes sueltos.
+ */
+export function resolve_server_errors(errors, precios) {
+  /** Rutas que tienen un campo donde mostrarse. */
+  const visibles = list_field_error_keys(precios || {})
+  /** Resultado. */
+  const resuelto = { por_campo: {}, generales: [] }
+
+  Object.keys(errors || {}).forEach(function (ruta) {
+    const mensajes = errors[ruta]
+    const mensaje = Array.isArray(mensajes) ? mensajes[0] : String(mensajes)
+    if (visibles.indexOf(ruta) !== -1) {
+      resuelto.por_campo[ruta] = mensaje
+    } else {
+      resuelto.generales.push(mensaje)
+    }
+  })
+
+  return resuelto
 }

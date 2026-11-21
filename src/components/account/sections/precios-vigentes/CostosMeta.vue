@@ -2,8 +2,8 @@
   <div class="precios-costos-meta">
     <h3 class="h6 mb-2">Costos de Meta por WhatsApp</h3>
     <p class="text-muted small mb-2">
-      Los paga el negocio aparte, en su cuenta de WhatsApp. Vigentes desde
-      <strong>{{ vigente_desde_label }}</strong>. Son los que muestra la landing en «Ver costos de Meta».
+      Los paga el negocio aparte, en su cuenta de WhatsApp. Son los que muestra la landing en «Ver costos
+      de Meta». Cuando Meta cambie las tarifas, actualizá los importes y la fecha desde la que rigen.
     </p>
 
     <div class="table-responsive">
@@ -16,7 +16,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(tarifa, index) in precios.costos_meta.tarifas" :key="tarifa.clave">
+          <tr v-for="tarifa in precios.costos_meta.tarifas" :key="tarifa.clave">
             <th scope="row" class="fw-normal">{{ tarifa.nombre }}</th>
             <td>
               <div class="input-group input-group-sm flex-nowrap">
@@ -27,12 +27,12 @@
                   min="0"
                   step="0.0001"
                   class="form-control text-end"
-                  :class="{ 'is-invalid': errors['costos_meta.tarifas.' + index + '.usd'] }"
+                  :class="{ 'is-invalid': errors['costos_meta.tarifas.' + tarifa.clave + '.usd'] }"
                   :aria-label="'Dólares, ' + tarifa.nombre"
                   :disabled="disabled"
                 />
               </div>
-              <div class="invalid-feedback d-block">{{ errors['costos_meta.tarifas.' + index + '.usd'] }}</div>
+              <div class="invalid-feedback d-block">{{ errors['costos_meta.tarifas.' + tarifa.clave + '.usd'] }}</div>
             </td>
             <td>
               <div class="input-group input-group-sm flex-nowrap">
@@ -43,12 +43,12 @@
                   min="0"
                   step="0.01"
                   class="form-control text-end"
-                  :class="{ 'is-invalid': errors['costos_meta.tarifas.' + index + '.ars'] }"
+                  :class="{ 'is-invalid': errors['costos_meta.tarifas.' + tarifa.clave + '.ars'] }"
                   :aria-label="'Pesos, ' + tarifa.nombre"
                   :disabled="disabled"
                 />
               </div>
-              <div class="invalid-feedback d-block">{{ errors['costos_meta.tarifas.' + index + '.ars'] }}</div>
+              <div class="invalid-feedback d-block">{{ errors['costos_meta.tarifas.' + tarifa.clave + '.ars'] }}</div>
             </td>
           </tr>
         </tbody>
@@ -56,6 +56,19 @@
     </div>
 
     <div class="row g-2 align-items-start">
+      <div class="col-12 col-sm-6 col-md-4">
+        <label class="form-label small" for="precios_vigente_desde">Tarifas vigentes desde</label>
+        <!-- El input de fecha entrega y recibe AAAA-MM-DD, el mismo formato que valida la API. -->
+        <input
+          id="precios_vigente_desde"
+          v-model="precios.costos_meta.vigente_desde"
+          type="date"
+          class="form-control form-control-sm"
+          :class="{ 'is-invalid': errors['costos_meta.vigente_desde'] }"
+          :disabled="disabled"
+        />
+        <div class="invalid-feedback d-block">{{ errors['costos_meta.vigente_desde'] }}</div>
+      </div>
       <div class="col-12 col-sm-6 col-md-4">
         <label class="form-label small" for="precios_mensajes_gratis">Mensajes libres gratis por mes (por número)</label>
         <input
@@ -89,7 +102,7 @@ export default {
       type: Object,
       required: true,
     },
-    /** Errores por ruta de campo (cliente y servidor), con la notación de puntos de Laravel. */
+    /** Errores por ruta de campo (cliente y servidor), con cada tarifa nombrada por su `clave` (ej. `costos_meta.tarifas.marketing.usd`). */
     errors: {
       type: Object,
       default: function () {
@@ -100,21 +113,6 @@ export default {
     disabled: {
       type: Boolean,
       default: false,
-    },
-  },
-  computed: {
-    /**
-     * Fecha de vigencia de las tarifas en formato día/mes/año (la API manda `AAAA-MM-DD`).
-     *
-     * @returns {string} Fecha legible o el texto original si no tiene el formato esperado.
-     */
-    vigente_desde_label() {
-      const crudo = this.precios.costos_meta.vigente_desde || ''
-      const partes = crudo.split('-')
-      if (partes.length !== 3) {
-        return crudo
-      }
-      return partes[2] + '/' + partes[1] + '/' + partes[0]
     },
   },
 }

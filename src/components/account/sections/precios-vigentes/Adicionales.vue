@@ -156,7 +156,7 @@ export default {
       type: Object,
       required: true,
     },
-    /** Errores por ruta de campo (cliente y servidor), con la notación de puntos de Laravel. */
+    /** Errores por ruta de campo (cliente y servidor), con la misma notación de puntos que usa Laravel. */
     errors: {
       type: Object,
       default: function () {

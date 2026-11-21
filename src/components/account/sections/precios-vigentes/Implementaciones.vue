@@ -18,7 +18,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(item, index) in precios.implementaciones.items" :key="item.clave">
+          <tr v-for="item in precios.implementaciones.items" :key="item.clave">
             <th scope="row" class="fw-normal">{{ item.nombre }}</th>
             <td>
               <div class="input-group input-group-sm flex-nowrap">
@@ -29,12 +29,12 @@
                   min="0"
                   step="0.01"
                   class="form-control text-end"
-                  :class="{ 'is-invalid': errors['implementaciones.items.' + index + '.precio'] }"
+                  :class="{ 'is-invalid': errors['implementaciones.items.' + item.clave + '.precio'] }"
                   :aria-label="'Precio de la implementación: ' + item.nombre"
                   :disabled="disabled"
                 />
               </div>
-              <div class="invalid-feedback d-block">{{ errors['implementaciones.items.' + index + '.precio'] }}</div>
+              <div class="invalid-feedback d-block">{{ errors['implementaciones.items.' + item.clave + '.precio'] }}</div>
             </td>
             <!-- Calculado: precio * anticipo / 100. Sólo lectura, en gris. -->
             <td class="text-end text-muted precios-calculado">{{ down_payment_label(item) }}</td>
@@ -82,7 +82,7 @@ export default {
       type: Object,
       required: true,
     },
-    /** Errores por ruta de campo (cliente y servidor), con la notación de puntos de Laravel. */
+    /** Errores por ruta de campo (cliente y servidor), con cada ítem nombrado por su `clave` (ej. `implementaciones.items.gestion.precio`). */
     errors: {
       type: Object,
       default: function () {

@@ -31,15 +31,15 @@
                 min="0"
                 step="1"
                 class="form-control form-control-sm text-end"
-                :class="{ 'is-invalid': errors['gestion.planes.' + index + '.desde'] }"
+                :class="{ 'is-invalid': errors['gestion.planes.' + plan.clave + '.desde'] }"
                 :aria-label="'Desde, plan ' + plan.nombre"
                 :disabled="disabled"
               />
-              <div class="invalid-feedback d-block">{{ errors['gestion.planes.' + index + '.desde'] }}</div>
+              <div class="invalid-feedback d-block">{{ errors['gestion.planes.' + plan.clave + '.desde'] }}</div>
             </td>
             <td>
               <!-- El último plan es ilimitado: su «hasta» no se edita. -->
-              <span v-if="plan.hasta === null" class="text-muted">ilimitadas</span>
+              <span v-if="plan.hasta === null && is_last_plan(index)" class="text-muted">ilimitadas</span>
               <template v-else>
                 <input
                   v-model.number="plan.hasta"
@@ -47,11 +47,11 @@
                   min="0"
                   step="1"
                   class="form-control form-control-sm text-end"
-                  :class="{ 'is-invalid': errors['gestion.planes.' + index + '.hasta'] }"
+                  :class="{ 'is-invalid': errors['gestion.planes.' + plan.clave + '.hasta'] }"
                   :aria-label="'Hasta, plan ' + plan.nombre"
                   :disabled="disabled"
                 />
-                <div class="invalid-feedback d-block">{{ errors['gestion.planes.' + index + '.hasta'] }}</div>
+                <div class="invalid-feedback d-block">{{ errors['gestion.planes.' + plan.clave + '.hasta'] }}</div>
               </template>
             </td>
             <td>
@@ -59,13 +59,14 @@
                 v-model.number="plan.usuarios"
                 type="number"
                 min="1"
+                max="1000"
                 step="1"
                 class="form-control form-control-sm text-end"
-                :class="{ 'is-invalid': errors['gestion.planes.' + index + '.usuarios'] }"
+                :class="{ 'is-invalid': errors['gestion.planes.' + plan.clave + '.usuarios'] }"
                 :aria-label="'Usuarios incluidos, plan ' + plan.nombre"
                 :disabled="disabled"
               />
-              <div class="invalid-feedback d-block">{{ errors['gestion.planes.' + index + '.usuarios'] }}</div>
+              <div class="invalid-feedback d-block">{{ errors['gestion.planes.' + plan.clave + '.usuarios'] }}</div>
             </td>
             <td>
               <div class="input-group input-group-sm flex-nowrap">
@@ -76,19 +77,19 @@
                   min="0"
                   step="0.01"
                   class="form-control text-end"
-                  :class="{ 'is-invalid': errors['gestion.planes.' + index + '.abono'] }"
+                  :class="{ 'is-invalid': errors['gestion.planes.' + plan.clave + '.abono'] }"
                   :aria-label="'Abono mensual, plan ' + plan.nombre"
                   :disabled="disabled"
                 />
               </div>
-              <div class="invalid-feedback d-block">{{ errors['gestion.planes.' + index + '.abono'] }}</div>
+              <div class="invalid-feedback d-block">{{ errors['gestion.planes.' + plan.clave + '.abono'] }}</div>
             </td>
             <!-- Calculado: abono * (100 - descuento) / 100. Sólo lectura. -->
             <td class="text-end text-muted precios-calculado">
               {{ discounted_label(plan) }}
             </td>
             <td>
-              <span v-if="plan.excedente === null" class="text-muted">sin excedente</span>
+              <span v-if="plan.excedente === null && is_last_plan(index)" class="text-muted">sin excedente</span>
               <template v-else>
                 <div class="input-group input-group-sm flex-nowrap">
                   <span class="input-group-text">$</span>
@@ -98,12 +99,12 @@
                     min="0"
                     step="0.01"
                     class="form-control text-end"
-                    :class="{ 'is-invalid': errors['gestion.planes.' + index + '.excedente'] }"
+                    :class="{ 'is-invalid': errors['gestion.planes.' + plan.clave + '.excedente'] }"
                     :aria-label="'Excedente por operación, plan ' + plan.nombre"
                     :disabled="disabled"
                   />
                 </div>
-                <div class="invalid-feedback d-block">{{ errors['gestion.planes.' + index + '.excedente'] }}</div>
+                <div class="invalid-feedback d-block">{{ errors['gestion.planes.' + plan.clave + '.excedente'] }}</div>
               </template>
             </td>
           </tr>
@@ -131,7 +132,7 @@ export default {
       type: Object,
       required: true,
     },
-    /** Errores por ruta de campo (cliente y servidor), con la notación de puntos de Laravel. */
+    /** Errores por ruta de campo (cliente y servidor), con la notación de puntos de Laravel y cada plan nombrado por su `clave` (ej. `gestion.planes.inicial.usuarios`). */
     errors: {
       type: Object,
       default: function () {
@@ -145,6 +146,16 @@ export default {
     },
   },
   methods: {
+    /**
+     * Indica si el plan es el último de la lista (Empresa): el único que puede ser ilimitado y no tener
+     * precio de excedente. Los demás siempre muestran su campo, así un valor faltante se puede corregir.
+     *
+     * @param {number} index Posición del plan en la lista.
+     * @returns {boolean} true si es el último.
+     */
+    is_last_plan(index) {
+      return index === this.precios.gestion.planes.length - 1
+    },
     /**
      * Texto del abono con el descuento de bienvenida para un plan.
      *

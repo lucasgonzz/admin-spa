@@ -38,6 +38,11 @@
       <!-- El aviso de «guardado» sólo vale mientras la pantalla coincide con lo guardado. -->
       <p v-if="saved_message && !has_changes" class="text-success small mt-2 mb-0">{{ saved_message }}</p>
       <p v-else-if="error_message" class="text-danger small mt-2 mb-0">{{ error_message }}</p>
+      <!-- Errores del servidor que no corresponden a un campo visible (ej. un nombre o un dato que la
+           pantalla no edita): se listan acá para que no se pierdan. -->
+      <ul v-if="visible_general_errors.length > 0" class="text-danger small mt-1 mb-0 ps-3">
+        <li v-for="mensaje in visible_general_errors" :key="mensaje">{{ mensaje }}</li>
+      </ul>
 
       <!-- Pie: quién y cuándo tocó los precios por última vez. -->
       <p v-if="updated_label" class="text-muted small mt-3 mb-0">{{ updated_label }}</p>
@@ -51,6 +56,7 @@ import {
   build_save_payload,
   clone_precios,
   format_updated_at,
+  resolve_server_errors,
   validate_precios,
 } from '@/utils/precios_vigentes'
 import PlanesGestion from './PlanesGestion.vue'
@@ -67,7 +73,8 @@ import CostosMeta from './CostosMeta.vue'
  * implementación, rangos encadenados, formato) está en `@/utils/precios_vigentes`.
  *
  * El backend valida todo y responde 422; acá se valida antes para que el operador vea el error
- * debajo del campo sin viajar al servidor.
+ * debajo del campo sin viajar al servidor. Las claves de error (local y del servidor) usan la `clave` de
+ * cada plan, ítem y tarifa, así que ambos marcan el mismo campo.
  */
 export default {
   name: 'PreciosVigentesSection',
@@ -83,8 +90,10 @@ export default {
       local: null,
       /** Copia serializada de lo guardado en el servidor, para detectar cambios. */
       stored_json: '',
-      /** Errores 422 del servidor por ruta de campo. */
+      /** Errores 422 del servidor que tienen un campo visible, por ruta (la misma notación por `clave`). */
       server_errors: {},
+      /** Errores 422 del servidor sin campo visible: se muestran en el resumen general. */
+      server_general_errors: [],
       /** Cuerpo serializado que provocó los errores del servidor: sólo valen mientras no se edite. */
       server_errors_payload_json: '',
       /** Carga inicial GET. */
@@ -112,13 +121,25 @@ export default {
      * @returns {Object<string, string>}
      */
     all_errors() {
-      /* Un error del servidor habla del cuerpo que se mandó: si el operador ya editó algo, deja de
-         valer y se oculta (el cliente sigue validando lo suyo). */
-      const server_vigentes =
-        this.local && JSON.stringify(build_save_payload(this.local)) === this.server_errors_payload_json
-          ? this.server_errors
-          : {}
-      return Object.assign({}, server_vigentes, this.client_errors)
+      return Object.assign({}, this.server_errors_still_valid ? this.server_errors : {}, this.client_errors)
+    },
+    /**
+     * true mientras lo editado coincide con el cuerpo que provocó los errores del servidor. Un error del
+     * servidor habla del cuerpo que se mandó: si el operador ya editó algo, deja de valer y se oculta (el
+     * cliente sigue validando lo suyo).
+     *
+     * @returns {boolean}
+     */
+    server_errors_still_valid() {
+      return !!this.local && JSON.stringify(build_save_payload(this.local)) === this.server_errors_payload_json
+    },
+    /**
+     * Errores del servidor sin campo visible, mientras sigan valiendo.
+     *
+     * @returns {string[]}
+     */
+    visible_general_errors() {
+      return this.server_errors_still_valid ? this.server_general_errors : []
     },
     /**
      * true si hay algún error de validación del lado cliente.
@@ -172,6 +193,7 @@ export default {
       this.local = clone_precios(data)
       this.stored_json = JSON.stringify(build_save_payload(data))
       this.server_errors = {}
+      this.server_general_errors = []
     },
     /**
      * GET /settings/precios-vigentes — carga el contrato actual.
@@ -199,21 +221,6 @@ export default {
         })
     },
     /**
-     * Pasa los errores `errors` de un 422 de Laravel a un mapa «ruta → primer mensaje».
-     *
-     * @param {Object|undefined} errors Campo `errors` de la respuesta.
-     * @returns {Object<string, string>}
-     */
-    map_server_errors(errors) {
-      /** Mapa resultante. */
-      const mapa = {}
-      Object.keys(errors || {}).forEach(function (ruta) {
-        const mensajes = errors[ruta]
-        mapa[ruta] = Array.isArray(mensajes) ? mensajes[0] : String(mensajes)
-      })
-      return mapa
-    },
-    /**
      * PUT /settings/precios-vigentes — guarda el contrato entero y toma lo que devuelve el servidor
      * (con `actualizado_en` y `actualizado_por` sellados).
      *
@@ -227,6 +234,7 @@ export default {
       self.saved_message = ''
       self.error_message = ''
       self.server_errors = {}
+      self.server_general_errors = []
       self.saving = true
       api
         .put('/settings/precios-vigentes', build_save_payload(self.local), {
@@ -241,7 +249,11 @@ export default {
         .catch(function (error) {
           const response = error && error.response
           if (response && response.status === 422) {
-            self.server_errors = self.map_server_errors(response.data && response.data.errors)
+            /* Las claves del servidor usan la `clave` de cada plan, ítem y tarifa: son las mismas que
+               busca cada campo. Lo que no tiene campo visible va al resumen general. */
+            const resuelto = resolve_server_errors(response.data && response.data.errors, self.local)
+            self.server_errors = resuelto.por_campo
+            self.server_general_errors = resuelto.generales
             self.server_errors_payload_json = JSON.stringify(build_save_payload(self.local))
           }
           self.error_message = resolve_error_message(error)
