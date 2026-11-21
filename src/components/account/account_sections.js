@@ -90,6 +90,11 @@ export const ACCOUNT_SECTIONS = [
     group: 'Leads y ventas',
   },
   {
+    id: 'precios-vigentes',
+    label: 'Precios vigentes',
+    group: 'Leads y ventas',
+  },
+  {
     id: 'task-templates',
     label: 'Plantillas de tareas',
     group: 'Operaciones',
