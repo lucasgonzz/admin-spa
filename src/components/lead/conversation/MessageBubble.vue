@@ -563,7 +563,7 @@
             <i class="bi bi-emoji-smile" aria-hidden="true" />
           </button>
           <button
-            v-if="segment.is_last"
+            v-if="segment.is_last && !solo_lectura"
             type="button"
             class="btn btn-link wa-ctx-toggle p-0"
             :class="message.deleted_from_context ? 'wa-ctx-toggle--excluded text-danger' : 'wa-ctx-toggle--included text-muted'"
@@ -762,6 +762,11 @@ export default {
     /* true si el lead esta marcado como "ya no recibe mensajes" (numero bloqueado o dado de baja).
        Cambia el texto del banner de fallo y saca al lead del rojo de la grilla. */
     lead_no_recibe_mensajes: { type: Boolean, default: false },
+    /**
+     * true para el perfil «Sólo Leads»: la burbuja se ve sin ninguna acción (enviar, editar, aprobar,
+     * descartar, cancelar autoenvío, reaccionar, sacar del contexto). Misión embudo-whatsapp-precios, E5.
+     */
+    solo_lectura: { type: Boolean, default: false },
   },
   data() {
     return {
@@ -1247,6 +1252,10 @@ export default {
      * @returns {boolean}
      */
     show_marcar_no_recibe() {
+      /* Perfil «Sólo Leads» (misión embudo-whatsapp-precios, E5): sólo lectura, sin acciones sobre el mensaje. */
+      if (this.solo_lectura) {
+        return false
+      }
       return this.message.whatsapp_delivery_status === 'fallido'
     },
     /**
@@ -1348,6 +1357,10 @@ export default {
      * @returns {boolean}
      */
     puede_reaccionar() {
+      /* Perfil «Sólo Leads» (misión embudo-whatsapp-precios, E5): sólo lectura, sin acciones sobre el mensaje. */
+      if (this.solo_lectura) {
+        return false
+      }
       if (this.is_status_event || this.is_error) {
         return false
       }
@@ -1381,6 +1394,10 @@ export default {
      * @returns {boolean}
      */
     puede_abrir_paleta() {
+      /* Perfil «Sólo Leads» (misión embudo-whatsapp-precios, E5): sólo lectura, sin acciones sobre el mensaje. */
+      if (this.solo_lectura) {
+        return false
+      }
       return this.puede_reaccionar || this.has_admin_reaction
     },
     /**
@@ -1457,6 +1474,10 @@ export default {
      * @returns {boolean}
      */
     show_verification_panel() {
+      /* Perfil «Sólo Leads» (misión embudo-whatsapp-precios, E5): sólo lectura, sin acciones sobre el mensaje. */
+      if (this.solo_lectura) {
+        return false
+      }
       return this.message.status === 'sugerido' && Boolean(this.message.requiere_verificacion)
     },
     /**
@@ -1543,6 +1564,10 @@ export default {
      * @returns {boolean}
      */
     show_pending_suggestion_actions() {
+      /* Perfil «Sólo Leads» (misión embudo-whatsapp-precios, E5): sólo lectura, sin acciones sobre el mensaje. */
+      if (this.solo_lectura) {
+        return false
+      }
       if (this.message.sender !== 'sistema') {
         return false
       }
