@@ -596,7 +596,7 @@ export default {
      * @returns {void}
      */
     sync_active_section_from_route() {
-      this.active_section = resolve_account_section_from_hash(this.$route.hash)
+      this.active_section = resolve_account_section_from_hash(this.$route.hash, this.admin)
     },
 
     /**
