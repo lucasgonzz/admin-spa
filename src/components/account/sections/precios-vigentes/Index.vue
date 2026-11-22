@@ -9,11 +9,12 @@
       <button type="button" class="btn btn-outline-secondary btn-sm" @click="load_settings">Reintentar</button>
     </div>
 
-    <!-- Formulario: cuatro bloques, cada uno es un subcomponente que edita su parte del contrato. -->
+    <!-- Formulario: cinco bloques, cada uno es un subcomponente que edita su parte del contrato. -->
     <template v-else>
       <div class="d-flex flex-column gap-4 mb-3">
         <planes-gestion :precios="local" :errors="all_errors" :disabled="saving" />
         <adicionales :precios="local" :errors="all_errors" :disabled="saving" />
+        <agentes :precios="local" :errors="all_errors" :disabled="saving" />
         <implementaciones :precios="local" :errors="all_errors" :disabled="saving" />
         <costos-meta :precios="local" :errors="all_errors" :disabled="saving" />
       </div>
@@ -61,6 +62,7 @@ import {
 } from '@/utils/precios_vigentes'
 import PlanesGestion from './PlanesGestion.vue'
 import Adicionales from './Adicionales.vue'
+import Agentes from './Agentes.vue'
 import Implementaciones from './Implementaciones.vue'
 import CostosMeta from './CostosMeta.vue'
 
@@ -81,6 +83,7 @@ export default {
   components: {
     PlanesGestion,
     Adicionales,
+    Agentes,
     Implementaciones,
     CostosMeta,
   },
