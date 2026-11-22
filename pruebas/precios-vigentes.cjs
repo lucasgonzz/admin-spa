@@ -483,6 +483,11 @@ if (texto !== null) {
 
   const cuenta = fs.readFileSync(path.join(RAIZ, 'src', 'views', 'Account.vue'), 'utf8')
   cierto('Account.vue monta la sección «precios-vigentes»', /active_section === 'precios-vigentes'/.test(cuenta))
+
+  /* `min-w-0` no existe en Bootstrap 5: sin `min-width: 0` propio, el contenido de Cuenta se estira hasta el
+     ancho de la tabla más ancha y desborda el área principal en tablet (verificación en navegador, 900 px). */
+  cierto('Account.vue define min-width: 0 para .account-page__content',
+    /\.account-page__content\s*\{[^}]*min-width:\s*0\s*;/.test(cuenta))
 }
 
 console.log('\n' + corridas + ' comprobaciones, ' + fallos + ' fallas')
