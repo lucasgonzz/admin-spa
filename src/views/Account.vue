@@ -685,6 +685,16 @@ export default {
 </script>
 
 <style scoped>
+/*
+ * Contenido de la sección activa. `min-w-0` (que se usa en el template) no existe en Bootstrap 5, así que
+ * el item flex conservaba `min-width: auto` y se estiraba hasta el ancho de la tabla más ancha (por ejemplo
+ * la de planes de gestión), desbordando el área principal en tablet. Con `min-width: 0` el contenido se
+ * achica al espacio disponible y las `.table-responsive` scrollean por dentro.
+ */
+.account-page__content {
+  min-width: 0;
+}
+
 .account-section--narrow {
   max-width: 36rem;
 }
