@@ -15,6 +15,44 @@
     <div v-if="loading" class="text-muted small">Cargando…</div>
 
     <template v-else>
+      <!-- Flujo de entrada nuevo (E2): interruptor, apagado por defecto. -->
+      <div class="mb-3">
+        <div class="form-check form-switch">
+          <input
+            id="lead_flujo_entrada_activo"
+            v-model="form.flujo_entrada_activo"
+            type="checkbox"
+            class="form-check-input"
+            role="switch"
+            :disabled="saving"
+            @change="on_input_change"
+          />
+          <label class="form-check-label small fw-semibold" for="lead_flujo_entrada_activo">
+            Flujo de entrada nuevo (dos caminos)
+          </label>
+        </div>
+        <p class="form-text small text-muted mb-0">
+          Con esto prendido, todo lead nuevo recibe la presentación y las dos formas de arrancar; el link va a pedido.
+        </p>
+      </div>
+
+      <!-- Textos de los anuncios: el sistema no los trata como pregunta del lead. -->
+      <div class="mb-3">
+        <label class="form-label small fw-semibold" for="lead_flujo_textos_precargados">Textos precargados de los anuncios</label>
+        <textarea
+          id="lead_flujo_textos_precargados"
+          v-model="form.flujo_textos_precargados"
+          class="form-control form-control-sm"
+          rows="3"
+          :disabled="saving"
+          @input="on_input_change"
+        />
+        <p class="form-text small text-muted mb-0">
+          Los mensajes que WhatsApp deja escritos al tocar un anuncio, uno por línea. Un lead que escribe
+          uno de estos textos tal cual no se toma como una pregunta.
+        </p>
+      </div>
+
       <div class="mb-3">
         <label class="form-label small fw-semibold" for="lead_auto_with_name">Mensaje automático (con nombre)</label>
         <textarea
@@ -223,6 +261,10 @@ export default {
         ai_suggestion_delay_seconds: 60,
         verificacion_agendamiento_auto_send_delay_minutes: 30,
         auto_activar_verificacion_al_solicitar_disponibilidad: true,
+        /* Flujo de entrada nuevo (E2): apagado por defecto. */
+        flujo_entrada_activo: false,
+        /* Textos precargados de los anuncios, uno por línea. */
+        flujo_textos_precargados: '',
       },
       /** Snapshot persistido para detectar cambios. */
       stored_form: null,
@@ -325,6 +367,12 @@ export default {
           data && typeof data.auto_activar_verificacion_al_solicitar_disponibilidad !== 'undefined'
             ? !!data.auto_activar_verificacion_al_solicitar_disponibilidad
             : true,
+        /* Default false: una API vieja no manda la clave y un «Guardar» no debe prender el flujo. */
+        flujo_entrada_activo:
+          data && typeof data.flujo_entrada_activo !== 'undefined'
+            ? !!data.flujo_entrada_activo
+            : false,
+        flujo_textos_precargados: (data && data.flujo_textos_precargados) || '',
       }
       self.form = JSON.parse(JSON.stringify(snapshot))
       self.stored_form = JSON.parse(JSON.stringify(snapshot))
@@ -435,6 +483,8 @@ export default {
           ai_suggestion_delay_seconds: ai_delay,
           verificacion_agendamiento_auto_send_delay_minutes: verif_agendamiento_delay,
           auto_activar_verificacion_al_solicitar_disponibilidad: !!self.form.auto_activar_verificacion_al_solicitar_disponibilidad,
+          flujo_entrada_activo: !!self.form.flujo_entrada_activo,
+          flujo_textos_precargados: self.form.flujo_textos_precargados,
         })
         .then(function (res) {
           self.apply_from_response(res.data)
