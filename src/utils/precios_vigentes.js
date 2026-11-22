@@ -3,7 +3,10 @@
  *
  * La fuente única de precios vive en admin-api (`admin_settings.precios_vigentes`) y el contrato JSON
  * es el de §2.6 del plan. Este archivo NO calcula precios: sólo hace lo que el contrato permite a las
- * puntas (la mitad de la implementación y el abono con descuento, con redondeo a 2 decimales), valida
+ * puntas (la mitad de la implementación y el abono con descuento, con redondeo a 2 decimales), y desde el
+ * ajuste «oferta simple» (21/11/2026) una VISTA PREVIA de la mensualidad de cada paquete de Agentes y de
+ * los tres juntos, con la misma fórmula que la API y redondeo a pesos enteros. Lo que vale es lo que
+ * devuelve la API al guardar: la vista previa sólo sirve mientras se edita. Valida
  * lo que el operador tipea antes de guardar (el backend igual responde 422) y da formato de lectura.
  *
  * Es JavaScript sin imports a propósito: `pruebas/precios-vigentes.cjs` lo lee tal cual y lo ejecuta en
@@ -26,6 +29,15 @@ export const MAX_USUARIOS = 1000
 
 /** Techo de las operaciones de un rango de plan y de los mensajes libres gratis por mes. */
 export const MAX_OPERACIONES = 100000000
+
+/** Techo de los textos largos de Agentes (`incluye`, `uso_de_tokens`). */
+export const MAX_TEXTO_LARGO = 300
+
+/** Techo de la referencia de la cotización («Dólar blue, venta»). */
+export const MAX_TEXTO_REFERENCIA = 60
+
+/** Techo del nombre de un paquete de Agentes. */
+export const MAX_TEXTO_NOMBRE = 40
 
 /**
  * Redondea a 2 decimales (el redondeo del contrato para la mitad y el abono con descuento).
@@ -57,6 +69,98 @@ export function calculate_down_payment(price, percentage) {
  */
 export function calculate_discounted_fee(fee, percentage) {
   return round_to_cents((Number(fee) * (100 - Number(percentage))) / 100)
+}
+
+/**
+ * Redondea a pesos enteros (el redondeo del contrato para la mensualidad de un paquete y para el precio
+ * de los tres juntos). La tolerancia de 1e-9 evita que un 0,5 expresado en punto flotante caiga para abajo.
+ *
+ * @param {number} valor Importe en pesos.
+ * @returns {number} Importe entero.
+ */
+function round_to_pesos(valor) {
+  return Math.round(Number(valor) + 1e-9)
+}
+
+/**
+ * Calcula la mensualidad de un paquete de Agentes: `ganancia + tokens_usd * cotización`, a pesos enteros.
+ * Es la misma fórmula que aplica la API; acá sólo se usa como vista previa mientras se edita.
+ *
+ * @param {number} profit Ganancia fija por paquete, en pesos.
+ * @param {number} tokens_usd Tokens del paquete, en USD.
+ * @param {number} usd_rate Cotización del dólar (blue, venta), en pesos.
+ * @returns {number} Mensualidad en pesos enteros.
+ */
+export function calculate_package_fee(profit, tokens_usd, usd_rate) {
+  return round_to_pesos(Number(profit) + Number(tokens_usd) * Number(usd_rate))
+}
+
+/**
+ * Suma el precio de lista de los tres productos (`implementaciones.items`).
+ *
+ * @param {Array<{precio: number}>} items Los tres productos de implementación.
+ * @returns {number} Suma de los precios, sin descuento.
+ */
+export function calculate_three_together_list_price(items) {
+  let total = 0
+  ;(items || []).forEach(function (item) {
+    total += Number(item.precio)
+  })
+  return round_to_cents(total)
+}
+
+/**
+ * Calcula el precio de los tres juntos: `precio_lista * (100 - descuento) / 100`, a pesos enteros.
+ *
+ * @param {number} list_price Precio de lista (suma de los tres productos).
+ * @param {number} percentage Porcentaje de descuento (hoy 30).
+ * @returns {number} Precio con descuento en pesos enteros.
+ */
+export function calculate_three_together_price(list_price, percentage) {
+  return round_to_pesos((Number(list_price) * (100 - Number(percentage))) / 100)
+}
+
+/**
+ * Vista previa de la mensualidad de cada paquete de Agentes con lo que se está editando.
+ *
+ * @param {Object} agentes Bloque `agentes` del contrato.
+ * @returns {Array<{clave: string, mensualidad: (number|null)}>} Un elemento por paquete; la mensualidad es
+ *   null si falta la cotización, la ganancia o los tokens (no se inventa un número).
+ */
+export function preview_agent_packages(agentes) {
+  const bloque = agentes || {}
+  const cotizacion = (bloque.cotizacion_usd || {}).valor
+  return (bloque.paquetes || []).map(function (paquete) {
+    const incompleto = is_missing_number(cotizacion) || is_missing_number(bloque.ganancia_por_paquete) || is_missing_number(paquete.tokens_usd)
+    return {
+      clave: paquete.clave,
+      mensualidad: incompleto ? null : calculate_package_fee(bloque.ganancia_por_paquete, paquete.tokens_usd, cotizacion),
+    }
+  })
+}
+
+/**
+ * Vista previa del precio de lista y del precio con descuento de los tres juntos.
+ *
+ * @param {Object} implementaciones Bloque `implementaciones` del contrato.
+ * @returns {{precio_lista: (number|null), precio: (number|null)}} null en lo que no se puede calcular
+ *   porque falta algún precio o el porcentaje.
+ */
+export function preview_three_together(implementaciones) {
+  const bloque = implementaciones || {}
+  const items = bloque.items || []
+  const porcentaje = (bloque.tres_juntos || {}).descuento_porcentaje
+  const precios_completos = items.length > 0 && items.every(function (item) {
+    return !is_missing_number(item.precio)
+  })
+  if (!precios_completos) {
+    return { precio_lista: null, precio: null }
+  }
+  const lista = calculate_three_together_list_price(items)
+  return {
+    precio_lista: lista,
+    precio: is_missing_number(porcentaje) ? null : calculate_three_together_price(lista, porcentaje),
+  }
 }
 
 /**
@@ -105,6 +209,23 @@ export function validate_number_field(valor, minimo, maximo, decimals) {
   }
   if (!has_at_most_decimals(valor, decimals)) {
     return decimals === 0 ? 'Tiene que ser un número entero.' : 'Admite hasta ' + decimals + ' decimales.'
+  }
+  return ''
+}
+
+/**
+ * Valida un texto libre: no vacío (sin contar espacios) y de hasta `maximo` caracteres.
+ *
+ * @param {*} valor Valor del campo.
+ * @param {number} maximo Largo máximo permitido.
+ * @returns {string} Mensaje legible o '' si el texto es válido.
+ */
+export function validate_text_field(valor, maximo) {
+  if (typeof valor !== 'string' || valor.trim().length === 0) {
+    return 'Completá este campo.'
+  }
+  if (valor.trim().length > maximo) {
+    return 'Admite hasta ' + format_plain_number(maximo) + ' caracteres.'
   }
   return ''
 }
@@ -342,12 +463,44 @@ export function validate_precios(precios) {
 
   check('tienda.mensualidad', (precios.tienda || {}).mensualidad, 0, MAX_MONTO, 2)
 
+  /**
+   * Valida un texto libre y, si falla, lo anota en `errores`.
+   *
+   * @param {string} ruta Ruta del campo.
+   * @param {*} valor Valor actual.
+   * @param {number} maximo Largo máximo.
+   * @returns {void}
+   */
+  function check_text(ruta, valor, maximo) {
+    const mensaje = validate_text_field(valor, maximo)
+    if (mensaje !== '') {
+      errores[ruta] = mensaje
+    }
+  }
+
+  /* Agentes (oferta simple): un solo producto con tres paquetes de tokens. La mensualidad es calculada
+     (sólo lectura), así que no se valida acá. */
   const agentes = precios.agentes || {}
-  check('agentes.lite.mensualidad', (agentes.lite || {}).mensualidad, 0, MAX_MONTO, 2)
-  check('agentes.full.mensualidad', (agentes.full || {}).mensualidad, 0, MAX_MONTO, 2)
+  const cotizacion = agentes.cotizacion_usd || {}
+  check_text('agentes.incluye', agentes.incluye, MAX_TEXTO_LARGO)
+  check_text('agentes.uso_de_tokens', agentes.uso_de_tokens, MAX_TEXTO_LARGO)
+  /* La cotización es > 0: con 2 decimales, 0,01 es el mínimo. */
+  check('agentes.cotizacion_usd.valor', cotizacion.valor, 0.01, MAX_MONTO, 2)
+  check_text('agentes.cotizacion_usd.referencia', cotizacion.referencia, MAX_TEXTO_REFERENCIA)
+  if (!is_valid_iso_date(cotizacion.fecha)) {
+    errores['agentes.cotizacion_usd.fecha'] = 'Elegí una fecha válida (día/mes/año).'
+  }
+  check('agentes.ganancia_por_paquete', agentes.ganancia_por_paquete, 0, MAX_MONTO, 2)
+  check('agentes.aviso_consumo_porcentaje', agentes.aviso_consumo_porcentaje, 1, 100, 0)
+  ;(agentes.paquetes || []).forEach(function (paquete) {
+    check_text('agentes.paquetes.' + paquete.clave + '.nombre', paquete.nombre, MAX_TEXTO_NOMBRE)
+    /* Tokens > 0 con hasta 4 decimales: 0,0001 es el mínimo. */
+    check('agentes.paquetes.' + paquete.clave + '.tokens_usd', paquete.tokens_usd, 0.0001, MAX_MONTO, 4)
+  })
 
   const implementaciones = precios.implementaciones || {}
   check('implementaciones.anticipo_porcentaje', implementaciones.anticipo_porcentaje, 0, 100, 2)
+  check('implementaciones.tres_juntos.descuento_porcentaje', (implementaciones.tres_juntos || {}).descuento_porcentaje, 0, 100, 2)
   ;(implementaciones.items || []).forEach(function (item) {
     check('implementaciones.items.' + item.clave + '.precio', item.precio, 0, MAX_MONTO, 2)
   })
@@ -369,7 +522,8 @@ export function validate_precios(precios) {
  * Lista las rutas de error que tienen un campo visible en la pantalla para un contrato dado: las que
  * puede marcar la validación local y las que el servidor puede devolver sobre algo que se edita.
  * Quedan afuera, a propósito, lo que la pantalla no edita (los `nombre` de planes, ítems y tarifas,
- * `agentes.lite.implementacion`, `implementaciones.reembolsable`) y los errores de estructura
+ * la mensualidad de cada paquete y los precios de los tres juntos, que son calculados, y
+ * `implementaciones.reembolsable`) y los errores de estructura
  * (`contrato.…`): esos van al resumen general.
  *
  * @param {Object} precios Contrato de precios que se está editando.
@@ -382,9 +536,15 @@ export function list_field_error_keys(precios) {
     'gestion.descuento_bienvenida.porcentaje',
     'gestion.descuento_bienvenida.meses',
     'tienda.mensualidad',
-    'agentes.lite.mensualidad',
-    'agentes.full.mensualidad',
+    'agentes.incluye',
+    'agentes.uso_de_tokens',
+    'agentes.cotizacion_usd.valor',
+    'agentes.cotizacion_usd.referencia',
+    'agentes.cotizacion_usd.fecha',
+    'agentes.ganancia_por_paquete',
+    'agentes.aviso_consumo_porcentaje',
     'implementaciones.anticipo_porcentaje',
+    'implementaciones.tres_juntos.descuento_porcentaje',
     'costos_meta.vigente_desde',
     'costos_meta.mensajes_libres_gratis_por_mes',
   ]
@@ -393,6 +553,10 @@ export function list_field_error_keys(precios) {
     ;['desde', 'hasta', 'usuarios', 'abono', 'excedente'].forEach(function (campo) {
       rutas.push('gestion.planes.' + plan.clave + '.' + campo)
     })
+  })
+  ;((precios.agentes || {}).paquetes || []).forEach(function (paquete) {
+    rutas.push('agentes.paquetes.' + paquete.clave + '.nombre')
+    rutas.push('agentes.paquetes.' + paquete.clave + '.tokens_usd')
   })
   ;((precios.implementaciones || {}).items || []).forEach(function (item) {
     rutas.push('implementaciones.items.' + item.clave + '.precio')
