@@ -358,8 +358,7 @@ export default {
 	color: #6c757d;
 }
 
-/* Ancho mínimo para que las columnas no se achiquen a unos pocos píxeles en pantallas chicas;
-   si no entra, el contenedor scrollea en horizontal. Sin partir palabras ni números. */
+/* Ancho mínimo: si no entra, el contenedor scrollea en horizontal y no parte números. */
 .reset-resumen__tabla {
 	min-width: 20rem;
 	overflow-wrap: normal;
