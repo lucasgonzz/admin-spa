@@ -94,47 +94,6 @@
             </td>
             <td></td>
           </tr>
-          <tr>
-            <th scope="row" class="fw-normal">Agentes de IA Lite (mensualidad base)</th>
-            <td>
-              <div class="input-group input-group-sm flex-nowrap">
-                <span class="input-group-text">$</span>
-                <input
-                  v-model.number="precios.agentes.lite.mensualidad"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  class="form-control text-end"
-                  :class="{ 'is-invalid': errors['agentes.lite.mensualidad'] }"
-                  aria-label="Mensualidad base de Agentes Lite"
-                  :disabled="disabled"
-                />
-              </div>
-              <div class="invalid-feedback d-block">{{ errors['agentes.lite.mensualidad'] }}</div>
-            </td>
-            <!-- La implementación de Lite no se edita acá: el contrato la trae fija en 0. -->
-            <td class="text-end text-muted small">sin costo de implementación</td>
-          </tr>
-          <tr>
-            <th scope="row" class="fw-normal">Agentes de IA Full (mensualidad base)</th>
-            <td>
-              <div class="input-group input-group-sm flex-nowrap">
-                <span class="input-group-text">$</span>
-                <input
-                  v-model.number="precios.agentes.full.mensualidad"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  class="form-control text-end"
-                  :class="{ 'is-invalid': errors['agentes.full.mensualidad'] }"
-                  aria-label="Mensualidad base de Agentes Full"
-                  :disabled="disabled"
-                />
-              </div>
-              <div class="invalid-feedback d-block">{{ errors['agentes.full.mensualidad'] }}</div>
-            </td>
-            <td class="text-end text-muted small">valor provisorio</td>
-          </tr>
         </tbody>
       </table>
     </div>
@@ -144,7 +103,7 @@
 <script>
 /**
  * Tabla editable de adicionales y mensualidades: usuario extra, descuento de bienvenida,
- * tienda online y Agentes de IA (Lite y Full).
+ * y tienda online. Agentes de IA tiene su propio bloque (`Agentes.vue`).
  *
  * Subcomponente de «Precios vigentes»: edita en el lugar el contrato que le pasa el orquestador.
  */
