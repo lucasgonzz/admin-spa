@@ -12,8 +12,12 @@
        - el encadenado de rangos de los planes: 0-200 / 201-600 / 601-∞ es válido y
          0-200 / 150-600 no lo es (el backend igual responde 422, pero la pantalla no deja guardar);
        - el formato de pesos («$628.400», «$89,56») y de dólares («USD 0,0618»).
-    2. Que la pantalla exista y esté registrada: los cinco componentes de la carpeta
-       `precios-vigentes/`, la sección en `account_sections.js` (grupo «Leads y ventas») y su
+       - AJUSTE «oferta simple» (21/11/2026): vista previa de la mensualidad de Agentes
+         (30000 + 10 × 1675 = 46750; con 1700: 47000 / 81000 / 149000), de los tres juntos
+         (1885200 → 1319640 con 30 %; 1413900 con 25 %), anticipo de los tres juntos (659820) y la
+         validación espejo de los 422 del servidor, con las MISMAS claves.
+    2. Que la pantalla exista y esté registrada: los seis componentes de la carpeta
+       `precios-vigentes/` (con `Agentes.vue`), la sección en `account_sections.js` (grupo «Leads y ventas») y su
        montaje en `Account.vue`.
 
   La verificación visual (tablas con los valores de CA1, editar, guardar, rango inválido sin guardar)
@@ -154,7 +158,7 @@ if (texto !== null) {
   /** Contrato de partida: los DEFAULTS de la API (válidos). */
   function contrato_base() {
     return {
-      version: 1,
+      version: 2,
       moneda: 'ARS',
       gestion: {
         planes: [
@@ -166,14 +170,27 @@ if (texto !== null) {
         descuento_bienvenida: { porcentaje: 50, meses: 3 },
       },
       tienda: { mensualidad: 44900 },
-      agentes: { lite: { mensualidad: 30000, implementacion: 0 }, full: { mensualidad: 94700 } },
+      agentes: {
+        incluye: 'Agente de WhatsApp con la migración o configuración inicial del número',
+        uso_de_tokens: 'Hacerle preguntas y pedirle cosas a los agentes, y generar imágenes para el negocio',
+        cotizacion_usd: { valor: 1675, referencia: 'Dólar blue, venta', fecha: '2026-11-20' },
+        ganancia_por_paquete: 30000,
+        aviso_consumo_porcentaje: 80,
+        paquetes: [
+          { clave: 'inicial', nombre: 'Inicial', tokens_usd: 10, mensualidad: 46750 },
+          { clave: 'pro', nombre: 'Pro', tokens_usd: 30, mensualidad: 80250 },
+          { clave: 'max', nombre: 'Max', tokens_usd: 70, mensualidad: 147250 },
+        ],
+      },
       implementaciones: {
         anticipo_porcentaje: 50,
         reembolsable: false,
         items: [
           { clave: 'gestion', nombre: 'Sistema de gestión', precio: 628400 },
-          { clave: 'gestion_tienda_agentes_full', nombre: 'Sistema + tienda + Agentes Full', precio: 1574300 },
+          { clave: 'tienda', nombre: 'Tienda online', precio: 628400 },
+          { clave: 'agentes', nombre: 'Agentes', precio: 628400 },
         ],
+        tres_juntos: { descuento_porcentaje: 30, precio_lista: 1885200, precio: 1319640 },
       },
       costos_meta: {
         vigente_desde: '2026-10-01',
@@ -196,6 +213,14 @@ if (texto !== null) {
   const rango_roto = contrato_base()
   rango_roto.gestion.planes[1].desde = 150
   igual('un rango inválido en Intermedio marca gestion.planes.intermedio.desde', claves_de(rango_roto), ['gestion.planes.intermedio.desde'])
+
+  /* ---- Estructura de la oferta simple: 3 items, 3 paquetes, sin Lite/Full ---- */
+  const estructura = contrato_base()
+  igual('los items de implementación son exactamente gestion, tienda y agentes',
+    estructura.implementaciones.items.map(function (i) { return i.clave }), ['gestion', 'tienda', 'agentes'])
+  igual('los paquetes de Agentes son exactamente inicial, pro y max',
+    estructura.agentes.paquetes.map(function (p) { return p.clave }), ['inicial', 'pro', 'max'])
+  cierto('agentes no tiene claves lite ni full', estructura.agentes.lite === undefined && estructura.agentes.full === undefined)
 
   const mil_uno = contrato_base()
   mil_uno.gestion.planes[0].usuarios = 1001
@@ -252,6 +277,116 @@ if (texto !== null) {
   inicial_sin_excedente.gestion.planes[0].excedente = null
   igual('Inicial sin precio de excedente es inválido (el servidor lo exige)', claves_de(inicial_sin_excedente), ['gestion.planes.inicial.excedente'])
 
+  /* ---- Validación espejo de los 422 de la oferta simple (mismas claves que el servidor) ---- */
+  const cot_cero = contrato_base()
+  cot_cero.agentes.cotizacion_usd.valor = 0
+  igual('cotización en 0 es inválida: agentes.cotizacion_usd.valor', claves_de(cot_cero), ['agentes.cotizacion_usd.valor'])
+  const cot_vacia = contrato_base()
+  cot_vacia.agentes.cotizacion_usd.valor = ''
+  igual('cotización vacía es inválida', claves_de(cot_vacia), ['agentes.cotizacion_usd.valor'])
+  const cot_1700 = contrato_base()
+  cot_1700.agentes.cotizacion_usd.valor = 1700
+  igual('cotización 1700 es válida', claves_de(cot_1700), [])
+  const cot_3_dec = contrato_base()
+  cot_3_dec.agentes.cotizacion_usd.valor = 1675.123
+  igual('cotización con 3 decimales es inválida (2 como máximo)', claves_de(cot_3_dec), ['agentes.cotizacion_usd.valor'])
+  const cot_techo = contrato_base()
+  cot_techo.agentes.cotizacion_usd.valor = 100000000
+  igual('cotización por encima de 99.999.999 es inválida', claves_de(cot_techo), ['agentes.cotizacion_usd.valor'])
+  const pro_negativo = contrato_base()
+  pro_negativo.agentes.paquetes[1].tokens_usd = -1
+  igual('tokens_usd = -1 en Pro es inválido: agentes.paquetes.pro.tokens_usd', claves_de(pro_negativo), ['agentes.paquetes.pro.tokens_usd'])
+  const pro_cero = contrato_base()
+  pro_cero.agentes.paquetes[1].tokens_usd = 0
+  igual('tokens_usd = 0 es inválido (tiene que ser mayor que 0)', claves_de(pro_cero), ['agentes.paquetes.pro.tokens_usd'])
+  const tokens_4_dec = contrato_base()
+  tokens_4_dec.agentes.paquetes[0].tokens_usd = 2.5001
+  igual('tokens_usd con 4 decimales es válido', claves_de(tokens_4_dec), [])
+  tokens_4_dec.agentes.paquetes[0].tokens_usd = 2.50001
+  igual('tokens_usd con 5 decimales es inválido', claves_de(tokens_4_dec), ['agentes.paquetes.inicial.tokens_usd'])
+  const aviso_cero = contrato_base()
+  aviso_cero.agentes.aviso_consumo_porcentaje = 0
+  igual('aviso de consumo en 0 es inválido', claves_de(aviso_cero), ['agentes.aviso_consumo_porcentaje'])
+  aviso_cero.agentes.aviso_consumo_porcentaje = 101
+  igual('aviso de consumo en 101 es inválido', claves_de(aviso_cero), ['agentes.aviso_consumo_porcentaje'])
+  aviso_cero.agentes.aviso_consumo_porcentaje = 100
+  igual('aviso de consumo en 100 es válido', claves_de(aviso_cero), [])
+  aviso_cero.agentes.aviso_consumo_porcentaje = 80.5
+  igual('aviso de consumo con decimales es inválido (entero)', claves_de(aviso_cero), ['agentes.aviso_consumo_porcentaje'])
+  const desc_120 = contrato_base()
+  desc_120.implementaciones.tres_juntos.descuento_porcentaje = 120
+  igual('descuento de los tres juntos en 120 es inválido', claves_de(desc_120), ['implementaciones.tres_juntos.descuento_porcentaje'])
+  desc_120.implementaciones.tres_juntos.descuento_porcentaje = 0
+  igual('descuento de los tres juntos en 0 es válido', claves_de(desc_120), [])
+  const fecha_ayer = contrato_base()
+  fecha_ayer.agentes.cotizacion_usd.fecha = 'ayer'
+  igual('fecha de cotización «ayer» es inválida: agentes.cotizacion_usd.fecha', claves_de(fecha_ayer), ['agentes.cotizacion_usd.fecha'])
+  const ganancia_neg = contrato_base()
+  ganancia_neg.agentes.ganancia_por_paquete = -1
+  igual('ganancia negativa es inválida', claves_de(ganancia_neg), ['agentes.ganancia_por_paquete'])
+  const textos = contrato_base()
+  textos.agentes.incluye = ''
+  textos.agentes.uso_de_tokens = 'x'.repeat(301)
+  textos.agentes.cotizacion_usd.referencia = 'x'.repeat(61)
+  textos.agentes.paquetes[2].nombre = 'x'.repeat(41)
+  igual('textos vacíos o demasiado largos se marcan con su clave', claves_de(textos),
+    ['agentes.cotizacion_usd.referencia', 'agentes.incluye', 'agentes.paquetes.max.nombre', 'agentes.uso_de_tokens'])
+  const textos_ok = contrato_base()
+  textos_ok.agentes.uso_de_tokens = 'x'.repeat(300)
+  textos_ok.agentes.paquetes[2].nombre = 'x'.repeat(40)
+  igual('textos en el tope (300 y 40) son válidos', claves_de(textos_ok), [])
+
+  /* ---- Vista previa con la MISMA fórmula que la API (redondeo a pesos enteros) ---- */
+  const prev = new Function(texto + '\nreturn {'
+    + ' calculate_package_fee: typeof calculate_package_fee === "function" ? calculate_package_fee : undefined,'
+    + ' calculate_three_together_list_price: typeof calculate_three_together_list_price === "function" ? calculate_three_together_list_price : undefined,'
+    + ' calculate_three_together_price: typeof calculate_three_together_price === "function" ? calculate_three_together_price : undefined,'
+    + ' preview_agent_packages: typeof preview_agent_packages === "function" ? preview_agent_packages : undefined,'
+    + ' preview_three_together: typeof preview_three_together === "function" ? preview_three_together : undefined }')()
+  /** Llama a una función de vista previa o devuelve un marcador si todavía no existe. */
+  function via(nombre, args) {
+    return typeof prev[nombre] === 'function' ? prev[nombre].apply(null, args) : '(no existe ' + nombre + ')'
+  }
+
+  /** Fuerza lista: si la función todavía no existe, devuelve [] y la aserción falla en vez de romper el script. */
+  function lista(valor) {
+    return Array.isArray(valor) ? valor : []
+  }
+
+  igual('mensualidad Inicial: 30000 + 10 × 1675 = 46750', via('calculate_package_fee', [30000, 10, 1675]), 46750)
+  igual('mensualidad Pro: 30000 + 30 × 1675 = 80250', via('calculate_package_fee', [30000, 30, 1675]), 80250)
+  igual('mensualidad Max: 30000 + 70 × 1675 = 147250', via('calculate_package_fee', [30000, 70, 1675]), 147250)
+  igual('con el blue en 1700: Inicial 47000', via('calculate_package_fee', [30000, 10, 1700]), 47000)
+  igual('con el blue en 1700: Pro 81000', via('calculate_package_fee', [30000, 30, 1700]), 81000)
+  igual('con el blue en 1700: Max 149000', via('calculate_package_fee', [30000, 70, 1700]), 149000)
+  igual('la mensualidad se redondea a pesos enteros', via('calculate_package_fee', [30000, 2.5, 1675.5]), 34189)
+  igual('los paquetes del contrato por defecto dan 46750 / 80250 / 147250',
+    lista(via('preview_agent_packages', [contrato_base().agentes])).map(function (p) { return [p.clave, p.mensualidad] }),
+    [['inicial', 46750], ['pro', 80250], ['max', 147250]])
+  const agentes_1700 = contrato_base().agentes
+  agentes_1700.cotizacion_usd.valor = 1700
+  igual('los paquetes con la cotización en 1700 dan 47000 / 81000 / 149000',
+    lista(via('preview_agent_packages', [agentes_1700])).map(function (p) { return p.mensualidad }), [47000, 81000, 149000])
+  const agentes_incompletos = contrato_base().agentes
+  agentes_incompletos.cotizacion_usd.valor = ''
+  igual('con la cotización vacía la vista previa no inventa números',
+    lista(via('preview_agent_packages', [agentes_incompletos])).map(function (p) { return p.mensualidad }), [null, null, null])
+
+  igual('lista de los tres juntos: 3 × 628400 = 1885200',
+    via('calculate_three_together_list_price', [contrato_base().implementaciones.items]), 1885200)
+  igual('tres juntos con 30 %: 1885200 → 1319640', via('calculate_three_together_price', [1885200, 30]), 1319640)
+  igual('tres juntos con 25 %: 1413900', via('calculate_three_together_price', [1885200, 25]), 1413900)
+  igual('tres juntos con 0 %: queda el precio de lista', via('calculate_three_together_price', [1885200, 0]), 1885200)
+  igual('tres juntos redondea a pesos enteros', via('calculate_three_together_price', [1000, 33.33]), 667)
+  igual('vista previa de los tres juntos (contrato por defecto)',
+    via('preview_three_together', [contrato_base().implementaciones]), { precio_lista: 1885200, precio: 1319640 })
+  const impl_25 = contrato_base().implementaciones
+  impl_25.tres_juntos.descuento_porcentaje = 25
+  igual('vista previa de los tres juntos con 25 %', via('preview_three_together', [impl_25]), { precio_lista: 1885200, precio: 1413900 })
+  igual('anticipo (50 %) de los tres juntos: 1319640 → 659820', modulo.calculate_down_payment(1319640, 50), 659820)
+  igual('anticipo de los tres juntos desde la vista previa',
+    modulo.calculate_down_payment(via('preview_three_together', [contrato_base().implementaciones]).precio, 50), 659820)
+
   /* ---- El objeto `errors` del servidor se resuelve al campo correcto ---- */
   const errores_servidor = {
     'gestion.planes.intermedio.desde': ['Los rangos de operaciones tienen que ser continuos.'],
@@ -260,13 +395,21 @@ if (texto !== null) {
     'costos_meta.tarifas.marketing.usd': ['La tarifa «Plantilla de marketing» en USD admite hasta 4 decimales.'],
     'costos_meta.vigente_desde': ['La fecha de vigencia tiene que tener el formato AAAA-MM-DD.'],
     'implementaciones.reembolsable': ['El dato «reembolsable» tiene que ser verdadero o falso.'],
-    'agentes.lite.implementacion': ['La implementación de Agentes Lite tiene que ser un número.'],
+    'agentes.paquetes.pro.mensualidad': ['La mensualidad del paquete Pro la calcula el servidor.'],
+    'agentes.paquetes.pro.tokens_usd': ['Paquete Pro: los tokens en USD tienen que ser mayores que 0.'],
+    'agentes.cotizacion_usd.valor': ['La cotización del dólar tiene que ser mayor que 0.'],
+    'agentes.aviso_consumo_porcentaje': ['El aviso de consumo tiene que estar entre 1 y 100.'],
+    'implementaciones.tres_juntos.descuento_porcentaje': ['El descuento de los tres juntos tiene que estar entre 0 y 100.'],
     'gestion.planes.inicial.nombre': ['El nombre del plan inicial tiene que ser un texto de 1 a 80 caracteres.'],
   }
   const resuelto = typeof extra.resolve_server_errors === 'function' ? extra.resolve_server_errors(errores_servidor, contrato_base()) : null
   cierto('existe resolve_server_errors', resuelto !== null)
   if (resuelto !== null) {
     igual('Intermedio «desde» queda en su campo', resuelto.por_campo['gestion.planes.intermedio.desde'], 'Los rangos de operaciones tienen que ser continuos.')
+    ;['agentes.paquetes.pro.tokens_usd', 'agentes.cotizacion_usd.valor', 'agentes.aviso_consumo_porcentaje',
+      'implementaciones.tres_juntos.descuento_porcentaje'].forEach(function (ruta) {
+      igual('el error 422 de ' + ruta + ' queda en su campo', Object.keys(resuelto.por_campo).indexOf(ruta) !== -1, true)
+    })
     igual('usuarios de Inicial queda en su campo', Object.keys(resuelto.por_campo).indexOf('gestion.planes.inicial.usuarios') !== -1, true)
     igual('el precio de «gestion» queda en su campo', Object.keys(resuelto.por_campo).indexOf('implementaciones.items.gestion.precio') !== -1, true)
     igual('la tarifa USD de marketing queda en su campo', Object.keys(resuelto.por_campo).indexOf('costos_meta.tarifas.marketing.usd') !== -1, true)
@@ -274,7 +417,7 @@ if (texto !== null) {
     igual('lo que no tiene campo visible va al resumen general', resuelto.generales.slice().sort(), [
       'El dato «reembolsable» tiene que ser verdadero o falso.',
       'El nombre del plan inicial tiene que ser un texto de 1 a 80 caracteres.',
-      'La implementación de Agentes Lite tiene que ser un número.',
+      'La mensualidad del paquete Pro la calcula el servidor.',
     ].sort())
     igual('un mensaje suelto (string) también se acepta', extra.resolve_server_errors({ 'tienda.mensualidad': 'Mal' }, contrato_base()).por_campo['tienda.mensualidad'], 'Mal')
     igual('una clave de un plan que no existe en la pantalla va al resumen general',
@@ -283,9 +426,15 @@ if (texto !== null) {
 
   /* ---- Ningún componente busca errores por posición, y la fecha de Meta es editable ---- */
   const carpeta_vistas = path.join(RAIZ, 'src', 'components', 'account', 'sections', 'precios-vigentes')
-  ;['PlanesGestion.vue', 'Adicionales.vue', 'Implementaciones.vue', 'CostosMeta.vue'].forEach(function (archivo) {
-    const contenido = fs.readFileSync(path.join(carpeta_vistas, archivo), 'utf8')
-    cierto(archivo + ' no arma claves de error con el índice', !/errors\['[a-z_.]+\.'\s*\+\s*index/.test(contenido))
+  ;['PlanesGestion.vue', 'Adicionales.vue', 'Implementaciones.vue', 'CostosMeta.vue', 'Agentes.vue'].forEach(function (archivo) {
+    /* Si el archivo todavía no existe se lee como vacío: la falla la da la comprobación de existencia. */
+    let contenido = ''
+    try {
+      contenido = fs.readFileSync(path.join(carpeta_vistas, archivo), 'utf8')
+    } catch (error) {
+      contenido = ''
+    }
+    cierto(archivo + ' existe y no arma claves de error con el índice', !/errors\['[a-z_.]+\.'\s*\+\s*index/.test(contenido))
   })
   cierto('CostosMeta.vue edita costos_meta.vigente_desde con un campo de fecha',
     /v-model="precios\.costos_meta\.vigente_desde"/.test(fs.readFileSync(path.join(carpeta_vistas, 'CostosMeta.vue'), 'utf8'))
@@ -293,10 +442,40 @@ if (texto !== null) {
 
   /* ---- La pantalla: sus archivos y su registro en Cuenta ---- */
   const carpeta = path.join(RAIZ, 'src', 'components', 'account', 'sections', 'precios-vigentes')
-  ;['Index.vue', 'PlanesGestion.vue', 'Adicionales.vue', 'Implementaciones.vue', 'CostosMeta.vue']
+  ;['Index.vue', 'PlanesGestion.vue', 'Adicionales.vue', 'Agentes.vue', 'Implementaciones.vue', 'CostosMeta.vue']
     .forEach(function (archivo) {
       cierto('existe precios-vigentes/' + archivo, fs.existsSync(path.join(carpeta, archivo)))
     })
+
+  /* ---- Oferta simple en la pantalla: sin Lite/Full, con la tabla de Agentes y la de tres juntos ---- */
+  /** Lee un componente de la carpeta o '' si no existe (para que la falla sea una aserción, no un crash). */
+  function leer_vista(archivo) {
+    try {
+      return fs.readFileSync(path.join(carpeta, archivo), 'utf8')
+    } catch (error) {
+      return ''
+    }
+  }
+  const vista_adicionales = leer_vista('Adicionales.vue')
+  cierto('Adicionales.vue ya no tiene Agentes Lite ni Full', vista_adicionales !== '' && !/Lite|Full|agentes\.(lite|full)/.test(vista_adicionales))
+  const vista_agentes = leer_vista('Agentes.vue')
+  cierto('Agentes.vue edita la cotización (valor, referencia y fecha)',
+    /precios\.agentes\.cotizacion_usd\.valor/.test(vista_agentes) && /precios\.agentes\.cotizacion_usd\.referencia/.test(vista_agentes)
+    && /precios\.agentes\.cotizacion_usd\.fecha/.test(vista_agentes) && /type="date"/.test(vista_agentes))
+  cierto('Agentes.vue edita ganancia, aviso de consumo y los dos textos',
+    /precios\.agentes\.ganancia_por_paquete/.test(vista_agentes) && /precios\.agentes\.aviso_consumo_porcentaje/.test(vista_agentes)
+    && /precios\.agentes\.incluye/.test(vista_agentes) && /precios\.agentes\.uso_de_tokens/.test(vista_agentes))
+  cierto('Agentes.vue edita nombre y USD de cada paquete y recorre precios.agentes.paquetes',
+    /precios\.agentes\.paquetes/.test(vista_agentes) && /paquete\.tokens_usd/.test(vista_agentes) && /paquete\.nombre/.test(vista_agentes))
+  cierto('Agentes.vue muestra la mensualidad calculada sólo de lectura (sin v-model)',
+    /preview_agent_packages/.test(vista_agentes) && !/v-model[^>]*mensualidad/.test(vista_agentes))
+  cierto('Agentes.vue marca los errores con la clave del paquete', /agentes\.paquetes\.'\s*\+\s*paquete\.clave/.test(vista_agentes))
+  const vista_impl = leer_vista('Implementaciones.vue')
+  cierto('Implementaciones.vue muestra el descuento de los tres juntos con precio de lista y con descuento',
+    /tres_juntos\.descuento_porcentaje/.test(vista_impl) && /preview_three_together/.test(vista_impl))
+  cierto('Implementaciones.vue ya no menciona Agentes Lite ni Full', vista_impl !== '' && !/Lite|Full/.test(vista_impl))
+  const vista_index = leer_vista('Index.vue')
+  cierto('Index.vue registra y monta Agentes.vue', /import Agentes from '\.\/Agentes\.vue'/.test(vista_index) && /<agentes\b/.test(vista_index))
 
   const secciones = fs.readFileSync(path.join(RAIZ, 'src', 'components', 'account', 'account_sections.js'), 'utf8')
   cierto('account_sections.js registra «precios-vigentes» en «Leads y ventas»',
