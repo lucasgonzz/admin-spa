@@ -18,6 +18,7 @@ import ClientTokensTab from '@/components/client/TokensTab.vue'
 import ClientSerperTab from '@/components/client/SerperTab.vue'
 import ClientImagenesTab from '@/components/client/imagenes/Index.vue'
 import ClientCandadoSesionTab from '@/components/client/CandadoSesionTab.vue'
+import ClientResetDatosTab from '@/components/client/reset-datos/Index.vue'
 import ClientExtensionesTab from '@/components/client/ExtensionesTab.vue'
 import ClientModelosIaTab from '@/components/client/ModelosIaTab.vue'
 import SubjectPipelinesTab from '@/components/pipeline/SubjectPipelinesTab.vue'
@@ -152,6 +153,15 @@ export default {
           key: 'pipelines',
           label: 'Pipelines',
           component: markRaw(SubjectPipelinesTab),
+        },
+        {
+          /* Reiniciar datos (misión reset-datos-cliente): simula y borra los datos de negocio del
+             sistema del cliente (con respaldo previo y confirmación escribiendo su nombre). Va al
+             final porque es la herramienta más delicada y la menos usada. Rótulo corto para no
+             desbordar la barra de solapas. */
+          key: 'reset-datos',
+          label: 'Reiniciar datos',
+          component: markRaw(ClientResetDatosTab),
         },
       ],
     }
