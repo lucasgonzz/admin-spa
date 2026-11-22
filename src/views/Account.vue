@@ -388,6 +388,25 @@
           </div>
         </section>
 
+        <!-- Leads: precios vigentes (fuente única que leen Martín y la landing) -->
+        <section
+          v-if="active_section === 'precios-vigentes'"
+          id="precios-vigentes"
+          class="account-section"
+        >
+          <div class="card account-config-card">
+            <div class="card-body">
+              <h2 class="h6 card-title">Precios vigentes</h2>
+              <p class="text-muted small mb-3">
+                Planes, mensualidades, implementaciones y costos de Meta. Es la única fuente de
+                precios: Martín los toma de acá en cada conversación y la landing los muestra desde
+                acá. Lo que guardes rige desde el momento en que guardás.
+              </p>
+              <precios-vigentes-section />
+            </div>
+          </div>
+        </section>
+
         <!-- Operaciones: plantillas de tareas -->
         <section
           v-if="active_section === 'task-templates'"
@@ -444,6 +463,7 @@ import AgentIdentitySection from '@/components/account/sections/AgentIdentitySec
 import AgentPromptSyncSection from '@/components/account/sections/AgentPromptSyncSection.vue'
 import ContractSignatureSection from '@/components/account/sections/ContractSignatureSection.vue'
 import CotizadorSettingsSection from '@/components/account/sections/CotizadorSettingsSection.vue'
+import PreciosVigentesSection from '@/components/account/sections/precios-vigentes/Index.vue'
 import LeadDemoSettingsSection from '@/components/account/sections/LeadDemoSettingsSection.vue'
 import PushNotificationsSection from '@/components/account/sections/PushNotificationsSection.vue'
 import PwaInstallSection from '@/components/account/sections/PwaInstallSection.vue'
@@ -469,6 +489,7 @@ export default {
     AgentPromptSyncSection,
     ContractSignatureSection,
     CotizadorSettingsSection,
+    PreciosVigentesSection,
     LeadDemoSettingsSection,
     PushNotificationsSection,
     PwaInstallSection,
@@ -575,7 +596,7 @@ export default {
      * @returns {void}
      */
     sync_active_section_from_route() {
-      this.active_section = resolve_account_section_from_hash(this.$route.hash)
+      this.active_section = resolve_account_section_from_hash(this.$route.hash, this.admin)
     },
 
     /**
@@ -664,6 +685,16 @@ export default {
 </script>
 
 <style scoped>
+/*
+ * Contenido de la sección activa. `min-w-0` (que se usa en el template) no existe en Bootstrap 5, así que
+ * el item flex conservaba `min-width: auto` y se estiraba hasta el ancho de la tabla más ancha (por ejemplo
+ * la de planes de gestión), desbordando el área principal en tablet. Con `min-width: 0` el contenido se
+ * achica al espacio disponible y las `.table-responsive` scrollean por dentro.
+ */
+.account-page__content {
+  min-width: 0;
+}
+
 .account-section--narrow {
   max-width: 36rem;
 }

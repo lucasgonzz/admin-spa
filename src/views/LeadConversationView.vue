@@ -108,6 +108,7 @@
 
         <!-- Pedir sugerencia IA a Claude manualmente -->
         <button
+          v-if="!solo_lectura"
           type="button"
           class="icon-btn"
           :class="can_request_ai_suggestion ? 'text-primary' : 'text-muted'"
@@ -127,6 +128,7 @@
 
         <!-- Ofrecer/agendar demo: fuerza el turno hacia la demo, sin esperar sugerencia -->
         <button
+          v-if="!solo_lectura"
           type="button"
           class="icon-btn"
           :class="can_offer_demo ? 'text-primary' : 'text-muted'"
@@ -146,6 +148,7 @@
 
         <!-- Programar envío: deja un mensaje listo para salir a una fecha y hora futuras -->
         <button
+          v-if="!solo_lectura"
           type="button"
           class="icon-btn"
           :class="can_schedule_message ? 'text-primary' : 'text-muted'"
@@ -159,6 +162,7 @@
 
         <!-- Toggle respuesta automática de Claude por lead -->
         <button
+          v-if="!solo_lectura"
           type="button"
           class="icon-btn"
           :class="claude_auto_reply_enabled ? 'text-success' : 'text-muted'"
@@ -182,6 +186,7 @@
 
         <!-- Toggle verificación humana de mensajes por lead -->
         <button
+          v-if="!solo_lectura"
           type="button"
           class="icon-btn"
           :class="requiere_verificacion_mensajes_enabled ? 'text-warning' : 'text-muted'"
@@ -271,6 +276,7 @@
               :auto_send_delay_seconds="ai_suggestion_auto_send_delay_seconds"
               :lead_status="effective_record ? effective_record.status : ''"
               :whatsapp_window_open="whatsapp_window_open"
+              :solo_lectura="solo_lectura"
               @enviar="on_enviar_sugerencia(msg.id)"
               @guardar_y_enviar="on_guardar_y_enviar_sugerencia(msg.id, $event)"
               @aprobar_con_acciones="on_aprobar_con_acciones(msg.id, $event)"
@@ -285,7 +291,7 @@
                  lead que todavía cuenta como sin responder. Marca atendido hasta ese mensaje y la
                  fila deja de estar en amarillo sin mandar nada; desaparece al confirmarse. -->
             <div
-              v-if="msg.id === mensaje_sin_responder_id"
+              v-if="msg.id === mensaje_sin_responder_id && !solo_lectura"
               class="wa-no-necesita-respuesta"
             >
               <button
@@ -342,6 +348,7 @@
              el backend lo saca de scheduled_messages y aparece como LeadMessage normal, mezclado
              por id donde le toca: eso pasa solo, sin código de por medio. -->
         <scheduled-message-bubble
+          v-if="!solo_lectura"
           v-for="scheduled in sorted_scheduled_messages"
           :key="'scheduled-' + scheduled.id"
           :scheduled="scheduled"
@@ -361,7 +368,10 @@
          FOOTER FIJO: textarea auto-expandible + botón mic/enviar
          (+ panel simulación lead oculto por defecto; forzar seguimiento solo en DEV dentro del panel)
          ==================================================== -->
-    <div class="conversation-footer border-top px-3">
+    <div
+      v-if="!solo_lectura"
+      class="conversation-footer border-top px-3"
+    >
 
       <!-- Aviso cuando Meta no permite mensajes libres (ventana 24hs cerrada). -->
       <div
@@ -612,6 +622,7 @@ import TemplatePickerModal from '@/components/lead/conversation/TemplatePickerMo
 import ScheduleMessageModal from '@/components/lead/conversation/ScheduleMessageModal.vue'
 import ImageAnnotationEditor from '@/components/common/ImageAnnotationEditor.vue'
 import api from '@/utils/axios'
+import { es_solo_leads } from '@/utils/solo_leads'
 import { cached_get, MAX_AGE_SETTINGS } from '@/common-vue/helpers/request_cache_helper'
 import { copy_lead_conversation_to_clipboard } from '@/utils/lead_conversation_clipboard'
 import lead_conversation_date_dividers from '@/mixins/lead_conversation_date_dividers'
@@ -825,6 +836,17 @@ export default {
   },
 
   computed: {
+    /**
+     * true para el perfil «Sólo Leads» (misión embudo-whatsapp-precios, E5): ve la conversación pero no
+     * puede escribirle al lead. Esconde la barra de redacción, las acciones del encabezado, los botones
+     * de las burbujas y «No necesita respuesta». El backend igual responde 403 a todo eso.
+     *
+     * @returns {boolean}
+     */
+    solo_lectura() {
+      return es_solo_leads(this.$store.state.auth.admin)
+    },
+
     /**
      * true cuando la vista recibe el lead por prop (sidebar embebido), no por ruta.
      *
@@ -2003,6 +2025,10 @@ export default {
      * @returns {void}
      */
     try_mark_whatsapp_messages_read() {
+      /* El perfil «Sólo Leads» no marca leído: cambiaría el estado compartido del chat de los setters. */
+      if (this.solo_lectura) {
+        return
+      }
       const self = this
       const rec = this.effective_record
       if (!rec || !rec.id) {

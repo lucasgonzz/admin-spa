@@ -27,6 +27,7 @@
 
 <script>
 import { ACCOUNT_SECTIONS } from '@/components/account/account_sections'
+import { secciones_de_cuenta } from '@/utils/solo_leads'
 
 /**
  * Barra lateral de navegación de la vista Cuenta.
@@ -54,7 +55,8 @@ export default {
       /** Orden de aparición de grupos en la barra. */
       const group_order = []
 
-      ACCOUNT_SECTIONS.forEach(function (section) {
+      /* El perfil «Sólo Leads» ve sólo Instalar aplicación y Notificaciones push (utils/solo_leads.js). */
+      secciones_de_cuenta(this.$store.state.auth.admin, ACCOUNT_SECTIONS).forEach(function (section) {
         /** Clave interna del grupo; null se trata como preferencias sin título. */
         const group_key = section.group || '__root__'
         if (!groups_by_key[group_key]) {

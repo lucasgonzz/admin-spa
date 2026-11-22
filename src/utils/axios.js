@@ -2,6 +2,7 @@
  * Cliente HTTP hacia admin-api con prefijo /api/admin y token Sanctum.
  */
 import axios from 'axios'
+import { es_error_solo_leads } from '@/utils/solo_leads'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api/admin',
@@ -378,7 +379,14 @@ api.interceptors.response.use(
     const silent_statuses = (error && error.config && error.config.silent_error_statuses) || null
     const silenciado_por_status =
       Array.isArray(silent_statuses) && silent_statuses.indexOf(status_code) !== -1
-    if (status_code !== 401 && !silent_error && !silenciado_por_status) {
+    /**
+     * 403 de fondo del perfil «Sólo Leads» (`code = 'solo_leads'`, misión embudo-whatsapp-precios, E5):
+     * son pedidos de la barra lateral o de App.vue que el backend le niega a propósito. No se avisa;
+     * el error igual se rechaza abajo para que el que llamó decida. Los botones que escriben no se
+     * silencian: la pantalla los esconde para ese perfil.
+     */
+    const silenciado_por_perfil = es_error_solo_leads(error)
+    if (status_code !== 401 && !silent_error && !silenciado_por_status && !silenciado_por_perfil) {
       /** Mensaje final que se mostrará en la toast. */
       const error_message = resolve_error_message(error)
       emit_api_error_toast(error_message)

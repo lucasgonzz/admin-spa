@@ -1,4 +1,5 @@
 import routes_def from './routes'
+import { es_solo_leads, ruta_permitida } from '@/utils/solo_leads'
 
 /**
  * Indica si el perfil admin autenticado es closer operativo.
@@ -39,12 +40,18 @@ function admin_es_vendedor(admin) {
  * Las que tienen `meta.solo_vendedor` (hoy, "Mis comisiones") se muestran solo si el admin es
  * vendedor (`admin_es_vendedor`).
  *
+ * El perfil «Sólo Leads» (misión embudo-whatsapp-precios, E5) ve únicamente Leads y Cuenta: la decisión
+ * de qué rutas le tocan vive en `utils/solo_leads.js` (`ruta_permitida`), acá sólo se la consulta.
+ *
  * @param {Object|null|undefined} admin Perfil admin autenticado.
  * @returns {Array<object>}
  */
 export function get_nav_routes(admin) {
   return routes_def.filter(function (r) {
     if (!r.meta || !r.meta.nav) {
+      return false
+    }
+    if (es_solo_leads(admin) && !ruta_permitida(r.name)) {
       return false
     }
     if (r.meta.solo_vendedor && !admin_es_vendedor(admin)) {
@@ -117,6 +124,14 @@ export function get_first_nav_route(admin) {
   const nav_routes = get_nav_routes(admin)
   if (!nav_routes.length) {
     return null
+  }
+
+  /* Perfil «Sólo Leads»: entra directo a Leads (el primer ítem de su menú). */
+  if (es_solo_leads(admin)) {
+    const leads_route = nav_routes.filter(function (r) {
+      return r.name === 'leads'
+    })[0]
+    return leads_route || nav_routes[0]
   }
 
   /* Closers: el Tablero de pipelines, que es donde trabajan el embudo comercial. */

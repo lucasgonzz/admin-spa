@@ -50,6 +50,7 @@
 import routes from '@/router/routes'
 import { time_ago } from '@/utils/relative_time'
 import { play_notification_sound } from '@/utils/notification_sound'
+import { destino_del_aviso } from '@/utils/solo_leads'
 
 /** Cantidad máxima de tarjetas visibles al mismo tiempo (el resto queda en "+N más"). */
 const MAX_VISIBLE_CARDS = 4
@@ -207,7 +208,9 @@ export default {
       this.$store.dispatch('task_notification/mark_seen', notification.id).catch(function () {
         return null
       })
-      this.$router.push(this.tasks_route_path)
+      /* El perfil «Sólo Leads» no ve Tareas: un aviso con lead abre la conversación de ese lead. */
+      const destino_propio = destino_del_aviso(notification, this.$store.state.auth.admin)
+      this.$router.push(destino_propio || this.tasks_route_path)
     },
     /**
      * Clic en la X: marca como vista, sin navegar.

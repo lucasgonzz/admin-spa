@@ -1,3 +1,5 @@
+import { secciones_de_cuenta, seccion_de_cuenta_por_defecto } from '@/utils/solo_leads'
+
 /**
  * Definición de secciones navegables en la vista Cuenta.
  * Cada ítem tiene id (hash en URL), etiqueta visible y grupo opcional para agrupar en la barra lateral.
@@ -90,6 +92,11 @@ export const ACCOUNT_SECTIONS = [
     group: 'Leads y ventas',
   },
   {
+    id: 'precios-vigentes',
+    label: 'Precios vigentes',
+    group: 'Leads y ventas',
+  },
+  {
     id: 'task-templates',
     label: 'Plantillas de tareas',
     group: 'Operaciones',
@@ -120,13 +127,21 @@ export const ACCOUNT_DEFAULT_SECTION_ID = 'preferences'
 /**
  * Resuelve un id de sección desde el hash de la ruta.
  *
+ * El perfil «Sólo Leads» (misión embudo-whatsapp-precios, E5) sólo tiene dos secciones: un hash que
+ * apunta a otra (o ninguno) cae en la sección por defecto de su perfil, no en «Preferencias».
+ *
  * @param {string|null|undefined} hash Hash de vue-router (con o sin # inicial).
+ * @param {Object|null|undefined} admin Perfil admin (opcional); sin él se asume un admin normal.
  * @returns {string} Id de sección válido o el default.
  */
-export function resolve_account_section_from_hash(hash) {
+export function resolve_account_section_from_hash(hash, admin) {
   const raw = (hash || '').replace(/^#/, '')
-  if (raw && ACCOUNT_SECTION_IDS.indexOf(raw) !== -1) {
+  /** Ids de las secciones que este admin puede ver. */
+  const ids_visibles = secciones_de_cuenta(admin, ACCOUNT_SECTIONS).map(function (section) {
+    return section.id
+  })
+  if (raw && ids_visibles.indexOf(raw) !== -1) {
     return raw
   }
-  return ACCOUNT_DEFAULT_SECTION_ID
+  return seccion_de_cuenta_por_defecto(admin)
 }
