@@ -2,6 +2,10 @@
   <div class="precios-implementaciones">
     <h3 class="h6 mb-2">Implementaciones (pago único, en pesos)</h3>
     <p class="text-muted small mb-2">
+      Tres productos al mismo precio: gestión, tienda y Agentes. Si el cliente lleva los tres juntos tiene un
+      descuento; no hay combos de dos (dos productos se suman sin descuento).
+    </p>
+    <p class="text-muted small mb-2">
       <template v-if="precios.implementaciones.reembolsable">Reembolsable.</template>
       <template v-else>No reembolsable.</template>
       Se arranca pagando el anticipo; la columna «Para arrancar» se calcula sola con el porcentaje de
@@ -39,11 +43,41 @@
             <!-- Calculado: precio * anticipo / 100. Sólo lectura, en gris. -->
             <td class="text-end text-muted precios-calculado">{{ down_payment_label(item) }}</td>
           </tr>
+          <!-- Los tres juntos: precio de lista (suma) y precio con descuento, de sólo lectura. -->
+          <tr class="precios-tres-juntos">
+            <th scope="row" class="fw-normal">
+              Los tres juntos
+              <span class="d-block text-muted small">Precio de lista: {{ list_price_label }}</span>
+            </th>
+            <td class="text-end text-muted precios-calculado">{{ together_price_label }}</td>
+            <td class="text-end text-muted precios-calculado">{{ together_down_payment_label }}</td>
+          </tr>
         </tbody>
       </table>
     </div>
+    <p class="text-muted small mb-2">
+      Vista previa mientras editás; al guardar, la pantalla muestra lo que calcula el servidor.
+    </p>
 
     <div class="row g-2 align-items-start">
+      <div class="col-12 col-sm-6 col-md-4">
+        <label class="form-label small" for="precios_tres_juntos_descuento">Descuento de los tres juntos (%)</label>
+        <div class="input-group input-group-sm">
+          <input
+            id="precios_tres_juntos_descuento"
+            v-model.number="precios.implementaciones.tres_juntos.descuento_porcentaje"
+            type="number"
+            min="0"
+            max="100"
+            step="0.01"
+            class="form-control text-end"
+            :class="{ 'is-invalid': errors['implementaciones.tres_juntos.descuento_porcentaje'] }"
+            :disabled="disabled"
+          />
+          <span class="input-group-text">%</span>
+        </div>
+        <div class="invalid-feedback d-block">{{ errors['implementaciones.tres_juntos.descuento_porcentaje'] }}</div>
+      </div>
       <div class="col-12 col-sm-6 col-md-4">
         <label class="form-label small" for="precios_anticipo_porcentaje">Anticipo para arrancar (%)</label>
         <div class="input-group input-group-sm">
@@ -67,10 +101,11 @@
 </template>
 
 <script>
-import { calculate_down_payment, format_pesos, is_missing_number } from '@/utils/precios_vigentes'
+import { calculate_down_payment, format_pesos, is_missing_number, preview_three_together } from '@/utils/precios_vigentes'
 
 /**
- * Tabla editable de los precios de implementación, con el anticipo calculado al lado.
+ * Tabla editable de los precios de implementación (gestión, tienda y Agentes), con el anticipo calculado
+ * al lado y el descuento de los tres juntos con su precio de lista y su precio con descuento.
  *
  * Subcomponente de «Precios vigentes»: edita en el lugar el contrato que le pasa el orquestador.
  */
@@ -93,6 +128,44 @@ export default {
     disabled: {
       type: Boolean,
       default: false,
+    },
+  },
+  computed: {
+    /**
+     * Vista previa de los tres juntos con lo que se está editando (misma fórmula de la API).
+     *
+     * @returns {{precio_lista: (number|null), precio: (number|null)}}
+     */
+    together() {
+      return preview_three_together(this.precios.implementaciones)
+    },
+    /**
+     * Texto del precio de lista de los tres juntos (la suma de los tres productos).
+     *
+     * @returns {string} Importe o «—» si falta algún dato.
+     */
+    list_price_label() {
+      return this.together.precio_lista === null ? '—' : format_pesos(this.together.precio_lista)
+    },
+    /**
+     * Texto del precio de los tres juntos con el descuento aplicado.
+     *
+     * @returns {string} Importe o «—» si falta algún dato.
+     */
+    together_price_label() {
+      return this.together.precio === null ? '—' : format_pesos(this.together.precio)
+    },
+    /**
+     * Texto del anticipo («Para arrancar») de los tres juntos.
+     *
+     * @returns {string} Importe o «—» si falta el precio o el porcentaje de anticipo.
+     */
+    together_down_payment_label() {
+      const porcentaje = this.precios.implementaciones.anticipo_porcentaje
+      if (this.together.precio === null || is_missing_number(porcentaje)) {
+        return '—'
+      }
+      return format_pesos(calculate_down_payment(this.together.precio, porcentaje))
     },
   },
   methods: {
