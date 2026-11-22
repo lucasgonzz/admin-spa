@@ -16,7 +16,13 @@
       <!-- Error del último pedido (simular o ejecutar) -->
       <div v-if="error_mensaje" class="alert alert-danger py-2 small">
         <div>{{ error_mensaje }}</div>
-        <div v-if="error_codigo" class="text-muted">Código: {{ error_codigo }}</div>
+        <!-- Hereda el color oscuro de la alerta (text-muted sobre fondo rosa no llega a 4,5:1) -->
+        <div v-if="error_codigo" class="small">Código: {{ error_codigo }}</div>
+        <!-- Pedido de ejecución que quedó sin respuesta clara: el borrado pudo terminar igual -->
+        <div v-if="error_puede_haber_terminado" class="mt-1 fw-semibold">
+          El borrado puede haber terminado igual: mirá "Últimos reinicios" (incluido lo registrado en
+          el sistema del cliente) antes de volver a intentar.
+        </div>
       </div>
 
       <!-- ============================================================ -->
@@ -33,7 +39,7 @@
           <ul class="small ps-3 mb-2">
             <li>
               Filas vaciadas: <strong>{{ formatear_numero(resultado.total_filas) }}</strong> en
-              {{ cantidad_de_tablas_vaciadas }} tablas de <span class="text-break">{{ resultado.base }}</span>.
+              {{ cantidad_de_tablas_vaciadas }} tablas con datos de <span class="text-break">{{ resultado.base }}</span>.
             </li>
             <li v-if="resultado.respaldo">
               Respaldo: <span class="text-break">{{ resultado.respaldo.ruta_relativa }}</span>
@@ -168,6 +174,8 @@ export default {
       // Texto del error del último pedido y su código (si lo trae).
       error_mensaje: null,
       error_codigo: null,
+      // true si el último error fue de la ejecución y el borrado pudo haber terminado igual.
+      error_puede_haber_terminado: false,
       // Cuerpo de la ejecución terminada (C1); null hasta que termina una.
       resultado: null,
       // Instante actual en ms; se actualiza cada segundo para la cuenta regresiva.
@@ -218,11 +226,19 @@ export default {
       return minutos + ':' + String(segundos).padStart(2, '0')
     },
     /**
-     * Cantidad de tablas que quedaron vaciadas en la ejecución.
+     * Cantidad de tablas que tenían filas y quedaron vaciadas en la ejecución (misma regla que
+     * "con datos" de la simulación: las que ya estaban en 0 no cuentan).
      * @returns {number}
      */
     cantidad_de_tablas_vaciadas() {
-      return this.resultado && this.resultado.vaciadas ? Object.keys(this.resultado.vaciadas).length : 0
+      const vaciadas = this.resultado && this.resultado.vaciadas ? this.resultado.vaciadas : {}
+      let cantidad = 0
+      Object.keys(vaciadas).forEach(function (tabla) {
+        if ((Number(vaciadas[tabla]) || 0) > 0) {
+          cantidad++
+        }
+      })
+      return cantidad
     },
     /**
      * Advertencias de la ejecución en una sola lista de textos: ajustes salteados, errores al
@@ -230,6 +246,7 @@ export default {
      * @returns {Array<string>}
      */
     advertencias_del_resultado() {
+      const self = this
       const r = this.resultado
       const lista = []
       if (!r) {
@@ -237,14 +254,14 @@ export default {
       }
       if (Array.isArray(r.advertencias)) {
         r.advertencias.forEach(function (aviso) {
-          lista.push(typeof aviso === 'string' ? aviso : JSON.stringify(aviso))
+          lista.push(self.texto_legible(aviso))
         })
       }
       if (Array.isArray(r.ajustes_salteados) && r.ajustes_salteados.length > 0) {
-        lista.push('Ajustes salteados: ' + JSON.stringify(r.ajustes_salteados))
+        lista.push('Ajustes salteados: ' + this.texto_legible(r.ajustes_salteados))
       }
       if (r.archivos && Array.isArray(r.archivos.errores) && r.archivos.errores.length > 0) {
-        lista.push('No se pudieron mover algunos archivos: ' + JSON.stringify(r.archivos.errores))
+        lista.push('No se pudieron mover algunos archivos: ' + this.texto_legible(r.archivos.errores))
       }
       const verificacion = r.verificacion || {}
       if (Array.isArray(verificacion.tablas_con_filas) && verificacion.tablas_con_filas.length > 0) {
@@ -290,6 +307,7 @@ export default {
       this.resultado = null
       this.error_mensaje = null
       this.error_codigo = null
+      this.error_puede_haber_terminado = false
       this.modal_abierto = false
       this.incluir_comprobantes_con_cae = false
       this.incluir_integraciones_conectadas = false
@@ -297,10 +315,16 @@ export default {
     /**
      * Guarda en el estado el error de un pedido: usa el `mensaje` del cuerpo (contrato C2/C3) y,
      * si no está, el `message`; sin respuesta (timeout, red) usa un texto propio.
+     * Si el pedido era la EJECUCIÓN y no hubo respuesta (timeout, red) o la puerta de enlace
+     * contestó 502/503/504, marca `error_puede_haber_terminado`: el borrado pudo completarse igual.
      * @param {Object} error Error de axios.
+     * @param {boolean} durante_ejecucion true si el pedido fallido fue el de ejecutar.
      * @returns {void}
      */
-    registrar_error(error) {
+    registrar_error(error, durante_ejecucion) {
+      const estado_http = error && error.response ? error.response.status : null
+      this.error_puede_haber_terminado =
+        Boolean(durante_ejecucion) && (!error || !error.response || [502, 503, 504].indexOf(estado_http) !== -1)
       const cuerpo = error && error.response && error.response.data ? error.response.data : null
       if (cuerpo && (cuerpo.mensaje || cuerpo.message)) {
         this.error_mensaje = cuerpo.mensaje || cuerpo.message
@@ -312,7 +336,7 @@ export default {
         this.error_mensaje = 'El servidor respondió con un error (código ' + error.response.status + ').'
       } else {
         this.error_mensaje =
-          'No se recibió respuesta. Mirá "Últimos reinicios" antes de volver a intentar: el borrado puede haber terminado igual.'
+          'No se recibió respuesta del servidor (tiempo de espera o corte de red).'
       }
     },
     /**
@@ -327,6 +351,7 @@ export default {
       self.simulando = true
       self.error_mensaje = null
       self.error_codigo = null
+      self.error_puede_haber_terminado = false
       self.resultado = null
       api
         .post(
@@ -358,6 +383,7 @@ export default {
       if (this.simulacion && this.simulacion.ejecutable && this.token_vigente) {
         this.error_mensaje = null
         this.error_codigo = null
+        this.error_puede_haber_terminado = false
         this.modal_abierto = true
       }
     },
@@ -385,6 +411,7 @@ export default {
       self.ejecutando = true
       self.error_mensaje = null
       self.error_codigo = null
+      self.error_puede_haber_terminado = false
       api
         .post('/client/' + this.record.id + '/reset-datos/ejecutar', cuerpo, {
           silent_error: true,
@@ -399,7 +426,7 @@ export default {
           self.refrescar_registros++
         })
         .catch(function (error) {
-          self.registrar_error(error)
+          self.registrar_error(error, true)
           self.ejecutando = false
           self.modal_abierto = false
           self.refrescar_registros++
@@ -412,6 +439,34 @@ export default {
      */
     formatear_numero(valor) {
       return (Number(valor) || 0).toLocaleString('es-AR')
+    },
+    /**
+     * Convierte un valor del backend (texto, número, arreglo u objeto) en texto legible, sin
+     * corchetes ni comillas: los textos van tal cual, los objetos como "clave: valor" y los
+     * arreglos con sus elementos separados por coma.
+     * @param {*} valor
+     * @returns {string}
+     */
+    texto_legible(valor) {
+      const self = this
+      if (valor === null || valor === undefined) {
+        return ''
+      }
+      if (Array.isArray(valor)) {
+        return valor
+          .map(function (elemento) {
+            return self.texto_legible(elemento)
+          })
+          .join(', ')
+      }
+      if (typeof valor === 'object') {
+        return Object.keys(valor)
+          .map(function (clave) {
+            return clave + ': ' + self.texto_legible(valor[clave])
+          })
+          .join(', ')
+      }
+      return String(valor)
     },
     /**
      * Formatea bytes en B / KB / MB / GB.
@@ -437,6 +492,12 @@ export default {
 .reset-datos {
 	max-width: 100%;
 	overflow-wrap: anywhere;
+}
+
+/* Las tablas no parten palabras ni números letra por letra: el scroll horizontal vive en su contenedor. */
+.reset-datos :deep(table) {
+	overflow-wrap: normal;
+	word-break: normal;
 }
 
 .reset-datos__panel {

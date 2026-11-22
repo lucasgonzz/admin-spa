@@ -97,17 +97,17 @@
         con datos)
       </button>
       <div v-if="tabla_abierta" class="reset-resumen__scroll">
-        <table class="table table-sm table-striped mb-0">
+        <table class="table table-sm table-striped mb-0 reset-resumen__tabla">
           <thead>
             <tr>
               <th>Tabla</th>
-              <th class="text-end">Filas</th>
+              <th class="text-end text-nowrap">Filas</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="fila in filas_con_datos" :key="fila.tabla">
               <td class="text-break">{{ fila.tabla }}</td>
-              <td class="text-end">{{ formatear_numero(fila.filas) }}</td>
+              <td class="text-end text-nowrap">{{ formatear_numero(fila.filas) }}</td>
             </tr>
             <tr v-if="filas_con_datos.length === 0">
               <td colspan="2" class="text-muted fst-italic">No hay datos de negocio para borrar.</td>
@@ -356,6 +356,14 @@ export default {
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
 	color: #6c757d;
+}
+
+/* Ancho mínimo para que las columnas no se achiquen a unos pocos píxeles en pantallas chicas;
+   si no entra, el contenedor scrollea en horizontal. Sin partir palabras ni números. */
+.reset-resumen__tabla {
+	min-width: 20rem;
+	overflow-wrap: normal;
+	word-break: normal;
 }
 
 /* La tabla larga scrollea dentro de su caja: la página nunca se desborda. */
