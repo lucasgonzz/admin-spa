@@ -94,7 +94,7 @@ import api from '@/utils/axios'
 import { route_string } from '@/utils/route_string'
 import { PAQUETES } from '@/utils/registrar_llamada'
 import { show_toast } from '@/components/pipeline/pipeline_helpers'
-import { format_datetime } from '@/utils/pipeline_dates'
+import { formatear_fecha_argentina } from '@/utils/fecha_argentina'
 
 /**
  * Estados de la implementación contratada, en el orden en que se muestran. La clave es la del contrato con la API.
@@ -178,7 +178,8 @@ export default {
       return this.form.estado !== this.record.implementacion_contratada || (guardado_con_paquetes && guardados !== elegidos)
     },
     /**
-     * Fechas en sólo lectura, con «—» cuando no hay.
+     * Fechas en sólo lectura, en hora de Argentina, con «—» cuando no hay. La API las manda en ISO con zona
+     * (`...Z` o `-03:00`), que el formateador de pipeline_dates.js no lee: por eso `formatear_fecha_argentina`.
      * @returns {Array<{clave: string, etiqueta: string, texto: string}>}
      */
     fechas() {
@@ -190,7 +191,7 @@ export default {
         { clave: 'prueba_pausada_at', etiqueta: 'Prueba pausada' },
         { clave: 'prueba_reanudada_at', etiqueta: 'Prueba reanudada' },
       ].map(function (fecha) {
-        return Object.assign({}, fecha, { texto: format_datetime(record[fecha.clave]) || '—' })
+        return Object.assign({}, fecha, { texto: formatear_fecha_argentina(record[fecha.clave]) || '—' })
       })
     },
   },
