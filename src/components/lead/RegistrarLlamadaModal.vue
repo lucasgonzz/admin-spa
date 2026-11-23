@@ -86,6 +86,32 @@
         <div v-if="error_de('motivo')" class="invalid-feedback d-block">{{ error_de('motivo') }}</div>
       </div>
 
+      <!--
+        Paquetes (E2): con «Pagó la mitad» hay que decir qué implementación pagó. La API pausa la prueba del
+        cliente (si ya tiene) y arranca la implementación de esos paquetes.
+      -->
+      <fieldset v-if="pide_paquetes" class="rl-form__group">
+        <legend class="form-label mb-2">Qué pagó<span class="rl-form__required" title="Obligatorio"> *</span></legend>
+        <div class="rl-form__results">
+          <label
+            v-for="paquete in paquetes_disponibles"
+            :key="paquete.value"
+            class="rl-form__result"
+            :class="{ 'rl-form__result--selected': form.paquetes.indexOf(paquete.value) !== -1 }"
+          >
+            <input
+              v-model="form.paquetes"
+              type="checkbox"
+              class="form-check-input"
+              :value="paquete.value"
+              :disabled="saving"
+            />
+            <span>{{ paquete.label }}</span>
+          </label>
+        </div>
+        <div v-if="error_de('paquetes')" class="invalid-feedback d-block">{{ error_de('paquetes') }}</div>
+      </fieldset>
+
       <!-- Fecha: obligatoria si no atendió o hay que volver a llamar; opcional con «Implementación acordada» -->
       <div v-if="pide_fecha" class="rl-form__group">
         <label class="form-label mb-1" for="rl-fecha">
@@ -152,7 +178,17 @@
 import api from '@/utils/axios'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import { first_error, show_toast, validation_errors } from '@/components/pipeline/pipeline_helpers'
-import { RESULTADOS, admite_fecha, payload, requiere_fecha, requiere_motivo, validar } from '@/utils/registrar_llamada'
+import {
+  PAQUETES,
+  RESULTADOS,
+  admite_fecha,
+  payload,
+  requiere_fecha,
+  requiere_motivo,
+  requiere_paquetes,
+  validar,
+  validar_paquetes,
+} from '@/utils/registrar_llamada'
 
 /** Slug del pipeline de leads, del que salen los motivos de pérdida. */
 const SLUG_DEL_PIPELINE_DE_LEADS = 'lead'
@@ -184,6 +220,7 @@ export default {
         proxima_llamada_at: '',
         cotizado: '',
         notas: '',
+        paquetes: [],
       },
       /** Errores por campo: los de la validación local y, después de mandar, los del 422 de la API. */
       errores: {},
@@ -193,6 +230,8 @@ export default {
       saving: false,
       /** Resultados para los radios. */
       resultados: RESULTADOS,
+      /** Paquetes de implementación para las casillas. */
+      paquetes_disponibles: PAQUETES,
     }
   },
   computed: {
@@ -208,6 +247,10 @@ export default {
     /** @returns {boolean} true si hay que elegir el motivo. */
     pide_motivo() {
       return requiere_motivo(this.form)
+    },
+    /** @returns {boolean} true si hay que elegir los paquetes («Pagó la mitad»). */
+    pide_paquetes() {
+      return requiere_paquetes(this.form)
     },
     /** @returns {boolean} true si se muestra la fecha. */
     pide_fecha() {
@@ -250,6 +293,7 @@ export default {
       this.form.atendio = atendio
       this.form.resultado = ''
       this.form.motivo = ''
+      this.form.paquetes = []
       this.form.proxima_llamada_at = ''
       this.errores = {}
     },
@@ -263,7 +307,7 @@ export default {
         return
       }
       this.server_message = ''
-      this.errores = validar(this.form, { motivos: this.motivos })
+      this.errores = Object.assign(validar(this.form, { motivos: this.motivos }), validar_paquetes(this.form))
       if (Object.keys(this.errores).length > 0) {
         return
       }
