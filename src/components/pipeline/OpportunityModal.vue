@@ -11,6 +11,11 @@
     Se abre desde el tablero, el listado, la agenda y la pestaña "Pipelines" del cliente/lead (en
     ese caso encima del modal del cliente, con `stack_level` 1). Cada vez que cambia la
     oportunidad se re-inicializa todo: no queda nada de la anterior.
+
+    Misión embudo-juan-pipeline (E1): si el sujeto es un lead, la ficha tiene «Registrar llamada» y la
+    lista «Llamadas» de ese lead (las cargadas a mano y las que el agente asentó desde un audio de
+    Juan, E1b, rotuladas «por audio de Juan»). Con el perfil «Sólo Leads» se esconden borrar y el
+    responsable, que el backend le niega.
   -->
   <base-modal
     :show="show"
@@ -92,8 +97,8 @@
       </section>
 
       <!-- Responsable y próxima acción -->
-      <section class="pl-ficha__block pl-ficha__grid">
-        <div>
+      <section class="pl-ficha__block pl-ficha__grid" :class="{ 'pl-ficha__grid--single': es_perfil_solo_leads }">
+        <div v-if="!es_perfil_solo_leads">
           <label class="form-label mb-1" for="pl-ficha-owner">Responsable</label>
           <select
             id="pl-ficha-owner"
@@ -245,6 +250,37 @@
         </router-link>
       </section>
 
+      <!--
+        Llamadas del lead (misión embudo-juan-pipeline). Vienen de GET lead/{id}/llamadas, las últimas
+        20. Si la API es vieja (404) o el pedido falla, la lista queda vacía y el bloque no se muestra.
+        `origen = audio_juan` son las que el agente cargó desde un audio de Juan (E1b): se rotulan y
+        dicen quién las cargó; la transcripción completa se despliega a pedido.
+      -->
+      <section v-if="llamadas.length" class="pl-ficha__block">
+        <h6 class="pl-ficha__heading">Llamadas</h6>
+        <ul class="pl-calls">
+          <li v-for="llamada in llamadas" :key="llamada.id" class="pl-calls__item">
+            <p class="pl-calls__head">
+              <strong>{{ llamada_titulo(llamada) }}</strong>
+              <span v-if="llamada.origen === 'audio_juan'" class="pl-ficha__tag">por audio de Juan</span>
+            </p>
+            <p v-if="llamada.cotizado" class="pl-calls__line">Cotizado: {{ llamada.cotizado }}</p>
+            <p v-if="llamada.motivo" class="pl-calls__line">Motivo: {{ llamada.motivo }}</p>
+            <p v-if="llamada.proxima_llamada_at" class="pl-calls__line">Volver a llamar: {{ format_datetime(llamada.proxima_llamada_at) }}</p>
+            <p v-if="llamada.notas" class="pl-calls__notes">{{ llamada.notas }}</p>
+            <details v-if="llamada.transcripcion" class="pl-calls__transcript">
+              <summary>Ver la transcripción</summary>
+              <p>{{ llamada.transcripcion }}</p>
+            </details>
+            <p class="pl-calls__meta">
+              {{ llamada.admin && llamada.admin.name ? llamada.admin.name : 'Sin operador' }}
+              <template v-if="llamada.cargada_por && llamada.cargada_por.name"> · cargada por {{ llamada.cargada_por.name }}</template>
+              · {{ format_datetime(llamada.created_at) }}
+            </p>
+          </li>
+        </ul>
+      </section>
+
       <!-- Historial -->
       <section class="pl-ficha__block pl-ficha__block--last">
         <h6 class="pl-ficha__heading">Historial</h6>
@@ -300,10 +336,22 @@
       @rule-error="load(true)"
     />
 
+    <!-- Registrar llamada desde la ficha: se abre encima, como el de mover. -->
+    <registrar-llamada-modal
+      v-if="llamada_modal.show && puede_registrar_llamada"
+      :key="'ficha-llamada-' + llamada_modal.key"
+      :show="true"
+      :lead_id="opportunity.lead_id"
+      :lead_name="modal_title"
+      :stack_level="stack_level + 1"
+      @close="llamada_modal.show = false"
+      @registrada="on_call_registered"
+    />
+
     <template #footer>
       <div class="d-flex w-100 align-items-center flex-wrap gap-2">
         <button
-          v-if="opportunity"
+          v-if="opportunity && !es_perfil_solo_leads"
           type="button"
           class="btn btn-outline-danger"
           :disabled="deleting"
@@ -313,6 +361,14 @@
         </button>
         <div class="ms-auto d-flex flex-wrap gap-2">
           <button type="button" class="btn btn-secondary" @click="$emit('close')">Cerrar</button>
+          <button
+            v-if="puede_registrar_llamada"
+            type="button"
+            class="btn btn-outline-primary"
+            @click="open_llamada"
+          >
+            <i class="bi bi-telephone-plus me-1" aria-hidden="true" />Registrar llamada
+          </button>
           <button
             v-if="opportunity"
             type="button"
@@ -334,9 +390,11 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 // 🔴 Compartido con la pestaña Resumen del lead, que es su primer uso: acá se consume tal cual.
 import CallSummaryPanel from '@/components/lead/resumen/CallSummaryPanel.vue'
 import MoveModal from '@/components/pipeline/MoveModal.vue'
+import RegistrarLlamadaModal from '@/components/lead/RegistrarLlamadaModal.vue'
 import NextActionText from '@/components/pipeline/NextActionText.vue'
 import StageTag from '@/components/pipeline/StageTag.vue'
 import SubjectTypeBadge from '@/components/pipeline/SubjectTypeBadge.vue'
+import { es_solo_leads } from '@/utils/solo_leads'
 import {
   first_error,
   format_field_value,
@@ -387,7 +445,7 @@ function sort_activities(list) {
  */
 export default {
   name: 'PipelineOpportunityModal',
-  components: { BaseModal, CallSummaryPanel, MoveModal, NextActionText, StageTag, SubjectTypeBadge },
+  components: { BaseModal, CallSummaryPanel, MoveModal, RegistrarLlamadaModal, NextActionText, StageTag, SubjectTypeBadge },
   props: {
     /** Visibilidad del modal. */
     show: { type: Boolean, default: true },
@@ -396,11 +454,31 @@ export default {
     /** Nivel de apilamiento (1 cuando se abre encima del modal del cliente/lead). */
     stack_level: { type: Number, default: 0 },
   },
-  emits: ['close', 'changed', 'deleted'],
+  emits: ['close', 'changed', 'deleted', 'registrada'],
   data() {
     return this.initial_state()
   },
   computed: {
+    /**
+     * true para el perfil «Sólo Leads» (Juan): no puede borrar la oportunidad ni cambiar el responsable.
+     * La decisión es de `solo_leads.js`.
+     * @returns {boolean}
+     */
+    es_perfil_solo_leads() {
+      return es_solo_leads(this.$store.state.auth.admin)
+    },
+    /**
+     * true si se puede registrar una llamada desde la ficha: la oportunidad es de un lead que todavía
+     * existe y sigue abierta (en una cerrada, el tablero tampoco ofrece el botón).
+     * @returns {boolean}
+     */
+    puede_registrar_llamada() {
+      const opportunity = this.opportunity
+      if (!opportunity || opportunity.subject_type !== 'lead' || !opportunity.lead_id || this.subject.missing) {
+        return false
+      }
+      return !this.is_closed
+    },
     /** @returns {Object} */
     subject() {
       return (this.opportunity && this.opportunity.subject) || {}
@@ -561,7 +639,10 @@ export default {
   },
   created() {
     this.$store.dispatch('pipeline/fetch_meta')
-    this.$store.dispatch('pipeline/fetch_admins')
+    // El perfil «Sólo Leads» no puede listar admins (403) y no ve el selector de responsable.
+    if (!this.es_perfil_solo_leads) {
+      this.$store.dispatch('pipeline/fetch_admins')
+    }
     this.load(false)
   },
   methods: {
@@ -598,6 +679,10 @@ export default {
         deleting: false,
         /** Modal de mover abierto desde la ficha. */
         move: { show: false, key: 0 },
+        /** Modal «Registrar llamada» abierto desde la ficha. */
+        llamada_modal: { show: false, key: 0 },
+        /** Llamadas del lead, de la más nueva a la más vieja (`GET lead/{id}/llamadas`). */
+        llamadas: [],
       }
     },
 
@@ -628,6 +713,7 @@ export default {
           self.opportunity = data.opportunity || null
           self.activities = sort_activities(Array.isArray(data.activities) ? data.activities : [])
           self.loading = false
+          self.load_llamadas()
           if (silent && self.opportunity) {
             self.$emit('changed', self.opportunity)
           }
@@ -641,6 +727,63 @@ export default {
             self.load_error = resolve_error_message(error)
           }
         })
+    },
+
+    /**
+     * Pide las llamadas del lead (sólo si la oportunidad es de un lead). Es información de apoyo: si
+     * falla (por ejemplo, una API que todavía no la tiene) la lista queda como estaba y no se avisa.
+     */
+    load_llamadas() {
+      const self = this
+      const opportunity = this.opportunity
+      if (!opportunity || opportunity.subject_type !== 'lead' || !opportunity.lead_id) {
+        return
+      }
+      const lead_id = opportunity.lead_id
+      api
+        .get('/lead/' + lead_id + '/llamadas')
+        .then(function (res) {
+          if (!self.opportunity || Number(self.opportunity.lead_id) !== Number(lead_id)) {
+            return
+          }
+          const data = res.data || {}
+          self.llamadas = Array.isArray(data.models) ? data.models : []
+        })
+        .catch(function () {
+          return null
+        })
+    },
+
+    /**
+     * Título de una llamada en la lista: si atendió y cómo terminó, o «No atendió».
+     *
+     * @param {Object} llamada Llamada de `GET lead/{id}/llamadas`.
+     * @returns {string}
+     */
+    llamada_titulo(llamada) {
+      if (!llamada.atendio) {
+        return 'No atendió'
+      }
+      return 'Atendió · ' + (llamada.resultado_label || llamada.resultado || 'sin resultado')
+    },
+
+    /** Abre el modal «Registrar llamada» encima de la ficha. */
+    open_llamada() {
+      this.llamada_modal = { show: true, key: this.llamada_modal.key + 1 }
+    },
+
+    /**
+     * La llamada quedó registrada: la ficha toma la tarjeta ya movida, recarga el historial (la llamada
+     * deja una nota) y las llamadas, y le avisa al tablero para que cambie de columna y recargue
+     * «Mis tareas».
+     *
+     * @param {{ llamada: (Object|null), oportunidad: (Object|null) }} payload
+     */
+    on_call_registered(payload) {
+      this.llamada_modal = { show: false, key: this.llamada_modal.key }
+      this.apply_opportunity(payload && payload.oportunidad)
+      this.load(true)
+      this.$emit('registrada', payload)
     },
 
     /**
@@ -1082,6 +1225,68 @@ export default {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
   gap: 1rem 1.5rem;
+}
+
+/* Sin la columna del responsable (perfil «Sólo Leads») la próxima acción ocupa todo el ancho. */
+.pl-ficha__grid--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.pl-calls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pl-calls__item {
+  min-width: 0;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--color-border-secondary);
+  border-radius: 10px;
+}
+
+.pl-calls__item p {
+  margin: 0;
+}
+
+.pl-calls__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.88rem;
+}
+
+.pl-calls__line {
+  font-size: 0.82rem;
+}
+
+.pl-calls__notes {
+  margin-top: 0.25rem !important;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pl-calls__transcript {
+  margin-top: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.pl-calls__transcript p {
+  margin-top: 0.3rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pl-calls__meta {
+  margin-top: 0.3rem !important;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
 }
 
 @media (max-width: 575.98px) {
