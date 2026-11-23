@@ -87,6 +87,20 @@ import { subject_name } from '@/components/pipeline/pipeline_helpers'
 import { format_datetime, format_relative } from '@/utils/pipeline_dates'
 
 /**
+ * Etiquetas de respaldo de los tipos de actividad. Las publica la API en `GET pipelines/meta`
+ * (`activity_types`), pero el perfil «Sólo Leads» no las recibe (su salida se filtra) y la nota de la
+ * tarjeta mostraba el tipo crudo («Juan: stage_change»). Si el meta no las trae se usan éstas, que son
+ * las de `PipelineActivity::TYPE_LABELS`.
+ */
+const ETIQUETAS_DE_ACTIVIDAD = {
+  created: 'Alta',
+  stage_change: 'Cambio de etapa',
+  note: 'Nota',
+  next_action: 'Próxima acción',
+  owner: 'Responsable',
+}
+
+/**
  * Tarjeta de oportunidad.
  */
 export default {
@@ -154,9 +168,12 @@ export default {
       if (!activity) {
         return ''
       }
+      const label = this.$store.getters['pipeline/label_for']('activity_types', activity.type)
+      // `label_for` devuelve el valor crudo cuando no encuentra la etiqueta: ahí se cae al respaldo.
+      const legible = label === activity.type && ETIQUETAS_DE_ACTIVIDAD[activity.type] ? ETIQUETAS_DE_ACTIVIDAD[activity.type] : label
       const text = activity.body
         ? String(activity.body).replace(/\s+/g, ' ').trim()
-        : this.$store.getters['pipeline/label_for']('activity_types', activity.type)
+        : legible
       return activity.admin_name ? activity.admin_name + ': ' + text : text
     },
     /** @returns {string} */

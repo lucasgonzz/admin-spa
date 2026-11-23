@@ -441,6 +441,18 @@ function sort_activities(list) {
 }
 
 /**
+ * Etiquetas de respaldo de los tipos de actividad del historial (las de `PipelineActivity::TYPE_LABELS`): el
+ * perfil «Sólo Leads» no recibe `activity_types` en el meta y el título saldría crudo («owner», «next_action»).
+ */
+const ETIQUETAS_DE_ACTIVIDAD = {
+  created: 'Alta',
+  stage_change: 'Cambio de etapa',
+  note: 'Nota',
+  next_action: 'Próxima acción',
+  owner: 'Responsable',
+}
+
+/**
  * Ficha de la oportunidad.
  */
 export default {
@@ -1075,7 +1087,12 @@ export default {
      * @returns {string}
      */
     activity_title(activity) {
-      const label_for = this.$store.getters['pipeline/label_for']
+      const label_for_meta = this.$store.getters['pipeline/label_for']
+      /* Con el valor crudo (sin etiqueta en el meta) cae a la de respaldo. */
+      const label_for = function (group, value) {
+        const label = label_for_meta(group, value)
+        return group === 'activity_types' && label === value && ETIQUETAS_DE_ACTIVIDAD[value] ? ETIQUETAS_DE_ACTIVIDAD[value] : label
+      }
       if (activity.type === 'stage_change') {
         return (activity.from_stage_name || '—') + ' → ' + (activity.to_stage_name || '—')
       }
