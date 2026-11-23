@@ -408,12 +408,12 @@ if (texto !== null) {
       cierto('PreciosPorSistema.vue arma el select con opciones_de_plan', /opciones_de_plan/.test(vista_precios))
       cierto('PreciosPorSistema.vue tiene el selector de paquete de agentes', /elegir_paquete_agentes/.test(vista_precios) && /opciones_de_paquete_agentes/.test(vista_precios))
       const editor_lead = leer('src/components/lead/contract/Index.vue')
-      cierto('el editor del lead pide la fuente y precarga con precargar_precios_si_es_nuevo',
-        /cargar_precios_vigentes/.test(editor_lead) && /precargar_precios_si_es_nuevo/.test(editor_lead))
+      cierto('el editor del lead pide la fuente y precarga con precargar_si_sigue_nuevo',
+        /cargar_precios_vigentes/.test(editor_lead) && /precargar_si_sigue_nuevo/.test(editor_lead))
       cierto('el editor del lead ya no precarga con iniciar_precios_por_sistema a mano', !/iniciar_precios_por_sistema\(this\.record\)/.test(editor_lead))
       const editor_cliente = leer('src/components/client/ContratoTab.vue')
-      cierto('la pestaña del cliente pide la fuente y precarga con precargar_precios_si_es_nuevo',
-        /cargar_precios_vigentes/.test(editor_cliente) && /precargar_precios_si_es_nuevo/.test(editor_cliente))
+      cierto('la pestaña del cliente pide la fuente y precarga con precargar_si_sigue_nuevo',
+        /cargar_precios_vigentes/.test(editor_cliente) && /precargar_si_sigue_nuevo/.test(editor_cliente))
       cierto('PreciosPorSistema.vue recibe la versión de la fuente para recalcular el select cuando llega', /version_fuente/.test(vista_precios))
       cierto('el editor del lead pide la fuente en cada apertura y avisa a PreciosPorSistema', /version_fuente/.test(editor_lead) && /precargar_si_sigue_nuevo/.test(editor_lead))
       cierto('la pestaña del cliente pide la fuente en cada apertura y avisa a PreciosPorSistema', /version_fuente/.test(editor_cliente) && /precargar_si_sigue_nuevo/.test(editor_cliente))
