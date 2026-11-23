@@ -62,6 +62,20 @@
            el resumen vive en la ficha, que ahora abre el nombre. -->
       <div class="d-flex align-items-center gap-1 flex-shrink-0 conversation-header-actions">
 
+        <!-- Registrar llamada (misión embudo-juan-pipeline, E1): deja asentado qué se habló con el lead y
+             mueve su tarjeta del tablero. Se ve TAMBIÉN en sólo lectura: Juan (perfil «Sólo Leads») lo usa
+             desde acá, por eso no cuelga de `solo_lectura`. -->
+        <button
+          type="button"
+          class="icon-btn text-primary"
+          title="Registrar llamada"
+          aria-label="Registrar llamada con este lead"
+          :disabled="!effective_record"
+          @click="on_open_llamada_modal"
+        >
+          <i class="bi bi-telephone-plus" aria-hidden="true" />
+        </button>
+
         <!-- Notificar mensajes: campana l͏͏͏͏ si activo, vacía si no -->
         <button
           type="button"
@@ -603,6 +617,16 @@
     @saved="on_scheduled_message_saved"
   />
 
+  <!-- Registrar llamada: se monta recién al abrirlo, así cada apertura arranca con el formulario vacío -->
+  <registrar-llamada-modal
+    v-if="llamada_modal_visible && effective_record"
+    :show="true"
+    :lead_id="effective_record.id"
+    :lead_name="lead_name"
+    @close="llamada_modal_visible = false"
+    @registrada="llamada_modal_visible = false"
+  />
+
   <!-- Editor de anotaciones sobre imagen (pegada o adjunta) antes de enviarla al lead -->
   <image-annotation-editor
     :show="image_editor_visible"
@@ -620,6 +644,7 @@ import PendingOutgoingBubble from '@/components/lead/conversation/PendingOutgoin
 import ScheduledMessageBubble from '@/components/lead/conversation/ScheduledMessageBubble.vue'
 import TemplatePickerModal from '@/components/lead/conversation/TemplatePickerModal.vue'
 import ScheduleMessageModal from '@/components/lead/conversation/ScheduleMessageModal.vue'
+import RegistrarLlamadaModal from '@/components/lead/RegistrarLlamadaModal.vue'
 import ImageAnnotationEditor from '@/components/common/ImageAnnotationEditor.vue'
 import api from '@/utils/axios'
 import { es_solo_leads } from '@/utils/solo_leads'
@@ -668,6 +693,7 @@ export default {
     ScheduledMessageBubble,
     TemplatePickerModal,
     ScheduleMessageModal,
+    RegistrarLlamadaModal,
     ImageAnnotationEditor,
   },
   mixins: [lead_conversation_date_dividers, conversation_scroll_behavior, audio_recorder_button],
@@ -732,6 +758,9 @@ export default {
 
       /** true mientras se simula el mensaje entrante (evita doble envío). */
       enviando_simulado: false,
+
+      /** true mientras está abierto el modal «Registrar llamada» (E1 de embudo-juan-pipeline). */
+      llamada_modal_visible: false,
 
       /** Evita doble click mientras se persiste el toggle de notificaciones push. */
       toggling_notify: false,
@@ -1882,6 +1911,19 @@ export default {
         .then(function () {
           self.deshaciendo_marca = false
         })
+    },
+
+    /**
+     * Abre el modal «Registrar llamada» del lead de esta conversación. La llamada la guarda la API (y
+     * mueve la tarjeta del tablero); acá no hay nada más que refrescar.
+     *
+     * @returns {void}
+     */
+    on_open_llamada_modal() {
+      if (!this.effective_record) {
+        return
+      }
+      this.llamada_modal_visible = true
     },
 
     /**
@@ -3422,10 +3464,13 @@ export default {
     height: 1.9rem;
     font-size: 0.95rem;
   }
+  /* Con «Registrar llamada» (E1 de embudo-juan-pipeline) los botones del header son 9 y a 1.8rem ya no
+     entran junto a flecha+nombre en 360px: 9 x 1.6rem + separación entra en el ancho que deja el 90px
+     del nombre. */
   .conversation-header-actions .icon-btn {
-    width: 1.8rem;
-    height: 1.8rem;
-    font-size: 0.9rem;
+    width: 1.6rem;
+    height: 1.6rem;
+    font-size: 0.85rem;
   }
   .conversation-header-actions {
     gap: 0.1rem !important;
