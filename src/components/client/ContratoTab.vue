@@ -112,7 +112,7 @@
         </div>
       </div>
 
-      <PreciosPorSistema :contrato="form" :id="'contrato-cliente-' + record.id" />
+      <PreciosPorSistema :contrato="form" :id="'contrato-cliente-' + record.id" :version_fuente="version_fuente" />
       <!-- En Suscripción no hay licencia que pagar: el pago inicial es la puesta en marcha. -->
       <h6 class="text-primary mb-2">{{ es_suscripcion ? 'Pago inicial' : 'Pago único' }}</h6>
       <div class="alert alert-light border mb-3">
@@ -309,7 +309,7 @@
 
 <script>
 import PreciosPorSistema from '@/components/lead/contract/PreciosPorSistema.vue'
-import { actualizar_totales, iniciar_precios_por_sistema, precargar_precios_si_es_nuevo, cargar_precios_vigentes, precios_vigentes_cargados, tiene_condiciones_guardadas, aplicar_defaults_anuales } from '@/utils/contract_precios'
+import { actualizar_totales, precargar_si_sigue_nuevo, firma_de_condiciones, cargar_precios_vigentes, tiene_condiciones_guardadas, aplicar_defaults_anuales } from '@/utils/contract_precios'
 import api, { resolve_error_message } from '@/utils/axios'
 import clause_templates from '@/utils/contract_clause_templates'
 import {
@@ -346,6 +346,8 @@ export default {
   },
   data() {
     return {
+      /** Cuántas veces llegó la fuente de precios (la lee PreciosPorSistema para redibujar el select de plan). */
+      version_fuente: 0,
       /** true mientras carga el GET inicial. */
       loading: false,
       /** Mensaje de error del GET inicial (null = sin error). */
@@ -599,33 +601,31 @@ export default {
         contract_descuento_conjunto: c.contract_descuento_conjunto ?? null,
         contract_mes_gratis: c.contract_mes_gratis ?? null,
         contract_plan_gestion: c.contract_plan_gestion ?? null,
+        /* Foto del plan que armó la API (sólo lectura: el PUT no la manda y la API la ignora). */
+        contract_plan_gestion_foto: c.contract_plan_gestion_foto ?? null,
         contract_pago_anual: c.contract_pago_anual ?? false,
         contract_descuento_anual: c.contract_descuento_anual ?? 20,
         contract_copiado_desde_lead_at: c.contract_copiado_desde_lead_at || null,
       }
-      /* Contrato nuevo (sin desglose ni condiciones guardadas): se precargan los precios de la fuente única
-         (`GET settings/precios-vigentes`, una vez por sesión). Un contrato guardado no se recalcula nunca. */
-      const es_nuevo = !nuevo_form.contract_precios_sistemas && !tiene_condiciones_guardadas(c)
-      if (es_nuevo && precios_vigentes_cargados()) {
-        precargar_precios_si_es_nuevo(nuevo_form)
-      }
+      /* Se pide la fuente de precios en cada apertura (un GET, con timeout de 10 s; si falla rige el fallback) para
+         que el select de plan diga lo que dice el PDF. Si el contrato es NUEVO (sin desglose ni condiciones
+         guardadas) se precargan los precios al llegar, siempre que el formulario abierto siga siendo este y el
+         operador no haya cargado nada mientras tanto. Un contrato guardado no se recalcula nunca. */
+      const era_nuevo = !nuevo_form.contract_precios_sistemas && !tiene_condiciones_guardadas(c)
+      const firma = firma_de_condiciones(nuevo_form)
       aplicar_defaults_anuales(nuevo_form)
       this.form = nuevo_form
-      if (es_nuevo && !precios_vigentes_cargados()) {
-        /* La fuente todavía no llegó: se pide y se precarga al llegar (o con el fallback de siempre si falla),
-           siempre que el formulario abierto siga siendo este y siga sin desglose. `this.form` es el proxy
-           reactivo del formulario: se guarda para comparar y para que el cambio se vea en pantalla. */
-        const form_reactivo = this.form
-        const self = this
-        cargar_precios_vigentes(function () {
-          return api.get('/settings/precios-vigentes', { silent_error: true })
-        }).then(function () {
-          if (self.form !== form_reactivo || form_reactivo.contract_precios_sistemas) {
-            return
-          }
-          iniciar_precios_por_sistema(form_reactivo)
-        })
-      }
+      /* `this.form` es el proxy reactivo del formulario: se guarda para comparar y para que el cambio se vea. */
+      const form_reactivo = this.form
+      const self = this
+      cargar_precios_vigentes(function () {
+        return api.get('/settings/precios-vigentes', { silent_error: true })
+      }).then(function () {
+        self.version_fuente += 1
+        if (era_nuevo && self.form === form_reactivo) {
+          precargar_si_sigue_nuevo(form_reactivo, firma)
+        }
+      })
     },
     /**
      * GET client/{id}/contrato → `{contrato, lead_id, resumen_actualizacion}`.

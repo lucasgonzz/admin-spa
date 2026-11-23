@@ -79,13 +79,19 @@ import { SISTEMAS } from '@/utils/contract_modalidades'
 import { iniciar_precios_por_sistema, elegir_plan_gestion, opciones_de_plan, opciones_de_paquete_agentes, paquete_agentes_del_contrato, elegir_paquete_agentes, resumen_precios, resumen_anual, actualizar_totales, plan_historico_del_contrato } from '@/utils/contract_precios'
 
 export default {
-  props: { contrato: { type: Object, required: true }, id: { type: String, required: true } },
+  props: {
+    contrato: { type: Object, required: true },
+    id: { type: String, required: true },
+    /** Cuenta las veces que llegó la fuente de precios: el módulo de precios no es reactivo, así que el select
+        y los paquetes se recalculan cuando este número cambia. */
+    version_fuente: { type: Number, default: 0 },
+  },
   computed: {
     sistemas() { return SISTEMAS },
     /** Opciones del select de plan: los planes vigentes de la fuente (o el fallback) más el que el contrato conserva. */
-    opciones_plan() { return opciones_de_plan(this.contrato) },
+    opciones_plan() { return this.version_fuente >= 0 ? opciones_de_plan(this.contrato) : [] },
     /** Paquetes de tokens de Agentes de la fuente (vacío si la fuente no se pudo leer: no se muestra el selector). */
-    paquetes_agentes() { return opciones_de_paquete_agentes() },
+    paquetes_agentes() { return this.version_fuente >= 0 ? opciones_de_paquete_agentes() : [] },
     /** El selector de paquete: muestra el que coincide con el importe de Agentes y, al elegir, completa el importe. */
     paquete_agentes: {
       get() { return paquete_agentes_del_contrato(this.contrato) },

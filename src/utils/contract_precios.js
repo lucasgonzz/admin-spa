@@ -36,6 +36,9 @@ export const PLANES_HISTORICOS = [
  * Fuente única de precios (E4): estado del módulo y lectura
  * ================================================================================================== */
 
+/** Política de precios de las fotos de plan (la misma que arma la API). */
+const POLITICA_DE_LA_FOTO = '2026-11-21'
+
 /** La fuente de precios ya validada, o null si todavía no se pidió o el pedido falló (entonces rige el fallback). */
 let precios_vigentes = null
 
@@ -64,7 +67,7 @@ function fuente_es_usable(f) {
   if (!Array.isArray(paquetes) || !paquetes.length) return false
   if (paquetes.filter(p => p && typeof p.clave === 'string' && es_numero(p.mensualidad)).length !== paquetes.length) return false
   const impl = f.implementaciones
-  if (!impl || !Array.isArray(impl.items) || !impl.tres_juntos || !es_numero(impl.tres_juntos.descuento_porcentaje)) return false
+  if (!impl || !Array.isArray(impl.items) || !impl.tres_juntos || !es_numero(impl.tres_juntos.precio_lista) || !es_numero(impl.tres_juntos.precio)) return false
   return ['gestion', 'tienda', 'agentes'].every(clave => {
     const item = impl.items.find(i => i && i.clave === clave)
     return !!item && es_numero(item.precio)
@@ -86,24 +89,34 @@ export function precios_vigentes_cargados() {
   return precios_vigentes !== null
 }
 
+/** Tiempo máximo que se espera la fuente al abrir un contrato antes de usar el fallback (10 s). */
+export const TIMEOUT_FUENTE_MS = 10000
+
 /**
- * Pide la fuente una sola vez por sesión. `pedir` es una función que devuelve la promesa del GET (axios:
- * la respuesta trae `res.data`); así este archivo no importa nada y se puede probar en Node. Si el pedido
- * falla o la respuesta no sirve NO se rechaza: se resuelve con null y rige el fallback; el próximo contrato
- * que se abra lo vuelve a intentar.
- * @returns {Promise<Object|null>} La fuente, o null.
+ * Pide la fuente: UNA VEZ POR APERTURA de un contrato (no por sesión), para que el editor muestre siempre los
+ * rangos y precios de hoy. Dos aperturas simultáneas comparten el mismo pedido. `pedir` es una función que
+ * devuelve la promesa del GET (axios: la respuesta trae `res.data`); así este archivo no importa nada y se puede
+ * probar en Node. Si el pedido falla, se cuelga más de `timeout_ms` o la respuesta no sirve NO se rechaza: la
+ * fuente cargada se descarta y rige el fallback de siempre (el próximo contrato que se abra lo vuelve a intentar).
+ * @returns {Promise<Object|null>} La fuente, o null si rige el fallback.
  */
-export function cargar_precios_vigentes(pedir) {
-  if (precios_vigentes !== null) return Promise.resolve(precios_vigentes)
+export function cargar_precios_vigentes(pedir, timeout_ms = TIMEOUT_FUENTE_MS) {
   if (pedido_en_curso !== null) return pedido_en_curso
-  pedido_en_curso = Promise.resolve()
-    .then(pedir)
-    .then(res => { fijar_precios_vigentes(res && res.data) })
-    .catch(() => {})
-    .then(() => {
+  pedido_en_curso = new Promise(resolve => {
+    let cerrado = false
+    let temporizador = null
+    /* Cierra el pedido una sola vez: lo que llegue después (un GET tardío) se ignora. */
+    const cerrar = datos => {
+      if (cerrado) return
+      cerrado = true
+      clearTimeout(temporizador)
+      if (!fijar_precios_vigentes(datos)) precios_vigentes = null
       pedido_en_curso = null
-      return precios_vigentes
-    })
+      resolve(precios_vigentes)
+    }
+    temporizador = setTimeout(() => cerrar(null), timeout_ms)
+    Promise.resolve().then(pedir).then(res => cerrar(res && res.data), () => cerrar(null))
+  })
   return pedido_en_curso
 }
 
@@ -160,35 +173,85 @@ export function precios_por_defecto() {
 }
 
 /**
- * Descuento conjunto de un contrato nuevo: la lista de los tres × el porcentaje de «tres juntos» / 100, con dos
- * decimales (mismo cálculo que la API). Se guarda siempre, pero `resumen_precios` sólo lo resta con los tres
- * sistemas. Sin fuente, 0 como hasta ahora.
+ * Descuento conjunto de un contrato nuevo: `tres_juntos.precio_lista − tres_juntos.precio` de la fuente, o sea la
+ * fórmula única de la API (en pesos enteros), sin recalcularla acá. Se guarda siempre, pero `resumen_precios`
+ * sólo lo resta con los tres sistemas. Sin fuente, 0 como hasta ahora.
  */
 function descuento_conjunto_por_defecto() {
   if (precios_vigentes === null) return 0
-  const lista = ['gestion', 'tienda', 'agentes'].reduce((suma, clave) => suma + precio_de_implementacion(clave), 0)
-  return Math.round(lista * precios_vigentes.implementaciones.tres_juntos.descuento_porcentaje) / 100
+  const tres = precios_vigentes.implementaciones.tres_juntos
+  return tres.precio_lista - tres.precio
+}
+
+/**
+ * La vista previa de la foto del plan que la API va a sacar al guardar (misma forma). Sólo sirve para que el
+ * editor muestre el rango que va a decir el PDF: la API ignora lo que llegue y arma la suya desde la fuente.
+ */
+function foto_de_plan(plan) {
+  return {
+    clave: plan.clave, nombre: plan.nombre, desde: plan.desde, hasta: plan.limite, usuarios: plan.usuarios,
+    excedente: plan.excedente, abono_lista: plan.abono, politica: POLITICA_DE_LA_FOTO,
+  }
+}
+
+/**
+ * Las condiciones que el contrato tiene cargadas (las mismas que cuentan como «guardadas»), por clave. Lo que
+ * valga lo que trae un contrato vacío (USD, ARS, 6 meses, 0 usuarios extra) no cuenta.
+ * @param {Object} c
+ * @param {boolean} sin_sistemas No contar los sistemas tildados (el editor los completa solo con la cotización).
+ */
+function condiciones_cargadas(c, sin_sistemas) {
+  const cargadas = {}
+  const claves_de_valor = ['contract_client_name', 'contract_client_razon_social', 'contract_client_cuit',
+    'contract_precio_licencia', 'contract_mensualidad_base', 'contract_modalidad', 'contract_fecha_emision',
+    'contract_fecha_primer_pago_unico', 'contract_fecha_primer_pago_mensual', 'contract_permanencia_meses']
+  claves_de_valor.forEach(k => { if (c[k] !== null && c[k] !== undefined && c[k] !== '') cargadas[k] = c[k] })
+  const claves_de_lista = ['contract_financiacion', 'contract_clausulas_particulares']
+  if (!sin_sistemas) claves_de_lista.push('contract_sistemas')
+  claves_de_lista.forEach(k => { if (Array.isArray(c[k]) && c[k].length > 0) cargadas[k] = c[k] })
+  if (c.contract_mes_gratis === true) cargadas.contract_mes_gratis = true
+  if (c.contract_plan_gestion != null && c.contract_plan_gestion !== '') cargadas.contract_plan_gestion = c.contract_plan_gestion
+  if (c.contract_pago_anual === true) cargadas.contract_pago_anual = true
+  if (c.contract_descuento_conjunto != null) cargadas.contract_descuento_conjunto = c.contract_descuento_conjunto
+  if (c.contract_currency != null && c.contract_currency !== '' && c.contract_currency !== 'USD') cargadas.contract_currency = c.contract_currency
+  if (c.contract_mensualidad_moneda != null && c.contract_mensualidad_moneda !== '' && c.contract_mensualidad_moneda !== 'ARS') cargadas.contract_mensualidad_moneda = c.contract_mensualidad_moneda
+  if (c.contract_meses_actualizacion != null && Number(c.contract_meses_actualizacion) !== 6) cargadas.contract_meses_actualizacion = c.contract_meses_actualizacion
+  if (Number(c.contract_usuarios_extra) > 0) cargadas.contract_usuarios_extra = c.contract_usuarios_extra
+  if (Number(c.contract_perfiles_ecommerce) > 0) cargadas.contract_perfiles_ecommerce = c.contract_perfiles_ecommerce
+  return cargadas
 }
 
 export function tiene_condiciones_guardadas(c) {
-  return ['contract_client_name', 'contract_client_razon_social', 'contract_client_cuit',
-    'contract_precio_licencia', 'contract_mensualidad_base', 'contract_modalidad', 'contract_fecha_emision',
-    'contract_fecha_primer_pago_unico', 'contract_fecha_primer_pago_mensual', 'contract_permanencia_meses']
-    .some(k => c[k] !== null && c[k] !== undefined && c[k] !== '') ||
-    ['contract_financiacion', 'contract_clausulas_particulares', 'contract_sistemas'].some(k => Array.isArray(c[k]) && c[k].length > 0) ||
-    c.contract_mes_gratis === true ||
-    (c.contract_plan_gestion != null && c.contract_plan_gestion !== '') ||
-    c.contract_pago_anual === true ||
-    c.contract_descuento_conjunto != null ||
-    (c.contract_currency != null && c.contract_currency !== '' && c.contract_currency !== 'USD') ||
-    (c.contract_mensualidad_moneda != null && c.contract_mensualidad_moneda !== '' && c.contract_mensualidad_moneda !== 'ARS') ||
-    (c.contract_meses_actualizacion != null && Number(c.contract_meses_actualizacion) !== 6) ||
-    Number(c.contract_usuarios_extra) > 0 || Number(c.contract_perfiles_ecommerce) > 0
+  return Object.keys(condiciones_cargadas(c, false)).length > 0
+}
+
+/**
+ * Una «firma» de las condiciones cargadas del contrato (sin los sistemas, que el editor completa solo). Se toma
+ * al abrir el contrato y se compara cuando llega la fuente: si cambió, el operador ya tocó algo y no se precarga.
+ */
+export function firma_de_condiciones(c) {
+  return JSON.stringify(condiciones_cargadas(c, true))
+}
+
+/**
+ * Precarga tardía (cuando llega la fuente, después de abrir el contrato): sólo si el contrato SIGUE siendo nuevo,
+ * o sea sin desglose y con las mismas condiciones que tenía al abrirlo. Si el operador ya cargó algo, o el
+ * contrato ya estaba guardado, no se toca nada.
+ * @returns {boolean} true si lo precargó.
+ */
+export function precargar_si_sigue_nuevo(c, firma) {
+  if (c.contract_precios_sistemas || firma_de_condiciones(c) !== firma) return false
+  iniciar_precios_por_sistema(c)
+  return true
 }
 
 export function iniciar_precios_por_sistema(c) {
   c.contract_precios_sistemas = precios_por_defecto()
-  c.contract_plan_gestion = null
+  /* Con la fuente, el contrato nuevo arranca con el plan Inicial elegido (la API le saca la foto al guardar y la
+     cobranza usa sus cortes); «Sin plan» sigue disponible a mano. Sin fuente, sin plan como siempre. */
+  const plan_inicial = precios_vigentes !== null ? planes_vigentes_actuales()[0] : null
+  c.contract_plan_gestion = plan_inicial ? plan_inicial.clave : null
+  c.contract_plan_gestion_foto = plan_inicial ? foto_de_plan(plan_inicial) : null
   /* Sin descuento por contratar los tres (era USD 300 cuando el conjunto valía USD 1.500 contra
      USD 1.800 de lista; con Gestión sin licencia ya no hay conjunto que descontar). Editable. */
   c.contract_descuento_conjunto = descuento_conjunto_por_defecto()
@@ -222,12 +285,15 @@ export function precargar_precios_si_es_nuevo(c) {
 export function elegir_plan_gestion(c, clave) {
   if (clave === '' || clave == null) {
     c.contract_plan_gestion = null
+    c.contract_plan_gestion_foto = null
     return
   }
   /* Sólo se elige un plan que hoy se ofrece: Plus u otros que la fuente ya no tiene quedan como opción deshabilitada. */
   const plan = planes_vigentes_actuales().find(p => p.clave === clave)
   if (!plan) return
   c.contract_plan_gestion = plan.clave
+  /* Vista previa de la foto que sacará la API (sólo con la fuente cargada; con el fallback no hay foto). */
+  c.contract_plan_gestion_foto = precios_vigentes !== null ? foto_de_plan(plan) : null
   if (plan.abono != null && c.contract_precios_sistemas?.gestion) {
     c.contract_precios_sistemas.gestion.mensualidad = plan.abono
     actualizar_totales(c)
@@ -251,10 +317,22 @@ export function opciones_de_plan(c) {
       disabled: true,
     })
   }
-  vigentes.forEach(plan => {
-    opciones.push({ clave: plan.clave, texto: nombre_del_plan(plan), disabled: !!(historico && historico.clave === plan.clave) })
-  })
   const guardado = c && c.contract_plan_gestion
+  const foto = c && c.contract_plan_gestion_foto
+  vigentes.forEach(plan => {
+    let texto = nombre_del_plan(plan)
+    if (guardado === plan.clave && !historico) {
+      /* El plan guardado dice lo que dice el PDF: con foto, el rango de la foto; sin foto (contrato firmado antes
+         de E4), el de la política del 3/11/2026. Las demás opciones salen de la fuente. */
+      if (foto && foto.clave === guardado && foto.nombre != null && foto.desde != null) {
+        texto = nombre_del_plan({ clave: foto.clave, nombre: foto.nombre, desde: foto.desde, limite: foto.hasta })
+      } else {
+        const de_la_politica = PLANES_GESTION.find(p => p.clave === guardado)
+        if (de_la_politica) texto = nombre_del_plan(de_la_politica)
+      }
+    }
+    opciones.push({ clave: plan.clave, texto, disabled: !!(historico && historico.clave === plan.clave) })
+  })
   if (guardado && !historico && !vigentes.some(p => p.clave === guardado)) {
     const anterior = PLANES_GESTION.find(p => p.clave === guardado)
     if (anterior) opciones.push({ clave: anterior.clave, texto: nombre_del_plan(anterior) + ' (política anterior)', disabled: true })
