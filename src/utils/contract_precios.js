@@ -1,4 +1,9 @@
 /**
+ * FALLBACK de los planes de Gestión (misión embudo-whatsapp-precios, E4): los vigentes se leen de la fuente
+ * única de precios (`GET admin/settings/precios-vigentes`, ver `cargar_precios_vigentes`); estas constantes se
+ * usan sólo si ese pedido falla, y para mostrar con su rango de siempre un plan que la fuente ya no ofrece
+ * (`plus`, `a_medida`) en un contrato guardado.
+ *
  * Planes de Gestión por OPERACIONES mensuales (ventas + compras + gastos), política del 3/11/2026
  * (programa «Prueba gratuita de 7 días»): misma tabla que `ContractPreciosService::PLANES_GESTION` de
  * la API y que el manual de precios. `desde`/`limite` son las operaciones por mes que cubre el plan;
@@ -26,6 +31,103 @@ export const PLANES_HISTORICOS = [
   { clave: 'pro', nombre: 'Pro', limite: 7000, abono: 105600 },
 ]
 
+
+/* ==================================================================================================
+ * Fuente única de precios (E4): estado del módulo y lectura
+ * ================================================================================================== */
+
+/** La fuente de precios ya validada, o null si todavía no se pidió o el pedido falló (entonces rige el fallback). */
+let precios_vigentes = null
+
+/** El pedido en curso, para que dos contratos abiertos a la vez no pidan la fuente dos veces. */
+let pedido_en_curso = null
+
+/** ¿Es un número finito? (un string o un null no valen para un precio) */
+function es_numero(valor) {
+  return typeof valor === 'number' && isFinite(valor)
+}
+
+/**
+ * ¿La respuesta es un contrato v2 usable por el editor? Mira sólo lo que el editor necesita: planes de
+ * gestión con rango y abono, mensualidad de tienda, paquetes de agentes, precio de cada implementación y
+ * el porcentaje de los tres juntos. Una forma vieja o rota se descarta (rige el fallback).
+ */
+function fuente_es_usable(f) {
+  if (!f || typeof f !== 'object') return false
+  const planes = f.gestion && f.gestion.planes
+  if (!Array.isArray(planes) || !planes.length) return false
+  const planes_ok = planes.filter(p => p && typeof p.clave === 'string' && typeof p.nombre === 'string' &&
+    es_numero(p.abono) && es_numero(p.desde) && (p.hasta === null || es_numero(p.hasta))).length === planes.length
+  if (!planes_ok) return false
+  if (!f.tienda || !es_numero(f.tienda.mensualidad)) return false
+  const paquetes = f.agentes && f.agentes.paquetes
+  if (!Array.isArray(paquetes) || !paquetes.length) return false
+  if (paquetes.filter(p => p && typeof p.clave === 'string' && es_numero(p.mensualidad)).length !== paquetes.length) return false
+  const impl = f.implementaciones
+  if (!impl || !Array.isArray(impl.items) || !impl.tres_juntos || !es_numero(impl.tres_juntos.descuento_porcentaje)) return false
+  return ['gestion', 'tienda', 'agentes'].every(clave => {
+    const item = impl.items.find(i => i && i.clave === clave)
+    return !!item && es_numero(item.precio)
+  })
+}
+
+/**
+ * Guarda la fuente si es usable.
+ * @returns {boolean} true si quedó cargada, false si se descartó.
+ */
+export function fijar_precios_vigentes(f) {
+  if (!fuente_es_usable(f)) return false
+  precios_vigentes = f
+  return true
+}
+
+/** ¿Hay una fuente cargada? (si no, el editor usa el fallback de siempre) */
+export function precios_vigentes_cargados() {
+  return precios_vigentes !== null
+}
+
+/**
+ * Pide la fuente una sola vez por sesión. `pedir` es una función que devuelve la promesa del GET (axios:
+ * la respuesta trae `res.data`); así este archivo no importa nada y se puede probar en Node. Si el pedido
+ * falla o la respuesta no sirve NO se rechaza: se resuelve con null y rige el fallback; el próximo contrato
+ * que se abra lo vuelve a intentar.
+ * @returns {Promise<Object|null>} La fuente, o null.
+ */
+export function cargar_precios_vigentes(pedir) {
+  if (precios_vigentes !== null) return Promise.resolve(precios_vigentes)
+  if (pedido_en_curso !== null) return pedido_en_curso
+  pedido_en_curso = Promise.resolve()
+    .then(pedir)
+    .then(res => { fijar_precios_vigentes(res && res.data) })
+    .catch(() => {})
+    .then(() => {
+      pedido_en_curso = null
+      return precios_vigentes
+    })
+  return pedido_en_curso
+}
+
+/**
+ * Los planes que se ofrecen hoy, con la forma de `PLANES_GESTION` (`limite` = `hasta` de la fuente; null =
+ * sin tope). Con la fuente cargada son los suyos; sin ella, el fallback.
+ */
+function planes_vigentes_actuales() {
+  if (precios_vigentes === null) return PLANES_GESTION
+  return precios_vigentes.gestion.planes.map(p => ({
+    clave: p.clave, nombre: p.nombre, desde: p.desde, limite: p.hasta, abono: p.abono, usuarios: p.usuarios, excedente: p.excedente,
+  }))
+}
+
+/** El precio de implementación de un sistema en la fuente (`gestion`, `tienda`, `agentes`). */
+function precio_de_implementacion(clave) {
+  return precios_vigentes.implementaciones.items.find(i => i.clave === clave).precio
+}
+
+/** Paquetes de tokens de Agentes de la fuente (vacío sin fuente). */
+function paquetes_de_agentes() {
+  return precios_vigentes === null ? [] : precios_vigentes.agentes.paquetes
+}
+
 /**
  * Un contrato nuevo no trae plan elegido («Sin plan»): el abono de Gestión arranca en el del plan
  * Inicial y el operador elige el plan (que lo precarga) o carga el importe acordado.
@@ -40,11 +142,32 @@ const ABONO_GESTION_POR_DEFECTO = 55900
  * prueba gratuita: se edita a mano). Hasta esa fecha precargaba USD 800 / 500 / 500.
  */
 export function precios_por_defecto() {
+  if (precios_vigentes !== null) {
+    /* Precios nuevos en pesos (decisión de Lucas, 23/11/2026): licencia de implementación de la fuente en los
+       tres sistemas, abono de gestión del primer plan (Inicial), tienda de la fuente y agentes del primer
+       paquete (Inicial). Todo sigue editable a mano. */
+    return {
+      gestion: { licencia: precio_de_implementacion('gestion'), mensualidad: precios_vigentes.gestion.planes[0].abono },
+      ecommerce: { licencia: precio_de_implementacion('tienda'), mensualidad: precios_vigentes.tienda.mensualidad },
+      agentes: { licencia: precio_de_implementacion('agentes'), mensualidad: precios_vigentes.agentes.paquetes[0].mensualidad },
+    }
+  }
   return {
     gestion: { licencia: 0, mensualidad: ABONO_GESTION_POR_DEFECTO },
     ecommerce: { licencia: 800, mensualidad: 20000 },
     agentes: { licencia: 800, mensualidad: 30000 },
   }
+}
+
+/**
+ * Descuento conjunto de un contrato nuevo: la lista de los tres × el porcentaje de «tres juntos» / 100, con dos
+ * decimales (mismo cálculo que la API). Se guarda siempre, pero `resumen_precios` sólo lo resta con los tres
+ * sistemas. Sin fuente, 0 como hasta ahora.
+ */
+function descuento_conjunto_por_defecto() {
+  if (precios_vigentes === null) return 0
+  const lista = ['gestion', 'tienda', 'agentes'].reduce((suma, clave) => suma + precio_de_implementacion(clave), 0)
+  return Math.round(lista * precios_vigentes.implementaciones.tres_juntos.descuento_porcentaje) / 100
 }
 
 export function tiene_condiciones_guardadas(c) {
@@ -68,11 +191,12 @@ export function iniciar_precios_por_sistema(c) {
   c.contract_plan_gestion = null
   /* Sin descuento por contratar los tres (era USD 300 cuando el conjunto valía USD 1.500 contra
      USD 1.800 de lista; con Gestión sin licencia ya no hay conjunto que descontar). Editable. */
-  c.contract_descuento_conjunto = 0
+  c.contract_descuento_conjunto = descuento_conjunto_por_defecto()
   c.contract_mes_gratis = false
   c.contract_meses_actualizacion = 6
   c.contract_modalidad = 'licencia'
-  c.contract_currency = 'USD'
+  /* Con la fuente cargada el contrato nuevo es en pesos; sin ella, USD como siempre. */
+  c.contract_currency = precios_vigentes !== null ? 'ARS' : 'USD'
   c.contract_mensualidad_moneda = 'ARS'
   c.contract_perfiles_ecommerce = 0
   c.contract_precio_perfil_ecommerce = ''
@@ -81,16 +205,86 @@ export function iniciar_precios_por_sistema(c) {
 }
 
 /**
+ * Precarga los precios SÓLO si el contrato es nuevo (sin desglose ni condiciones guardadas). Un contrato ya
+ * guardado no se recalcula nunca al abrirlo, aunque la fuente de precios haya cambiado.
+ * @returns {boolean} true si lo precargó.
+ */
+export function precargar_precios_si_es_nuevo(c) {
+  if (c.contract_precios_sistemas || tiene_condiciones_guardadas(c)) return false
+  iniciar_precios_por_sistema(c)
+  return true
+}
+
+/**
  * Elige el plan de Gestión del contrato. Un plan con abono precarga la mensualidad de Gestión
  * (sigue siendo editable); a medida y la opción vacía (importe acordado) no tocan el importe.
  */
 export function elegir_plan_gestion(c, clave) {
-  const plan = PLANES_GESTION.find(p => p.clave === clave)
-  c.contract_plan_gestion = plan ? plan.clave : null
-  if (plan && plan.abono != null && c.contract_precios_sistemas?.gestion) {
+  if (clave === '' || clave == null) {
+    c.contract_plan_gestion = null
+    return
+  }
+  /* Sólo se elige un plan que hoy se ofrece: Plus u otros que la fuente ya no tiene quedan como opción deshabilitada. */
+  const plan = planes_vigentes_actuales().find(p => p.clave === clave)
+  if (!plan) return
+  c.contract_plan_gestion = plan.clave
+  if (plan.abono != null && c.contract_precios_sistemas?.gestion) {
     c.contract_precios_sistemas.gestion.mensualidad = plan.abono
     actualizar_totales(c)
   }
+}
+
+/**
+ * Las opciones del select de plan de Gestión: los planes que se ofrecen hoy (con su rango), más, deshabilitadas,
+ * el plan histórico por ventas que el contrato conserva y el plan que la fuente ya no ofrece (`plus`,
+ * `a_medida`) si el contrato lo tiene guardado. Así guardar no pierde el plan.
+ * @returns {Array<{clave: string, texto: string, disabled: boolean}>}
+ */
+export function opciones_de_plan(c) {
+  const vigentes = planes_vigentes_actuales()
+  const historico = plan_historico_del_contrato(c)
+  const opciones = []
+  if (historico) {
+    opciones.push({
+      clave: historico.clave,
+      texto: historico.nombre + ' — hasta ' + historico.limite.toLocaleString('es-AR') + ' ventas por mes (política anterior)',
+      disabled: true,
+    })
+  }
+  vigentes.forEach(plan => {
+    opciones.push({ clave: plan.clave, texto: nombre_del_plan(plan), disabled: !!(historico && historico.clave === plan.clave) })
+  })
+  const guardado = c && c.contract_plan_gestion
+  if (guardado && !historico && !vigentes.some(p => p.clave === guardado)) {
+    const anterior = PLANES_GESTION.find(p => p.clave === guardado)
+    if (anterior) opciones.push({ clave: anterior.clave, texto: nombre_del_plan(anterior) + ' (política anterior)', disabled: true })
+  }
+  return opciones
+}
+
+/**
+ * Los paquetes de tokens de Agentes para el selector (Inicial / Pro / Max). Vacío sin fuente: el selector no se muestra.
+ * @returns {Array<{clave: string, nombre: string, mensualidad: number}>}
+ */
+export function opciones_de_paquete_agentes() {
+  const opciones = []
+  paquetes_de_agentes().forEach(p => opciones.push({ clave: p.clave, nombre: p.nombre, mensualidad: p.mensualidad }))
+  return opciones
+}
+
+/** El paquete cuyo importe es el de Agentes del contrato, o '' si el importe se cargó a mano. */
+export function paquete_agentes_del_contrato(c) {
+  const importe = Number(c?.contract_precios_sistemas?.agentes?.mensualidad)
+  const paquete = paquetes_de_agentes().find(p => p.mensualidad === importe)
+  return paquete ? paquete.clave : ''
+}
+
+/** Elige un paquete de Agentes: sólo completa la mensualidad (editable); no se guarda el nombre del paquete. */
+export function elegir_paquete_agentes(c, clave) {
+  const paquete = paquetes_de_agentes().find(p => p.clave === clave)
+  if (!paquete || !c?.contract_precios_sistemas?.agentes) return
+  c.contract_precios_sistemas.agentes.mensualidad = paquete.mensualidad
+  actualizar_totales(c)
 }
 
 /**
@@ -111,6 +305,8 @@ export function plan_historico_del_contrato(c) {
 export function nombre_del_plan(plan) {
   const miles = n => n.toLocaleString('es-AR')
   if (plan.limite == null) {
+    /* Sin tope: `a_medida` (política 3/11) se lee «más de 3.000»; Empresa de la fuente es ilimitado. */
+    if (plan.clave !== 'a_medida') return plan.nombre + ' — operaciones ilimitadas'
     const ultimo = PLANES_GESTION.filter(p => p.limite != null).pop()
     return plan.nombre + ' — más de ' + miles(ultimo.limite) + ' operaciones por mes'
   }

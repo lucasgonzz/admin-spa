@@ -309,7 +309,7 @@
 
 <script>
 import PreciosPorSistema from '@/components/lead/contract/PreciosPorSistema.vue'
-import { actualizar_totales, iniciar_precios_por_sistema, tiene_condiciones_guardadas, aplicar_defaults_anuales } from '@/utils/contract_precios'
+import { actualizar_totales, iniciar_precios_por_sistema, precargar_precios_si_es_nuevo, cargar_precios_vigentes, precios_vigentes_cargados, tiene_condiciones_guardadas, aplicar_defaults_anuales } from '@/utils/contract_precios'
 import api, { resolve_error_message } from '@/utils/axios'
 import clause_templates from '@/utils/contract_clause_templates'
 import {
@@ -603,11 +603,29 @@ export default {
         contract_descuento_anual: c.contract_descuento_anual ?? 20,
         contract_copiado_desde_lead_at: c.contract_copiado_desde_lead_at || null,
       }
-      if (!nuevo_form.contract_precios_sistemas && !tiene_condiciones_guardadas(c)) {
-        iniciar_precios_por_sistema(nuevo_form)
+      /* Contrato nuevo (sin desglose ni condiciones guardadas): se precargan los precios de la fuente única
+         (`GET settings/precios-vigentes`, una vez por sesión). Un contrato guardado no se recalcula nunca. */
+      const es_nuevo = !nuevo_form.contract_precios_sistemas && !tiene_condiciones_guardadas(c)
+      if (es_nuevo && precios_vigentes_cargados()) {
+        precargar_precios_si_es_nuevo(nuevo_form)
       }
       aplicar_defaults_anuales(nuevo_form)
       this.form = nuevo_form
+      if (es_nuevo && !precios_vigentes_cargados()) {
+        /* La fuente todavía no llegó: se pide y se precarga al llegar (o con el fallback de siempre si falla),
+           siempre que el formulario abierto siga siendo este y siga sin desglose. `this.form` es el proxy
+           reactivo del formulario: se guarda para comparar y para que el cambio se vea en pantalla. */
+        const form_reactivo = this.form
+        const self = this
+        cargar_precios_vigentes(function () {
+          return api.get('/settings/precios-vigentes', { silent_error: true })
+        }).then(function () {
+          if (self.form !== form_reactivo || form_reactivo.contract_precios_sistemas) {
+            return
+          }
+          iniciar_precios_por_sistema(form_reactivo)
+        })
+      }
     },
     /**
      * GET client/{id}/contrato → `{contrato, lead_id, resumen_actualizacion}`.

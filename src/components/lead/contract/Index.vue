@@ -319,7 +319,7 @@
 
 <script>
 import PreciosPorSistema from '@/components/lead/contract/PreciosPorSistema.vue'
-import { actualizar_totales, iniciar_precios_por_sistema, tiene_condiciones_guardadas, aplicar_defaults_anuales } from '@/utils/contract_precios'
+import { actualizar_totales, iniciar_precios_por_sistema, precargar_precios_si_es_nuevo, cargar_precios_vigentes, precios_vigentes_cargados, tiene_condiciones_guardadas, aplicar_defaults_anuales } from '@/utils/contract_precios'
 import api, { resolve_error_message } from '@/utils/axios'
 import clause_templates from '@/utils/contract_clause_templates'
 import {
@@ -555,6 +555,33 @@ export default {
       }
     },
     /**
+     * Precarga los precios de un contrato NUEVO con los de la fuente única (`GET settings/precios-vigentes`, una
+     * vez por sesión): moneda ARS, licencias de implementación, descuento conjunto y mensualidades de la fuente.
+     * Si la fuente todavía no llegó se pide y se precarga al llegar, siempre que el lead abierto siga siendo el
+     * mismo y siga sin desglose; si el pedido falla se precarga el fallback de siempre (USD, 0 / 800 / 800).
+     * Un contrato ya guardado no se toca nunca (ver `precargar_precios_si_es_nuevo`).
+     * @returns {void}
+     */
+    precargar_precios_del_contrato_nuevo() {
+      const registro = this.record
+      if (!registro || registro.contract_precios_sistemas || tiene_condiciones_guardadas(registro)) {
+        return
+      }
+      if (precios_vigentes_cargados()) {
+        precargar_precios_si_es_nuevo(registro)
+        return
+      }
+      const self = this
+      cargar_precios_vigentes(function () {
+        return api.get('/settings/precios-vigentes', { silent_error: true })
+      }).then(function () {
+        if (self.record !== registro || registro.contract_precios_sistemas) {
+          return
+        }
+        iniciar_precios_por_sistema(registro)
+      })
+    },
+    /**
      * Valores por defecto de monedas y contadores numéricos del contrato, y la forma de los
      * campos de la modalidad (sin elegir una modalidad: ver el comentario de adentro).
      * @returns {void}
@@ -563,9 +590,9 @@ export default {
       if (!this.record) {
         return
       }
-      if (!this.record.contract_precios_sistemas && !tiene_condiciones_guardadas(this.record)) {
-        iniciar_precios_por_sistema(this.record)
-      }
+      /* 🔴 Va ANTES de los defaults de abajo: más abajo se cargan los sistemas de la cotización, y con eso el
+         contrato ya parecería tener condiciones guardadas y no se lo reconocería como nuevo. */
+      this.precargar_precios_del_contrato_nuevo()
       if (!this.record.contract_currency) {
         this.record.contract_currency = 'USD'
       }
