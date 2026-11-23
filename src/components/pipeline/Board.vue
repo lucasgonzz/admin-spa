@@ -23,6 +23,7 @@
       :draggable_enabled="draggable_enabled"
       @open="$emit('open', $event)"
       @move="$emit('move', { opportunity: $event, stage_id: null })"
+      @registrar-llamada="$emit('registrar-llamada', $event)"
       @card-dragstart="on_drag_start"
       @card-dragend="on_drag_end"
       @column-dragover="drag_over_stage_id = stage.id"
@@ -48,7 +49,7 @@ export default {
     /** false = sin arrastre (solo botón "Mover"). */
     draggable_enabled: { type: Boolean, default: true },
   },
-  emits: ['open', 'move'],
+  emits: ['open', 'move', 'registrar-llamada'],
   data() {
     return {
       /** Oportunidad que se está arrastrando. */

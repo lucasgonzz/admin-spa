@@ -28,8 +28,10 @@
         :opportunity="opportunity"
         :is_dragging="Number(dragging_id) === Number(opportunity.id)"
         :draggable_enabled="draggable_enabled"
+        :show_call_button="true"
         @open="$emit('open', $event)"
         @move="$emit('move', $event)"
+        @registrar-llamada="$emit('registrar-llamada', $event)"
         @dragstart="$emit('card-dragstart', $event)"
         @dragend="$emit('card-dragend', $event)"
       />
@@ -59,7 +61,7 @@ export default {
     /** false = sin arrastre. */
     draggable_enabled: { type: Boolean, default: true },
   },
-  emits: ['open', 'move', 'card-dragstart', 'card-dragend', 'column-dragover', 'column-drop'],
+  emits: ['open', 'move', 'registrar-llamada', 'card-dragstart', 'card-dragend', 'column-dragover', 'column-drop'],
   computed: {
     /** @returns {string} */
     type_label() {

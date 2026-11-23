@@ -5,6 +5,10 @@
     Click (o Enter) abre la ficha. En escritorio se puede arrastrar a otra columna; en pantallas
     táctiles el arrastre HTML5 no anda, así que el botón "Mover" abre el mismo modal con el selector
     de etapa. Nada se mueve en la base hasta que el modal confirma.
+
+    Misión embudo-juan-pipeline (E1): en las tarjetas de leads abiertas del tablero se suma «Registrar
+    llamada» (el padre abre el modal) y, si la API la trae, la línea «Cotizado: …» con lo último que se
+    le cotizó al lead.
   -->
   <article
     class="pl-card"
@@ -35,10 +39,26 @@
       <next-action-text :opportunity="opportunity" />
     </p>
 
+    <p v-if="opportunity.cotizado" class="pl-card__cotizado" :title="'Cotizado: ' + opportunity.cotizado">
+      <i class="bi bi-cash-coin" aria-hidden="true" />
+      <span class="pl-card__cotizado-text">Cotizado: {{ opportunity.cotizado }}</span>
+    </p>
+
     <p v-if="last_activity_text" class="pl-card__last" :title="last_activity_title">
       <span class="pl-card__last-text">{{ last_activity_text }}</span>
       <span v-if="last_activity_when" class="pl-card__last-when">{{ last_activity_when }}</span>
     </p>
+
+    <button
+      v-if="can_register_call"
+      type="button"
+      class="btn btn-sm pl-card__call"
+      title="Dejar asentado qué se habló en la llamada"
+      @click.stop="$emit('registrar-llamada', opportunity)"
+      @keydown.enter.stop
+    >
+      <i class="bi bi-telephone-plus" aria-hidden="true" />Registrar llamada
+    </button>
 
     <div class="pl-card__footer">
       <owner-avatar :owner="opportunity.owner" />
@@ -83,9 +103,27 @@ export default {
     show_pipeline: { type: Boolean, default: false },
     /** Muestra la etapa (agenda: ahí no hay columna que la diga). */
     show_stage: { type: Boolean, default: false },
+    /**
+     * true = ofrece «Registrar llamada» en las tarjetas de leads abiertas. Sólo lo prende el tablero,
+     * que sabe abrir el modal; la agenda no, así que ahí el botón no aparece.
+     */
+    show_call_button: { type: Boolean, default: false },
   },
-  emits: ['open', 'move', 'dragstart', 'dragend'],
+  emits: ['open', 'move', 'dragstart', 'dragend', 'registrar-llamada'],
   computed: {
+    /**
+     * true si corresponde mostrar «Registrar llamada»: la ofrece el padre, la tarjeta es de un lead
+     * (con su id, porque la llamada se registra sobre el lead) y la oportunidad sigue abierta.
+     * @returns {boolean}
+     */
+    can_register_call() {
+      const stage = this.opportunity.stage
+      return this.show_call_button
+        && this.opportunity.subject_type === 'lead'
+        && !!this.opportunity.lead_id
+        && !!stage
+        && stage.type === 'open'
+    },
     /** @returns {Object} */
     subject() {
       return this.opportunity.subject || {}
@@ -231,6 +269,44 @@ export default {
   min-width: 0;
   margin-top: 0.45rem !important;
   font-size: 0.8rem;
+}
+
+.pl-card__cotizado {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  min-width: 0;
+  margin-top: 0.3rem !important;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.pl-card__cotizado-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pl-card__call {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  width: 100%;
+  margin-top: 0.55rem;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+  border: 1px solid var(--color-primary);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--color-primary);
+}
+
+.pl-card__call:hover,
+.pl-card__call:focus-visible {
+  background: var(--bg-hover);
 }
 
 .pl-card__last {

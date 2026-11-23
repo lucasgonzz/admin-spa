@@ -7,6 +7,12 @@
     búsqueda, chips de vencidas y de hoy) y el resumen (abiertas / ganadas / perdidas / tasa) con el
     embudo desplegable.
 
+    Misión embudo-juan-pipeline (E1): es también el tablero de Juan (perfil «Sólo Leads»). Con ese
+    perfil la pantalla muestra «Mis tareas» arriba y esconde lo que el backend le niega: el enlace a
+    Configuración, «Agregar», el cambio de pipeline (sólo ve el de leads) y el filtro de responsable.
+    Para todos, la tarjeta de un lead abierto tiene «Registrar llamada», que abre el modal y mueve la
+    tarjeta a la columna que corresponde.
+
     Todo sale de un solo pedido: GET pipelines/{id}/opportunities, que devuelve las oportunidades y
     el `resumen`. El resumen lo calcula el back SIN la búsqueda ni los chips (solo respeta
     responsable y tipo de sujeto), así el embudo no se achica al buscar.
@@ -17,10 +23,13 @@
         <h2 class="h4 mb-0">Pipelines</h2>
         <p v-if="pipeline && pipeline.description" class="pl-head__desc">{{ pipeline.description }}</p>
       </div>
-      <router-link class="btn btn-link btn-sm pl-head__config" :to="config_link">
+      <router-link v-if="!es_perfil_solo_leads" class="btn btn-link btn-sm pl-head__config" :to="config_link">
         <i class="bi bi-sliders" aria-hidden="true" />Configurar
       </router-link>
     </div>
+
+    <!-- Tareas abiertas del admin (sólo el perfil «Sólo Leads», que no ve Tareas). -->
+    <mis-tareas v-if="es_perfil_solo_leads" ref="mis_tareas" />
 
     <div v-if="pipelines_error" class="alert alert-danger d-flex flex-wrap align-items-center gap-2">
       <span>{{ pipelines_error }}</span>
@@ -42,7 +51,7 @@
     <template v-else>
       <!-- Pipeline, vista y alta -->
       <div class="pl-toolbar">
-        <div class="pl-toolbar__pipeline">
+        <div v-if="!es_perfil_solo_leads" class="pl-toolbar__pipeline">
           <label class="visually-hidden" for="pl-tablero-pipeline">Pipeline</label>
           <select
             id="pl-tablero-pipeline"
@@ -81,6 +90,7 @@
             </button>
           </div>
           <button
+            v-if="!es_perfil_solo_leads"
             type="button"
             class="btn btn-primary btn-sm"
             :disabled="!pipeline"
@@ -95,6 +105,7 @@
       <!-- Filtros -->
       <div class="pl-filters">
         <select
+          v-if="!es_perfil_solo_leads"
           v-model="filters.owner_admin_id"
           class="form-select form-select-sm pl-filters__owner"
           aria-label="Responsable"
@@ -235,6 +246,7 @@
           :opportunities="opportunities"
           @open="open_opportunity"
           @move="open_move_modal"
+          @registrar-llamada="open_call_modal"
         />
         <opportunity-list
           v-else
@@ -266,6 +278,17 @@
       @close="on_opportunity_closed"
       @changed="on_opportunity_changed"
       @deleted="on_opportunity_deleted"
+      @registrada="on_call_registered"
+    />
+
+    <registrar-llamada-modal
+      v-if="call_modal.show"
+      :key="'llamada-' + call_modal.key"
+      :show="true"
+      :lead_id="call_modal.lead_id"
+      :lead_name="call_modal.lead_name"
+      @close="call_modal.show = false"
+      @registrada="on_call_registered"
     />
 
     <add-modal
@@ -287,7 +310,10 @@ import MoveModal from '@/components/pipeline/MoveModal.vue'
 import OpportunityModal from '@/components/pipeline/OpportunityModal.vue'
 import AddModal from '@/components/pipeline/AddModal.vue'
 import StageTag from '@/components/pipeline/StageTag.vue'
-import { show_toast, sort_stages_for_board } from '@/components/pipeline/pipeline_helpers'
+import MisTareas from '@/components/pipeline/MisTareas.vue'
+import RegistrarLlamadaModal from '@/components/lead/RegistrarLlamadaModal.vue'
+import { es_solo_leads } from '@/utils/solo_leads'
+import { show_toast, sort_stages_for_board, subject_name } from '@/components/pipeline/pipeline_helpers'
 
 /** Clave de localStorage del último pipeline elegido. */
 const STORAGE_PIPELINE_KEY = 'admin_pipelines_pipeline_id'
@@ -348,7 +374,7 @@ function empty_filters() {
 
 export default {
   name: 'ViewPipelinesTablero',
-  components: { PipelineBoard, OpportunityList, MoveModal, OpportunityModal, AddModal, StageTag },
+  components: { PipelineBoard, OpportunityList, MoveModal, OpportunityModal, AddModal, StageTag, MisTareas, RegistrarLlamadaModal },
   data() {
     const stored_view = storage_get(STORAGE_VIEW_KEY)
     return {
@@ -379,6 +405,8 @@ export default {
       move_modal: { show: false, opportunity: null, stage_id: null, key: 0 },
       opportunity_modal: { show: false, opportunity_id: null, key: 0 },
       add_modal: { show: false, key: 0 },
+      /** Modal «Registrar llamada»: el lead al que se le registra y cómo se llama (para el título). */
+      call_modal: { show: false, lead_id: null, lead_name: '', key: 0 },
       subject_type_options: [
         { value: '', label: 'Todos' },
         { value: 'client', label: 'Clientes' },
@@ -387,6 +415,14 @@ export default {
     }
   },
   computed: {
+    /**
+     * true para el perfil «Sólo Leads» (Juan): ve «Mis tareas» y no ve lo que el backend le niega
+     * (Configuración, Agregar, cambio de pipeline y responsable). La decisión es de `solo_leads.js`.
+     * @returns {boolean}
+     */
+    es_perfil_solo_leads() {
+      return es_solo_leads(this.$store.state.auth.admin)
+    },
     /** @returns {Array<Object>} */
     all_pipelines() {
       return this.$store.state.pipeline.pipelines
@@ -572,7 +608,10 @@ export default {
   },
   created() {
     this.$store.dispatch('pipeline/fetch_meta')
-    this.$store.dispatch('pipeline/fetch_admins')
+    // El perfil «Sólo Leads» no puede listar admins (403) y no tiene selector de responsable.
+    if (!this.es_perfil_solo_leads) {
+      this.$store.dispatch('pipeline/fetch_admins')
+    }
     this.load_pipelines()
   },
   beforeUnmount() {
@@ -762,6 +801,38 @@ export default {
         opportunity: payload.opportunity,
         stage_id: payload.stage_id === undefined ? null : payload.stage_id,
         key: this.move_modal.key + 1,
+      }
+    },
+    /**
+     * Abre el modal «Registrar llamada» para el lead de la tarjeta.
+     *
+     * @param {Object} opportunity Oportunidad de un lead (trae `lead_id` y `subject.name`).
+     */
+    open_call_modal(opportunity) {
+      if (!opportunity || !opportunity.lead_id) {
+        return
+      }
+      this.call_modal = {
+        show: true,
+        lead_id: opportunity.lead_id,
+        lead_name: subject_name(opportunity),
+        key: this.call_modal.key + 1,
+      }
+    },
+    /**
+     * La llamada quedó registrada: la tarjeta cambia de columna con lo que devolvió la API, se recarga
+     * el tablero en segundo plano (orden y resumen) y, con el perfil, las tareas (registrar una llamada
+     * cierra las del embudo de ese lead). Si el modal se abrió desde la ficha de la oportunidad, ella
+     * también se actualiza con su propio `changed`.
+     *
+     * @param {{ llamada: (Object|null), oportunidad: (Object|null) }} payload
+     */
+    on_call_registered(payload) {
+      this.call_modal = { show: false, lead_id: null, lead_name: '', key: this.call_modal.key }
+      this.replace_opportunity(payload && payload.oportunidad)
+      this.load_opportunities(true)
+      if (this.$refs.mis_tareas) {
+        this.$refs.mis_tareas.load()
       }
     },
     open_add_modal() {
