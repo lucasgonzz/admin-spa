@@ -86,11 +86,21 @@ function fuente_de_la_oferta() {
   }
 }
 
+/** Una fuente con otro descuento y otros precios, con `tres_juntos` calculado como lo hace la API (pesos enteros). */
+function fuente_con(descuento, precios) {
+  const f = fuente_de_la_oferta()
+  f.implementaciones.items.forEach((item, i) => { item.precio = precios[i] })
+  const lista = precios.reduce((a, b) => a + b, 0)
+  f.implementaciones.tres_juntos = { descuento_porcentaje: descuento, precio_lista: lista, precio: Math.round(lista * (100 - descuento) / 100) }
+  return f
+}
+
 const NOMBRES = [
   'fijar_precios_vigentes', 'precios_vigentes_cargados', 'cargar_precios_vigentes',
   'iniciar_precios_por_sistema', 'precargar_precios_si_es_nuevo', 'tiene_condiciones_guardadas',
   'elegir_plan_gestion', 'opciones_de_plan', 'opciones_de_paquete_agentes', 'paquete_agentes_del_contrato',
   'elegir_paquete_agentes', 'resumen_precios', 'actualizar_totales', 'plan_historico_del_contrato',
+  'firma_de_condiciones', 'precargar_si_sigue_nuevo',
 ]
 
 let texto = null
@@ -150,7 +160,9 @@ if (texto !== null) {
     igual('mensualidad de tienda: $44.900', nuevo.contract_precios_sistemas.ecommerce.mensualidad, 44900)
     igual('mensualidad de agentes: paquete Inicial $46.750', nuevo.contract_precios_sistemas.agentes.mensualidad, 46750)
     igual('descuento conjunto: 30 % de 1.885.200 = 565.560', nuevo.contract_descuento_conjunto, 565560)
-    igual('el contrato nuevo no trae plan elegido (sin foto en la API hasta elegirlo)', nuevo.contract_plan_gestion, null)
+    igual('el contrato nuevo arranca con el plan Inicial elegido (la API le saca la foto al guardar)', nuevo.contract_plan_gestion, 'inicial')
+    igual('y se ve con el rango de la fuente (vista previa de la foto: hasta 200)', [nuevo.contract_plan_gestion_foto.clave, nuevo.contract_plan_gestion_foto.hasta, nuevo.contract_plan_gestion_foto.abono_lista], ['inicial', 200, 55900])
+    igual('el select del contrato nuevo marca Inicial con el rango de la fuente', m.opciones_de_plan(nuevo)[0].texto, 'Inicial — hasta 200 operaciones por mes')
     igual('con los tres, total de licencia = 1.319.640', m.resumen_precios(nuevo).total, 1319640)
     igual('contract_precio_licencia guarda el total', nuevo.contract_precio_licencia, '1319640')
     igual('contract_mensualidad_base suma las tres mensualidades', nuevo.contract_mensualidad_base, String(55900 + 44900 + 46750))
@@ -179,8 +191,9 @@ if (texto !== null) {
     igual('el abono base se recalcula al elegir plan', nuevo.contract_mensualidad_base, String(263000 + 44900 + 46750))
     m.elegir_plan_gestion(nuevo, 'plus')
     igual('un plan que la fuente no ofrece (plus) no se puede elegir', nuevo.contract_plan_gestion, 'empresa')
+    igual('elegir otro plan cambia la vista previa de la foto', nuevo.contract_plan_gestion_foto.clave, 'empresa')
     m.elegir_plan_gestion(nuevo, '')
-    igual('la opción vacía quita el plan sin tocar el importe', [nuevo.contract_plan_gestion, nuevo.contract_precios_sistemas.gestion.mensualidad], [null, 263000])
+    igual('la opción «Sin plan» sigue disponible: quita el plan y la foto sin tocar el importe', [nuevo.contract_plan_gestion, nuevo.contract_plan_gestion_foto, nuevo.contract_precios_sistemas.gestion.mensualidad], [null, null, 263000])
 
     /* Paquete de agentes. */
     igual('el selector de paquetes lista Inicial, Pro y Max',
@@ -197,14 +210,25 @@ if (texto !== null) {
     m.elegir_paquete_agentes(nuevo, 'inexistente')
     igual('un paquete inexistente no toca el importe', nuevo.contract_precios_sistemas.agentes.mensualidad, 50000)
 
-    /* Otro porcentaje de descuento se redondea a 2 decimales. */
-    const f25 = fuente_de_la_oferta()
-    f25.implementaciones.tres_juntos.descuento_porcentaje = 25.55
+    /* El descuento es EXACTAMENTE lista − precio de `tres_juntos` (la fórmula única de la API, en pesos enteros). */
     const m25 = cargar()
+    const f25 = fuente_con(25.55, [628400, 628400, 628400])
     m25.fijar_precios_vigentes(f25)
     const c25 = {}
     m25.precargar_precios_si_es_nuevo(c25)
-    igual('descuento 25,55 % de 1.885.200 con 2 decimales', c25.contract_descuento_conjunto, 481668.6)
+    igual('descuento con 25,55 % = precio_lista − precio de la fuente (1.885.200 − 1.403.531)', c25.contract_descuento_conjunto, 481669)
+    c25.contract_sistemas = ['gestion', 'ecommerce', 'agentes']
+    igual('y el total de los tres coincide con el precio de la API', m25.resumen_precios(c25).total, f25.implementaciones.tres_juntos.precio)
+
+    const m_raro = cargar()
+    const f_raro = fuente_con(30, [628401, 628402, 628403])
+    m_raro.fijar_precios_vigentes(f_raro)
+    const c_raro = {}
+    m_raro.precargar_precios_si_es_nuevo(c_raro)
+    c_raro.contract_sistemas = ['gestion', 'ecommerce', 'agentes']
+    m_raro.actualizar_totales(c_raro)
+    igual('con items que no son múltiplos de 100 el descuento sigue siendo lista − precio', c_raro.contract_descuento_conjunto, f_raro.implementaciones.tres_juntos.precio_lista - f_raro.implementaciones.tres_juntos.precio)
+    igual('y el total guardado es el precio de la API', c_raro.contract_precio_licencia, String(f_raro.implementaciones.tres_juntos.precio))
 
     /* ================= 2. El select de plan ================= */
     igual('el select de un contrato nuevo: los tres planes vigentes con sus rangos y ninguno deshabilitado',
@@ -229,6 +253,22 @@ if (texto !== null) {
     igual('del histórico: una opción por ventas y el Inicial vigente, las dos deshabilitadas',
       opciones_hist.map(o => !!o.disabled), [true, true])
     cierto('el texto del histórico dice 300 ventas', opciones_hist.some(o => /hasta 300 ventas por mes/.test(o.texto)))
+
+    /* El rango del plan guardado es el que dice el PDF: con foto, el de la foto; sin foto, el de la política 3/11. */
+    const foto_200 = { clave: 'inicial', nombre: 'Inicial', desde: 0, hasta: 200, usuarios: 1, excedente: 760, abono_lista: 55900, politica: '2026-11-21' }
+    const guardado_con_foto = { contract_plan_gestion: 'inicial', contract_plan_gestion_foto: foto_200, contract_precios_sistemas: { gestion: { licencia: 628400, mensualidad: 55900 } } }
+    igual('un contrato guardado con foto de 200 se reabre diciendo hasta 200', m.opciones_de_plan(guardado_con_foto)[0].texto, 'Inicial — hasta 200 operaciones por mes')
+    const guardado_sin_foto = { contract_plan_gestion: 'inicial', contract_plan_gestion_foto: null, contract_precios_sistemas: { gestion: { licencia: 0, mensualidad: 55900 } } }
+    const op_sin_foto = m.opciones_de_plan(guardado_sin_foto)
+    igual('un plan vigente guardado SIN foto dice el rango de la política 3/11 (como el PDF): hasta 100', op_sin_foto[0].texto, 'Inicial — hasta 100 operaciones por mes')
+    igual('las demás opciones salen de la fuente', op_sin_foto.slice(1).map(o => o.texto), ['Intermedio — de 201 a 600 operaciones por mes', 'Empresa — operaciones ilimitadas'])
+    const f_150 = fuente_de_la_oferta()
+    f_150.gestion.planes[0].hasta = 150
+    f_150.gestion.planes[1].desde = 151
+    const m_150 = cargar()
+    m_150.fijar_precios_vigentes(f_150)
+    igual('con la fuente editada a 150, el contrato con foto de 200 sigue diciendo 200 y las otras opciones siguen la fuente',
+      m_150.opciones_de_plan(guardado_con_foto).map(o => o.texto).slice(0, 2), ['Inicial — hasta 200 operaciones por mes', 'Intermedio — de 151 a 600 operaciones por mes'])
 
     /* Si la fuente cambia el rango, el select lo sigue. */
     const f_otra = fuente_de_la_oferta()
@@ -274,19 +314,58 @@ if (texto !== null) {
       resultado_caida = valor
     })
 
-    /* ================= 5. Una sola vez por sesión ================= */
-    const una_vez = cargar()
+    /* ================= 5. Un pedido por apertura (sin repetir los simultáneos), con timeout ================= */
+    const por_apertura = cargar()
     let pedidos = 0
     const pedir = () => { pedidos++; return Promise.resolve({ data: fuente_de_la_oferta() }) }
-    const promesa_una_vez = una_vez.cargar_precios_vigentes(pedir)
-      .then(() => una_vez.cargar_precios_vigentes(pedir))
+    const promesa_una_vez = Promise.all([por_apertura.cargar_precios_vigentes(pedir), por_apertura.cargar_precios_vigentes(pedir)])
       .then(function () {
-        igual('la fuente se pidió una sola vez aunque se abran dos contratos', pedidos, 1)
-        cierto('y quedó cargada (res.data)', una_vez.precios_vigentes_cargados() === true)
-        const c = {}
-        una_vez.precargar_precios_si_es_nuevo(c)
-        igual('con la fuente pedida por la red, el contrato nuevo sale en ARS', c.contract_currency, 'ARS')
+        igual('dos aperturas simultáneas comparten un solo pedido', pedidos, 1)
+        cierto('y quedó cargada (res.data)', por_apertura.precios_vigentes_cargados() === true)
+        return por_apertura.cargar_precios_vigentes(pedir)
       })
+      .then(function () {
+        igual('una apertura posterior vuelve a pedir la fuente (precios frescos)', pedidos, 2)
+        const c = {}
+        por_apertura.precargar_precios_si_es_nuevo(c)
+        igual('con la fuente pedida por la red, el contrato nuevo sale en ARS', c.contract_currency, 'ARS')
+        return por_apertura.cargar_precios_vigentes(() => Promise.reject(new Error('Network Error')))
+      })
+      .then(function () {
+        cierto('si el pedido de la apertura falla, rige el fallback aunque antes hubiera llegado', por_apertura.precios_vigentes_cargados() === false)
+        const inicio = Date.now()
+        return por_apertura.cargar_precios_vigentes(() => new Promise(function () {}), 30).then(function () {
+          cierto('un GET colgado se corta por timeout y se resuelve sin error', Date.now() - inicio < 1500)
+          cierto('y rige el fallback', por_apertura.precios_vigentes_cargados() === false)
+        })
+      })
+
+    /* ================= 5b. GET tardío: no pisa un contrato ya tocado o guardado ================= */
+    const tardia = cargar()
+    tardia.fijar_precios_vigentes(fuente_de_la_oferta())
+    const sin_tocar = { contract_sistemas: [] }
+    const firma_limpia = tardia.firma_de_condiciones(sin_tocar)
+    sin_tocar.contract_sistemas = ['gestion', 'ecommerce']
+    cierto('un contrato nuevo que sigue igual (los sistemas de la cotización no cuentan) recibe la precarga tardía', tardia.precargar_si_sigue_nuevo(sin_tocar, firma_limpia) === true)
+    igual('y queda en ARS con el plan Inicial', [sin_tocar.contract_currency, sin_tocar.contract_plan_gestion], ['ARS', 'inicial'])
+
+    const tocado = {}
+    const firma_tocado = tardia.firma_de_condiciones(tocado)
+    tocado.contract_client_name = 'Escribió el operador mientras esperaba'
+    cierto('si el operador cargó una condición antes de que llegara la fuente, no se precarga', tardia.precargar_si_sigue_nuevo(tocado, firma_tocado) === false)
+    cierto('y no se le inventó un desglose', !tocado.contract_precios_sistemas)
+
+    const ya_con_precios = {}
+    const firma_precios = tardia.firma_de_condiciones(ya_con_precios)
+    ya_con_precios.contract_precios_sistemas = { gestion: { licencia: 1, mensualidad: 2 }, ecommerce: { licencia: 3, mensualidad: 4 }, agentes: { licencia: 5, mensualidad: 6 } }
+    const copia_precios = JSON.parse(JSON.stringify(ya_con_precios))
+    cierto('si el operador ya cargó los precios a mano, no se pisan', tardia.precargar_si_sigue_nuevo(ya_con_precios, firma_precios) === false)
+    igual('y quedan como estaban', ya_con_precios, copia_precios)
+
+    const guardado_tarde = JSON.parse(JSON.stringify(guardado))
+    const firma_guardado = tardia.firma_de_condiciones({})
+    cierto('un contrato guardado que se abrió sin desglose y trae condiciones no se precarga', tardia.precargar_si_sigue_nuevo({ contract_client_name: 'Viejo', contract_currency: 'USD' }, firma_guardado) === false)
+    igual('el guardado completo no cambia', guardado_tarde, guardado)
 
     Promise.all([promesa_caida, promesa_una_vez]).then(function () {
       igual('GET caído: la promesa se resuelve sin error', resultado_caida === 'sin resolver', false)
@@ -314,6 +393,7 @@ if (texto !== null) {
         'sin planes': Object.assign(fuente_de_la_oferta(), { gestion: { planes: [] } }),
         'abono que no es número': (function () { const f = fuente_de_la_oferta(); f.gestion.planes[0].abono = 'mucho'; return f })(),
         'sin la mensualidad de tienda': Object.assign(fuente_de_la_oferta(), { tienda: {} }),
+        'tres juntos sin precio': (function () { const f = fuente_de_la_oferta(); delete f.implementaciones.tres_juntos.precio; return f })(),
         'null': null,
       }
       Object.keys(invalidas).forEach(function (nombre) {
@@ -334,6 +414,9 @@ if (texto !== null) {
       const editor_cliente = leer('src/components/client/ContratoTab.vue')
       cierto('la pestaña del cliente pide la fuente y precarga con precargar_precios_si_es_nuevo',
         /cargar_precios_vigentes/.test(editor_cliente) && /precargar_precios_si_es_nuevo/.test(editor_cliente))
+      cierto('PreciosPorSistema.vue recibe la versión de la fuente para recalcular el select cuando llega', /version_fuente/.test(vista_precios))
+      cierto('el editor del lead pide la fuente en cada apertura y avisa a PreciosPorSistema', /version_fuente/.test(editor_lead) && /precargar_si_sigue_nuevo/.test(editor_lead))
+      cierto('la pestaña del cliente pide la fuente en cada apertura y avisa a PreciosPorSistema', /version_fuente/.test(editor_cliente) && /precargar_si_sigue_nuevo/.test(editor_cliente))
       cierto('el módulo no usa async/await (regla del repo)', !/\basync\b|\bawait\b/.test(texto))
 
       console.log('\n' + corridas + ' comprobaciones, ' + fallos + ' fallas')
