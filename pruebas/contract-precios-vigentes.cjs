@@ -137,8 +137,11 @@ if (texto !== null) {
     cierto('la fuente válida se acepta', m.fijar_precios_vigentes(fuente_de_la_oferta()) === true)
     cierto('queda marcada como cargada', m.precios_vigentes_cargados() === true)
 
-    const nuevo = { contract_sistemas: ['gestion', 'ecommerce', 'agentes'] }
+    const nuevo = {}
     cierto('un contrato vacío es nuevo: se precarga', m.precargar_precios_si_es_nuevo(nuevo) === true)
+    /* El operador tilda los tres sistemas (la precarga cubre siempre los tres precios). */
+    nuevo.contract_sistemas = ['gestion', 'ecommerce', 'agentes']
+    m.actualizar_totales(nuevo)
     igual('moneda de la licencia ARS', nuevo.contract_currency, 'ARS')
     igual('moneda de la mensualidad ARS', nuevo.contract_mensualidad_moneda, 'ARS')
     igual('licencias de $628.400 en los tres (gestión ya no es 0)',
@@ -201,7 +204,7 @@ if (texto !== null) {
     m25.fijar_precios_vigentes(f25)
     const c25 = {}
     m25.precargar_precios_si_es_nuevo(c25)
-    igual('descuento 25,55 % de 1.885.200 con 2 decimales', c25.contract_descuento_conjunto, 481656.6)
+    igual('descuento 25,55 % de 1.885.200 con 2 decimales', c25.contract_descuento_conjunto, 481668.6)
 
     /* ================= 2. El select de plan ================= */
     igual('el select de un contrato nuevo: los tres planes vigentes con sus rangos y ninguno deshabilitado',
