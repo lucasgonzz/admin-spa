@@ -2,8 +2,9 @@
  * Lógica pura del perfil «Sólo Leads» (misión embudo-whatsapp-precios, E5).
  *
  * Un admin con `solo_leads = true` (Usuarios admin → tilde «Sólo Leads») ve del admin únicamente Leads
- * (lista, conversación en sólo lectura y ficha con estado y nota) y Cuenta (sólo «Instalar aplicación» y
- * «Notificaciones push»). El backend lo hace cumplir con un 403 (`code = 'solo_leads'`); acá se decide lo
+ * (lista, conversación en sólo lectura y ficha con estado y nota), el tablero del embudo de leads en
+ * Pipelines (misión embudo-juan-pipeline, E1: ahí Juan registra sus llamadas) y Cuenta (sólo «Instalar
+ * aplicación» y «Notificaciones push»). El backend lo hace cumplir con un 403 (`code = 'solo_leads'`); acá se decide lo
  * que el SPA muestra para que ese 403 no llegue a verse.
  *
  * Esta es la ÚNICA fuente de esa decisión en el SPA: el menú, el guard, Cuenta, el aviso de tareas, el
@@ -20,6 +21,20 @@
  * @type {string[]}
  */
 export const RUTAS_SOLO_LEADS = ['leads', 'lead_conversation', 'account']
+
+/**
+ * Nombres de las rutas del Tablero de pipelines que también puede abrir el perfil (misión
+ * embudo-juan-pipeline, E1): `pipelines` es el padre del menú (redirige al tablero) y
+ * `pipelines_tablero` es el tablero del embudo de leads, donde Juan registra sus llamadas.
+ *
+ * Va en una lista APARTE de `RUTAS_SOLO_LEADS` a propósito: esa lista la fija
+ * `pruebas/solo-leads.cjs` (y el backend, `AdminSoloLeadsPolicy::RUTAS_PERMITIDAS`, tiene su gemela
+ * con un test que la compara). `pipelines_configuracion` y `pipelines_agenda` quedan afuera: el
+ * backend responde 403 a la configuración de pipelines y a la agenda.
+ *
+ * @type {string[]}
+ */
+export const RUTAS_DEL_TABLERO_SOLO_LEADS = ['pipelines', 'pipelines_tablero']
 
 /**
  * Ids de las secciones de Cuenta que ve el perfil: instalar la app y recibir las notificaciones push.
@@ -49,7 +64,19 @@ export function es_solo_leads(admin) {
  * @returns {boolean}
  */
 export function ruta_permitida(nombre) {
-  return !!nombre && RUTAS_SOLO_LEADS.indexOf(nombre) !== -1
+  return !!nombre && (
+    RUTAS_SOLO_LEADS.indexOf(nombre) !== -1 || RUTAS_DEL_TABLERO_SOLO_LEADS.indexOf(nombre) !== -1
+  )
+}
+
+/**
+ * Ubicación del tablero del embudo de leads (el pipeline con slug `lead`), que es lo único de
+ * Pipelines que ve el perfil. La usa el menú lateral para llevar el ítem «Pipelines» directo ahí.
+ *
+ * @returns {{name: string, query: {pipeline: string}}}
+ */
+export function ruta_de_entrada_al_tablero() {
+  return { name: 'pipelines_tablero', query: { pipeline: 'lead' } }
 }
 
 /**

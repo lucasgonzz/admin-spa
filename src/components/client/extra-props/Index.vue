@@ -16,6 +16,11 @@
 
     <hr class="my-3" />
 
+    <!-- Implementación contratada (embudo-juan-pipeline, E2): se oculta sola contra un admin-api sin el campo. -->
+    <client-implementacion-contratada :record="record" @record-updated="on_shared_database_updated" />
+
+    <hr v-if="record.implementacion_contratada !== undefined" class="my-3" />
+
     <client-shared-database-group :record="record" @record-updated="on_shared_database_updated" />
   </div>
 </template>
@@ -24,10 +29,12 @@
 import api, { resolve_error_message } from '@/utils/axios'
 import { route_string } from '@/utils/route_string'
 import ClientSharedDatabaseGroup from '@/components/client/extra-props/SharedDatabaseGroup.vue'
+import ClientImplementacionContratada from '@/components/client/extra-props/ImplementacionContratada.vue'
 
 export default {
   name: 'ClientImplementationExtraProps',
-  components: { ClientSharedDatabaseGroup },
+  /* <client-implementacion-contratada>: bloque «Implementación contratada» (E2 de embudo-juan-pipeline). */
+  components: { ClientSharedDatabaseGroup, ClientImplementacionContratada },
   props: {
     /**
      * Cliente en edición: en el modal CRUD es el borrador (`draft`) del ModelModal.

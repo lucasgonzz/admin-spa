@@ -1,5 +1,5 @@
 import routes_def from './routes'
-import { es_solo_leads, ruta_permitida } from '@/utils/solo_leads'
+import { es_solo_leads, ruta_permitida, ruta_de_entrada_al_tablero } from '@/utils/solo_leads'
 
 /**
  * Indica si el perfil admin autenticado es closer operativo.
@@ -40,18 +40,22 @@ function admin_es_vendedor(admin) {
  * Las que tienen `meta.solo_vendedor` (hoy, "Mis comisiones") se muestran solo si el admin es
  * vendedor (`admin_es_vendedor`).
  *
- * El perfil «Sólo Leads» (misión embudo-whatsapp-precios, E5) ve únicamente Leads y Cuenta: la decisión
- * de qué rutas le tocan vive en `utils/solo_leads.js` (`ruta_permitida`), acá sólo se la consulta.
+ * El perfil «Sólo Leads» (misión embudo-whatsapp-precios, E5) ve únicamente Leads y Cuenta, y desde la
+ * misión embudo-juan-pipeline (E1) también Pipelines: la decisión de qué rutas le tocan vive en
+ * `utils/solo_leads.js` (`ruta_permitida`), acá sólo se la consulta. Su ítem «Pipelines» no lleva
+ * submenú (Agenda y Configuración le dan 403) y va directo al tablero del embudo de leads, ver
+ * `item_de_pipelines_para_el_perfil`.
  *
  * @param {Object|null|undefined} admin Perfil admin autenticado.
  * @returns {Array<object>}
  */
 export function get_nav_routes(admin) {
-  return routes_def.filter(function (r) {
+  const solo_leads = es_solo_leads(admin)
+  const visibles = routes_def.filter(function (r) {
     if (!r.meta || !r.meta.nav) {
       return false
     }
-    if (es_solo_leads(admin) && !ruta_permitida(r.name)) {
+    if (solo_leads && !ruta_permitida(r.name)) {
       return false
     }
     if (r.meta.solo_vendedor && !admin_es_vendedor(admin)) {
@@ -59,6 +63,34 @@ export function get_nav_routes(admin) {
     }
     return true
   })
+  if (!solo_leads) {
+    return visibles
+  }
+  return visibles.map(item_de_pipelines_para_el_perfil)
+}
+
+/**
+ * Ítem del menú «Pipelines» como lo ve el perfil «Sólo Leads»: sin `children` (el menú lo dibujaría como
+ * un grupo con Agenda y Configuración, que el backend le niega) y con la `path` del tablero, que es la
+ * ruta que sale de `ruta_de_entrada_al_tablero()`.
+ *
+ * La `path` va SIN la query `?pipeline=lead` a propósito: el menú resalta el ítem activo comparando
+ * `$route.path` con `path`, y con la query nunca coincidiría. No hace falta: el perfil sólo recibe el
+ * pipeline de leads (`GET pipelines` se lo filtra), así que `Tablero.vue` entra a ese solo. El resto de
+ * los ítems pasa tal cual.
+ *
+ * @param {object} item Definición de ruta del menú (routes.js).
+ * @returns {object} El mismo ítem, o una copia sin hijos y con la path del tablero si es «Pipelines».
+ */
+function item_de_pipelines_para_el_perfil(item) {
+  if (item.name !== 'pipelines') {
+    return item
+  }
+  const entrada = find_route_def_by_name(ruta_de_entrada_al_tablero().name)
+  if (!entrada) {
+    return item
+  }
+  return Object.assign({}, item, { children: undefined, path: entrada.path })
 }
 
 /**

@@ -1688,6 +1688,12 @@ export default __base_store({
     /**
      * GET /lead/status-cards: conteos globales por estado para las tarjetas de arriba de la grilla.
      *
+     * Pide `version=2` (misión embudo-juan-pipeline, E1): las diez tarjetas simplificadas del embudo
+     * (Nuevo, Conversando, Quiere probar, Implementación pedida, En prueba, En implementación, Prueba
+     * vencida, Cliente, Perdido y En pausa) y «Archivados» sólo si hay leads en un estado archivado. Sin
+     * el parámetro la API devuelve las tarjetas de antes, y una API vieja lo ignora: en los dos casos el
+     * SPA muestra lo que llega, sin cambiar nada más (la forma de cada tarjeta es la misma).
+     *
      * Nunca rechaza. Si el GET falla se dejan en pantalla las tarjetas anteriores en vez de
      * vaciarlas: números viejos por unos segundos son mejores que una grilla que parpadea a cero
      * cada vez que se corta la red.
@@ -1699,7 +1705,7 @@ export default __base_store({
       const commit = context.commit
       commit('set_loading_status_cards', true)
       return api
-        .get('/lead/status-cards')
+        .get('/lead/status-cards', { params: { version: 2 } })
         .then(function (res) {
           if (res.data && Array.isArray(res.data.cards)) {
             commit('set_status_cards', res.data.cards)
