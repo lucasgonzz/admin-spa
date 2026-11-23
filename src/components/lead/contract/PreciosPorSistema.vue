@@ -14,14 +14,22 @@
             <label class="form-label" :for="id + '-abono-' + sistema.key">Mensualidad ({{ contrato.contract_mensualidad_moneda || 'ARS' }})</label>
             <input :id="id + '-abono-' + sistema.key" v-model.number="contrato.contract_precios_sistemas[sistema.key].mensualidad" type="number" min="0" step="0.01" class="form-control" />
           </div>
+          <div v-if="sistema.key === 'agentes' && paquetes_agentes.length" class="col-12">
+            <label class="form-label" :for="id + '-paquete-agentes'">Paquete de tokens de Agentes</label>
+            <select :id="id + '-paquete-agentes'" v-model="paquete_agentes" class="form-select">
+              <option value="">Importe acordado</option>
+              <option v-for="paquete in paquetes_agentes" :key="paquete.clave" :value="paquete.clave">{{ paquete.nombre }} — {{ contrato.contract_mensualidad_moneda || 'ARS' }} {{ formato(paquete.mensualidad) }} por mes</option>
+            </select>
+            <div class="form-text">Completa la mensualidad de Agentes con el importe del paquete; podés editarla. El nombre del paquete no se guarda en el contrato.</div>
+          </div>
           <div v-if="sistema.key === 'gestion'" class="col-12">
             <label class="form-label" :for="id + '-plan-gestion'">Plan de Gestión (operaciones por mes: ventas + compras + gastos)</label>
             <select :id="id + '-plan-gestion'" v-model="plan_gestion" class="form-select">
               <option value="">Sin plan (importe acordado)</option>
-              <!-- El plan de la política anterior (por ventas) que este contrato conserva: se muestra para
-                   que guardar no lo pierda, pero no se elige para un contrato nuevo. -->
-              <option v-if="plan_historico" :value="plan_historico.clave" disabled>{{ plan_historico.nombre }} — hasta {{ plan_historico.limite.toLocaleString('es-AR') }} ventas por mes (política anterior)</option>
-              <option v-for="plan in planes" :key="plan.clave" :value="plan.clave" :disabled="plan_historico && plan_historico.clave === plan.clave">{{ nombre_plan(plan) }}</option>
+              <!-- Los planes que se ofrecen hoy (de la fuente de precios) con su rango; el plan que este contrato
+                   conserva y que ya no se ofrece (Plus, a medida, o el histórico por ventas) va deshabilitado para
+                   que guardar no lo pierda. -->
+              <option v-for="opcion in opciones_plan" :key="opcion.clave + (opcion.disabled ? '-d' : '')" :value="opcion.clave" :disabled="opcion.disabled">{{ opcion.texto }}</option>
             </select>
             <div v-if="contrato.contract_plan_gestion === 'a_medida'" class="form-text">Plan a medida: cargá el importe acordado.</div>
             <div v-else-if="plan_historico" class="form-text">Plan de la política anterior (por ventas): el contrato conserva sus condiciones. Elegí uno de los planes por operaciones solo si lo acordaste con el cliente.</div>
@@ -68,13 +76,27 @@
 
 <script>
 import { SISTEMAS } from '@/utils/contract_modalidades'
-import { PLANES_GESTION, iniciar_precios_por_sistema, elegir_plan_gestion, resumen_precios, resumen_anual, actualizar_totales, plan_historico_del_contrato, nombre_del_plan } from '@/utils/contract_precios'
+import { iniciar_precios_por_sistema, elegir_plan_gestion, opciones_de_plan, opciones_de_paquete_agentes, paquete_agentes_del_contrato, elegir_paquete_agentes, resumen_precios, resumen_anual, actualizar_totales, plan_historico_del_contrato } from '@/utils/contract_precios'
 
 export default {
-  props: { contrato: { type: Object, required: true }, id: { type: String, required: true } },
+  props: {
+    contrato: { type: Object, required: true },
+    id: { type: String, required: true },
+    /** Cuenta las veces que llegó la fuente de precios: el módulo de precios no es reactivo, así que el select
+        y los paquetes se recalculan cuando este número cambia. */
+    version_fuente: { type: Number, default: 0 },
+  },
   computed: {
     sistemas() { return SISTEMAS },
-    planes() { return PLANES_GESTION },
+    /** Opciones del select de plan: los planes vigentes de la fuente (o el fallback) más el que el contrato conserva. */
+    opciones_plan() { return this.version_fuente >= 0 ? opciones_de_plan(this.contrato) : [] },
+    /** Paquetes de tokens de Agentes de la fuente (vacío si la fuente no se pudo leer: no se muestra el selector). */
+    paquetes_agentes() { return this.version_fuente >= 0 ? opciones_de_paquete_agentes() : [] },
+    /** El selector de paquete: muestra el que coincide con el importe de Agentes y, al elegir, completa el importe. */
+    paquete_agentes: {
+      get() { return paquete_agentes_del_contrato(this.contrato) },
+      set(clave) { elegir_paquete_agentes(this.contrato, clave) },
+    },
     /** El plan histórico (por ventas) guardado en el contrato, o null si es uno vigente. */
     plan_historico() { return plan_historico_del_contrato(this.contrato) },
     /** El select del plan: lee y escribe `contract_plan_gestion` por `elegir_plan_gestion`, que precarga el abono. */
@@ -93,10 +115,6 @@ export default {
   },
   methods: {
     iniciar() { iniciar_precios_por_sistema(this.contrato) },
-    /** Texto de cada opción: «Inicial — hasta 100 operaciones por mes», «A medida — más de 3.000 operaciones por mes». */
-    nombre_plan(plan) {
-      return nombre_del_plan(plan)
-    },
     formato(valor) { return Number(valor).toLocaleString('es-AR', { maximumFractionDigits: 2 }) },
   },
 }

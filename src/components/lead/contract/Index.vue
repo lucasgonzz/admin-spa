@@ -86,7 +86,7 @@
       </div>
     </div>
 
-    <PreciosPorSistema :contrato="record" :id="'contrato-lead-' + record.id" />
+    <PreciosPorSistema :contrato="record" :id="'contrato-lead-' + record.id" :version_fuente="version_fuente" />
     <!-- En Suscripción no hay licencia que pagar: el pago inicial es la puesta en marcha. -->
     <h6 class="text-primary mb-2">{{ es_suscripcion ? 'Pago inicial' : 'Pago único' }}</h6>
     <div class="alert alert-light border mb-3">
@@ -319,7 +319,7 @@
 
 <script>
 import PreciosPorSistema from '@/components/lead/contract/PreciosPorSistema.vue'
-import { actualizar_totales, iniciar_precios_por_sistema, tiene_condiciones_guardadas, aplicar_defaults_anuales } from '@/utils/contract_precios'
+import { actualizar_totales, precargar_si_sigue_nuevo, firma_de_condiciones, cargar_precios_vigentes, tiene_condiciones_guardadas, aplicar_defaults_anuales } from '@/utils/contract_precios'
 import api, { resolve_error_message } from '@/utils/axios'
 import clause_templates from '@/utils/contract_clause_templates'
 import {
@@ -348,6 +348,8 @@ export default {
   emits: ['record-updated'],
   data() {
     return {
+      /** Cuántas veces llegó la fuente de precios (la lee PreciosPorSistema para redibujar el select de plan). */
+      version_fuente: 0,
       /** Spinner del PUT de guardado de contrato. */
       loading_save: false,
       /** Spinner del POST de generación de PDF. */
@@ -478,7 +480,7 @@ export default {
     record: {
       immediate: true,
       handler: function () {
-        this.ensure_contract_defaults()
+        this.abrir_contrato()
       },
     },
     /**
@@ -555,6 +557,34 @@ export default {
       }
     },
     /**
+     * Abre un contrato en el editor: se pide la fuente de precios (UN GET por apertura, con timeout de 10 s; si
+     * falla, rige el fallback) para que el select de plan diga lo que dice el PDF, y se normalizan los defaults.
+     * Si el contrato era NUEVO (sin desglose ni condiciones) se precargan los precios de la fuente al llegar,
+     * siempre que el lead abierto sea el mismo y el operador no haya cargado nada mientras tanto; un contrato
+     * ya guardado no se toca nunca.
+     * @returns {void}
+     */
+    abrir_contrato() {
+      const registro = this.record
+      if (!registro) {
+        return
+      }
+      /* 🔴 Se miran ANTES de los defaults: ensure_contract_defaults carga los sistemas de la cotización y con
+         eso el contrato ya parecería tener condiciones guardadas. */
+      const era_nuevo = !registro.contract_precios_sistemas && !tiene_condiciones_guardadas(registro)
+      const firma = firma_de_condiciones(registro)
+      this.ensure_contract_defaults()
+      const self = this
+      cargar_precios_vigentes(function () {
+        return api.get('/settings/precios-vigentes', { silent_error: true })
+      }).then(function () {
+        self.version_fuente += 1
+        if (era_nuevo && self.record === registro) {
+          precargar_si_sigue_nuevo(registro, firma)
+        }
+      })
+    },
+    /**
      * Valores por defecto de monedas y contadores numéricos del contrato, y la forma de los
      * campos de la modalidad (sin elegir una modalidad: ver el comentario de adentro).
      * @returns {void}
@@ -562,9 +592,6 @@ export default {
     ensure_contract_defaults() {
       if (!this.record) {
         return
-      }
-      if (!this.record.contract_precios_sistemas && !tiene_condiciones_guardadas(this.record)) {
-        iniciar_precios_por_sistema(this.record)
       }
       if (!this.record.contract_currency) {
         this.record.contract_currency = 'USD'
