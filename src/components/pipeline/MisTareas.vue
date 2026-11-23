@@ -109,7 +109,11 @@ export default {
       this.loading = true
       this.load_error = null
       api
-        .get('/lead-tablero/mis-tareas')
+        .get('/lead-tablero/mis-tareas', {
+          // Una API sin la ruta (404) no es un problema del operador: el componente ya muestra su
+          // propio «Reintentar»; un 500 sí avisa. Lo lee el interceptor de axios.
+          silent_error_statuses: [404, 405],
+        })
         .then(function (res) {
           const data = res.data || {}
           self.tareas = Array.isArray(data.models) ? data.models : []

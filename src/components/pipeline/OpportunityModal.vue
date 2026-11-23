@@ -741,7 +741,11 @@ export default {
       }
       const lead_id = opportunity.lead_id
       api
-        .get('/lead/' + lead_id + '/llamadas')
+        .get('/lead/' + lead_id + '/llamadas', {
+          // Contra un admin-api que todavía no tiene la ruta (404) la lista simplemente no se muestra;
+          // un 500 sí sigue avisando. `silent_error_statuses` lo lee el interceptor de axios.
+          silent_error_statuses: [404, 405],
+        })
         .then(function (res) {
           if (!self.opportunity || Number(self.opportunity.lead_id) !== Number(lead_id)) {
             return
