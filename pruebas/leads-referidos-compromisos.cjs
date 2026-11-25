@@ -216,5 +216,17 @@ contiene('Leads.vue lo registra como componente', LEADS, /components:\s*\{[\s\S]
 contiene('Leads.vue monta <alta-externa-modal>', LEADS, /<alta-externa-modal|<AltaExternaModal/)
 contiene('Leads.vue tiene el botón «Nuevo lead de otro medio»', LEADS, /Nuevo lead de otro medio/)
 
+/* ---- Ajuste de interfaz de la verificación visual (E1): el modal se cierra y se limpia al terminar ---- */
+const texto_del_modal = leer(...MODAL) || ''
+const en_exito = texto_del_modal.indexOf("self.$emit('creado'")
+const cierre = texto_del_modal.indexOf("self.$emit('close')", en_exito)
+const navegar = texto_del_modal.indexOf('self.$router.push', en_exito)
+cierto('AltaExternaModal.vue emite «close» después de «creado» y ANTES de navegar a la conversación',
+  en_exito !== -1 && cierre !== -1 && navegar !== -1 && cierre < navegar)
+contiene('AltaExternaModal.vue limpia el formulario al terminar con éxito (también al completar el existente)', MODAL, /reiniciar_formulario\(\)[\s\S]*self\.\$emit\('close'\)/)
+contiene('motivo_legible traduce «no_recibe_mensajes»', MODAL, /no_recibe_mensajes:\s*['"][^'"]+['"]/)
+contiene('motivo_legible traduce «ya_es_cliente»', MODAL, /ya_es_cliente:\s*['"][^'"]+['"]/)
+contiene('motivo_legible traduce «primer_contacto_ya_enviado»', MODAL, /primer_contacto_ya_enviado:\s*['"][^'"]+['"]/)
+
 console.log('\n' + corridas + ' comprobaciones, ' + fallos + ' fallas')
 process.exit(fallos === 0 ? 0 : 1)
