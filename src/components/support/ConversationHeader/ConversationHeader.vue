@@ -444,6 +444,7 @@ export default {
 /* En teléfono plegado, un renglón; el motivo completo queda en el tooltip. */
 .support-conversation-intervention--compact {
   padding: 0;
+  margin-top: 0.1rem;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;
