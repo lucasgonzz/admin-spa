@@ -295,6 +295,9 @@ export default {
             show_toast('El primer mensaje no salió (' + self.motivo_legible(primer.motivo) + '). El lead quedó cargado igual.')
           }
           self.$emit('creado', lead)
+          // Se limpia el formulario y se cierra ANTES de navegar: si no, el modal quedaba abierto encima de la conversación.
+          self.reiniciar_formulario()
+          self.$emit('close')
           if (lead.id) {
             self.$router.push({ name: 'lead_conversation', params: { lead_id: lead.id } })
           }
@@ -312,6 +315,29 @@ export default {
           }
         })
     },
+    /** Deja el formulario y los avisos como al abrir (después de un alta o de completar un lead existente). */
+    reiniciar_formulario() {
+      this.form = {
+        origen: 'referido',
+        contact_name: '',
+        phone: '',
+        company_name: '',
+        business_type: '',
+        email: '',
+        referido_por_client_id: null,
+        referido_por_texto: '',
+        contexto_previo: '',
+        estado_inicial: 'nuevo',
+        entrar_al_tablero: false,
+        primer_contacto: 'ninguno',
+      }
+      this.manda_primer_contacto = false
+      this.errores = {}
+      this.server_message = ''
+      this.lead_existente_id = null
+      this.aviso_primer_contacto = ''
+      this.busqueda_cliente = ''
+    },
     /**
      * Motivo por el que el primer contacto no salió, en castellano.
      *
@@ -326,6 +352,10 @@ export default {
         plantilla_no_aprobada: 'Meta todavía no aprobó la plantilla',
         sin_referente: 'falta quién lo refirió',
         envio_fallido: 'falló el envío',
+        no_recibe_mensajes: 'esa persona pidió no recibir mensajes',
+        ya_es_cliente: 'ya es cliente',
+        primer_contacto_ya_enviado: 'ya se le mandó el primer mensaje',
+        lead_existente: 'ya existía un lead con ese teléfono',
       }
       return motivos[motivo] || 'motivo desconocido'
     },
