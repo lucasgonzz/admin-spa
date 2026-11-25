@@ -95,7 +95,8 @@
         <input id="ae-tablero" v-model="form.entrar_al_tablero" type="checkbox" class="form-check-input" :disabled="saving || entra_solo_al_tablero" />
         <label class="form-check-label" for="ae-tablero">Que entre al tablero de Juan{{ entra_solo_al_tablero ? ' (ya entra por estar en «Quiere probar»)' : '' }}</label>
       </div>
-      <div class="form-check mb-3">
+      <!-- El primer WhatsApp no se le ofrece a Juan (Sólo Leads): su perfil no le escribe al lead y la API lo rechaza. -->
+      <div v-if="puede_escribirle_al_lead" class="form-check mb-3">
         <input id="ae-primer-contacto" v-model="manda_primer_contacto" type="checkbox" class="form-check-input" :disabled="saving" />
         <label class="form-check-label" for="ae-primer-contacto">Escribirle ahora con la plantilla de referido</label>
         <div class="form-text">Sólo sale si la plantilla está aprobada en Meta; si no, el lead se crea igual y te avisamos por qué no salió.</div>
@@ -183,6 +184,13 @@ export default {
      * @returns {boolean}
      */
     puede_buscar_clientes() {
+      return !es_solo_leads(this.$store.state.auth.admin)
+    },
+    /**
+     * El primer WhatsApp por plantilla sólo se ofrece a quien puede escribirle al lead: el perfil «Sólo Leads» no.
+     * @returns {boolean}
+     */
+    puede_escribirle_al_lead() {
       return !es_solo_leads(this.$store.state.auth.admin)
     },
     /**

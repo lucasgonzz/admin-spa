@@ -799,8 +799,8 @@ export default {
         return
       }
       const lead_id = opportunity.lead_id
-      /* Etiquetas de los orígenes externos (las mismas de `utils/alta_externa.js`). */
-      const etiquetas = {}
+      /* Etiquetas de los orígenes externos (las mismas de `utils/alta_externa.js`) y de los que calcula el sistema. */
+      const etiquetas = { anuncio_whatsapp: 'Anuncio de WhatsApp', landing: 'Web', instagram: 'Instagram' }
       ORIGENES.forEach(function (origen) {
         etiquetas[origen.value] = origen.label
       })
@@ -811,16 +811,22 @@ export default {
             return
           }
           const lead = (res.data && res.data.model) || {}
-          if (!etiquetas[lead.origen]) {
+          const cliente = lead.referido_por_client || null
+          const nombre_cliente = cliente ? (cliente.company_name && cliente.company_name !== cliente.name ? cliente.name + ' (' + cliente.company_name + ')' : cliente.name) : ''
+          const referido = nombre_cliente || lead.referido_por_texto || ''
+          const contexto = lead.contexto_previo || ''
+          const es_externo = ORIGENES.some(function (origen) {
+            return origen.value === lead.origen
+          })
+          /* Se muestra si llegó por otro medio o si, aun con origen real (anuncio, web), se le completó quién lo refirió o lo ya hablado. */
+          if (!es_externo && !referido && !contexto) {
             self.como_llego = null
             return
           }
-          const cliente = lead.referido_por_client || null
-          const nombre_cliente = cliente ? (cliente.company_name && cliente.company_name !== cliente.name ? cliente.name + ' (' + cliente.company_name + ')' : cliente.name) : ''
           self.como_llego = {
-            origen_label: etiquetas[lead.origen],
-            referido: nombre_cliente || lead.referido_por_texto || '',
-            contexto: lead.contexto_previo || '',
+            origen_label: etiquetas[lead.origen] || 'Sin dato',
+            referido: referido,
+            contexto: contexto,
           }
         })
         .catch(function () {
