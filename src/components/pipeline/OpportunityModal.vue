@@ -251,6 +251,20 @@
       </section>
 
       <!--
+        Cómo llegó (misión leads-referidos-compromisos, E1): sólo para un lead que NO llegó por un anuncio ni por la
+        web (referido, WhatsApp de Lucas, llamada). Juan lo lee antes de llamar: de dónde vino, quién lo recomendó y
+        lo que ya se habló. Viene de GET lead/{id}; si el pedido falla o el lead es común, el bloque no se muestra.
+      -->
+      <section v-if="como_llego" class="pl-ficha__block">
+        <h6 class="pl-ficha__heading">Cómo llegó</h6>
+        <p class="pl-calls__line mb-1"><strong>{{ como_llego.origen_label }}</strong><template v-if="como_llego.referido"> · referido por {{ como_llego.referido }}</template></p>
+        <details v-if="como_llego.contexto" class="pl-calls__transcript">
+          <summary>Ver lo que ya se habló</summary>
+          <p class="pl-ficha__prewrap">{{ como_llego.contexto }}</p>
+        </details>
+      </section>
+
+      <!--
         Llamadas del lead (misión embudo-juan-pipeline). Vienen de GET lead/{id}/llamadas, las últimas
         20. Si la API es vieja (404) o el pedido falla, la lista queda vacía y el bloque no se muestra.
         `origen = audio_juan` son las que el agente cargó desde un audio de Juan (E1b): se rotulan y
@@ -395,6 +409,7 @@ import NextActionText from '@/components/pipeline/NextActionText.vue'
 import StageTag from '@/components/pipeline/StageTag.vue'
 import SubjectTypeBadge from '@/components/pipeline/SubjectTypeBadge.vue'
 import { es_solo_leads } from '@/utils/solo_leads'
+import { ORIGENES } from '@/utils/alta_externa'
 import {
   first_error,
   format_field_value,
@@ -695,6 +710,8 @@ export default {
         llamada_modal: { show: false, key: 0 },
         /** Llamadas del lead, de la más nueva a la más vieja (`GET lead/{id}/llamadas`). */
         llamadas: [],
+        /** Cómo llegó el lead si es de otro medio: `{origen_label, referido, contexto}`; null si es un lead común. */
+        como_llego: null,
       }
     },
 
@@ -726,6 +743,7 @@ export default {
           self.activities = sort_activities(Array.isArray(data.activities) ? data.activities : [])
           self.loading = false
           self.load_llamadas()
+          self.load_como_llego()
           if (silent && self.opportunity) {
             self.$emit('changed', self.opportunity)
           }
@@ -764,6 +782,46 @@ export default {
           }
           const data = res.data || {}
           self.llamadas = Array.isArray(data.models) ? data.models : []
+        })
+        .catch(function () {
+          return null
+        })
+    },
+
+    /**
+     * Pide el lead para armar «Cómo llegó» (sólo si la oportunidad es de un lead). Es información de apoyo: si falla
+     * o el lead no es de otro medio, el bloque no se muestra y no se avisa.
+     */
+    load_como_llego() {
+      const self = this
+      const opportunity = this.opportunity
+      if (!opportunity || opportunity.subject_type !== 'lead' || !opportunity.lead_id) {
+        return
+      }
+      const lead_id = opportunity.lead_id
+      /* Etiquetas de los orígenes externos (las mismas de `utils/alta_externa.js`). */
+      const etiquetas = {}
+      ORIGENES.forEach(function (origen) {
+        etiquetas[origen.value] = origen.label
+      })
+      api
+        .get('/lead/' + lead_id, { silent_error_statuses: [404, 405] })
+        .then(function (res) {
+          if (!self.opportunity || Number(self.opportunity.lead_id) !== Number(lead_id)) {
+            return
+          }
+          const lead = (res.data && res.data.model) || {}
+          if (!etiquetas[lead.origen]) {
+            self.como_llego = null
+            return
+          }
+          const cliente = lead.referido_por_client || null
+          const nombre_cliente = cliente ? (cliente.company_name && cliente.company_name !== cliente.name ? cliente.name + ' (' + cliente.company_name + ')' : cliente.name) : ''
+          self.como_llego = {
+            origen_label: etiquetas[lead.origen],
+            referido: nombre_cliente || lead.referido_por_texto || '',
+            contexto: lead.contexto_previo || '',
+          }
         })
         .catch(function () {
           return null
@@ -1288,6 +1346,12 @@ export default {
 .pl-calls__notes {
   margin-top: 0.25rem !important;
   font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Lo que ya se habló con un lead de otro medio: conserva los saltos de línea que cargó quien lo dio de alta. */
+.pl-ficha__prewrap {
   white-space: pre-wrap;
   word-break: break-word;
 }
