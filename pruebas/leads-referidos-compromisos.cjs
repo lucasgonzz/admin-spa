@@ -228,5 +228,62 @@ contiene('motivo_legible traduce «no_recibe_mensajes»', MODAL, /no_recibe_mens
 contiene('motivo_legible traduce «ya_es_cliente»', MODAL, /ya_es_cliente:\s*['"][^'"]+['"]/)
 contiene('motivo_legible traduce «primer_contacto_ya_enviado»', MODAL, /primer_contacto_ya_enviado:\s*['"][^'"]+['"]/)
 
+/* ================================================================================================
+   3. Etapa E2 — motor de compromisos (criterio CA18 del PLAN y el montaje del compromiso vigente)
+
+   Interruptores y nombres de plantilla en la sección de Cuenta (`LeadWhatsappOnboardingSection.vue`):
+     - `compromisos_activo`, `compromisos_deteccion_ia` y `compromisos_envio_automatico` (switches, apagados por defecto);
+     - `compromiso_plantilla` (default `cc_coord_dia_acordado`) y `referido_plantilla` (default vacío).
+     Cada uno tiene que estar en los tres lugares de la sección: el valor por defecto del formulario, la carga del GET y el
+     cuerpo del PUT (si no, la pantalla los muestra pero no los guarda), y en el template con su `v-model`.
+   `CompromisoVigente.vue` (fecha en palabras, acción, origen, resumen, «Cambiar fecha» y «Cancelar») lo monta la barra lateral
+   de la conversación (`LeadConversationSidebar.vue`) y la ficha del tablero (`OpportunityModal.vue`). Lo usa también Juan
+   (perfil «Sólo Leads»): ve, reprograma y cancela, así que el componente NO se esconde con `es_solo_leads`.
+   ================================================================================================ */
+const SECCION = ['src', 'components', 'account', 'sections', 'LeadWhatsappOnboardingSection.vue']
+const CLAVES_DE_COMPROMISOS = [
+  'compromisos_activo', 'compromisos_deteccion_ia', 'compromisos_envio_automatico', 'compromiso_plantilla', 'referido_plantilla',
+]
+const texto_de_la_seccion = leer(...SECCION) || ''
+const inicio_del_put = texto_de_la_seccion.indexOf(".put('/settings/lead-whatsapp-onboarding'")
+const bloque_del_put = inicio_del_put === -1 ? '' : texto_de_la_seccion.slice(inicio_del_put, inicio_del_put + 3000)
+
+CLAVES_DE_COMPROMISOS.forEach(function (clave) {
+  const aparece = new RegExp('\\b' + clave + '\\b', 'g')
+  cierto('LeadWhatsappOnboardingSection.vue: «' + clave + '» está en el template con su v-model',
+    new RegExp('v-model(\\.\\w+)*="form\\.' + clave + '"').test(texto_de_la_seccion))
+  cierto('LeadWhatsappOnboardingSection.vue: «' + clave + '» se carga del GET (y está en el formulario por defecto)',
+    (texto_de_la_seccion.match(aparece) || []).length >= 4)
+  cierto('LeadWhatsappOnboardingSection.vue: «' + clave + '» viaja en el cuerpo del PUT', new RegExp('\\b' + clave + '\\b').test(bloque_del_put))
+})
+contiene('LeadWhatsappOnboardingSection.vue: la plantilla de compromisos arranca en cc_coord_dia_acordado',
+  SECCION, /compromiso_plantilla:\s*['"]cc_coord_dia_acordado['"]/)
+contiene('LeadWhatsappOnboardingSection.vue: los tres interruptores nacen en false',
+  SECCION, /compromisos_activo:\s*false[\s\S]*compromisos_deteccion_ia:\s*false[\s\S]*compromisos_envio_automatico:\s*false|compromisos_deteccion_ia:\s*false[\s\S]*compromisos_activo:\s*false/)
+
+const COMPROMISO = ['src', 'components', 'lead', 'CompromisoVigente.vue']
+const texto_del_compromiso = leer(...COMPROMISO)
+cierto('existe src/components/lead/CompromisoVigente.vue', texto_del_compromiso !== null)
+contiene('CompromisoVigente.vue lee los compromisos del lead (GET /lead/{id}/compromisos)', COMPROMISO, /['"`]\/lead\/[\s\S]{0,60}compromisos/)
+contiene('CompromisoVigente.vue reprograma con PUT /lead-compromisos/{id}', COMPROMISO, /\.put\(\s*[`'"]\/lead-compromisos\//)
+contiene('CompromisoVigente.vue cancela con POST /lead-compromisos/{id}/cancelar', COMPROMISO, /\.post\(\s*[`'"]\/lead-compromisos\/[\s\S]{0,60}cancelar/)
+contiene('CompromisoVigente.vue tiene el botón «Cambiar fecha»', COMPROMISO, /Cambiar fecha/)
+contiene('CompromisoVigente.vue tiene el botón «Cancelar»', COMPROMISO, /Cancelar/)
+contiene('CompromisoVigente.vue muestra el resumen del compromiso', COMPROMISO, /resumen/)
+contiene('CompromisoVigente.vue muestra la acción (llamar, escribir o esperar)', COMPROMISO, /llamar[\s\S]*escribir[\s\S]*esperar/)
+contiene('CompromisoVigente.vue muestra de dónde salió (origen)', COMPROMISO, /origen/)
+cierto('CompromisoVigente.vue NO se esconde para el perfil «Sólo Leads» (Juan ve, reprograma y cancela)',
+  texto_del_compromiso !== null && !/es_solo_leads/.test(texto_del_compromiso))
+
+const SIDEBAR = ['src', 'components', 'lead', 'LeadConversationSidebar.vue']
+contiene('LeadConversationSidebar.vue importa CompromisoVigente', SIDEBAR, /import\s+CompromisoVigente\s+from\s+['"]@\/components\/lead\/CompromisoVigente\.vue['"]/)
+contiene('LeadConversationSidebar.vue lo registra como componente', SIDEBAR, /components:\s*\{[^}]*CompromisoVigente/)
+contiene('LeadConversationSidebar.vue monta <compromiso-vigente>', SIDEBAR, /<compromiso-vigente|<CompromisoVigente/)
+
+const FICHA = ['src', 'components', 'pipeline', 'OpportunityModal.vue']
+contiene('OpportunityModal.vue importa CompromisoVigente', FICHA, /import\s+CompromisoVigente\s+from\s+['"]@\/components\/lead\/CompromisoVigente\.vue['"]/)
+contiene('OpportunityModal.vue lo registra como componente', FICHA, /components:\s*\{[^}]*CompromisoVigente/)
+contiene('OpportunityModal.vue monta <compromiso-vigente>', FICHA, /<compromiso-vigente|<CompromisoVigente/)
+
 console.log('\n' + corridas + ' comprobaciones, ' + fallos + ' fallas')
 process.exit(fallos === 0 ? 0 : 1)
