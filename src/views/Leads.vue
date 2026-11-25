@@ -61,6 +61,18 @@
       <span v-if="chats_total_texto" class="small text-muted">{{ chats_total_texto }}</span>
 
       <div class="ms-auto d-flex align-items-center gap-2">
+        <!--
+          Alta de un lead que llegó por otro medio (referido, WhatsApp de Lucas, llamada): misión
+          leads-referidos-compromisos. Se ve también con el perfil «Sólo Leads»: Juan puede cargar al que le llegó por teléfono.
+        -->
+        <button
+          type="button"
+          class="btn btn-sm btn-primary"
+          title="Dar de alta un lead que no llegó por un anuncio ni por la web"
+          @click="show_alta_externa = true"
+        >
+          <i class="bi bi-person-plus" aria-hidden="true" /> Nuevo lead de otro medio
+        </button>
         <!-- Botón toggle para el panel de demos agendadas (próximas, en curso y realizadas) -->
         <button
           type="button"
@@ -93,6 +105,8 @@
          Los conteos son GLOBALES (no aplican el texto buscado ni el filtro de atención). Son el
          único filtro por estado que quedó: clic filtra la lista, otro clic lo saca. -->
     <atribucion-metricas />
+    <!-- Alta de un lead de otro medio: se monta recién al abrirlo, así cada apertura arranca con el formulario limpio. -->
+    <alta-externa-modal v-if="show_alta_externa" :show="true" @close="show_alta_externa = false" />
     <lead-status-cards
       :cards="lead_status_cards"
       :active_status_slug="active_status_slug"
@@ -406,6 +420,7 @@ import { cached_get, MAX_AGE_SETTINGS } from '@/common-vue/helpers/request_cache
 import ModelModal from '@/common-vue/components/model/Index.vue'
 import LeadConversationSidebar from '@/components/lead/LeadConversationSidebar.vue'
 import LeadStatusCards from '@/components/lead/LeadStatusCards.vue'
+import AltaExternaModal from '@/components/lead/AltaExternaModal.vue'
 import AtribucionMetricas from '@/components/lead/AtribucionMetricas.vue'
 import LeadChatsList from '@/components/lead/chats/Index.vue'
 import {
@@ -456,6 +471,7 @@ const EN_CURSO_LIFECYCLE_STATUSES = [
 export default {
   name: 'ViewLeads',
   components: {
+    AltaExternaModal,
     AtribucionMetricas,
     ModelModal,
     LeadConversationSidebar,
@@ -471,6 +487,8 @@ export default {
       model_extra_tabs: es_solo_leads(this.$store.state.auth.admin) ? [] : lead_model_extra_tabs,
       /** Orden de la barra de pestañas del modal (Resumen → Operaciones → Demo → Basico → Contrato → Pipelines). */
       model_properties_nav_order: lead_model_properties_nav_order,
+      /** Controla el modal «Nuevo lead de otro medio». */
+      show_alta_externa: false,
       /** Controla visibilidad del panel de demos agendadas. */
       show_demos_agendadas: false,
       /** Demos próximas agrupadas por fecha (ascendente), cada ítem con date_key, heading y leads. */
