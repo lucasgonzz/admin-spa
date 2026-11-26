@@ -123,7 +123,6 @@ const UMBRALES_DEMORA = { plan: 120, construccion: 240, revision: 120, tests: 12
  */
 function mision(o) {
   const minutos = o.minutos
-  const terminada = o.estado === 'terminada'
   // historial: las fases previas hacia atrás desde el inicio de la actual, y la actual abierta
   const fases = []
   let hasta = minutos
@@ -157,7 +156,9 @@ function mision(o) {
     etapa_desde: iso(minutos),
     minutos_en_etapa: minutos,
     umbral_min: UMBRALES_DEMORA[o.etapa],
-    demorada: !terminada && minutos > UMBRALES_DEMORA[o.etapa],
+    // igual que el servidor: sólo una misión `trabajando` puede estar demorada (esperando a Lucas o
+    // trabada se ven con su propio estado, aunque hayan pasado el umbral de la etapa)
+    demorada: o.estado === 'trabajando' && minutos > UMBRALES_DEMORA[o.etapa],
     fases: fases,
     ruta: o.ticket ? '/soporte/ticket/' + o.ticket : null,
     sin_senal: !!o.sin_senal,
@@ -329,7 +330,7 @@ export function estado_de_prueba(paso) {
     }),
     mision({
       id: 'codex:0198a4', titulo: 'Mejora de listados de Compras', origen: 'codex', estado: 'esperando_lucas', sin_senal: ss,
-      etapa: 'plan', fase: 'plan', minutos: 70 + p, previas: [['contexto', 'plan', 15]],
+      etapa: 'plan', fase: 'plan', minutos: 200 + p, previas: [['contexto', 'plan', 15]],
       repos: ['empresa-spa'], sucios: 0, actividad: 20,
       agentes: [ag('coordinador', 'codex', 'idle'), ag('arquitecto', 'codex', 'idle')],
     }),
@@ -473,6 +474,8 @@ export function estado_de_prueba(paso) {
       modo: 'misiones',
       misiones: misiones,
       por_origen: contar_por_origen(misiones),
+      // el paso 1 simula el reporte recortado por tamaño (3 misiones no entran); el resto, completo
+      misiones_recorte: p === 1 ? { recortado: true, omitidas: 3 } : { recortado: false, omitidas: 0 },
       slots_en_uso: slots_en_uso,
       openclaw: {
         reportado_at: iso(reporterOk ? 0.4 : 9),

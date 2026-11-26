@@ -576,10 +576,11 @@ export function capaAdelante() {
  * @param {number} y
  * @param {string} rotulo Texto ya escapado.
  * @param {{texto:string,color:string}|null} fase
- * @param {{mesaNueva?:boolean, faseNueva?:boolean, titulo?:string, demorada?:boolean,
+ * @param {{mesaNueva?:boolean, faseNueva?:boolean, titulo?:string, demorada?:boolean, esperando?:boolean,
  *   misionId?:string, extra?:string}} [op] `mesaNueva` la hace aparecer con un fundido; `faseNueva`
  *   hace entrar el chip con «pop»; `titulo` (ya escapado) es el tooltip; `demorada` marca la mesa
- *   con borde y chip rojos (clase `mesa-demorada`); `misionId` (ya escapado) la hace tocable
+ *   con borde y chip rojos (clase `mesa-demorada`); `esperando` (misión esperando a Lucas, que NO
+ *   es demorada) la marca con borde y chip naranjas «te espera» (clase `mesa-espera`); `misionId` (ya escapado) la hace tocable
  *   (`data-mision-id`); `extra` es SVG ya armado (insignia y barra de etapas) en las coordenadas
  *   de la mesa.
  * @returns {string}
@@ -588,12 +589,26 @@ export function mesa(col, y, rotulo, fase, op) {
   const o = op || {}
   const w = col.w
   const fs = w < 130 ? 10.5 : 12
-  const clases = (o.mesaNueva ? 'mesa-nueva ' : '') + (o.demorada ? 'mesa-demorada' : '')
-  return html`<g transform="translate(${col.x},${y})" class="${clases.trim()}"${o.misionId ? ' data-mision-id="' + o.misionId + '" style="cursor:pointer"' : ''}>${o.titulo ? '<title>' + o.titulo + '</title>' : ''}${o.demorada ? html`<rect class="borde-demorada" x="-5" y="-5" width="${w + 10}" height="52" rx="9" fill="none" stroke="#EF4444" stroke-width="3"/>` : ''}<g filter="url(#ell-shadow)">
+  // una misión demorada gana sobre «esperando» (no se dan juntas: el servidor sólo demora las trabajando)
+  const esperando = !!o.esperando && !o.demorada
+  const clases = (o.mesaNueva ? 'mesa-nueva ' : '') + (o.demorada ? 'mesa-demorada ' : '') + (esperando ? 'mesa-espera' : '')
+  return html`<g transform="translate(${col.x},${y})" class="${clases.trim()}"${o.misionId ? ' data-mision-id="' + o.misionId + '" style="cursor:pointer"' : ''}>${o.titulo ? '<title>' + o.titulo + '</title>' : ''}${o.demorada ? html`<rect class="borde-demorada" x="-5" y="-5" width="${w + 10}" height="52" rx="9" fill="none" stroke="#EF4444" stroke-width="3"/>` : ''}${esperando ? html`<rect class="borde-espera" x="-5" y="-5" width="${w + 10}" height="52" rx="9" fill="none" stroke="#FA7E06" stroke-width="2.5" stroke-dasharray="7 5"/>` : ''}<g filter="url(#ell-shadow)">
 	<rect x="0" y="0" width="${w}" height="14" rx="4" fill="url(#ell-gWood)"/><rect x="0" y="14" width="${w}" height="26" rx="4" fill="#B48A5C"/>
 	<rect x="8" y="40" width="10" height="16" fill="#8A6A4E"/><rect x="${w - 18}" y="40" width="10" height="16" fill="#8A6A4E"/>
 	${rotulo ? html`<text x="${w / 2}" y="33" text-anchor="middle" font-size="${fs}" font-weight="700" fill="#fff" letter-spacing="${w < 130 ? 0.3 : 1}">${rotulo}</text>` : ''}
-</g>${fase ? chipFase(w / 2, -66, fase, w, o.faseNueva || o.mesaNueva) : ''}${o.extra || ''}${o.demorada ? chipDemorada(w / 2, -92) : ''}</g>`
+</g>${fase ? chipFase(w / 2, -66, fase, w, o.faseNueva || o.mesaNueva) : ''}${o.extra || ''}${o.demorada ? chipDemorada(w / 2, -92) : ''}${esperando ? chipEspera(w / 2, -92) : ''}</g>`
+}
+
+/**
+ * Chip naranja «te espera» de una misión que espera una decisión o acción de Lucas. No es el
+ * rojo de la demora: nadie la está atrasando, está parada porque la próxima jugada es de él.
+ *
+ * @param {number} x
+ * @param {number} y
+ * @returns {string}
+ */
+export function chipEspera(x, y) {
+  return html`<g transform="translate(${x},${y})"><g class="tag"><rect x="-34" y="-11" width="68" height="22" rx="11" fill="#FA7E06"/><text y="4" text-anchor="middle" font-size="11" font-weight="800" fill="#fff" letter-spacing=".4">te espera</text></g></g>`
 }
 
 /**
@@ -736,7 +751,8 @@ export function pizarra(lineas, sinSenal, sinDatos) {
     const color = v2 ? l.color || '#94A3B8' : l.fase ? l.fase.color : '#94A3B8'
     const texto = v2 ? String(l.rotulo || 'sin título') : 's' + l.slot + ' · ' + (l.mision || l.proyecto || 'sin misión')
     const recorte = texto.length > 22 ? texto.slice(0, 21) + '…' : texto
-    const etapa = v2 ? l.etapa_texto || '' : l.fase ? l.fase.texto : ''
+    // una misión esperando a Lucas muestra «te espera» en vez de su etapa
+    const etapa = v2 && l.espera ? 'te espera' : v2 ? l.etapa_texto || '' : l.fase ? l.fase.texto : ''
     s += html`<rect x="-112" y="${y - 9}" width="8" height="12" rx="2" fill="${esc(color)}"/>`
     s += html`<text x="-98" y="${y + 1}" font-size="12.5" font-weight="600" fill="#2B3A52">${esc(recorte)}</text>`
     s += html`<text x="118" y="${y + 1}" text-anchor="end" font-size="10.5" font-weight="700" fill="${esc(color)}">${esc(etapa)}</text>`

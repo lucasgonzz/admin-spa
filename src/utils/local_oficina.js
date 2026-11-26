@@ -145,7 +145,8 @@ function es_objeto(valor) {
  *
  * @param {Object|null|undefined} oficina Bloque `escena.oficina`.
  * @returns {{reporter:Object, planificador:Object, slots:Array, modo:string, misiones:Array,
- *   por_origen:Object, slots_en_uso:(number|null), openclaw:(Object|null), cola:(Object|null),
+ *   por_origen:Object, slots_en_uso:(number|null), misiones_recorte:{recortado:boolean, omitidas:number},
+ *   openclaw:(Object|null), cola:(Object|null),
  *   umbrales_demora:Object}}
  */
 export function completar_oficina(oficina) {
@@ -159,6 +160,7 @@ export function completar_oficina(oficina) {
     misiones: Array.isArray(base.misiones) ? base.misiones.filter(Boolean) : [],
     por_origen: es_objeto(base.por_origen) ? base.por_origen : {},
     slots_en_uso: typeof base.slots_en_uso === 'number' ? base.slots_en_uso : null,
+    misiones_recorte: completar_recorte(base.misiones_recorte),
     openclaw: openclaw
       ? {
           reportado_at: openclaw.reportado_at || null,
@@ -170,6 +172,37 @@ export function completar_oficina(oficina) {
     cola: es_objeto(base.cola) ? completar_cola(base.cola) : null,
     umbrales_demora: es_objeto(base.umbrales_demora) ? base.umbrales_demora : {},
   }
+}
+
+/**
+ * Normaliza `oficina.misiones_recorte` (cuántas misiones no entraron en el reporte guardado por
+ * el tope de tamaño). Un admin viejo no lo manda (ausente o null): se lee como «sin recorte».
+ *
+ * @param {Object|null|undefined} recorte
+ * @returns {{recortado:boolean, omitidas:number}}
+ */
+function completar_recorte(recorte) {
+  const r = es_objeto(recorte) ? recorte : {}
+  const omitidas = typeof r.omitidas === 'number' && r.omitidas > 0 ? Math.floor(r.omitidas) : 0
+  return { recortado: r.recortado === true, omitidas: omitidas }
+}
+
+/**
+ * Texto de la cabecera y del panel cuando el reporte no trajo todas las misiones.
+ *
+ * @param {{recortado:boolean, omitidas:number}|null|undefined} recorte
+ * @returns {string} «N misiones no entran» (o «1 misión no entra»); vacío si no hay recorte.
+ */
+export function texto_recorte(recorte) {
+  if (!recorte || recorte.recortado !== true) {
+    return ''
+  }
+  const n = typeof recorte.omitidas === 'number' ? recorte.omitidas : 0
+  if (n <= 0) {
+    // recortado sin saber cuántas: el texto igual avisa
+    return 'faltan misiones'
+  }
+  return n === 1 ? '1 misión no entra' : n + ' misiones no entran'
 }
 
 /**

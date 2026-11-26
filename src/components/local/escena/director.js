@@ -1276,13 +1276,17 @@ export class Director {
     // cuentan como misión en curso.
     const lineas = conMesa
       .filter(function (entrada) {
-        return entrada.datos.estado === 'trabajando' && (!entrada.datos.mision_datos || entrada.datos.mision_datos.estado === 'trabajando')
+        // en el modo misiones también figuran las que esperan a Lucas (con «te espera»); una
+        // trabada o colgada no cuenta como misión en curso
+        const md = entrada.datos.mision_datos
+        return entrada.datos.estado === 'trabajando' && (!md || md.estado === 'trabajando' || md.estado === 'esperando_lucas')
       })
       .map(function (entrada) {
         const s = entrada.datos
         if (enMisiones) {
           const etapa = ETAPAS[indice_etapa(s.mision_datos.etapa)]
-          return { rotulo: recortar(s.mision_datos.titulo || 'sin título', 22), color: etapa ? etapa.color : '#94A3B8', etapa_texto: etapa ? etapa.texto : '' }
+          const espera = s.mision_datos.estado === 'esperando_lucas'
+          return { rotulo: recortar(s.mision_datos.titulo || 'sin título', 22), color: espera ? '#FA7E06' : etapa ? etapa.color : '#94A3B8', etapa_texto: etapa ? etapa.texto : '', espera: espera }
         }
         return { slot: numero(s.slot), mision: s.mision || null, proyecto: s.proyecto || null, fase: s.fase && FASES[s.fase] ? FASES[s.fase] : null }
       })
@@ -1572,7 +1576,7 @@ export class Director {
         })
         const ancho = m.col.w
         const extra = insigniaOrigen(14, -66, md.origen) + barraEtapas(30, -70, ancho - 38, indice_etapa(md.etapa))
-        mesaSvg = mesa(m.col, MESA_Y, null, null, { mesaNueva: m.mesaNueva, titulo: esc(titulo), demorada: !!md.demorada, misionId: esc(md.id), extra: extra })
+        mesaSvg = mesa(m.col, MESA_Y, null, null, { mesaNueva: m.mesaNueva, titulo: esc(titulo), demorada: !!md.demorada, esperando: md.estado === 'esperando_lucas', misionId: esc(md.id), extra: extra })
         plaquita = plaquitaMesa(m.col, MESA_Y, esc(recortar(md.titulo || 'sin título', angosta ? 14 : 22)), m.mesaNueva)
         if (enEtapa) {
           // «lleva N en <etapa>»: en las mesas angostas va sin el «lleva» y con la etapa abreviada

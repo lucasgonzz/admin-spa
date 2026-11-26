@@ -614,6 +614,10 @@ export default {
 .ell-svg :deep(.mesa-demorada .borde-demorada) {
   animation: demorada 1.6s ease-in-out infinite alternate;
 }
+/* Misión esperando a Lucas: borde naranja punteado y quieto (no es una demora, no late). */
+.ell-svg :deep(.mesa-espera .borde-espera) {
+  opacity: 0.95;
+}
 @keyframes demorada {
   from {
     opacity: 0.45;

@@ -141,6 +141,7 @@
         v-model:filtro="filtro_origen"
         :misiones="oficina.misiones"
         :por_origen="oficina.por_origen"
+        :recorte="oficina.misiones_recorte"
         :cola="oficina.cola"
         :ahora="ahora"
         :enfocar="enfoque"
@@ -168,7 +169,7 @@ import api from '@/utils/axios'
 import ElLocalEscena from './Escena.vue'
 import PanelOpenclaw from './PanelOpenclaw.vue'
 import PanelMisiones from './PanelMisiones.vue'
-import { ESTADOS_GATEWAY, NIVELES_RECURSOS, completar_oficina, filtrar_misiones, nivel_recursos, texto_recursos } from '@/utils/local_oficina'
+import { ESTADOS_GATEWAY, NIVELES_RECURSOS, completar_oficina, filtrar_misiones, nivel_recursos, texto_recorte, texto_recursos } from '@/utils/local_oficina'
 
 /** Cada cuánto se vuelve a pedir la escena (Lucas: «cada ~1 minuto, no segundo a segundo»). */
 const POLL_MS = 60000
@@ -811,6 +812,11 @@ export default {
           titulo: 'Carpetas de trabajo (worktrees) con una misión en curso',
         },
       ]
+      // si el servidor recortó el reporte, la cabecera lo dice (si no, parecería que no hay más)
+      const recorte = texto_recorte(this.oficina.misiones_recorte)
+      if (recorte) {
+        lista.push({ clave: 'recorte', numero: '', rotulo: recorte, color: '#FA7E06', accion: 'misiones', titulo: 'El reporte de la PC es demasiado grande y no entran todas las misiones. Ver el panel' })
+      }
       const gateway = this.oficina.openclaw ? ESTADOS_GATEWAY[this.oficina.openclaw.gateway.estado] || ESTADOS_GATEWAY.desconocido : ESTADOS_GATEWAY.desconocido
       lista.push({ clave: 'openclaw', numero: 'OpenClaw', rotulo: gateway.texto, color: gateway.color, accion: 'openclaw', titulo: 'Ver el Workboard y las tareas programadas de OpenClaw' })
       const chequeo = this.oficina.cola ? this.oficina.cola.ultimo_chequeo : null

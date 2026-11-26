@@ -36,13 +36,17 @@
         Todavía no llegan misiones de la PC de Lucas. Cuando el reporter de Linux se conecte, van a aparecer acá.
       </p>
       <p v-else-if="visibles.length === 0" class="pm__vacio">No hay misiones de este origen.</p>
+      <p v-if="texto_recorte" class="pm__recorte" role="status">
+        <i class="bi bi-exclamation-circle" aria-hidden="true" />
+        {{ texto_recorte }} en este panel: el reporte de la PC es demasiado grande.
+      </p>
 
       <ul v-if="visibles.length" class="pm__lista">
         <li
           v-for="m in visibles"
           :key="'pm-m-' + m.id"
           class="pm__mision"
-          :class="{ 'pm__mision--demorada': m.demorada, 'pm__mision--foco': foco === m.id }"
+          :class="{ 'pm__mision--demorada': m.demorada, 'pm__mision--espera': m.estado === 'esperando_lucas' && !m.demorada, 'pm__mision--foco': foco === m.id }"
           :data-mision-id="m.id"
         >
           <div class="pm__fila">
@@ -53,6 +57,7 @@
                 <span class="pm__chip" :style="{ '--pm-color': origen_de(m).color }">{{ origen_de(m).texto }}</span>
                 <span class="pm__chip" :style="{ '--pm-color': estado_de(m).color }">{{ estado_de(m).texto }}</span>
                 <span v-if="m.demorada" class="pm__chip pm__chip--demorada">demorada</span>
+                <span v-else-if="m.estado === 'esperando_lucas'" class="pm__chip pm__chip--espera" title="Está parada esperando una decisión o acción tuya; no está demorada">te espera</span>
                 <span v-if="m.sin_senal" class="pm__chip pm__chip--suave" title="Hace más de 5 minutos que la PC no reporta">sin señal</span>
               </div>
             </div>
@@ -190,6 +195,7 @@ import {
   texto_en_etapa,
   texto_hace,
   texto_motivos,
+  texto_recorte,
   texto_segundos,
 } from '@/utils/local_oficina'
 
@@ -200,6 +206,8 @@ export default {
     misiones: { type: Array, default: () => [] },
     /** `oficina.por_origen`: no terminadas por origen. */
     por_origen: { type: Object, default: () => ({}) },
+    /** `oficina.misiones_recorte` ya normalizado (ausente en un admin viejo). */
+    recorte: { type: Object, default: null },
     /** Origen elegido en el filtro: una clave de `ORIGENES` o `'todas'`. */
     filtro: { type: String, default: 'todas' },
     /** `oficina.cola` ya normalizada, o null si la PC no la reporta. */
@@ -219,6 +227,10 @@ export default {
   computed: {
     etapas() {
       return ETAPAS
+    },
+    /** «N misiones no entran» si el servidor recortó el reporte (vacío si no). */
+    texto_recorte() {
+      return texto_recorte(this.recorte)
     },
     /** ¿La PC mandó alguna misión o la cola? */
     hay_datos() {
@@ -498,6 +510,14 @@ export default {
   margin: 10px 4px;
   color: #8fa0b8;
 }
+.pm__recorte {
+  margin: 10px 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(250, 126, 6, 0.14);
+  color: #fdba74;
+  font-weight: 600;
+}
 
 /* ---------- Una misión ---------- */
 .pm__lista {
@@ -517,6 +537,9 @@ export default {
 }
 .pm__mision--demorada {
   border-color: rgba(239, 68, 68, 0.55);
+}
+.pm__mision--espera {
+  border-color: rgba(250, 126, 6, 0.5);
 }
 .pm__mision--foco {
   background: rgba(11, 132, 248, 0.16);
@@ -566,6 +589,11 @@ export default {
 }
 .pm__chip--demorada {
   background: #ef4444;
+  color: #fff;
+  font-weight: 800;
+}
+.pm__chip--espera {
+  background: #fa7e06;
   color: #fff;
   font-weight: 800;
 }
