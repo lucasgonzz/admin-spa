@@ -531,7 +531,8 @@ export function capaMedio() {
 
 /**
  * Capa de adelante: el tabique de vidrio de las oficinas, plantas y la mesa de exhibición.
- * Parte viva: `oficinas-extra` (el «+N mesas» si hay más slots trabajando que mesas).
+ * Parte viva: `oficinas-extra` (el «+N mesas» si hay más misiones o slots que mesas) y `espera`
+ * (la fila de la cola de misiones junto a la puerta de las oficinas).
  *
  * @returns {string}
  */
@@ -548,6 +549,8 @@ export function capaAdelante() {
 </g>`
   s += html`<g data-ref="mesas-rotulos"></g>`
   s += html`<g data-ref="oficinas-extra" transform="translate(300,760)"></g>`
+  // fila de espera de la cola de misiones, del lado de afuera de la puerta de las oficinas
+  s += html`<g data-ref="espera" transform="translate(${PUERTA_OFICINA.x + 47},724)"></g>`
   s += planta(600, 760, 1.1)
   // en el prototipo esta planta iba en x 1330 y tapaba cabezas del banco: corrida a la izquierda
   s += planta(1222, 772, 1.1)

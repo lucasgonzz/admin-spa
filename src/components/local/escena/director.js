@@ -47,10 +47,14 @@ import {
   masN,
   mesa,
   plaquitaMesa,
+  barraEtapas,
+  insigniaOrigen,
+  filaEspera,
   papel,
   etiquetaFlotante,
 } from './piezas'
 import { Actor } from './motor'
+import { completar_oficina, ETAPAS, ORIGENES, ESTADOS_MISION, TEXTO_FASE, indice_etapa, recortar, texto_duracion, texto_en_etapa } from '@/utils/local_oficina'
 import { logo_cliente, clientes as INDICE_LOGOS } from '@/components/demo/clientes'
 
 /** Estados válidos de un agente del mostrador (contrato B: `agentes[].estado`). */
@@ -165,7 +169,6 @@ function cadenaLogos(n) {
  */
 function completarEstado(e) {
   const base = e && typeof e === 'object' ? e : {}
-  const oficina = base.oficina && typeof base.oficina === 'object' ? base.oficina : {}
   return {
     sinDatos: !e,
     resumen: base.resumen && typeof base.resumen === 'object' ? base.resumen : {},
@@ -174,11 +177,9 @@ function completarEstado(e) {
     }) : [],
     agentes: Array.isArray(base.agentes) ? base.agentes.filter(Boolean) : [],
     bandeja: Array.isArray(base.bandeja) ? base.bandeja.filter(Boolean) : [],
-    oficina: {
-      reporter: oficina.reporter && typeof oficina.reporter === 'object' ? oficina.reporter : { ok: false, last_seen_at: null, version: null },
-      planificador: oficina.planificador && typeof oficina.planificador === 'object' ? oficina.planificador : { estado: 'libre' },
-      slots: Array.isArray(oficina.slots) ? oficina.slots.filter(Boolean) : [],
-    },
+    // oficinas: modo `slots` (el pool de la PC de Windows) o `misiones` (reporter de Linux); lo
+    // normaliza la lógica pura, que también lo usan los paneles
+    oficina: completar_oficina(base.oficina),
     eventos: Array.isArray(base.eventos) ? base.eventos.filter(Boolean) : [],
   }
 }
@@ -285,7 +286,7 @@ export class Director {
     this.cache = {}
     this.refs = {}
     const self = this
-    ;['puerta', 'pizarra', 'tickets', 'escaner', 'bandeja', 'bandeja-notas', 'bandeja-badge', 'mesas', 'mesas-rotulos', 'banco-extra', 'entrada-extra', 'oficinas-extra', 'reloj-h', 'reloj-m'].forEach(function (r) {
+    ;['puerta', 'pizarra', 'tickets', 'escaner', 'bandeja', 'bandeja-notas', 'bandeja-badge', 'mesas', 'mesas-rotulos', 'banco-extra', 'entrada-extra', 'oficinas-extra', 'espera', 'reloj-h', 'reloj-m'].forEach(function (r) {
       self.refs[r] = svg.querySelector('[data-ref="' + r + '"]')
     })
     this.refs.pend = {}
@@ -320,7 +321,7 @@ export class Director {
       capa: 'actoresAtras',
       x: PLANIFICADOR.x,
       y: PLANIFICADOR.y,
-      titulo: 'Planificador',
+      titulo: 'OpenClaw',
     })
     this.planificadorTrabaja = false
     this.planificadorPresenta = false
@@ -1164,20 +1165,24 @@ export class Director {
    * Oficinas: planificador, pizarra y una mesa por slot con misión
    * ----------------------------------------------------------------------------------------- */
 
+  /**
+   * Oficinas: OpenClaw (el planificador), la pizarra, una mesa por misión (modo `misiones`, el
+   * reporter de Linux) o por slot (modo `slots`, el pool de la PC de Windows) y la fila de espera
+   * de la cola junto a la puerta.
+   *
+   * @param {Object} e Estado ya completado.
+   * @param {boolean} instantaneo Primer estado real: todo aparece en su lugar, sin animar.
+   */
   aplicarOficina(e, instantaneo) {
     const self = this
     const of = e.oficina
+    const enMisiones = of.modo === 'misiones'
     this.reporterOk = !e.sinDatos && of.reporter && of.reporter.ok === true
     const sinSenal = !e.sinDatos && !this.reporterOk
 
-    // con mesa: todo slot que no está libre (trabajando, colgado o huérfano)
-    const conMesa = of.slots
-      .filter(function (s) {
-        return s && numero(s.slot) !== null && s.estado && s.estado !== 'libre'
-      })
-      .sort(function (a, b) {
-        return numero(a.slot) - numero(b.slot)
-      })
+    // entradas con mesa: cada una lleva su `clave` (número de slot o `m:<id>`) y sus `datos` con
+    // la forma que entienden el orquestador y los ayudantes
+    const conMesa = enMisiones ? this.entradasDeMisiones(of.misiones) : this.entradasDeSlots(of.slots)
     const visibles = conMesa.slice(0, MAX_MESAS)
     const cols = columnasMesas(visibles.length)
     const vigentes = new Set()
@@ -1185,18 +1190,20 @@ export class Director {
     let vuelos = this.misionesSalidas || 0
     this.misionesSalidas = 0
 
-    visibles.forEach(function (s, i) {
-      const slot = numero(s.slot)
-      vigentes.add(slot)
+    visibles.forEach(function (entrada, i) {
+      const clave = entrada.clave
+      const s = entrada.datos
+      vigentes.add(clave)
       const col = cols[i]
-      const fase = s.fase && FASES[s.fase] ? FASES[s.fase] : null
-      let m = self.mesas.get(slot)
+      const fase = !enMisiones && s.fase && FASES[s.fase] ? FASES[s.fase] : null
+      let m = self.mesas.get(clave)
       const misionNueva = !m || (s.mision && m.mision !== s.mision)
       if (!m) {
-        m = { slot: slot, orq: null, ayudantes: new Map(), mision: null, fase: null, visible: false, mesaNueva: false, faseNueva: false, col: col }
-        self.mesas.set(slot, m)
+        m = { slot: clave, orq: null, ayudantes: new Map(), mision: null, fase: null, visible: false, mesaNueva: false, faseNueva: false, col: col, demorada: false }
+        self.mesas.set(clave, m)
       }
       m.datos = s
+      m.nombre = entrada.nombre
       m.col = col
       if (m.fase !== (fase ? s.fase : null) && m.visible) {
         m.faseNueva = !instantaneo
@@ -1227,18 +1234,24 @@ export class Director {
         self.presentarMision(m, s, retrasoMision)
         retrasoMision += 2600
       } else if (!m.esperando) {
-        // slot nuevo sin una misión pendiente que se haya ido de la bandeja: la mesa se arma sola
+        // entrada nueva sin una misión pendiente que se haya ido de la bandeja: la mesa se arma sola
         self.armarMesa(m)
       }
+      // una misión que acaba de pasar el umbral de su etapa: el orquestador avisa con un «!»
+      const demorada = !!(s.mision_datos && s.mision_datos.demorada)
+      if (demorada && !m.demorada && m.visible && !instantaneo && !self.motor.reducido) {
+        m.orq.globo('alerta', 5000)
+      }
+      m.demorada = demorada
     })
 
-    // mesas que ya no están (slot libre otra vez): se van los ayudantes y se levanta la mesa
-    Array.from(this.mesas.keys()).forEach(function (slot) {
-      if (vigentes.has(slot)) {
+    // mesas que ya no están (slot libre otra vez, misión terminada): se van los ayudantes y se levanta la mesa
+    Array.from(this.mesas.keys()).forEach(function (clave) {
+      if (vigentes.has(clave)) {
         return
       }
-      const m = self.mesas.get(slot)
-      self.mesas.delete(slot)
+      const m = self.mesas.get(clave)
+      self.mesas.delete(clave)
       m.ayudantes.forEach(function (a) {
         self.retirarAyudante(a, instantaneo)
       })
@@ -1254,25 +1267,105 @@ export class Director {
     this.dibujarMesas()
     this.pintarRef('oficinas-extra', this.refs['oficinas-extra'], masN(conMesa.length - visibles.length, 'mesas'))
 
-    // pizarra: las misiones en curso (slots con estado «trabajando», el mismo criterio que el chip
-    // `misiones_en_curso` del resumen) con su fase, y el cartel si la PC de Lucas no reporta. Los
-    // colgados y huérfanos tienen mesa con su chip, pero no cuentan como misión en curso.
+    // fila de espera de la cola junto a la puerta de las oficinas (sólo en modo misiones)
+    const enEspera = enMisiones && of.cola ? of.cola.en_espera.length : 0
+    this.pintarRef('espera', this.refs.espera, filaEspera(enEspera))
+
+    // pizarra: las misiones en curso con su fase o etapa y, si la PC de Lucas no reporta, el
+    // cartel de «sin señal». Los colgados, huérfanos y trabadas tienen mesa con su chip, pero no
+    // cuentan como misión en curso.
     const lineas = conMesa
-      .filter(function (s) {
-        return s.estado === 'trabajando'
+      .filter(function (entrada) {
+        return entrada.datos.estado === 'trabajando' && (!entrada.datos.mision_datos || entrada.datos.mision_datos.estado === 'trabajando')
       })
-      .map(function (s) {
+      .map(function (entrada) {
+        const s = entrada.datos
+        if (enMisiones) {
+          const etapa = ETAPAS[indice_etapa(s.mision_datos.etapa)]
+          return { rotulo: recortar(s.mision_datos.titulo || 'sin título', 22), color: etapa ? etapa.color : '#94A3B8', etapa_texto: etapa ? etapa.texto : '' }
+        }
         return { slot: numero(s.slot), mision: s.mision || null, proyecto: s.proyecto || null, fase: s.fase && FASES[s.fase] ? FASES[s.fase] : null }
       })
     this.pintarRef('pizarra', this.refs.pizarra, pizarra(lineas, sinSenal, e.sinDatos))
 
-    // planificador
-    this.planificadorTrabaja = !e.sinDatos && of.planificador && of.planificador.estado === 'trabajando'
-    this.planificador.setFlag('sin-senal', sinSenal || e.sinDatos)
+    // OpenClaw (el escritorio fijo): en modo misiones refleja la salud del gateway
+    // (`apagado` = dormido y con la antena apagada); en modo slots, el planificador de siempre
+    const estadoPlanificador = of.planificador && of.planificador.estado ? of.planificador.estado : 'libre'
+    const apagado = enMisiones && estadoPlanificador === 'apagado'
+    this.planificadorTrabaja = !e.sinDatos && estadoPlanificador === 'trabajando'
+    this.planificador.setFlag('sin-senal', sinSenal || e.sinDatos || apagado)
+    this.planificador.setFlag('dormido', apagado)
     if (!this.planificadorPresenta) {
       this.planificador.setEstado(this.planificadorTrabaja ? 'present' : 'idle')
     }
-    this.planificador.setTitulo('Planificador · ' + (this.planificadorTrabaja ? 'planificando' : 'libre') + (sinSenal ? ' · sin señal de la PC de Lucas' : ''))
+    const textoEstado = apagado ? 'apagado' : this.planificadorTrabaja ? 'trabajando' : 'libre'
+    this.planificador.setTitulo('OpenClaw · ' + textoEstado + (sinSenal ? ' · sin señal de la PC de Lucas' : '') + ' · tocá para ver el Workboard')
+  }
+
+  /**
+   * Entradas con mesa del modo `slots`: todo slot que no está libre (trabajando, colgado o
+   * huérfano), por número de slot.
+   *
+   * @param {Array<Object>} slots
+   * @returns {Array<{clave:number, nombre:string, datos:Object}>}
+   */
+  entradasDeSlots(slots) {
+    return slots
+      .filter(function (s) {
+        return s && numero(s.slot) !== null && s.estado && s.estado !== 'libre'
+      })
+      .sort(function (a, b) {
+        return numero(a.slot) - numero(b.slot)
+      })
+      .map(function (s) {
+        return { clave: numero(s.slot), nombre: 's' + numero(s.slot), datos: s }
+      })
+  }
+
+  /**
+   * Entradas con mesa del modo `misiones`: las no terminadas, en el orden en que llegan (el admin
+   * ya las ordena: trabajando, trabada, esperando a Lucas). Cada misión se traduce a los `datos`
+   * que entienden el orquestador y los ayudantes: el coordinador es el orquestador (si falta,
+   * se le pone uno quieto), una misión trabada es un orquestador dormido («colgado») y el resto
+   * de los agentes son ayudantes.
+   *
+   * @param {Array<Object>} misiones
+   * @returns {Array<{clave:string, nombre:string, datos:Object}>}
+   */
+  entradasDeMisiones(misiones) {
+    return misiones
+      .filter(function (m) {
+        return m && m.id !== undefined && m.id !== null && m.estado !== 'terminada'
+      })
+      .map(function (m) {
+        const agentes = (Array.isArray(m.agentes) ? m.agentes : []).filter(Boolean)
+        const hayActivo = agentes.some(function (a) {
+          return a.estado === 'activo' || a.estado === 'busy'
+        })
+        const coordinador = agentes.filter(function (a) {
+          return a.rol === 'coordinador' || a.rol === 'orquestador'
+        })[0]
+        // el orquestador tipea sólo si la misión trabaja y algún agente está activo
+        const orquestador = {
+          rol: 'orquestador',
+          runtime: coordinador && coordinador.runtime ? coordinador.runtime : 'claude',
+          estado: m.estado === 'trabajando' && hayActivo ? 'activo' : 'idle',
+        }
+        const ayudantes = agentes.filter(function (a) {
+          return a.rol !== 'coordinador' && a.rol !== 'orquestador'
+        })
+        return {
+          clave: 'm:' + m.id,
+          nombre: recortar(m.titulo || m.slug || String(m.id), 22),
+          datos: {
+            estado: m.estado === 'trabada' ? 'colgado' : 'trabajando',
+            mision: m.titulo || m.slug || String(m.id),
+            fase: null,
+            agentes: [orquestador].concat(ayudantes),
+            mision_datos: m,
+          },
+        }
+      })
   }
 
   /**
@@ -1291,7 +1384,7 @@ export class Director {
     m.orq.setEstado(activo && !colgado ? 'typing' : 'idle')
     m.orq.setFlag('dormido', colgado)
     m.orq.setFlag('sin-senal', !this.reporterOk)
-    let t = 'Orquestador de s' + m.slot
+    let t = 'Orquestador de ' + m.nombre
     if (orqAgente && orqAgente.runtime) {
       t += ' (' + orqAgente.runtime + ')'
     }
@@ -1335,7 +1428,7 @@ export class Director {
       const p = lugarAyudante(m.col, k)
       const activo = d.a.estado === 'busy' || d.a.estado === 'activo'
       let actor = m.ayudantes.get(d.clave)
-      const titulo = rol.rotulo.charAt(0).toUpperCase() + rol.rotulo.slice(1) + (d.a.nombre ? ' · ' + d.a.nombre : '') + (d.a.runtime ? ' (' + d.a.runtime + ')' : '') + ' · s' + m.slot
+      const titulo = rol.rotulo.charAt(0).toUpperCase() + rol.rotulo.slice(1) + (d.a.nombre ? ' · ' + d.a.nombre : '') + (d.a.runtime ? ' (' + d.a.runtime + ')' : '') + ' · ' + m.nombre
       const capa = p.atras ? 'actoresAtras' : 'actoresFrente'
       if (actor) {
         // si la mesa pasó de ancha a angosta (o al revés), cambia de adelante a detrás de la mesa
@@ -1443,7 +1536,11 @@ export class Director {
     })
   }
 
-  /** Dibuja las mesas visibles con su rótulo `s<N> · proyecto` y el chip de fase. */
+  /**
+   * Dibuja las mesas visibles. Modo `slots`: rótulo `s<N> · proyecto` y chip de fase. Modo
+   * `misiones`: insignia del origen y barra de las 6 etapas arriba, título de la misión en la
+   * plaquita y «lleva N en <etapa>» abajo; si está demorada, borde y chip rojos.
+   */
   dibujarMesas() {
     let s = ''
     let rotulos = ''
@@ -1452,32 +1549,67 @@ export class Director {
         return
       }
       const d = m.datos || {}
-      const fase = m.fase && FASES[m.fase] ? FASES[m.fase] : null
-      let chip = fase
-      if (d.estado === 'colgado') {
-        chip = { texto: 'colgado', color: '#94A3B8' }
-      } else if (d.estado === 'huerfano') {
-        chip = { texto: 'huérfano', color: '#B45309' }
-      } else if (!chip) {
-        chip = { texto: 'sin fase', color: '#94A3B8' }
+      const apagada = d.estado === 'colgado' || !m.tieneOrq
+      let mesaSvg = ''
+      let plaquita = ''
+      if (d.mision_datos) {
+        const md = d.mision_datos
+        const angosta = m.col.w < 130
+        const origen = ORIGENES[md.origen] || ORIGENES.desconocido
+        const estado = ESTADOS_MISION[md.estado] || ESTADOS_MISION.trabajando
+        const etapa = ETAPAS[indice_etapa(md.etapa)] || null
+        const fase = md.fase ? (TEXTO_FASE[md.fase] || md.fase) + (md.fase_inferida ? ' ≈' : '') : ''
+        let titulo = (md.titulo || 'Misión') + ' · ' + origen.texto + ' · ' + estado.texto
+        if (fase) {
+          titulo += ' · ' + fase
+        }
+        const enEtapa = texto_en_etapa(md)
+        if (enEtapa) {
+          titulo += ' · ' + enEtapa + (md.demorada ? ' (demorada: pasó los ' + texto_duracion(md.umbral_min) + ' de la etapa)' : '')
+        }
+        ;(Array.isArray(md.worktrees) ? md.worktrees : []).slice(0, 4).forEach(function (w) {
+          titulo += ' · ' + w.repo + (w.sucios ? ' (' + w.sucios + ' sin commitear)' : '')
+        })
+        const ancho = m.col.w
+        const extra = insigniaOrigen(14, -66, md.origen) + barraEtapas(30, -70, ancho - 38, indice_etapa(md.etapa))
+        mesaSvg = mesa(m.col, MESA_Y, null, null, { mesaNueva: m.mesaNueva, titulo: esc(titulo), demorada: !!md.demorada, misionId: esc(md.id), extra: extra })
+        plaquita = plaquitaMesa(m.col, MESA_Y, esc(recortar(md.titulo || 'sin título', angosta ? 14 : 22)), m.mesaNueva)
+        if (enEtapa) {
+          // «lleva N en <etapa>»: en las mesas angostas va sin el «lleva»
+          const texto = angosta ? enEtapa.replace(/^lleva /, '') : enEtapa
+          const anchoPildora = Math.min(m.col.w + 10, 12 + texto.length * (angosta ? 5.2 : 6))
+          plaquita += '<g transform="translate(' + (m.col.x + m.col.w / 2) + ',' + (MESA_Y + 72) + ')" pointer-events="none"><rect x="' + -anchoPildora / 2 + '" y="-9" width="' + anchoPildora + '" height="17" rx="8.5" fill="' + (md.demorada ? '#B91C1C' : '#101C28') + '" opacity=".88"/><text y="3.4" text-anchor="middle" font-size="' + (angosta ? 9.5 : 10.5) + '" font-weight="700" fill="#fff">' + esc(texto) + '</text></g>'
+        }
+      } else {
+        const fase = m.fase && FASES[m.fase] ? FASES[m.fase] : null
+        let chip = fase
+        if (d.estado === 'colgado') {
+          chip = { texto: 'colgado', color: '#94A3B8' }
+        } else if (d.estado === 'huerfano') {
+          chip = { texto: 'huérfano', color: '#B45309' }
+        } else if (!chip) {
+          chip = { texto: 'sin fase', color: '#94A3B8' }
+        }
+        const rotulo = 's' + m.slot + (d.proyecto ? ' · ' + d.proyecto : '')
+        let titulo = rotulo + (d.mision ? ' — ' + d.mision : '') + (fase ? ' · ' + fase.texto : '')
+        if (d.rama) {
+          titulo += ' · rama ' + d.rama
+        }
+        const sucios = numero(d.sucios)
+        if (sucios) {
+          titulo += ' · ' + sucios + ' sin commitear'
+        }
+        const h = horaDe(d.ultima_actividad_at)
+        if (h) {
+          titulo += ' · última actividad ' + h
+        }
+        mesaSvg = mesa(m.col, MESA_Y, null, chip, { mesaNueva: m.mesaNueva, faseNueva: m.faseNueva, titulo: esc(titulo) })
+        plaquita = plaquitaMesa(m.col, MESA_Y, esc(rotulo), m.mesaNueva)
       }
-      const rotulo = 's' + m.slot + (d.proyecto ? ' · ' + d.proyecto : '')
-      let titulo = rotulo + (d.mision ? ' — ' + d.mision : '') + (fase ? ' · ' + fase.texto : '')
-      if (d.rama) {
-        titulo += ' · rama ' + d.rama
-      }
-      const sucios = numero(d.sucios)
-      if (sucios) {
-        titulo += ' · ' + sucios + ' sin commitear'
-      }
-      const h = horaDe(d.ultima_actividad_at)
-      if (h) {
-        titulo += ' · última actividad ' + h
-      }
-      s += mesa(m.col, MESA_Y, null, chip, { mesaNueva: m.mesaNueva, faseNueva: m.faseNueva, titulo: esc(titulo) })
-      rotulos += plaquitaMesa(m.col, MESA_Y, esc(rotulo), m.mesaNueva)
+      s += mesaSvg
+      rotulos += plaquita
       // los monitores de cada mesa van con la mesa
-      s += '<g transform="translate(' + (m.col.x + m.col.w / 2) + ',' + (MESA_Y - 4) + ')" class="monitor ' + (d.estado === 'colgado' || !m.tieneOrq ? 'apagado' : '') + '" filter="url(#ell-soft)"><rect x="-3" y="0" width="6" height="10" fill="#8FA0B8"/><rect x="-14" y="8" width="28" height="4" rx="2" fill="#8FA0B8"/><rect x="-22" y="-30" width="44" height="30" rx="4" fill="#101C28"/><rect class="pantalla screen-on" x="-19" y="-27" width="38" height="24" rx="3" fill="url(#ell-gScreen)"/><g class="lineas" fill="#7CE0FF" opacity=".8"><rect x="-15" y="-22" width="18" height="2.5" rx="1"/><rect x="-15" y="-16" width="26" height="2.5" rx="1"/><rect x="-15" y="-10" width="12" height="2.5" rx="1"/></g></g>'
+      s += '<g transform="translate(' + (m.col.x + m.col.w / 2) + ',' + (MESA_Y - 4) + ')" class="monitor ' + (apagada ? 'apagado' : '') + '" filter="url(#ell-soft)"><rect x="-3" y="0" width="6" height="10" fill="#8FA0B8"/><rect x="-14" y="8" width="28" height="4" rx="2" fill="#8FA0B8"/><rect x="-22" y="-30" width="44" height="30" rx="4" fill="#101C28"/><rect class="pantalla screen-on" x="-19" y="-27" width="38" height="24" rx="3" fill="url(#ell-gScreen)"/><g class="lineas" fill="#7CE0FF" opacity=".8"><rect x="-15" y="-22" width="18" height="2.5" rx="1"/><rect x="-15" y="-16" width="26" height="2.5" rx="1"/><rect x="-15" y="-10" width="12" height="2.5" rx="1"/></g></g>'
       m.mesaNueva = false
       m.faseNueva = false
     })
