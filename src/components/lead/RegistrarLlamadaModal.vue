@@ -16,7 +16,8 @@
     celular. PRIMERO se registra la llamada como siempre y, con el id que devuelve la API, se sube el archivo por partes de
     4 MB (`/grabacion`, `/grabacion/partes`, `/grabacion/completar`; reglas en `utils/grabacion_de_llamada.js`) con una barra de
     progreso y tres intentos por parte. El modal no se cierra hasta que termina la subida: si falla, la llamada YA está
-    registrada (no se vuelve a mandar el formulario, se vuelve a intentar sólo la subida) y se puede cerrar igual. La
+    registrada (no se vuelve a mandar el formulario, se vuelve a intentar sólo la subida) y se puede cerrar por cualquier camino: avisa
+    `registrada` para que la ficha recargue, y el audio se sube después desde la ficha de la llamada. La
     transcripción la hace el servidor después y tarda unos minutos.
   -->
   <base-modal :show="show" title="Registrar llamada" size="lg" :stack_level="stack_level" @close="on_cancel">
@@ -445,6 +446,7 @@ export default {
       const archivo = this.archivo
       const partes = partir_en_partes(archivo.size)
       const base = '/lead/' + this.lead_id + '/llamadas/' + registro.llamada.id
+      let grabacion_id = 0
       this.saving = true
       this.server_message = ''
       this.subida = { activa: true, hechas: 0, total: partes.length }
@@ -454,11 +456,13 @@ export default {
           bytes: archivo.size,
           mime: archivo.type || '',
         }, { silent_error: true })
-        .then(function () {
-          return self.subir_las_partes(base + '/grabacion/partes', archivo, partes, 0)
+        .then(function (res) {
+          // El id de ESTA subida: las partes y «completar» lo llevan para no mezclarse con otra subida de la misma llamada.
+          grabacion_id = res.data && res.data.grabacion ? res.data.grabacion.id : 0
+          return self.subir_las_partes(base + '/grabacion/partes', archivo, partes, 0, grabacion_id)
         })
         .then(function () {
-          return api.post('/lead/' + self.lead_id + '/llamadas/' + registro.llamada.id + '/grabacion/completar', {}, { silent_error: true })
+          return api.post('/lead/' + self.lead_id + '/llamadas/' + registro.llamada.id + '/grabacion/completar', { grabacion_id: grabacion_id }, { silent_error: true })
         })
         .then(function () {
           self.saving = false
@@ -476,7 +480,7 @@ export default {
             self.$emit('registrada', registro)
             return
           }
-          self.server_message = 'La llamada quedó registrada, pero la grabación no se pudo subir: ' + resolve_error_message(error) + ' Tocá «Reintentar la subida» o cerrá y probá más tarde desde la ficha.'
+          self.server_message = 'La llamada quedó registrada; subí la grabación desde la ficha cuando tengas señal. (' + resolve_error_message(error) + ') También podés tocar «Reintentar la subida».'
         })
     },
     /**
@@ -486,16 +490,17 @@ export default {
      * @param {File} archivo Archivo elegido.
      * @param {Array<{ indice: number, desde: number, hasta: number, bytes: number }>} partes Salida de `partir_en_partes`.
      * @param {number} posicion Parte que toca subir.
+     * @param {number} grabacion_id Id de la grabación de esta subida.
      * @returns {Promise<void>}
      */
-    subir_las_partes(url, archivo, partes, posicion) {
+    subir_las_partes(url, archivo, partes, posicion, grabacion_id) {
       const self = this
       if (posicion >= partes.length) {
         return Promise.resolve()
       }
-      return this.mandar_la_parte(url, archivo, partes[posicion], 1).then(function () {
+      return this.mandar_la_parte(url, archivo, partes[posicion], 1, grabacion_id).then(function () {
         self.subida.hechas = posicion + 1
-        return self.subir_las_partes(url, archivo, partes, posicion + 1)
+        return self.subir_las_partes(url, archivo, partes, posicion + 1, grabacion_id)
       })
     },
     /**
@@ -506,12 +511,14 @@ export default {
      * @param {File} archivo Archivo elegido.
      * @param {{ indice: number, desde: number, hasta: number }} parte La parte a mandar.
      * @param {number} intento Número de intento (desde 1).
+     * @param {number} grabacion_id Id de la grabación de esta subida.
      * @returns {Promise<void>}
      */
-    mandar_la_parte(url, archivo, parte, intento) {
+    mandar_la_parte(url, archivo, parte, intento, grabacion_id) {
       const self = this
       const cuerpo = new FormData()
       cuerpo.append('indice', String(parte.indice))
+      cuerpo.append('grabacion_id', String(grabacion_id))
       cuerpo.append('parte', archivo.slice(parte.desde, parte.hasta), 'parte.bin')
       return api
         .post(url, cuerpo, { headers: { 'Content-Type': 'multipart/form-data' }, silent_error: true })
@@ -520,25 +527,34 @@ export default {
         })
         .catch(function (error) {
           const status = error && error.response ? error.response.status : 0
-          if (intento >= INTENTOS_POR_PARTE || status === 422) {
+          if (intento >= INTENTOS_POR_PARTE || status === 422 || status === 404) {
             throw error
           }
           return new Promise(function (resolve) {
             window.setTimeout(resolve, 1000 * intento)
           }).then(function () {
-            return self.mandar_la_parte(url, archivo, parte, intento + 1)
+            return self.mandar_la_parte(url, archivo, parte, intento + 1, grabacion_id)
           })
         })
     },
     /** Cierra el modal sin la grabación (la llamada ya estaba registrada): el padre se entera como si todo hubiera salido bien. */
     cerrar_sin_la_grabacion() {
-      this.$emit('registrada', this.registro)
+      this.on_cancel()
     },
-    /** Cierra sin guardar (no mientras viaja el pedido). */
+    /**
+     * Cierra el modal (X, Escape, fondo y «Cancelar» pasan por acá), no mientras viaja un pedido. Si la llamada YA se registró (y lo que
+     * falló fue la subida del audio) se avisa `registrada` y no `close`: así la ficha y el tablero recargan la tarjeta, las llamadas y
+     * el compromiso, que la llamada ya cambió.
+     */
     on_cancel() {
-      if (!this.saving) {
-        this.$emit('close')
+      if (this.saving) {
+        return
       }
+      if (this.registro) {
+        this.$emit('registrada', this.registro)
+        return
+      }
+      this.$emit('close')
     },
   },
 }
