@@ -11,6 +11,13 @@
     Se abre desde la tarjeta del tablero, la ficha de la oportunidad y el encabezado de la conversación
     del lead (también con el perfil «Sólo Leads», que ve esa conversación en sólo lectura). Cada
     apertura se monta con una `key` nueva, así que no arrastra nada de la anterior.
+
+    Grabación de la llamada (misión leads-referidos-compromisos, E3): Juan puede adjuntar el audio que grabó con el
+    celular. PRIMERO se registra la llamada como siempre y, con el id que devuelve la API, se sube el archivo por partes de
+    4 MB (`/grabacion`, `/grabacion/partes`, `/grabacion/completar`; reglas en `utils/grabacion_de_llamada.js`) con una barra de
+    progreso y tres intentos por parte. El modal no se cierra hasta que termina la subida: si falla, la llamada YA está
+    registrada (no se vuelve a mandar el formulario, se vuelve a intentar sólo la subida) y se puede cerrar igual. La
+    transcripción la hace el servidor después y tarda unos minutos.
   -->
   <base-modal :show="show" title="Registrar llamada" size="lg" :stack_level="stack_level" @close="on_cancel">
     <form class="rl-form" novalidate @submit.prevent="on_submit">
@@ -162,20 +169,47 @@
         <p class="rl-form__hint">Martín y Soporte leen estas notas para no volver a preguntarle lo que ya contó.</p>
       </div>
 
+      <!-- Grabación de la llamada (E3): opcional; se sube DESPUÉS de registrar la llamada. -->
+      <div class="rl-form__group">
+        <label class="form-label mb-1" for="rl-grabacion">Grabación de la llamada (opcional)</label>
+        <input
+          id="rl-grabacion"
+          ref="archivo_input"
+          type="file"
+          accept="audio/*,.m4a,.amr,.3gp"
+          class="form-control"
+          :class="{ 'is-invalid': !!archivo_error }"
+          :disabled="saving || !!registro"
+          @change="on_elegir_archivo"
+        />
+        <div v-if="archivo_error" class="invalid-feedback d-block">{{ archivo_error }}</div>
+        <p v-else-if="archivo" class="rl-form__hint">{{ archivo.name }} · {{ tamano_del_archivo }}</p>
+        <p v-else class="rl-form__hint">Si grabaste la llamada con el celular, subila acá: se transcribe y queda asentado lo que se habló.</p>
+
+        <!-- Progreso de la subida -->
+        <div v-if="subida.activa" class="rl-form__subida">
+          <div class="progress" role="progressbar" aria-label="Subida de la grabación" :aria-valuenow="porcentaje_subido" aria-valuemin="0" aria-valuemax="100">
+            <div class="progress-bar" :style="{ width: porcentaje_subido + '%' }" />
+          </div>
+          <p class="rl-form__hint">Subiendo la grabación: {{ subida.hechas }} de {{ subida.total }} partes. No cierres esta ventana.</p>
+        </div>
+      </div>
+
       <div v-if="server_message" class="alert alert-danger py-2 mb-0" role="alert">{{ server_message }}</div>
     </form>
 
     <template #footer>
-      <button type="button" class="btn btn-secondary" :disabled="saving" @click="on_cancel">Cancelar</button>
+      <button v-if="registro && !saving" type="button" class="btn btn-secondary" @click="cerrar_sin_la_grabacion">Cerrar sin la grabación</button>
+      <button v-else type="button" class="btn btn-secondary" :disabled="saving" @click="on_cancel">Cancelar</button>
       <button type="button" class="btn btn-primary" :disabled="saving" @click="on_submit">
-        {{ saving ? 'Registrando…' : 'Registrar llamada' }}
+        {{ texto_del_boton }}
       </button>
     </template>
   </base-modal>
 </template>
 
 <script>
-import api from '@/utils/axios'
+import api, { resolve_error_message } from '@/utils/axios'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import { first_error, show_toast, validation_errors } from '@/components/pipeline/pipeline_helpers'
 import {
@@ -189,6 +223,12 @@ import {
   validar,
   validar_paquetes,
 } from '@/utils/registrar_llamada'
+import {
+  INTENTOS_POR_PARTE,
+  partir_en_partes,
+  tamano_en_palabras,
+  validar_archivo,
+} from '@/utils/grabacion_de_llamada'
 
 /** Slug del pipeline de leads, del que salen los motivos de pérdida. */
 const SLUG_DEL_PIPELINE_DE_LEADS = 'lead'
@@ -232,6 +272,17 @@ export default {
       resultados: RESULTADOS,
       /** Paquetes de implementación para las casillas. */
       paquetes_disponibles: PAQUETES,
+      /** Grabación elegida (File) o null; sólo si pasó `validar_archivo`. */
+      archivo: null,
+      /** Por qué se rechazó el archivo elegido ('' si está bien o no se eligió). */
+      archivo_error: '',
+      /**
+       * Lo que devolvió la API al registrar la llamada (`{ llamada, oportunidad, duplicada }`). Mientras es null la llamada no está
+       * registrada; cuando existe, el formulario ya no se vuelve a mandar (duplicaría la llamada): sólo se reintenta la subida.
+       */
+      registro: null,
+      /** Estado de la subida por partes. */
+      subida: { activa: false, hechas: 0, total: 0 },
     }
   },
   computed: {
@@ -259,6 +310,21 @@ export default {
     /** @returns {boolean} true si la fecha es obligatoria. */
     fecha_obligatoria() {
       return requiere_fecha(this.form)
+    },
+    /** @returns {string} Tamaño del archivo elegido, para mostrar. */
+    tamano_del_archivo() {
+      return this.archivo ? tamano_en_palabras(this.archivo.size) : ''
+    },
+    /** @returns {number} Porcentaje de partes ya subidas (0 a 100). */
+    porcentaje_subido() {
+      return this.subida.total > 0 ? Math.round((this.subida.hechas / this.subida.total) * 100) : 0
+    },
+    /** @returns {string} Texto del botón principal según en qué paso está. */
+    texto_del_boton() {
+      if (this.saving) {
+        return this.subida.activa ? 'Subiendo la grabación…' : 'Registrando…'
+      }
+      return this.registro ? 'Reintentar la subida' : 'Registrar llamada'
     },
   },
   created() {
@@ -307,6 +373,11 @@ export default {
         return
       }
       this.server_message = ''
+      // La llamada ya quedó registrada y lo que falló fue la subida del audio: se reintenta sólo eso.
+      if (this.registro) {
+        this.subir_la_grabacion(this.registro)
+        return
+      }
       this.errores = Object.assign(validar(this.form, { motivos: this.motivos }), validar_paquetes(this.form))
       if (Object.keys(this.errores).length > 0) {
         return
@@ -316,14 +387,20 @@ export default {
         .post('/lead/' + this.lead_id + '/llamadas', payload(this.form))
         .then(function (res) {
           const data = res.data || {}
-          self.saving = false
           const columna = data.oportunidad && data.oportunidad.stage ? data.oportunidad.stage.name : ''
           show_toast(columna ? 'Llamada registrada. La tarjeta pasó a «' + columna + '».' : 'Llamada registrada.')
-          self.$emit('registrada', {
+          self.registro = {
             llamada: data.llamada || null,
             oportunidad: data.oportunidad || null,
             duplicada: data.duplicada === true,
-          })
+          }
+          // Con una grabación elegida, el modal sigue abierto hasta que termine de subirla.
+          if (self.archivo && self.registro.llamada && self.registro.llamada.id) {
+            self.subir_la_grabacion(self.registro)
+            return
+          }
+          self.saving = false
+          self.$emit('registrada', self.registro)
         })
         .catch(function (error) {
           self.saving = false
@@ -334,6 +411,128 @@ export default {
             self.server_message = respuesta && respuesta.message ? String(respuesta.message) : 'No se pudo registrar la llamada. Probá de nuevo.'
           }
         })
+    },
+    /**
+     * Elige (o saca) la grabación. Se valida en el momento —extensión de audio, no vacío, hasta 200 MB— y un archivo que no sirve no se
+     * guarda: el campo se vacía para que Juan elija otro.
+     *
+     * @param {Event} event Evento `change` del input de archivo.
+     */
+    on_elegir_archivo(event) {
+      const elegido = event && event.target && event.target.files ? event.target.files[0] : null
+      this.archivo = null
+      this.archivo_error = ''
+      if (!elegido) {
+        return
+      }
+      const revision = validar_archivo(elegido.name, elegido.size)
+      if (!revision.ok) {
+        this.archivo_error = revision.mensaje
+        event.target.value = ''
+        return
+      }
+      this.archivo = elegido
+    },
+    /**
+     * Sube la grabación de la llamada recién registrada: avisa qué archivo viene, manda las partes de 4 MB de a una (cada una con
+     * hasta tres intentos) y completa para que el servidor la una y la transcriba. Cuando termina avisa al padre; si falla en
+     * cualquier paso deja el motivo en pantalla y la llamada igual registrada.
+     *
+     * @param {{ llamada: Object, oportunidad: (Object|null), duplicada: boolean }} registro Lo que devolvió el POST de la llamada.
+     */
+    subir_la_grabacion(registro) {
+      const self = this
+      const archivo = this.archivo
+      const partes = partir_en_partes(archivo.size)
+      const base = '/lead/' + this.lead_id + '/llamadas/' + registro.llamada.id
+      this.saving = true
+      this.server_message = ''
+      this.subida = { activa: true, hechas: 0, total: partes.length }
+      api
+        .post('/lead/' + this.lead_id + '/llamadas/' + registro.llamada.id + '/grabacion', {
+          nombre: archivo.name,
+          bytes: archivo.size,
+          mime: archivo.type || '',
+        }, { silent_error: true })
+        .then(function () {
+          return self.subir_las_partes(base + '/grabacion/partes', archivo, partes, 0)
+        })
+        .then(function () {
+          return api.post('/lead/' + self.lead_id + '/llamadas/' + registro.llamada.id + '/grabacion/completar', {}, { silent_error: true })
+        })
+        .then(function () {
+          self.saving = false
+          self.subida.activa = false
+          show_toast('Grabación subida. La transcripción tarda unos minutos.')
+          self.$emit('registrada', registro)
+        })
+        .catch(function (error) {
+          self.saving = false
+          self.subida.activa = false
+          const respuesta = error && error.response ? error.response.data : null
+          // Un 409 con la grabación significa que ese audio ya estaba cargado: no es una falla, no hay nada más que subir.
+          if (error && error.response && error.response.status === 409 && respuesta && respuesta.grabacion) {
+            show_toast(respuesta.message || 'Esa grabación ya estaba cargada.')
+            self.$emit('registrada', registro)
+            return
+          }
+          self.server_message = 'La llamada quedó registrada, pero la grabación no se pudo subir: ' + resolve_error_message(error) + ' Tocá «Reintentar la subida» o cerrá y probá más tarde desde la ficha.'
+        })
+    },
+    /**
+     * Sube las partes en orden, de a una (así la barra avanza de verdad y el celular no manda cuatro pedidos de 4 MB juntos).
+     *
+     * @param {string} url Dirección de las partes.
+     * @param {File} archivo Archivo elegido.
+     * @param {Array<{ indice: number, desde: number, hasta: number, bytes: number }>} partes Salida de `partir_en_partes`.
+     * @param {number} posicion Parte que toca subir.
+     * @returns {Promise<void>}
+     */
+    subir_las_partes(url, archivo, partes, posicion) {
+      const self = this
+      if (posicion >= partes.length) {
+        return Promise.resolve()
+      }
+      return this.mandar_la_parte(url, archivo, partes[posicion], 1).then(function () {
+        self.subida.hechas = posicion + 1
+        return self.subir_las_partes(url, archivo, partes, posicion + 1)
+      })
+    },
+    /**
+     * Manda UNA parte. Una mala señal del celular no tira la subida entera: se reintenta hasta `INTENTOS_POR_PARTE` veces, esperando un
+     * poco más cada vez. Un error de validación (422) no se reintenta: repetirlo daría lo mismo.
+     *
+     * @param {string} url Dirección de las partes.
+     * @param {File} archivo Archivo elegido.
+     * @param {{ indice: number, desde: number, hasta: number }} parte La parte a mandar.
+     * @param {number} intento Número de intento (desde 1).
+     * @returns {Promise<void>}
+     */
+    mandar_la_parte(url, archivo, parte, intento) {
+      const self = this
+      const cuerpo = new FormData()
+      cuerpo.append('indice', String(parte.indice))
+      cuerpo.append('parte', archivo.slice(parte.desde, parte.hasta), 'parte.bin')
+      return api
+        .post(url, cuerpo, { headers: { 'Content-Type': 'multipart/form-data' }, silent_error: true })
+        .then(function () {
+          return null
+        })
+        .catch(function (error) {
+          const status = error && error.response ? error.response.status : 0
+          if (intento >= INTENTOS_POR_PARTE || status === 422) {
+            throw error
+          }
+          return new Promise(function (resolve) {
+            window.setTimeout(resolve, 1000 * intento)
+          }).then(function () {
+            return self.mandar_la_parte(url, archivo, parte, intento + 1)
+          })
+        })
+    },
+    /** Cierra el modal sin la grabación (la llamada ya estaba registrada): el padre se entera como si todo hubiera salido bien. */
+    cerrar_sin_la_grabacion() {
+      this.$emit('registrada', this.registro)
     },
     /** Cierra sin guardar (no mientras viaja el pedido). */
     on_cancel() {
@@ -438,5 +637,13 @@ export default {
   margin: 0.35rem 0 0;
   font-size: 0.78rem;
   color: var(--color-text-secondary);
+}
+
+.rl-form__subida {
+  margin-top: 0.6rem;
+}
+
+.rl-form__subida .progress {
+  height: 0.5rem;
 }
 </style>
