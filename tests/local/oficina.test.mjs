@@ -156,3 +156,34 @@ test('fixture v2 completo: cola, chequeo y misión demorada con fases', () => {
   assert.ok(demoradas.length > 0, 'al menos una misión demorada')
   assert.ok(demoradas.some((m) => new Set((m.fases || []).map((f) => f.etapa)).size > 1), 'fases de más de una etapa')
 })
+
+// ---------- Ronda 2 (R8 de .mision/REVISION-1.md): recorte visible y «esperando a Lucas» ----------
+
+test('R8 completar_oficina: misiones_recorte ausente o null se tolera (admin viejo)', () => {
+  assert.deepEqual(completar_oficina(undefined).misiones_recorte, { recortado: false, omitidas: 0 })
+  assert.deepEqual(completar_oficina({ modo: 'misiones', misiones: [] }).misiones_recorte, { recortado: false, omitidas: 0 })
+  assert.deepEqual(completar_oficina({ misiones_recorte: null }).misiones_recorte, { recortado: false, omitidas: 0 })
+})
+
+test('R8 completar_oficina: misiones_recorte pasa con sus valores', () => {
+  const o = completar_oficina({ misiones_recorte: { recortado: true, omitidas: 4 } })
+  assert.deepEqual(o.misiones_recorte, { recortado: true, omitidas: 4 })
+})
+
+test('R8 texto_recorte: «N misiones no entran» sólo si hay recorte', () => {
+  assert.equal(typeof oficina.texto_recorte, 'function')
+  assert.equal(oficina.texto_recorte({ recortado: false, omitidas: 0 }), '')
+  assert.equal(oficina.texto_recorte(null), '')
+  assert.equal(oficina.texto_recorte({ recortado: true, omitidas: 3 }), '3 misiones no entran')
+  assert.equal(oficina.texto_recorte({ recortado: true, omitidas: 1 }), '1 misión no entra')
+})
+
+test('R8 fixture: un paso con recorte y una misión esperando a Lucas que NO es demorada', () => {
+  const pasos = pasos_del_fixture()
+  assert.ok(pasos.some((p) => p.oficina.misiones_recorte.recortado && p.oficina.misiones_recorte.omitidas > 0), 'algún paso recortado')
+  assert.ok(pasos.some((p) => !p.oficina.misiones_recorte.recortado), 'algún paso sin recorte')
+  const todas = [].concat(...pasos.map((p) => p.oficina.misiones))
+  assert.ok(todas.some((m) => m.estado === 'esperando_lucas'), 'hay una esperando_lucas')
+  assert.ok(todas.filter((m) => m.estado !== 'trabajando').every((m) => !m.demorada), 'sólo las trabajando pueden ser demoradas')
+  assert.ok(todas.filter((m) => m.estado === 'esperando_lucas').some((m) => m.minutos_en_etapa > m.umbral_min), 'una esperando_lucas pasó el umbral y aun así no es demorada')
+})

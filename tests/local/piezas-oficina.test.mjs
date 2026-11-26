@@ -74,3 +74,22 @@ test('mesa demorada: chip «demorada» y clase mesa-demorada', () => {
   const normal = piezas.mesa(col, 600, 'MISIÓN', null, {})
   assert.ok(!normal.includes('mesa-demorada'))
 })
+
+// ---------- Ronda 2 (R8): «esperando a Lucas» se distingue de «demorada» ----------
+
+test('R8 mesa esperando a Lucas: chip «te espera», clase mesa-espera y nada del rojo de demora', () => {
+  const col = { x: 100, w: 200 }
+  const espera = piezas.mesa(col, 600, 'MISIÓN', null, { esperando: true })
+  assert.ok(espera.includes('te espera'))
+  assert.ok(espera.includes('mesa-espera'))
+  assert.ok(!espera.includes('mesa-demorada'))
+  assert.ok(!espera.includes('#EF4444'))
+  assert.ok(!espera.includes('demorada'))
+})
+
+test('R8 pizarra: la línea de una misión esperando a Lucas dice «te espera»', () => {
+  const svg = piezas.pizarra([{ rotulo: 'Cupones', color: '#FA7E06', etapa_texto: 'plan', espera: true }], false, false)
+  assert.ok(svg.includes('te espera'))
+  const normal = piezas.pizarra([{ rotulo: 'Cupones', color: '#3A31FC', etapa_texto: 'plan' }], false, false)
+  assert.ok(!normal.includes('te espera'))
+})
