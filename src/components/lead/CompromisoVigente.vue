@@ -11,7 +11,7 @@
     vieja o el pedido falla, el bloque no se muestra y no se avisa. Se monta en la barra lateral de la conversación y en la
     ficha del tablero.
   -->
-  <div v-if="compromiso" class="compromiso-vigente" :class="{ 'compromiso-vigente--revisar': es_para_revisar }">
+  <div v-if="compromiso && motor_activo" class="compromiso-vigente" :class="{ 'compromiso-vigente--revisar': es_para_revisar }">
     <div class="compromiso-vigente__head">
       <span class="compromiso-vigente__titulo">{{ es_para_revisar ? 'Compromiso para revisar' : 'Próximo contacto acordado' }}</span>
       <span class="compromiso-vigente__accion">{{ accion_label }}</span>
@@ -114,6 +114,8 @@ export default {
       editando: false,
       /** Valor del selector de fecha (`AAAA-MM-DDTHH:MM`). */
       nueva_fecha: '',
+      /** El motor de compromisos está prendido (la API lo dice): apagado, el compromiso no se va a ejecutar y no se muestra. */
+      motor_activo: true,
       /** Pedido en curso. */
       saving: false,
       /** Último error de un pedido. */
@@ -156,6 +158,7 @@ export default {
   methods: {
     /**
      * Pide los compromisos del lead y se queda con el abierto (el primero de la lista, si está vigente, procesando o para revisar).
+     * Lo llama también la ficha después de «Registrar llamada» (por `ref`): la llamada puede haber cumplido o reemplazado el compromiso.
      *
      * @returns {void}
      */
@@ -174,6 +177,7 @@ export default {
           if (String(self.lead_id) !== String(id)) {
             return
           }
+          self.motor_activo = !res.data || res.data.motor_activo !== false
           const lista = (res.data && res.data.compromisos) || []
           const abierto = lista.find(function (c) {
             return c.status === 'vigente' || c.status === 'procesando' || c.status === 'revisar'

@@ -253,7 +253,7 @@
       <!--
         Próximo contacto acordado (misión leads-referidos-compromisos, E2): sólo para un lead. Juan lo ve, lo reprograma y lo cancela.
       -->
-      <compromiso-vigente v-if="opportunity && opportunity.subject_type === 'lead' && opportunity.lead_id" :lead_id="opportunity.lead_id" />
+      <compromiso-vigente v-if="opportunity && opportunity.subject_type === 'lead' && opportunity.lead_id" ref="compromiso_vigente" :lead_id="opportunity.lead_id" />
 
       <!--
         Cómo llegó (misión leads-referidos-compromisos, E1): sólo para un lead que NO llegó por un anuncio ni por la
@@ -869,6 +869,10 @@ export default {
       this.llamada_modal = { show: false, key: this.llamada_modal.key }
       this.apply_opportunity(payload && payload.oportunidad)
       this.load(true)
+      /* La llamada pudo cumplir, reemplazar o crear el compromiso: se vuelve a leer para no mostrar el viejo. */
+      if (this.$refs.compromiso_vigente) {
+        this.$refs.compromiso_vigente.cargar()
+      }
       this.$emit('registrada', payload)
     },
 
