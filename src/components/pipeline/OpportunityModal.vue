@@ -291,8 +291,8 @@
               <summary>Ver la transcripción</summary>
               <p>{{ llamada.transcripcion }}</p>
             </details>
-            <!-- La grabación de la llamada (E3): estado, resumen, transcripción plegada y «Reintentar». También la ve Juan. -->
-            <grabacion-de-llamada v-if="llamada.grabacion" :llamada="llamada" :lead_id="opportunity.lead_id" @cambio="on_grabacion_cambio" />
+            <!-- La grabación de la llamada (E3): estado, resumen, transcripción plegada, «Reintentar» y, si no hay o quedó cortada, «Subir la grabación». También la usa Juan. -->
+            <grabacion-de-llamada :llamada="llamada" :lead_id="opportunity.lead_id" @cambio="on_grabacion_cambio" />
             <p class="pl-calls__meta">
               {{ llamada.admin && llamada.admin.name ? llamada.admin.name : 'Sin operador' }}
               <template v-if="llamada.cargada_por && llamada.cargada_por.name"> · cargada por {{ llamada.cargada_por.name }}</template>
