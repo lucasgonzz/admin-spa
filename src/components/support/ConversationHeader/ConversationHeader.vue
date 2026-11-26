@@ -46,15 +46,26 @@
         v-if="ticket_summary_text && show_back && !controles_abiertos"
         class="support-conversation-heading-summary support-conversation-heading-summary--compact"
         :title="ticket_summary_text">{{ ticket_summary_text }}</div>
+      <!-- Plegado en teléfono el campo de la descripción no se ve: la línea roja queda a la vista, en un renglón. -->
+      <div
+        v-if="intervention_text && show_back && !controles_abiertos"
+        class="support-conversation-intervention support-conversation-intervention--compact text-danger"
+        :title="intervention_text">{{ intervention_text }}</div>
     </div>
     <ticket-missions v-if="has_ticket" :ticket="selected_ticket" />
-    <!-- El resumen va pegado al título, arriba de los controles: el Guardar de abajo lo guarda junto con el nombre y el estado. -->
+    <!-- La descripción va pegada al título, arriba de los controles: el Guardar de abajo la guarda junto con el nombre y el estado.
+         Se lee como texto y sólo al hacer clic se edita. Debajo, en rojo, por qué el ticket necesita a Lucas (sólo si lo necesita). -->
     <ticket-summary-field
       v-if="has_ticket"
       :class="{ 'd-none': show_back && !controles_abiertos }"
       :has_ticket="has_ticket"
       :ticket_summary_draft="ticket_summary_draft"
+      :saved_summary="ticket_summary_text"
       @update:ticket_summary_draft="$emit('update:ticket_summary_draft', $event)" />
+    <p
+      v-if="intervention_text && !(show_back && !controles_abiertos)"
+      class="support-conversation-intervention text-danger mb-0"
+      role="status">{{ intervention_text }}</p>
     <!-- d-none y no v-show: el display:none en línea de v-show pierde contra el d-flex !important. -->
     <div
       class="d-flex align-items-center flex-wrap gap-2 w-100"
@@ -122,6 +133,7 @@ import TicketSummaryField from './TicketSummaryField.vue'
 import MartinActivityIndicator from '@/components/support/MartinActivity/MartinActivityIndicator.vue'
 import TicketMissions from '@/components/support/TicketMissions.vue'
 import { ticket_heading, ticket_summary } from '@/utils/support_ticket_title'
+import { intervention_line } from '@/utils/support_description'
 
 /**
  * Agrupa controles del hilo y un único guardado HTTP para nombre y estado.
@@ -273,6 +285,14 @@ export default {
       return ticket_summary(this.selected_ticket)
     },
     /**
+     * Línea roja «Necesita tu intervención: <motivo>»; vacía si el ticket no necesita a Lucas.
+     *
+     * @returns {string}
+     */
+    intervention_text() {
+      return intervention_line(this.selected_ticket)
+    },
+    /**
      * Atajo para condicionar hijos.
      *
      * @returns {boolean}
@@ -411,6 +431,24 @@ export default {
 
 .support-conversation-heading-summary--compact {
   -webkit-line-clamp: 1;
+}
+
+/* Línea de intervención: el único rojo del bloque. Alineada con el texto de la descripción (mismo padding lateral). */
+.support-conversation-intervention {
+  padding: 0 0.5rem;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+/* En teléfono plegado, un renglón; el motivo completo queda en el tooltip. */
+.support-conversation-intervention--compact {
+  padding: 0;
+  margin-top: 0.1rem;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
 }
 
 .support-conversation-header-back {

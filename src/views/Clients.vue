@@ -2,7 +2,12 @@
   <resource-view
     model_name="client"
     :model_extra_tabs="model_extra_tabs"
-  />
+  >
+    <!-- Botón «Requieren actualización (N)»: filtra a los clientes con algo integrado que no tienen instalado. -->
+    <template #toolbar-right>
+      <upgrade-marks-toolbar-chip />
+    </template>
+  </resource-view>
 </template>
 
 <script>
@@ -24,6 +29,8 @@ import ClientModelosIaTab from '@/components/client/ModelosIaTab.vue'
 import SubjectPipelinesTab from '@/components/pipeline/SubjectPipelinesTab.vue'
 import PruebaTab from '@/components/prueba/PruebaTab.vue'
 import ClientFichaSoporteTab from '@/components/client/ficha-soporte/Index.vue'
+import ClientUpgradeMarksTab from '@/components/client/upgrade-marks/Index.vue'
+import UpgradeMarksToolbarChip from '@/components/client/upgrade-marks/ToolbarChip.vue'
 
 /**
  * Vista principal de clientes.
@@ -33,7 +40,7 @@ import ClientFichaSoporteTab from '@/components/client/ficha-soporte/Index.vue'
  */
 export default {
   name: 'ViewClients',
-  components: { ResourceView },
+  components: { ResourceView, UpgradeMarksToolbarChip },
   data() {
     return {
       /**
@@ -80,6 +87,14 @@ export default {
           key: 'soporte',
           label: 'Soporte',
           component: markRaw(ClientFichaSoporteTab),
+        },
+        {
+          /* Actualización (misión martin-descripcion-y-actualizaciones, 25/11/2026): lo ya integrado
+             (correcciones de soporte, funcionalidades) que este cliente todavía no tiene instalado, con
+             su ticket y la versión que lo trae. Va junto a Soporte porque casi todo nace de un ticket. */
+          key: 'actualizacion',
+          label: 'Actualización',
+          component: markRaw(ClientUpgradeMarksTab),
         },
         {
           key: 'horarios',
