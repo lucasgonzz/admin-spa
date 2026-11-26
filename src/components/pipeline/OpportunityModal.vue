@@ -291,6 +291,8 @@
               <summary>Ver la transcripción</summary>
               <p>{{ llamada.transcripcion }}</p>
             </details>
+            <!-- La grabación de la llamada (E3): estado, resumen, transcripción plegada, «Reintentar» y, si no hay o quedó cortada, «Subir la grabación». También la usa Juan. -->
+            <grabacion-de-llamada :llamada="llamada" :lead_id="opportunity.lead_id" @cambio="on_grabacion_cambio" />
             <p class="pl-calls__meta">
               {{ llamada.admin && llamada.admin.name ? llamada.admin.name : 'Sin operador' }}
               <template v-if="llamada.cargada_por && llamada.cargada_por.name"> · cargada por {{ llamada.cargada_por.name }}</template>
@@ -409,6 +411,7 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 // 🔴 Compartido con la pestaña Resumen del lead, que es su primer uso: acá se consume tal cual.
 import CallSummaryPanel from '@/components/lead/resumen/CallSummaryPanel.vue'
 import CompromisoVigente from '@/components/lead/CompromisoVigente.vue'
+import GrabacionDeLlamada from '@/components/lead/GrabacionDeLlamada.vue'
 import MoveModal from '@/components/pipeline/MoveModal.vue'
 import RegistrarLlamadaModal from '@/components/lead/RegistrarLlamadaModal.vue'
 import NextActionText from '@/components/pipeline/NextActionText.vue'
@@ -478,7 +481,7 @@ const ETIQUETAS_DE_ACTIVIDAD = {
  */
 export default {
   name: 'PipelineOpportunityModal',
-  components: { BaseModal, CallSummaryPanel, CompromisoVigente, MoveModal, RegistrarLlamadaModal, NextActionText, StageTag, SubjectTypeBadge },
+  components: { BaseModal, CallSummaryPanel, CompromisoVigente, GrabacionDeLlamada, MoveModal, RegistrarLlamadaModal, NextActionText, StageTag, SubjectTypeBadge },
   props: {
     /** Visibilidad del modal. */
     show: { type: Boolean, default: true },
@@ -851,6 +854,17 @@ export default {
         return 'No atendió'
       }
       return 'Atendió · ' + (llamada.resultado_label || llamada.resultado || 'sin resultado')
+    },
+
+    /**
+     * Una grabación terminó de transcribirse (o se reintentó): puede haber dejado un compromiso nuevo, así que se vuelven a leer el
+     * compromiso vigente y las llamadas.
+     */
+    on_grabacion_cambio() {
+      if (this.$refs.compromiso_vigente) {
+        this.$refs.compromiso_vigente.cargar()
+      }
+      this.load_llamadas()
     },
 
     /** Abre el modal «Registrar llamada» encima de la ficha. */
