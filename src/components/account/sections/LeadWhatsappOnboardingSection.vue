@@ -53,6 +53,91 @@
         </p>
       </div>
 
+      <!-- Compromisos de contacto y leads de otros medios (misión leads-referidos-compromisos, E2): los tres interruptores nacen apagados. -->
+      <div class="mb-3 border rounded p-3">
+        <p class="small fw-semibold mb-2">Compromisos de contacto</p>
+        <p class="form-text small text-muted mb-2">
+          Un compromiso es el próximo contacto acordado con un lead (Juan lo llama el viernes, Martín le escribe el martes).
+          Mientras hay uno vigente, el lead no recibe los seguimientos automáticos genéricos; a la hora, el sistema revisa si
+          cambió algo y ejecuta lo acordado o lo re-evalúa.
+        </p>
+
+        <div class="form-check form-switch mb-2">
+          <input
+            id="lead_compromisos_activo"
+            v-model="form.compromisos_activo"
+            type="checkbox"
+            class="form-check-input"
+            role="switch"
+            :disabled="saving"
+            @change="on_input_change"
+          />
+          <label class="form-check-label small fw-semibold" for="lead_compromisos_activo">
+            Motor de compromisos
+          </label>
+        </div>
+
+        <div class="form-check form-switch mb-2">
+          <input
+            id="lead_compromisos_deteccion_ia"
+            v-model="form.compromisos_deteccion_ia"
+            type="checkbox"
+            class="form-check-input"
+            role="switch"
+            :disabled="saving || !form.compromisos_activo"
+            @change="on_input_change"
+          />
+          <label class="form-check-label small fw-semibold" for="lead_compromisos_deteccion_ia">
+            Detectar con IA lo que el lead dice por WhatsApp («el martes te escribo»)
+          </label>
+        </div>
+
+        <div class="form-check form-switch mb-2">
+          <input
+            id="lead_compromisos_envio_automatico"
+            v-model="form.compromisos_envio_automatico"
+            type="checkbox"
+            class="form-check-input"
+            role="switch"
+            :disabled="saving || !form.compromisos_activo"
+            @change="on_input_change"
+          />
+          <label class="form-check-label small fw-semibold" for="lead_compromisos_envio_automatico">
+            Enviar solos los mensajes del motor
+          </label>
+        </div>
+        <p class="form-text small text-muted mb-2">
+          Apagado, los mensajes de Martín quedan como sugerencia para que los apruebes en la conversación.
+        </p>
+
+        <div class="mb-2">
+          <label class="form-label small fw-semibold" for="lead_compromiso_plantilla">Plantilla para retomar con la ventana de 24 h cerrada</label>
+          <input
+            id="lead_compromiso_plantilla"
+            v-model="form.compromiso_plantilla"
+            type="text"
+            class="form-control form-control-sm"
+            maxlength="120"
+            :disabled="saving"
+            @input="on_input_change"
+          />
+        </div>
+
+        <div>
+          <label class="form-label small fw-semibold" for="lead_referido_plantilla">Plantilla del primer contacto a un referido</label>
+          <input
+            id="lead_referido_plantilla"
+            v-model="form.referido_plantilla"
+            type="text"
+            class="form-control form-control-sm"
+            maxlength="120"
+            placeholder="Sin plantilla: el alta no manda ningún WhatsApp"
+            :disabled="saving"
+            @input="on_input_change"
+          />
+        </div>
+      </div>
+
       <div class="mb-3">
         <label class="form-label small fw-semibold" for="lead_auto_with_name">Mensaje automático (con nombre)</label>
         <textarea
@@ -265,6 +350,13 @@ export default {
         flujo_entrada_activo: false,
         /* Textos precargados de los anuncios, uno por línea. */
         flujo_textos_precargados: '',
+        /* Compromisos de contacto (E2): el motor, la detección con IA y el envío automático nacen apagados. */
+        compromisos_activo: false,
+        compromisos_deteccion_ia: false,
+        compromisos_envio_automatico: false,
+        /* Plantilla de Meta para retomar con la ventana cerrada, y la del primer contacto a un referido (vacía = sin envío). */
+        compromiso_plantilla: 'cc_coord_dia_acordado',
+        referido_plantilla: '',
       },
       /** Snapshot persistido para detectar cambios. */
       stored_form: null,
@@ -373,6 +465,13 @@ export default {
             ? !!data.flujo_entrada_activo
             : false,
         flujo_textos_precargados: (data && data.flujo_textos_precargados) || '',
+        /* Default false: una API vieja no manda las claves y un «Guardar» no debe prender el motor. */
+        compromisos_activo: data && typeof data.compromisos_activo !== 'undefined' ? !!data.compromisos_activo : false,
+        compromisos_deteccion_ia: data && typeof data.compromisos_deteccion_ia !== 'undefined' ? !!data.compromisos_deteccion_ia : false,
+        compromisos_envio_automatico:
+          data && typeof data.compromisos_envio_automatico !== 'undefined' ? !!data.compromisos_envio_automatico : false,
+        compromiso_plantilla: (data && data.compromiso_plantilla) || 'cc_coord_dia_acordado',
+        referido_plantilla: (data && data.referido_plantilla) || '',
       }
       self.form = JSON.parse(JSON.stringify(snapshot))
       self.stored_form = JSON.parse(JSON.stringify(snapshot))
@@ -485,6 +584,11 @@ export default {
           auto_activar_verificacion_al_solicitar_disponibilidad: !!self.form.auto_activar_verificacion_al_solicitar_disponibilidad,
           flujo_entrada_activo: !!self.form.flujo_entrada_activo,
           flujo_textos_precargados: self.form.flujo_textos_precargados,
+          compromisos_activo: !!self.form.compromisos_activo,
+          compromisos_deteccion_ia: !!self.form.compromisos_deteccion_ia,
+          compromisos_envio_automatico: !!self.form.compromisos_envio_automatico,
+          compromiso_plantilla: self.form.compromiso_plantilla,
+          referido_plantilla: self.form.referido_plantilla,
         })
         .then(function (res) {
           self.apply_from_response(res.data)

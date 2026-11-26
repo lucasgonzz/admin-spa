@@ -251,6 +251,11 @@
       </section>
 
       <!--
+        Próximo contacto acordado (misión leads-referidos-compromisos, E2): sólo para un lead. Juan lo ve, lo reprograma y lo cancela.
+      -->
+      <compromiso-vigente v-if="opportunity && opportunity.subject_type === 'lead' && opportunity.lead_id" :lead_id="opportunity.lead_id" />
+
+      <!--
         Cómo llegó (misión leads-referidos-compromisos, E1): sólo para un lead que NO llegó por un anuncio ni por la
         web (referido, WhatsApp de Lucas, llamada). Juan lo lee antes de llamar: de dónde vino, quién lo recomendó y
         lo que ya se habló. Viene de GET lead/{id}; si el pedido falla o el lead es común, el bloque no se muestra.
@@ -403,6 +408,7 @@ import api, { resolve_error_message } from '@/utils/axios'
 import BaseModal from '@/components/ui/BaseModal.vue'
 // 🔴 Compartido con la pestaña Resumen del lead, que es su primer uso: acá se consume tal cual.
 import CallSummaryPanel from '@/components/lead/resumen/CallSummaryPanel.vue'
+import CompromisoVigente from '@/components/lead/CompromisoVigente.vue'
 import MoveModal from '@/components/pipeline/MoveModal.vue'
 import RegistrarLlamadaModal from '@/components/lead/RegistrarLlamadaModal.vue'
 import NextActionText from '@/components/pipeline/NextActionText.vue'
@@ -472,7 +478,7 @@ const ETIQUETAS_DE_ACTIVIDAD = {
  */
 export default {
   name: 'PipelineOpportunityModal',
-  components: { BaseModal, CallSummaryPanel, MoveModal, RegistrarLlamadaModal, NextActionText, StageTag, SubjectTypeBadge },
+  components: { BaseModal, CallSummaryPanel, CompromisoVigente, MoveModal, RegistrarLlamadaModal, NextActionText, StageTag, SubjectTypeBadge },
   props: {
     /** Visibilidad del modal. */
     show: { type: Boolean, default: true },
