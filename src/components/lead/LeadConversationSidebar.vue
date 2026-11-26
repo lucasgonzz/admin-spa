@@ -39,6 +39,8 @@
 
       <!-- Cuerpo: contiene la vista de conversación embebida -->
       <div class="lead-sidebar__body">
+        <!-- Próximo contacto acordado con el lead (misión leads-referidos-compromisos, E2): lo ve también Juan. -->
+        <compromiso-vigente v-if="lead" :lead_id="lead.id" />
         <!-- LeadConversationView en modo embebido (lead_record_prop activa is_sidebar_mode) -->
         <lead-conversation-view
           v-if="lead"
@@ -53,6 +55,7 @@
 
 <script>
 import LeadConversationView from '@/views/LeadConversationView.vue'
+import CompromisoVigente from '@/components/lead/CompromisoVigente.vue'
 
 /**
  * Panel lateral deslizable que muestra la conversación WhatsApp de un lead
@@ -73,7 +76,7 @@ import LeadConversationView from '@/views/LeadConversationView.vue'
 export default {
   name: 'LeadConversationSidebar',
 
-  components: { LeadConversationView },
+  components: { LeadConversationView, CompromisoVigente },
 
   props: {
     /**
