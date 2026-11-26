@@ -114,6 +114,13 @@ export const ESTADOS_GATEWAY = {
   desconocido: { texto: 'sin datos', color: '#94A3B8' },
 }
 
+/** Nivel de los recursos de la PC (`nivel_recursos`) → texto y color del chip. */
+export const NIVELES_RECURSOS = {
+  ok: { texto: 'recursos bien', color: '#22C55E' },
+  justo: { texto: 'recursos justos', color: '#F59E0B' },
+  critico: { texto: 'recursos críticos', color: '#EF4444' },
+}
+
 /** Resultado de la última corrida de una tarea programada → texto y color. */
 export const RESULTADOS_TAREA = {
   ok: { texto: 'bien', color: '#22C55E' },
@@ -272,7 +279,7 @@ export function indice_etapa(etapa) {
  * tarjeta con un estado desconocido no se muestra.
  *
  * @param {Array<Object>} tarjetas
- * @returns {Array<{id:string, titulo:string, tarjetas:Array<Object>}>}
+ * @returns {Array<{id:string, titulo:string, estados:string[], tarjetas:Array<Object>}>}
  */
 export function agrupar_tarjetas(tarjetas) {
   const lista = Array.isArray(tarjetas) ? tarjetas : []
@@ -280,6 +287,7 @@ export function agrupar_tarjetas(tarjetas) {
     return {
       id: c.id,
       titulo: c.titulo,
+      estados: c.estados,
       tarjetas: lista.filter(function (t) {
         return t && c.estados.indexOf(t.estado) !== -1
       }),
@@ -450,4 +458,64 @@ export function texto_en_etapa(mision) {
   }
   const etapa = ETAPAS[indice_etapa(m.etapa)]
   return 'lleva ' + texto_duracion(m.minutos_en_etapa) + (etapa ? ' en ' + etapa.texto : '')
+}
+
+/**
+ * «en N min» a partir de una fecha ISO futura (la próxima corrida de una tarea). Una fecha ya
+ * pasada se dice como «hace N min».
+ *
+ * @param {string|null} iso
+ * @param {number} [ahora] Milisegundos de «ahora» (para los tests).
+ * @returns {string} Vacío si la fecha no se entiende.
+ */
+export function texto_en(iso, ahora) {
+  const t = iso ? new Date(iso).getTime() : NaN
+  if (isNaN(t)) {
+    return ''
+  }
+  const referencia = ahora === undefined ? Date.now() : ahora
+  if (t <= referencia) {
+    return texto_hace(iso, referencia)
+  }
+  const minutos = Math.max(1, Math.round((t - referencia) / 60000))
+  return 'en ' + texto_duracion(minutos)
+}
+
+/**
+ * Fecha y hora cortas en horario argentino («26/11 00:00»).
+ *
+ * @param {string|null} iso
+ * @returns {string} Vacío si la fecha no se entiende.
+ */
+export function texto_fecha_hora(iso) {
+  const d = iso ? new Date(iso) : null
+  if (!d || isNaN(d.getTime())) {
+    return ''
+  }
+  try {
+    return d.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' }).replace(',', '')
+  } catch (e) {
+    return ''
+  }
+}
+
+/**
+ * Cantidad real de tarjetas de una columna del Workboard: la del conteo del reporter (que cuenta
+ * todas, aunque se hayan recortado las que se mandan) o, sin conteo, las que llegaron.
+ *
+ * @param {{estados:string[], tarjetas:Array}} columna Columna de `agrupar_tarjetas` con sus `estados`.
+ * @param {Object} conteo `workboard.conteo`.
+ * @returns {number}
+ */
+export function contar_columna(columna, conteo) {
+  const c = conteo && typeof conteo === 'object' ? conteo : {}
+  let total = 0
+  let hay = false
+  ;(columna.estados || []).forEach(function (estado) {
+    if (typeof c[estado] === 'number') {
+      total += c[estado]
+      hay = true
+    }
+  })
+  return hay ? total : columna.tarjetas.length
 }

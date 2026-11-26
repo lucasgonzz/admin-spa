@@ -20,7 +20,9 @@
     @pointercancel="on_puntero_fin"
     @lostpointercapture="on_puntero_fin"
     @click.capture="on_clic_plano"
+    @click="on_clic_pieza"
     @keydown.self="on_tecla_plano"
+    @keydown="on_tecla_pieza"
   />
 </template>
 
@@ -39,7 +41,7 @@ export default {
     /** Ancho / alto del marco donde se muestra la escena (para ajustar la cámara). */
     aspecto: { type: Number, default: 1.6 },
   },
-  emits: ['bandeja'],
+  emits: ['bandeja', 'openclaw', 'mision', 'espera'],
   watch: {
     estado(nuevo) {
       if (this.director) {
@@ -197,6 +199,58 @@ export default {
         return
       }
       ev.preventDefault()
+    },
+    /**
+     * Qué pieza tocable del plano contiene un nodo: el escritorio de OpenClaw, la fila de espera
+     * de la cola o la mesa de una misión (`data-mision-id`). La bandeja tiene sus propios
+     * listeners.
+     *
+     * @param {EventTarget|null} nodo Nodo tocado o con el foco.
+     * @returns {{tipo:string, id?:string}|null}
+     */
+    pieza_de(nodo) {
+      if (!nodo || typeof nodo.closest !== 'function') {
+        return null
+      }
+      if (nodo.closest('[data-ref="openclaw"]')) {
+        return { tipo: 'openclaw' }
+      }
+      if (nodo.closest('[data-ref="fila-espera"]')) {
+        return { tipo: 'espera' }
+      }
+      const mesa = nodo.closest('[data-mision-id]')
+      if (mesa) {
+        return { tipo: 'mision', id: mesa.getAttribute('data-mision-id') }
+      }
+      return null
+    },
+    /** Avisa a la vista qué pieza se tocó (un arrastre del plano no llega hasta acá). */
+    avisar_pieza(pieza) {
+      if (pieza.tipo === 'openclaw') {
+        this.$emit('openclaw')
+      } else if (pieza.tipo === 'espera') {
+        this.$emit('espera')
+      } else if (pieza.tipo === 'mision') {
+        this.$emit('mision', pieza.id)
+      }
+    },
+    /** Clic en OpenClaw, en la fila de espera o en una mesa. */
+    on_clic_pieza(ev) {
+      const pieza = this.pieza_de(ev.target)
+      if (pieza) {
+        this.avisar_pieza(pieza)
+      }
+    },
+    /** OpenClaw y la fila de espera son botones también con teclado (Enter o espacio). */
+    on_tecla_pieza(ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ') {
+        return
+      }
+      const pieza = this.pieza_de(ev.target)
+      if (pieza && pieza.tipo !== 'mision') {
+        ev.preventDefault()
+        this.avisar_pieza(pieza)
+      }
     },
     /** Tocar la bandeja «Para Lucas» abre la lista de lo que espera. */
     on_bandeja() {
@@ -544,6 +598,29 @@ export default {
 .ell-svg :deep(.bandeja:focus-visible) {
   outline: 3px solid #fa7e06;
   outline-offset: 4px;
+}
+/* OpenClaw (el escritorio del planificador) y la fila de espera de la cola se tocan. */
+.ell-svg :deep(.openclaw),
+.ell-svg :deep(.fila-espera) {
+  cursor: pointer;
+  outline: none;
+}
+.ell-svg :deep(.openclaw:focus-visible),
+.ell-svg :deep(.fila-espera:focus-visible) {
+  outline: 3px solid #f97316;
+  outline-offset: 2px;
+}
+/* Misión pasada del umbral de su etapa: el borde rojo late despacio. */
+.ell-svg :deep(.mesa-demorada .borde-demorada) {
+  animation: demorada 1.6s ease-in-out infinite alternate;
+}
+@keyframes demorada {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* Quien pidió menos movimiento: nada se anima (y el motor tampoco hace caminar a nadie). */

@@ -1575,10 +1575,14 @@ export class Director {
         mesaSvg = mesa(m.col, MESA_Y, null, null, { mesaNueva: m.mesaNueva, titulo: esc(titulo), demorada: !!md.demorada, misionId: esc(md.id), extra: extra })
         plaquita = plaquitaMesa(m.col, MESA_Y, esc(recortar(md.titulo || 'sin título', angosta ? 14 : 22)), m.mesaNueva)
         if (enEtapa) {
-          // «lleva N en <etapa>»: en las mesas angostas va sin el «lleva»
-          const texto = angosta ? enEtapa.replace(/^lleva /, '') : enEtapa
-          const anchoPildora = Math.min(m.col.w + 10, 12 + texto.length * (angosta ? 5.2 : 6))
-          plaquita += '<g transform="translate(' + (m.col.x + m.col.w / 2) + ',' + (MESA_Y + 72) + ')" pointer-events="none"><rect x="' + -anchoPildora / 2 + '" y="-9" width="' + anchoPildora + '" height="17" rx="8.5" fill="' + (md.demorada ? '#B91C1C' : '#101C28') + '" opacity=".88"/><text y="3.4" text-anchor="middle" font-size="' + (angosta ? 9.5 : 10.5) + '" font-weight="700" fill="#fff">' + esc(texto) + '</text></g>'
+          // «lleva N en <etapa>»: en las mesas angostas va sin el «lleva» y con la etapa abreviada
+          const texto = angosta ? enEtapa.replace(/^lleva /, '').replace(' en construcción', ' en constr.').replace(' en revisión', ' en revis.') : enEtapa
+          const disponible = m.col.w + 6
+          const estimado = 12 + texto.length * (angosta ? 5.2 : 6)
+          const anchoPildora = Math.min(disponible, estimado)
+          // si el texto no entra en la mesa, se comprime en vez de salirse de la pastilla
+          const comprimir = estimado > disponible ? ' textLength="' + (disponible - 12) + '" lengthAdjust="spacingAndGlyphs"' : ''
+          plaquita += '<g transform="translate(' + (m.col.x + m.col.w / 2) + ',' + (MESA_Y + 72) + ')" pointer-events="none"><rect x="' + -anchoPildora / 2 + '" y="-9" width="' + anchoPildora + '" height="17" rx="8.5" fill="' + (md.demorada ? '#B91C1C' : '#101C28') + '" opacity=".88"/><text y="3.4" text-anchor="middle" font-size="' + (angosta ? 9.5 : 10.5) + '" font-weight="700" fill="#fff"' + comprimir + '>' + esc(texto) + '</text></g>'
         }
       } else {
         const fase = m.fase && FASES[m.fase] ? FASES[m.fase] : null
