@@ -219,17 +219,9 @@ export default {
       handler(tickets) {
         const order = new Map()
         for (const ticket of tickets || []) {
-          const previous = this.ticket_order.get(ticket.id)
-          const closed = this.ticket_status_class(ticket) === 'closed'
-          const message = ticket.last_message && ticket.last_message.id
-          // El cierre cambia updated_at y quita el aviso de intervención, pero no es actividad del hilo.
-          const preserve = closed && previous && previous.message === message
+          // Orden siempre por la hora del último mensaje (enviado o recibido); sin mensajes, la de creación.
           order.set(ticket.id, {
-            message,
-            escalated: preserve ? previous.escalated : Number(this.is_ticket_escalated(ticket)),
-            time: preserve ? previous.time : new Date((closed
-              ? (ticket.last_message && ticket.last_message.created_at) || ticket.created_at
-              : ticket.updated_at) || 0).getTime(),
+            time: new Date((ticket.last_message && ticket.last_message.created_at) || ticket.created_at || 0).getTime(),
           })
         }
         this.ticket_order = order
@@ -244,7 +236,7 @@ export default {
       return this.all_tickets || this.tickets
     },
     /**
-     * Tickets ordenados: intervención humana primero, luego por updated_at descendente.
+     * Tickets ordenados por la hora del último mensaje (enviado o recibido), los más recientes arriba.
      *
      * @returns {Array<Object>}
      */
@@ -253,7 +245,7 @@ export default {
       return list.sort((a, b) => {
         const first = this.ticket_order.get(a.id)
         const second = this.ticket_order.get(b.id)
-        return second.escalated - first.escalated || second.time - first.time || Number(b.id) - Number(a.id)
+        return second.time - first.time || Number(b.id) - Number(a.id)
       })
     },
   },
