@@ -17,6 +17,8 @@
  * pasa por `esc()` antes de entrar a una plantilla: se inserta con innerHTML.
  */
 
+import { ORIGENES, ETAPAS, COLOR_ETAPA_PENDIENTE } from '../../../utils/local_oficina.js'
+
 /** Ancho y alto del mundo (unidades del viewBox). */
 export const W = 1600
 export const H = 1000
@@ -130,6 +132,12 @@ export const ROLES = {
   revisor: { badge: 'lupa', accent: '#8B5CF6', rotulo: 'revisor' },
   verificador: { badge: 'check', accent: '#14B8A6', rotulo: 'verificador' },
   redactor: { badge: 'doc', accent: '#F59E0B', rotulo: 'redactor' },
+  // roles de las misiones de las oficinas (contrato A v2: `agentes[].rol`)
+  coordinador: { badge: 'gear', accent: '#3A31FC', rotulo: 'coordinador' },
+  arquitecto: { badge: 'bulb', accent: '#0B84F8', rotulo: 'arquitecto' },
+  programador: { badge: 'hammer', accent: '#3A31FC', rotulo: 'programador' },
+  operador: { badge: 'gear', accent: '#FA7E06', rotulo: 'operador' },
+  explorador: { badge: 'lupa', accent: '#0EA5E9', rotulo: 'explorador' },
   otro: { badge: 'gear', accent: '#94A3B8', rotulo: 'ayudante' },
 }
 
@@ -508,16 +516,23 @@ export function capaMedio() {
 	<text x="0" y="36" text-anchor="middle" font-size="12" font-weight="700" fill="#fff" letter-spacing="1.5">PARA LUCAS</text>
 	<text x="0" y="49" text-anchor="middle" font-size="9.5" fill="#8FA0B8">misiones por iniciar</text>
 </g>`
-  // escritorio del planificador (fijo) y las mesas de los slots (vivas)
-  s += mesa({ x: 120, w: 200 }, 452, 'PLANIFICADOR', null)
+  // escritorio de OpenClaw (el planificador, fijo) y las mesas de las misiones (vivas). El área
+  // transparente cubre escritorio y robot y va en esta capa, por encima del robot (que está en
+  // `actoresAtras`), para que el toque llegue; abre el panel del Workboard y las tareas.
+  s += mesa({ x: 120, w: 200 }, 452, 'OPENCLAW', null)
   s += monitor(220, 448)
+  s += html`<g data-ref="openclaw" class="openclaw" role="button" tabindex="0" aria-label="OpenClaw: ver Workboard y tareas programadas">
+	<title>OpenClaw: ver Workboard y tareas programadas</title>
+	<rect x="110" y="340" width="220" height="170" rx="10" fill="transparent"/>
+</g>`
   s += html`<g data-ref="mesas"></g>`
   return s
 }
 
 /**
  * Capa de adelante: el tabique de vidrio de las oficinas, plantas y la mesa de exhibición.
- * Parte viva: `oficinas-extra` (el «+N mesas» si hay más slots trabajando que mesas).
+ * Parte viva: `oficinas-extra` (el «+N mesas» si hay más misiones o slots que mesas) y `espera`
+ * (la fila de la cola de misiones junto a la puerta de las oficinas).
  *
  * @returns {string}
  */
@@ -534,6 +549,8 @@ export function capaAdelante() {
 </g>`
   s += html`<g data-ref="mesas-rotulos"></g>`
   s += html`<g data-ref="oficinas-extra" transform="translate(300,760)"></g>`
+  // fila de espera de la cola de misiones, del lado de afuera de la puerta de las oficinas
+  s += html`<g data-ref="espera" transform="translate(${PUERTA_OFICINA.x + 47},724)"></g>`
   s += planta(600, 760, 1.1)
   // en el prototipo esta planta iba en x 1330 y tapaba cabezas del banco: corrida a la izquierda
   s += planta(1222, 772, 1.1)
@@ -553,26 +570,121 @@ export function capaAdelante() {
  * ------------------------------------------------------------------------------------------- */
 
 /**
- * Escritorio de las oficinas (el del planificador o el de un slot), con chip de fase opcional.
+ * Escritorio de las oficinas (el de OpenClaw o el de una misión), con chip de fase opcional.
  *
  * @param {{x:number,w:number}} col
  * @param {number} y
  * @param {string} rotulo Texto ya escapado.
  * @param {{texto:string,color:string}|null} fase
- * @param {{mesaNueva?:boolean, faseNueva?:boolean, titulo?:string}} [op] `mesaNueva` la hace
- *   aparecer con un fundido; `faseNueva` hace entrar el chip con «pop»; `titulo` (ya escapado)
- *   es el tooltip.
+ * @param {{mesaNueva?:boolean, faseNueva?:boolean, titulo?:string, demorada?:boolean, esperando?:boolean,
+ *   misionId?:string, extra?:string}} [op] `mesaNueva` la hace aparecer con un fundido; `faseNueva`
+ *   hace entrar el chip con «pop»; `titulo` (ya escapado) es el tooltip; `demorada` marca la mesa
+ *   con borde y chip rojos (clase `mesa-demorada`); `esperando` (misión esperando a Lucas, que NO
+ *   es demorada) la marca con borde y chip naranjas «te espera» (clase `mesa-espera`); `misionId` (ya escapado) la hace tocable
+ *   (`data-mision-id`); `extra` es SVG ya armado (insignia y barra de etapas) en las coordenadas
+ *   de la mesa.
  * @returns {string}
  */
 export function mesa(col, y, rotulo, fase, op) {
   const o = op || {}
   const w = col.w
   const fs = w < 130 ? 10.5 : 12
-  return html`<g transform="translate(${col.x},${y})" class="${o.mesaNueva ? 'mesa-nueva' : ''}">${o.titulo ? '<title>' + o.titulo + '</title>' : ''}<g filter="url(#ell-shadow)">
+  // una misión demorada gana sobre «esperando» (no se dan juntas: el servidor sólo demora las trabajando)
+  const esperando = !!o.esperando && !o.demorada
+  const clases = (o.mesaNueva ? 'mesa-nueva ' : '') + (o.demorada ? 'mesa-demorada ' : '') + (esperando ? 'mesa-espera' : '')
+  return html`<g transform="translate(${col.x},${y})" class="${clases.trim()}"${o.misionId ? ' data-mision-id="' + o.misionId + '" style="cursor:pointer"' : ''}>${o.titulo ? '<title>' + o.titulo + '</title>' : ''}${o.demorada ? html`<rect class="borde-demorada" x="-5" y="-5" width="${w + 10}" height="52" rx="9" fill="none" stroke="#EF4444" stroke-width="3"/>` : ''}${esperando ? html`<rect class="borde-espera" x="-5" y="-5" width="${w + 10}" height="52" rx="9" fill="none" stroke="#FA7E06" stroke-width="2.5" stroke-dasharray="7 5"/>` : ''}<g filter="url(#ell-shadow)">
 	<rect x="0" y="0" width="${w}" height="14" rx="4" fill="url(#ell-gWood)"/><rect x="0" y="14" width="${w}" height="26" rx="4" fill="#B48A5C"/>
 	<rect x="8" y="40" width="10" height="16" fill="#8A6A4E"/><rect x="${w - 18}" y="40" width="10" height="16" fill="#8A6A4E"/>
 	${rotulo ? html`<text x="${w / 2}" y="33" text-anchor="middle" font-size="${fs}" font-weight="700" fill="#fff" letter-spacing="${w < 130 ? 0.3 : 1}">${rotulo}</text>` : ''}
-</g>${fase ? chipFase(w / 2, -66, fase, w, o.faseNueva || o.mesaNueva) : ''}</g>`
+</g>${fase ? chipFase(w / 2, -66, fase, w, o.faseNueva || o.mesaNueva) : ''}${o.extra || ''}${o.demorada ? chipDemorada(w / 2, -92) : ''}${esperando ? chipEspera(w / 2, -92) : ''}</g>`
+}
+
+/**
+ * Chip naranja «te espera» de una misión que espera una decisión o acción de Lucas. No es el
+ * rojo de la demora: nadie la está atrasando, está parada porque la próxima jugada es de él.
+ *
+ * @param {number} x
+ * @param {number} y
+ * @returns {string}
+ */
+export function chipEspera(x, y) {
+  return html`<g transform="translate(${x},${y})"><g class="tag"><rect x="-34" y="-11" width="68" height="22" rx="11" fill="#FA7E06"/><text y="4" text-anchor="middle" font-size="11" font-weight="800" fill="#fff" letter-spacing=".4">te espera</text></g></g>`
+}
+
+/**
+ * Chip rojo «demorada» de una misión que pasó el umbral de su etapa.
+ *
+ * @param {number} x
+ * @param {number} y
+ * @returns {string}
+ */
+export function chipDemorada(x, y) {
+  return html`<g transform="translate(${x},${y})"><g class="tag"><rect x="-37" y="-11" width="74" height="22" rx="11" fill="#EF4444"/><text y="4" text-anchor="middle" font-size="11" font-weight="800" fill="#fff" letter-spacing=".4">demorada</text></g></g>`
+}
+
+/**
+ * Barra de las 6 etapas de una misión: las pasadas en su color atenuado, la actual en su color
+ * pleno y las que faltan en gris. Son exactamente 6 `<rect>`.
+ *
+ * @param {number} x
+ * @param {number} y
+ * @param {number} ancho Ancho total de la barra.
+ * @param {number} indice Etapa actual (0 a 5); -1 si no se sabe.
+ * @returns {string}
+ */
+export function barraEtapas(x, y, ancho, indice) {
+  const separacion = 2
+  const segmento = (ancho - separacion * (ETAPAS.length - 1)) / ETAPAS.length
+  let s = ''
+  ETAPAS.forEach(function (etapa, i) {
+    let relleno = COLOR_ETAPA_PENDIENTE
+    let opacidad = 1
+    if (indice >= 0 && i < indice) {
+      relleno = etapa.color
+      opacidad = 0.45
+    } else if (indice >= 0 && i === indice) {
+      relleno = etapa.color
+    }
+    s += html`<rect x="${x + i * (segmento + separacion)}" y="${y}" width="${segmento}" height="8" rx="3" fill="${relleno}" opacity="${opacidad}"/>`
+  })
+  return s
+}
+
+/**
+ * Insignia redonda del origen de una misión (O, C, S, X, D o ?), con su color.
+ *
+ * @param {number} x
+ * @param {number} y
+ * @param {string} origen Clave de `ORIGENES`; una desconocida se muestra como «sin origen».
+ * @returns {string}
+ */
+export function insigniaOrigen(x, y, origen) {
+  const o = ORIGENES[origen] || ORIGENES.desconocido
+  return html`<g transform="translate(${x},${y})"><title>${esc(o.texto)}</title><circle r="11" fill="${o.color}" stroke="#fff" stroke-width="2"/><text y="4.2" text-anchor="middle" font-size="12" font-weight="800" fill="#fff">${esc(o.letra)}</text></g>`
+}
+
+/**
+ * Fila de espera de la cola de misiones, junto a la puerta de las oficinas: hasta cuatro
+ * carpetas apiladas y el texto «N en espera». Toda la pieza se toca (`data-ref="fila-espera"`).
+ * El origen es la esquina de arriba a la izquierda de la primera carpeta.
+ *
+ * @param {number} n Cantidad de misiones en espera.
+ * @returns {string} Vacío si no hay ninguna.
+ */
+export function filaEspera(n) {
+  const cantidad = Math.floor(Number(n) || 0)
+  if (cantidad <= 0) {
+    return ''
+  }
+  const carpetas = Math.min(4, cantidad)
+  let s = ''
+  let i = 0
+  for (i = 0; i < carpetas; i = i + 1) {
+    s += html`<g data-carpeta="${i + 1}" transform="translate(${i * 5},${-i * 5})"><path d="M0 4 h10 l3 3 h17 v17 h-30z" fill="#FA7E06" stroke="#fff" stroke-width="1"/><rect x="0" y="9" width="30" height="15" rx="2" fill="#FFB24D"/></g>`
+  }
+  const texto = cantidad + ' en espera'
+  const ancho = 16 + texto.length * 6.4
+  return html`<g data-ref="fila-espera" class="fila-espera" role="button" tabindex="0" aria-label="${esc(texto)}: ver la cola de misiones" style="cursor:pointer"><title>${esc(texto)}: ver la cola de misiones</title><rect x="-8" y="-28" width="${Math.max(ancho, 52)}" height="74" rx="10" fill="transparent"/>${s}<g transform="translate(0,36)"><rect x="-4" y="-11" width="${ancho}" height="18" rx="9" fill="#101C28" opacity=".88"/><text x="${ancho / 2 - 4}" y="2" text-anchor="middle" font-size="10.5" font-weight="700" fill="#fff">${esc(texto)}</text></g></g>`
 }
 
 /**
@@ -610,7 +722,8 @@ export function chipFase(x, y, fase, anchoMesa, animar) {
  * Contenido de la pizarra de las oficinas: las misiones en curso con el color de su fase y, si la
  * PC de Lucas no reporta, el cartel chico de «sin señal».
  *
- * @param {Array<{slot:number, mision:string|null, proyecto:string|null, fase:{texto:string,color:string}|null}>} lineas
+ * @param {Array<{slot:number, mision:string|null, proyecto:string|null, fase:{texto:string,color:string}|null}|{rotulo:string, color:string, etapa_texto:string}>} lineas
+ *   Líneas v1 (un slot) o v2 (una misión de las oficinas).
  * @param {boolean} sinSenal
  * @param {boolean} sinDatos La escena todavía no tiene ningún estado (API vieja o caída).
  * @returns {string}
@@ -633,12 +746,16 @@ export function pizarra(lineas, sinSenal, sinDatos) {
   }
   lineas.slice(0, 5).forEach(function (l, i) {
     const y = -12 + i * 19
-    const color = l.fase ? l.fase.color : '#94A3B8'
-    const texto = 's' + l.slot + ' · ' + (l.mision || l.proyecto || 'sin misión')
+    // línea v2 (misión de las oficinas: rótulo, color y etapa) o v1 (slot: `s<N> · misión`)
+    const v2 = l.rotulo !== undefined
+    const color = v2 ? l.color || '#94A3B8' : l.fase ? l.fase.color : '#94A3B8'
+    const texto = v2 ? String(l.rotulo || 'sin título') : 's' + l.slot + ' · ' + (l.mision || l.proyecto || 'sin misión')
     const recorte = texto.length > 22 ? texto.slice(0, 21) + '…' : texto
-    s += html`<rect x="-112" y="${y - 9}" width="8" height="12" rx="2" fill="${color}"/>`
+    // una misión esperando a Lucas muestra «te espera» en vez de su etapa
+    const etapa = v2 && l.espera ? 'te espera' : v2 ? l.etapa_texto || '' : l.fase ? l.fase.texto : ''
+    s += html`<rect x="-112" y="${y - 9}" width="8" height="12" rx="2" fill="${esc(color)}"/>`
     s += html`<text x="-98" y="${y + 1}" font-size="12.5" font-weight="600" fill="#2B3A52">${esc(recorte)}</text>`
-    s += html`<text x="118" y="${y + 1}" text-anchor="end" font-size="10.5" font-weight="700" fill="${color}">${esc(l.fase ? l.fase.texto : '')}</text>`
+    s += html`<text x="118" y="${y + 1}" text-anchor="end" font-size="10.5" font-weight="700" fill="${esc(color)}">${esc(etapa)}</text>`
   })
   if (sinSenal) {
     // colgado del borde de arriba de la pizarra, para no tapar el título ni las misiones
@@ -797,6 +914,7 @@ export const ICONOS_GLOBO = {
   note: html`<rect x="-9" y="-9" width="18" height="18" rx="2" fill="#FFE27A"/><rect x="-5" y="-4" width="10" height="2" fill="#B98A00"/><rect x="-5" y="1" width="7" height="2" fill="#B98A00"/>`,
   img: html`<rect x="-9" y="-8" width="18" height="16" rx="3" fill="#0B84F8"/><circle cx="-3.5" cy="-3" r="2.2" fill="#fff"/><path d="M-8 6 l5 -6 l4 4 l3 -3 l5 5z" fill="#fff"/>`,
   hola: html`<circle r="9" fill="#FA7E06"/><path d="M-3.5 4 v-7 m3.5 7 v-8 m3.5 8 v-6" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>`,
+  alerta: html`<circle r="10" fill="#EF4444"/><rect x="-1.6" y="-6.5" width="3.2" height="8" rx="1.4" fill="#fff"/><circle cy="5" r="1.9" fill="#fff"/>`,
   carpeta: html`<path d="M-11 -7 h7 l3 3 h12 v13 h-22z" fill="#FA7E06"/><rect x="-11" y="-3" width="22" height="12" rx="1.5" fill="#FFB24D"/>`,
 }
 

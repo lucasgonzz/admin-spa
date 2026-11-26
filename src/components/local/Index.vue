@@ -45,7 +45,7 @@
           class="ell-chip"
           :class="{ 'ell-chip--accion': !!chip.accion }"
           :title="chip.titulo"
-          @click="chip.accion ? on_abrir_bandeja() : null"
+          @click="chip.accion ? on_chip(chip.accion) : null"
         >
           <i :style="{ background: chip.color }" aria-hidden="true" />
           <b>{{ chip.numero }}</b>
@@ -71,10 +71,13 @@
       >
         <el-local-escena
           ref="plano"
-          :estado="estado"
+          :estado="estado_escena"
           :camara="camara_efectiva"
           :aspecto="aspecto"
           @bandeja="on_abrir_bandeja"
+          @openclaw="on_abrir_panel('openclaw')"
+          @mision="on_tocar_mision"
+          @espera="on_tocar_espera"
         />
 
         <div class="ell-zoom" role="group" aria-label="Zoom del plano">
@@ -123,6 +126,28 @@
         </section>
       </div>
 
+      <!--
+        Paneles de las oficinas (modo misiones): a la derecha del escenario, sin tapar la cabecera.
+        Se abren desde el escritorio OPENCLAW, las mesas, la fila de espera o los chips.
+      -->
+      <panel-openclaw
+        v-if="panel === 'openclaw'"
+        :openclaw="oficina.openclaw"
+        :ahora="ahora"
+        @cerrar="panel = null"
+      />
+      <panel-misiones
+        v-if="panel === 'misiones'"
+        v-model:filtro="filtro_origen"
+        :misiones="oficina.misiones"
+        :por_origen="oficina.por_origen"
+        :recorte="oficina.misiones_recorte"
+        :cola="oficina.cola"
+        :ahora="ahora"
+        :enfocar="enfoque"
+        @cerrar="panel = null"
+      />
+
       <nav v-if="vertical" ref="camaras" class="ell-camaras" aria-label="Cámara">
         <button
           v-for="cam in camaras"
@@ -142,6 +167,9 @@
 <script>
 import api from '@/utils/axios'
 import ElLocalEscena from './Escena.vue'
+import PanelOpenclaw from './PanelOpenclaw.vue'
+import PanelMisiones from './PanelMisiones.vue'
+import { ESTADOS_GATEWAY, NIVELES_RECURSOS, completar_oficina, filtrar_misiones, nivel_recursos, texto_recorte, texto_recursos } from '@/utils/local_oficina'
 
 /** Cada cuánto se vuelve a pedir la escena (Lucas: «cada ~1 minuto, no segundo a segundo»). */
 const POLL_MS = 60000
@@ -187,7 +215,7 @@ const GEIST_HREF = 'https://fonts.googleapis.com/css2?family=Geist:wght@400;500;
 
 export default {
   name: 'ElLocalIndex',
-  components: { ElLocalEscena },
+  components: { ElLocalEscena, PanelOpenclaw, PanelMisiones },
   data() {
     return {
       /** Último JSON bueno de GET /local/escena (congelado: no hace falta que sea reactivo por dentro). */
@@ -214,6 +242,12 @@ export default {
       marco: { w: 0, h: 0 },
       /** Lista de la bandeja abierta. */
       mostrar_bandeja: false,
+      /** Panel de las oficinas abierto: null, 'openclaw' (Workboard y tareas) o 'misiones'. */
+      panel: null,
+      /** Origen elegido en el filtro de misiones ('todas' o una clave de ORIGENES): también filtra las mesas. */
+      filtro_origen: 'todas',
+      /** Pedido de enfocar una misión o la fila de espera en el panel de misiones (`vez` lo repite). */
+      enfoque: null,
       solicitudes_inicio: {},
     }
   },
@@ -241,6 +275,29 @@ export default {
     camaras() {
       return CAMARAS
     },
+    /** Bloque `oficina` normalizado (modo slots o misiones, OpenClaw, cola). */
+    oficina() {
+      return completar_oficina(this.estado ? this.estado.oficina : null)
+    },
+    /** ¿La PC reporta misiones (reporter de Linux) en vez de slots? */
+    en_misiones() {
+      return this.oficina.modo === 'misiones'
+    },
+    /**
+     * Estado que se le pasa al plano: el mismo, o con las misiones filtradas por origen (así las
+     * mesas y el panel muestran lo mismo). Con «todas» devuelve el mismo objeto: no hay trabajo de más.
+     *
+     * @returns {Object|null}
+     */
+    estado_escena() {
+      if (!this.estado || !this.en_misiones || this.filtro_origen === 'todas') {
+        return this.estado
+      }
+      return Object.freeze({
+        ...this.estado,
+        oficina: { ...this.estado.oficina, misiones: filtrar_misiones(this.oficina.misiones, this.filtro_origen) },
+      })
+    },
     /** `resumen` de la escena (vacío si no hay datos). */
     resumen() {
       return (this.estado && this.estado.resumen) || {}
@@ -264,7 +321,10 @@ export default {
         lista.push({ clave: 'sin-horario', numero: n(r.negocios_sin_horario), rotulo: 'sin horario', color: '#CBD5E1' })
       }
       lista.push({ clave: 'tickets', numero: n(r.tickets_abiertos), rotulo: 'tickets abiertos', color: '#25D366' })
-      lista.push({ clave: 'lucas', numero: n(r.para_lucas), rotulo: 'para Lucas', color: '#FA7E06', accion: true, titulo: 'Ver lo que espera en la bandeja' })
+      lista.push({ clave: 'lucas', numero: n(r.para_lucas), rotulo: 'para Lucas', color: '#FA7E06', accion: 'bandeja', titulo: 'Ver lo que espera en la bandeja' })
+      if (this.en_misiones) {
+        return lista.concat(this.chips_de_oficina(n))
+      }
       lista.push({ clave: 'misiones', numero: n(r.misiones_en_curso), rotulo: 'misiones en curso', color: '#3A31FC' })
       lista.push({
         clave: 'slots',
@@ -361,6 +421,7 @@ export default {
       this.observador.observe(this.$refs.escenario)
     }
     window.addEventListener('resize', this.on_resize)
+    window.addEventListener('keydown', this.on_tecla_global)
 
     this.cargar()
     this.poll_id = window.setInterval(this.cargar, this.modo_mock ? POLL_MOCK_MS : POLL_MS)
@@ -398,6 +459,7 @@ export default {
       this.observador = null
     }
     window.removeEventListener('resize', this.on_resize)
+    window.removeEventListener('keydown', this.on_tecla_global)
     document.removeEventListener('visibilitychange', this.on_visibility_change)
     this.desuscribir_vivo()
   },
@@ -726,6 +788,86 @@ export default {
     },
     on_abrir_bandeja() {
       this.mostrar_bandeja = !this.mostrar_bandeja
+      if (this.mostrar_bandeja) {
+        this.panel = null
+      }
+    },
+    /**
+     * Chips de las oficinas en modo misiones: misiones en curso (abre el panel de misiones),
+     * slots en uso, OpenClaw (color por la salud del gateway; abre su panel) y, si la cola
+     * reporta, los recursos de la PC.
+     *
+     * @param {Function} n Formatea un número (guion si no hay dato).
+     * @returns {Array<Object>}
+     */
+    chips_de_oficina(n) {
+      const r = this.resumen
+      const lista = [
+        { clave: 'misiones', numero: n(r.misiones_en_curso), rotulo: 'misiones en curso', color: '#3A31FC', accion: 'misiones', titulo: 'Ver las misiones y filtrarlas por origen' },
+        {
+          clave: 'slots',
+          numero: n(this.oficina.slots_en_uso),
+          rotulo: 'slots en uso',
+          color: '#94A3B8',
+          titulo: 'Carpetas de trabajo (worktrees) con una misión en curso',
+        },
+      ]
+      // si el servidor recortó el reporte, la cabecera lo dice (si no, parecería que no hay más)
+      const recorte = texto_recorte(this.oficina.misiones_recorte)
+      if (recorte) {
+        lista.push({ clave: 'recorte', numero: '', rotulo: recorte, color: '#FA7E06', accion: 'misiones', titulo: 'El reporte de la PC es demasiado grande y no entran todas las misiones. Ver el panel' })
+      }
+      const gateway = this.oficina.openclaw ? ESTADOS_GATEWAY[this.oficina.openclaw.gateway.estado] || ESTADOS_GATEWAY.desconocido : ESTADOS_GATEWAY.desconocido
+      lista.push({ clave: 'openclaw', numero: 'OpenClaw', rotulo: gateway.texto, color: gateway.color, accion: 'openclaw', titulo: 'Ver el Workboard y las tareas programadas de OpenClaw' })
+      const chequeo = this.oficina.cola ? this.oficina.cola.ultimo_chequeo : null
+      const recursos = texto_recursos(chequeo)
+      if (recursos) {
+        const nivel = NIVELES_RECURSOS[nivel_recursos(chequeo)]
+        lista.push({ clave: 'recursos', numero: recursos, rotulo: '', color: nivel.color, accion: 'misiones', titulo: 'Recursos de la PC: ' + nivel.texto + '. Ver el detalle' })
+      }
+      return lista
+    },
+    /** Un chip con acción: la bandeja, el panel de misiones o el de OpenClaw. */
+    on_chip(accion) {
+      if (accion === 'bandeja') {
+        this.on_abrir_bandeja()
+      } else {
+        this.on_abrir_panel(accion)
+      }
+    },
+    /**
+     * Abre (o cierra, si ya estaba) un panel de las oficinas. Sólo uno a la vez, y sin la bandeja.
+     *
+     * @param {('openclaw'|'misiones')} nombre
+     */
+    on_abrir_panel(nombre) {
+      this.panel = this.panel === nombre ? null : nombre
+      if (this.panel) {
+        this.mostrar_bandeja = false
+      }
+    },
+    /** Tocar la mesa de una misión: abre el panel de misiones enfocado en ella. */
+    on_tocar_mision(id) {
+      this.mostrar_bandeja = false
+      this.panel = 'misiones'
+      this.enfoque = { id: id, vez: Date.now() }
+    },
+    /** Tocar la fila de espera de la cola: abre el panel de misiones en «En espera». */
+    on_tocar_espera() {
+      this.mostrar_bandeja = false
+      this.panel = 'misiones'
+      this.enfoque = { id: 'espera', vez: Date.now() }
+    },
+    /** Escape cierra el panel de las oficinas o la bandeja abiertos. */
+    on_tecla_global(ev) {
+      if (ev.key !== 'Escape') {
+        return
+      }
+      if (this.panel) {
+        this.panel = null
+      } else if (this.mostrar_bandeja) {
+        this.mostrar_bandeja = false
+      }
     },
   },
 }
@@ -882,6 +1024,7 @@ export default {
 
 /* ---------- Escena ---------- */
 .ell-escenario {
+  position: relative;
   flex: 1 1 0;
   min-height: 0;
   display: flex;
