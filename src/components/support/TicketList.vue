@@ -49,6 +49,8 @@
           active: ticket.id == selected_ticket_id,
           'support-ticket-item--escalated': is_ticket_escalated(ticket),
           'support-ticket-item--unread': unread_count(ticket) > 0,
+          'support-ticket-item--pinned': is_pinned(ticket),
+          'support-ticket-item--marked-unread': is_marked_unread(ticket),
         },
       ]"
       role="listitem"
@@ -71,6 +73,7 @@
             :title="client_title_line(ticket)">
             {{ client_name(ticket) }}<span v-if="contact_name(ticket)" class="support-ticket-contact"> - {{ contact_name(ticket) }}</span>
           </span>
+          <i v-if="is_pinned(ticket)" class="bi bi-pin-angle-fill support-ticket-pin-icon" title="Ticket fijado" aria-label="Ticket fijado"></i>
           <span class="support-ticket-time" :title="last_activity_full(ticket)">{{ last_activity_label(ticket) }}</span>
         </div>
         <div class="support-ticket-line support-ticket-line--sub">
@@ -112,6 +115,12 @@
               :class="response_time_badge(ticket).class_name"
               :title="'Tiempo sin respuesta del operador'">
               {{ response_time_badge(ticket).label }}
+            </span>
+            <span
+              v-if="is_marked_unread(ticket)"
+              class="badge rounded-pill support-marked-unread-badge"
+              title="Marcado como no leído">
+              No leído
             </span>
             <span
               v-if="unread_count(ticket) > 0"
@@ -165,12 +174,23 @@
       <div v-if="ticket_menu" class="support-ticket-menu-overlay"
         @click.self="ticket_menu = null"
         @contextmenu.self.prevent="ticket_menu = null"
-        @keydown.esc.stop.prevent="dismiss_ticket_menu">
-        <button ref="close_ticket_action" type="button" class="btn btn-light shadow support-ticket-menu-action"
-          :style="{ left: ticket_menu.x + 'px', top: ticket_menu.y + 'px' }"
-          @blur="ticket_menu = null" @click="request_ticket_close">
-          Cerrar ticket
-        </button>
+        @keydown.esc.stop.prevent="dismiss_ticket_menu"
+        @focusout="on_menu_focusout">
+        <div class="support-ticket-menu shadow" role="menu"
+          :style="{ left: ticket_menu.x + 'px', top: ticket_menu.y + 'px' }">
+          <button v-if="!ticket_menu.closed" ref="close_ticket_action" type="button" class="support-ticket-menu-action"
+            role="menuitem" @click="request_ticket_close">
+            Cerrar ticket
+          </button>
+          <button ref="pin_ticket_action" type="button" class="support-ticket-menu-action"
+            role="menuitem" @click="request_ticket_pin">
+            {{ ticket_menu.pinned ? 'Desfijar ticket' : 'Fijar ticket' }}
+          </button>
+          <button type="button" class="support-ticket-menu-action"
+            role="menuitem" @click="request_ticket_unread">
+            {{ ticket_menu.marked_unread ? 'Marcar como leído' : 'Marcar como no leído' }}
+          </button>
+        </div>
       </div>
     </teleport>
   </div>
@@ -183,6 +203,7 @@ import { client_display_name, contact_display_name, agent_is_off_on_open_ticket,
 import { ticket_heading, ticket_title, ticket_summary } from '@/utils/support_ticket_title'
 import { normalize_ticket_search, ticket_matches_search } from '@/utils/support_ticket_search'
 import { mission_groups, mission_count_title } from '@/utils/support_missions'
+import { ticket_is_pinned, ticket_is_marked_unread, sort_inbox_tickets } from '@/utils/support_ticket_marks'
 
 export default {
   name: 'SupportTicketList',
@@ -206,7 +227,7 @@ export default {
      */
     now_tick: { type: Number, default: 0 },
   },
-  emits: ['select-ticket', 'create-ticket', 'close-ticket'],
+  emits: ['select-ticket', 'create-ticket', 'close-ticket', 'pin-ticket', 'mark-unread'],
   data() {
     return { ticket_menu: null, ticket_order: new Map(), search_query: '' }
   },
@@ -236,17 +257,14 @@ export default {
       return this.all_tickets || this.tickets
     },
     /**
-     * Tickets ordenados por la hora del último mensaje (enviado o recibido), los más recientes arriba.
+     * Tickets ordenados: primero los fijados y después por la hora del último mensaje (enviado o
+     * recibido), los más recientes arriba.
      *
      * @returns {Array<Object>}
      */
     display_tickets() {
       const list = (this.tickets || []).filter((ticket) => ticket_matches_search(ticket, this.normalized_search))
-      return list.sort((a, b) => {
-        const first = this.ticket_order.get(a.id)
-        const second = this.ticket_order.get(b.id)
-        return second.time - first.time || Number(b.id) - Number(a.id)
-      })
+      return sort_inbox_tickets(list, this.ticket_order)
     },
   },
   methods: {
@@ -270,19 +288,25 @@ export default {
       }
       return partes.join(' — ')
     },
+    is_pinned: ticket_is_pinned,
+    is_marked_unread: ticket_is_marked_unread,
     open_ticket_menu(event, ticket) {
-      if (this.ticket_status_class(ticket) === 'closed') return
       event.preventDefault()
       const row = event.currentTarget
       const bounds = row.getBoundingClientRect()
+      const closed = this.ticket_status_class(ticket) === 'closed'
       this.ticket_menu = {
         id: ticket.id,
         row,
-        x: Math.max(0, Math.min(event.clientX || bounds.left, window.innerWidth - 152)),
-        y: Math.max(0, Math.min(event.clientY || bounds.top, window.innerHeight - 48)),
+        closed,
+        pinned: ticket_is_pinned(ticket),
+        marked_unread: ticket_is_marked_unread(ticket),
+        x: Math.max(0, Math.min(event.clientX || bounds.left, window.innerWidth - 172)),
+        y: Math.max(0, Math.min(event.clientY || bounds.top, window.innerHeight - (closed ? 90 : 130))),
       }
       this.$nextTick(() => {
-        if (this.$refs.close_ticket_action) this.$refs.close_ticket_action.focus()
+        const first = this.$refs.close_ticket_action || this.$refs.pin_ticket_action
+        if (first) first.focus()
       })
     },
     dismiss_ticket_menu() {
@@ -290,11 +314,29 @@ export default {
       this.ticket_menu = null
       if (menu && menu.row.isConnected) menu.row.focus({ preventScroll: true })
     },
+    /** El menú se cierra al perder el foco hacia fuera de él (como el botón único de antes). */
+    on_menu_focusout(event) {
+      const next = event.relatedTarget
+      if (next && event.currentTarget.contains(next)) return
+      this.ticket_menu = null
+    },
     request_ticket_close() {
       if (!this.ticket_menu) return
       const id = this.ticket_menu.id
       this.dismiss_ticket_menu()
       this.$emit('close-ticket', id)
+    },
+    request_ticket_pin() {
+      if (!this.ticket_menu) return
+      const { id, pinned } = this.ticket_menu
+      this.dismiss_ticket_menu()
+      this.$emit('pin-ticket', { id, pinned: !pinned })
+    },
+    request_ticket_unread() {
+      if (!this.ticket_menu) return
+      const { id, marked_unread } = this.ticket_menu
+      this.dismiss_ticket_menu()
+      this.$emit('mark-unread', { id, unread: !marked_unread })
     },
     /**
      * Una misión pendiente no equivale a una atención bloqueada. El dato aditivo del API
@@ -797,6 +839,44 @@ export default {
   background: linear-gradient(90deg, #ffe4e6 0%, #fff1f2 100%);
 }
 
+/* Ticket fijado: va arriba de todo y se pinta en azul (Lucas, 27/11/2026). */
+.support-ticket-item--pinned {
+  background: #e7f1ff;
+  box-shadow: inset 3px 0 0 #0d6efd;
+}
+
+.support-ticket-item--pinned:hover {
+  background: #d6e6ff;
+}
+
+.support-ticket-pin-icon {
+  flex: 0 0 auto;
+  color: #0d6efd;
+  font-size: 0.8rem;
+}
+
+/* Ticket marcado como no leído a mano: amarillo hasta que se abre. Si además está fijado, gana el amarillo
+   y queda el borde azul de la izquierda. */
+.support-ticket-item--marked-unread {
+  background: #fff3bf;
+}
+
+.support-ticket-item--marked-unread:hover {
+  background: #ffec99;
+}
+
+.support-ticket-item--marked-unread.support-ticket-item--pinned {
+  box-shadow: inset 3px 0 0 #0d6efd;
+}
+
+.support-marked-unread-badge {
+  font-size: 0.65rem;
+  line-height: 1.1;
+  padding: 0.25em 0.5em;
+  color: #664d03;
+  background: #ffc107;
+}
+
 /* Ticket seleccionado: fondo claramente más gris y acento a la izquierda (no desplaza el layout). */
 .support-ticket-item.active {
   background: var(--bs-success-bg-subtle);
@@ -1005,9 +1085,29 @@ export default {
   z-index: 1080;
 }
 
-.support-ticket-menu-action {
+.support-ticket-menu {
   position: absolute;
-  width: 152px;
+  width: 172px;
+  display: flex;
+  flex-direction: column;
+  padding: 0.25rem 0;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.375rem;
+  background: #fff;
+}
+
+.support-ticket-menu-action {
+  padding: 0.4rem 0.9rem;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+.support-ticket-menu-action:hover,
+.support-ticket-menu-action:focus-visible {
+  background: var(--bs-tertiary-bg, #f1f3f5);
+  outline: none;
 }
 </style>
 
