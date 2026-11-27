@@ -554,6 +554,38 @@ export default __base_store({
       })
     },
     /**
+     * Fija o desfija un ticket (misión soporte-fijar-no-leido): el fijado va arriba de toda la bandeja.
+     *
+     * @param {Object} contexto Contexto Vuex.
+     * @param {{id: number|string, pinned: boolean}} payload
+     * @returns {Promise<Object|null>} Fila actualizada.
+     */
+    pin_ticket({ dispatch }, payload) {
+      return api.patch('/support-ticket/' + payload.id + '/pin', { pinned: !!payload.pinned }).then(function (response) {
+        const model = response.data && response.data.model
+        if (!model) return null
+        return dispatch('apply_ticket_row', model).then(function () {
+          return model
+        })
+      })
+    },
+    /**
+     * Marca un ticket como no leído (amarillo) o le saca la marca (al abrirlo).
+     *
+     * @param {Object} contexto Contexto Vuex.
+     * @param {{id: number|string, unread: boolean}} payload
+     * @returns {Promise<Object|null>} Fila actualizada.
+     */
+    mark_ticket_unread({ dispatch }, payload) {
+      return api.patch('/support-ticket/' + payload.id + '/mark-unread', { unread: !!payload.unread }).then(function (response) {
+        const model = response.data && response.data.model
+        if (!model) return null
+        return dispatch('apply_ticket_row', model).then(function () {
+          return model
+        })
+      })
+    },
+    /**
      * Crea ticket y añade/ajusta en lista vía el modelo devuelto.
      */
     store({ dispatch }, payload) {

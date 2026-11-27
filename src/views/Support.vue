@@ -58,6 +58,8 @@
         :now_tick="now_tick"
         @select-ticket="on_ticket_list_select"
         @close-ticket="close_ticket_from_list"
+        @pin-ticket="pin_ticket_from_list"
+        @mark-unread="mark_unread_from_list"
         @create-ticket="create_ticket" />
     </div>
 
@@ -257,12 +259,12 @@ export default {
      * Filtro que llegó por la query (`?filtro=`), normalizado. Cualquier otro valor se ignora:
      * la bandeja se muestra completa y sin chip.
      *
-     * @returns {'sin-responder'|'hoy'|null}
+     * @returns {'sin-responder'|'hoy'|'abiertos'|'pruebas'|null}
      */
     filtro_activo() {
       const valor = this.$route && this.$route.query ? this.$route.query.filtro : null
       const normalizado = String(valor == null ? '' : valor)
-      if (['sin-responder', 'hoy', 'abiertos'].includes(normalizado)) {
+      if (['sin-responder', 'hoy', 'abiertos', 'pruebas'].includes(normalizado)) {
         return normalizado
       }
       return null
@@ -274,6 +276,7 @@ export default {
      */
     filtro_rotulo() {
       if (this.filtro_activo === 'abiertos') return 'Solo abiertos'
+      if (this.filtro_activo === 'pruebas') return 'Pruebas abiertas'
       if (this.filtro_activo === 'sin-responder') {
         return 'Solo sin responder'
       }
@@ -321,26 +324,13 @@ export default {
       return support_filter_tickets(this.tickets_de_la_bandeja, this.filtro_activo)
     },
     /**
-     * Tickets de la bandeja elegida en «Clientes» / «Prueba» (misión prueba-ayuda-unificada-en-soporte,
-     * 10/11/2026): por defecto, sin los de prueba gratuita, que es el mismo criterio con el que la API
-     * cuenta las tarjetas de inicio, así que el deep link sigue mostrando las filas que dice la tarjeta.
-     *
-     * 🔴 Compatibilidad: con una API vieja ninguna fila trae `es_prueba` y se muestra la lista completa.
+     * Tickets de la bandeja: todos juntos, los de clientes y los de negocios en prueba gratuita (Lucas,
+     * 27/11/2026, misión soporte-fijar-no-leido). Los de prueba se aíslan con la tarjeta «Pruebas abiertas».
      *
      * @returns {Array<Object>}
      */
     tickets_de_la_bandeja() {
-      const tickets = this.tickets || []
-      const marcados = tickets.some(function (ticket) {
-        return !!ticket && ticket.es_prueba !== undefined
-      })
-      if (!marcados) {
-        return tickets
-      }
-      const solo_prueba = this.$store.state.support_ticket.filtro_prueba === 'prueba'
-      return tickets.filter(function (ticket) {
-        return !!ticket && !!ticket.es_prueba === solo_prueba
-      })
+      return this.tickets || []
     },
     /**
      * Mensajes del ticket activo.
@@ -1001,6 +991,7 @@ export default {
       this.suggestion_notice = ''
       this.ai_reasoning = ''
       this.$store.dispatch('support_message/load_ticket_messages', ticket_id)
+      this.limpiar_marca_no_leido(ticket_id)
       this.$nextTick(() => {
         if (String(this.selected_ticket_id) === String(ticket_id) && this.$refs.message_input) this.$refs.message_input.focus_textarea()
       })
@@ -1313,6 +1304,38 @@ export default {
             self.saving_header = false
           })
       })
+    },
+    /**
+     * Fija o desfija un ticket desde el menú de la lista.
+     *
+     * @param {{id: number|string, pinned: boolean}} payload
+     * @returns {Promise<void>}
+     */
+    pin_ticket_from_list(payload) {
+      return this.$store.dispatch('support_ticket/pin_ticket', payload)
+        .catch((error) => this.mostrar_error_de_borrador(error, payload.pinned ? 'No se pudo fijar el ticket.' : 'No se pudo desfijar el ticket.'))
+    },
+    /**
+     * Marca un ticket como no leído desde el menú de la lista (queda en amarillo hasta abrirlo).
+     * Si es el que está abierto ahora, no se limpia solo: la marca se saca al abrirlo de nuevo.
+     *
+     * @param {{id: number|string, unread: boolean}} payload
+     * @returns {Promise<void>}
+     */
+    mark_unread_from_list(payload) {
+      return this.$store.dispatch('support_ticket/mark_ticket_unread', payload)
+        .catch((error) => this.mostrar_error_de_borrador(error, 'No se pudo marcar el ticket como no leído.'))
+    },
+    /**
+     * Al abrir un ticket marcado como no leído, la marca se saca: deja de ser amarillo.
+     *
+     * @param {number|string} ticket_id
+     * @returns {void}
+     */
+    limpiar_marca_no_leido(ticket_id) {
+      const ticket = this.tickets.find((t) => t.id == ticket_id)
+      if (!ticket || !ticket.marked_unread_at) return
+      this.$store.dispatch('support_ticket/mark_ticket_unread', { id: ticket.id, unread: false }).catch(() => {})
     },
     close_ticket_from_list(id) {
       return this.$store.dispatch('support_ticket/update_ticket', { id, status: 'closed' })

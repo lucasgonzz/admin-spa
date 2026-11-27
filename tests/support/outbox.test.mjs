@@ -204,14 +204,14 @@ test('borradores de texto, cita y File quedan separados por operador y ticket', 
 
 test('cada tarjeta cuenta exactamente su lista, incluidos cerrados de hoy; API vieja queda explícita', () => {
   const tickets = [
-    { id: 1, status: 'open', abierto_hoy: true, sin_responder: true },
-    { id: 2, status: 'closed', abierto_hoy: true, sin_responder: false },
-    { id: 3, status: 'open', abierto_hoy: false, sin_responder: false },
+    { id: 1, status: 'open', abierto_hoy: true, sin_responder: true, es_prueba: false },
+    { id: 2, status: 'closed', abierto_hoy: true, sin_responder: false, es_prueba: false },
+    { id: 3, status: 'open', abierto_hoy: false, sin_responder: false, es_prueba: false },
   ]
   for (const card of support_summary(tickets)) assert.equal(card.count, support_filter_tickets(tickets, card.key).length)
-  assert.deepEqual(support_summary(tickets).map((row) => row.count), [2, 2, 1])
+  assert.deepEqual(support_summary(tickets).map((row) => row.count), [2, 2, 1, 0])
   const old = [{ id: 4, status: 'open' }]
-  assert.deepEqual(support_summary(old).map((row) => row.count), [null, 1, null])
+  assert.deepEqual(support_summary(old).map((row) => row.count), [null, 1, null, null])
   assert.deepEqual(support_filter_tickets(old, 'sin-responder'), old)
 })
 

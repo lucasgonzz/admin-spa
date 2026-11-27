@@ -33,7 +33,7 @@ export default {
 .support-overview-heading > i { font-size: 36px; color: var(--bs-secondary-color); }
 .support-overview h1 { font-size: 23px; margin: 16px 0 10px; }
 .support-overview p { font-size: 14px; color: var(--bs-secondary-color); }
-.support-overview-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.support-overview-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .support-overview-card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 20px; border: 1px solid var(--bs-border-color); border-radius: 16px; background: var(--bs-body-bg); color: var(--bs-body-color); text-align: left; }
 .support-overview-card > i { color: #198754; font-size: 20px; }
 .support-overview-card strong { font-size: 30px; font-weight: 650; line-height: 1.1; }
