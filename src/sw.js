@@ -23,7 +23,7 @@ self.addEventListener('message', (event) => {
 
 /**
  * Recibe un push del backend (AdminPushNotificationService) y muestra la notificación nativa.
- * El payload es el JSON que arma el servicio: { title, body, url? }.
+ * El payload es el JSON que arma el servicio: { title, body, url?, tag? }.
  */
 self.addEventListener('push', (event) => {
   const data = event.data ? event.data.json() : {}
@@ -32,6 +32,12 @@ self.addEventListener('push', (event) => {
     body: data.body || '',
     icon: '/icons/pwa-192.png',
     data: { url: data.url || '/' },
+  }
+  // Con tag, el navegador reemplaza la notificación anterior del mismo tag y renotify vuelve a avisar.
+  // Nunca renotify sin tag: showNotification lanza TypeError y la notificación no se muestra.
+  if (typeof data.tag === 'string' && data.tag !== '') {
+    options.tag = data.tag
+    options.renotify = true
   }
   event.waitUntil(self.registration.showNotification(title, options))
 })
