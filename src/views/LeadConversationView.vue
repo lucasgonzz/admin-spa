@@ -732,6 +732,8 @@ export default {
        * un push de "mensaje por aprobar"). null = sin foco pendiente: la vista baja al final como siempre.
        */
       pending_focus_message_id: null,
+      /* Último foco ya aplicado ({ id, mode: 'row'|'bottom' }); permite reforzar la posición sin re-resaltar. */
+      focus_applied: null,
       /**
        * Registro completo del lead cargado desde la API al montar la vista.
        * Equivale al prop `record` del componente de modal, pero aquí es estado local.
@@ -1789,26 +1791,58 @@ export default {
       }
       const self = this
       this.$nextTick(function () {
+        /* Intento inmediato: no depende de requestAnimationFrame (no corre con la pestaña en segundo plano). */
+        self.apply_pending_focus(focus_id, false)
+        /* Refuerzo tras el layout: repite el mismo posicionamiento, sin replace ni resalte. */
         requestAnimationFrame(function () {
           requestAnimationFrame(function () {
-            /* La raíz del template es un fragmento ($el no sirve): se busca dentro del contenedor del hilo.
-            Otra llamada de la misma carga ya enfocó y limpió el dato: nada más que hacer. */
-            if (self.pending_focus_message_id !== focus_id) {
-              return
-            }
-            self.pending_focus_message_id = null
-            const found = focus_message_row(self.$refs.conversation_scroll_box, focus_id, 'wa-message--focus-flash')
-            if (!found) {
-              /* Mensaje no encontrado: se comporta como hoy (al final del hilo). */
-              self.scroll_conversation_to_bottom()
-            }
-            /* Se limpia la URL para que un refresh no vuelva a enfocar. */
-            const next_query = Object.assign({}, self.$route.query)
-            delete next_query.message_id
-            self.$router.replace({ query: next_query })
+            self.apply_pending_focus(focus_id, true)
           })
         })
       })
+    },
+
+    /**
+     * Aplica el foco pendiente en el mensaje de un push. Tres casos:
+     * - La fila existe: la centra y resalta (o alinea al comienzo si es muy alta), consume el pendiente
+     *   y limpia ?message_id= de la URL una sola vez.
+     * - La fila no existe y el hilo todavía carga: no consume (se reintenta en la próxima llamada).
+     * - La fila no existe y el hilo ya cargó (mensaje aprobado o borrado): baja al final y consume.
+     * Con is_reinforce, si el foco ya se aplicó en esta carga repite la posición sin replace ni resalte.
+     *
+     * @param {number} focus_id Id de mensaje capturado al programar.
+     * @param {boolean} is_reinforce true en el refuerzo posterior al layout (rAF).
+     * @returns {void}
+     */
+    apply_pending_focus(focus_id, is_reinforce) {
+      const self = this
+      if (this.pending_focus_message_id === focus_id) {
+        /* La raíz del template es un fragmento ($el no sirve): se busca dentro del contenedor del hilo. */
+        const found = focus_message_row(this.$refs.conversation_scroll_box, focus_id, 'wa-message--focus-flash')
+        if (!found && this.loading_conversation) {
+          /* El hilo todavía no está: no se consume, otra llamada de la carga lo reintenta. */
+          return
+        }
+        this.pending_focus_message_id = null
+        this.focus_applied = { id: focus_id, mode: found ? 'row' : 'bottom' }
+        if (!found) {
+          /* Mensaje no encontrado: se comporta como hoy (al final del hilo). */
+          this.scroll_conversation_to_bottom()
+        }
+        /* Se limpia la URL para que un refresh no vuelva a enfocar. */
+        const next_query = Object.assign({}, self.$route.query)
+        delete next_query.message_id
+        this.$router.replace({ query: next_query })
+        return
+      }
+      /* Ya aplicado por otra llamada de la misma carga: en el refuerzo se repite la posición. */
+      if (is_reinforce && this.focus_applied && this.focus_applied.id === focus_id) {
+        if (this.focus_applied.mode === 'row') {
+          focus_message_row(this.$refs.conversation_scroll_box, focus_id, 'wa-message--focus-flash', false)
+        } else {
+          this.scroll_conversation_to_bottom()
+        }
+      }
     },
 
     /**
