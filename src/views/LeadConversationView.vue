@@ -283,6 +283,8 @@
             <span class="wa-date-divider-label">{{ section.date_label }}</span>
           </div>
           <template v-for="msg in section.messages" :key="msg.id">
+            <!-- Contenedor con data-message-id: MessageBubble tiene raíz múltiple y no hereda atributos. -->
+            <div class="wa-message-anchor" :data-message-id="msg.id">
             <message-bubble
               :message="msg"
               :busy="busy_message_id === msg.id"
@@ -301,6 +303,7 @@
               @toggle_deleted_from_context="on_toggle_deleted_from_context(msg.id)"
               @reaccionar="on_reaccionar_mensaje(msg.id, $event)"
             />
+            </div>
             <!-- "No necesita respuesta" (decisión D6, 17/10/2026): debajo del ÚLTIMO mensaje del
                  lead que todavía cuenta como sin responder. Marca atendido hasta ese mensaje y la
                  fila deja de estar en amarillo sin mandar nada; desaparece al confirmarse. -->
@@ -648,6 +651,7 @@ import RegistrarLlamadaModal from '@/components/lead/RegistrarLlamadaModal.vue'
 import ImageAnnotationEditor from '@/components/common/ImageAnnotationEditor.vue'
 import api from '@/utils/axios'
 import { es_solo_leads } from '@/utils/solo_leads'
+import { message_id_from_query, focus_message_row } from '@/utils/conversation_focus'
 import { cached_get, MAX_AGE_SETTINGS } from '@/common-vue/helpers/request_cache_helper'
 import { copy_lead_conversation_to_clipboard } from '@/utils/lead_conversation_clipboard'
 import lead_conversation_date_dividers from '@/mixins/lead_conversation_date_dividers'
@@ -723,6 +727,13 @@ export default {
 
   data() {
     return {
+      /**
+       * Id del mensaje a enfocar al terminar de cargar el hilo (viene de ?message_id= al abrir desde
+       * un push de "mensaje por aprobar"). null = sin foco pendiente: la vista baja al final como siempre.
+       */
+      pending_focus_message_id: null,
+      /* Último foco ya aplicado ({ id, mode: 'row'|'bottom' }); permite reforzar la posición sin re-resaltar. */
+      focus_applied: null,
       /**
        * Registro completo del lead cargado desde la API al montar la vista.
        * Equivale al prop `record` del componente de modal, pero aquí es estado local.
@@ -1713,6 +1724,8 @@ export default {
         })
       return
     }
+    /* Modo ruta: si la URL trae ?message_id= válido, queda pendiente el foco en ese mensaje. */
+    this.pending_focus_message_id = message_id_from_query(this.$route.query)
     const lead_id = this.$route.params.lead_id
     this.$store.commit('lead/set_lead_conversation_visible_id', lead_id)
     this.loading_conversation = true
@@ -1760,6 +1773,78 @@ export default {
   },
 
   methods: {
+    /**
+     * Sobrescribe el método del mixin conversation_scroll_behavior. Sin foco pendiente delega en el
+     * mixin (baja al final). Con foco pendiente (apertura desde un push), en vez de bajar centra y
+     * resalta el mensaje (nextTick + doble requestAnimationFrame, igual que el mixin, así gana a las
+     * bajadas automáticas de la carga) y después saca message_id de la URL. Si el mensaje no está en
+     * el hilo (ya aprobado o borrado) queda abajo, como siempre, sin error.
+     *
+     * @returns {void}
+     */
+    schedule_scroll_to_bottom() {
+      /** Id capturado ahora: las llamadas siguientes dentro de la misma carga comparten el mismo foco. */
+      const focus_id = this.pending_focus_message_id
+      if (focus_id === null || focus_id === undefined) {
+        conversation_scroll_behavior.methods.schedule_scroll_to_bottom.call(this)
+        return
+      }
+      const self = this
+      this.$nextTick(function () {
+        /* Intento inmediato: no depende de requestAnimationFrame (no corre con la pestaña en segundo plano). */
+        self.apply_pending_focus(focus_id, false)
+        /* Refuerzo tras el layout: repite el mismo posicionamiento, sin replace ni resalte. */
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            self.apply_pending_focus(focus_id, true)
+          })
+        })
+      })
+    },
+
+    /**
+     * Aplica el foco pendiente en el mensaje de un push. Tres casos:
+     * - La fila existe: la centra y resalta (o alinea al comienzo si es muy alta), consume el pendiente
+     *   y limpia ?message_id= de la URL una sola vez.
+     * - La fila no existe y el hilo todavía carga: no consume (se reintenta en la próxima llamada).
+     * - La fila no existe y el hilo ya cargó (mensaje aprobado o borrado): baja al final y consume.
+     * Con is_reinforce, si el foco ya se aplicó en esta carga repite la posición sin replace ni resalte.
+     *
+     * @param {number} focus_id Id de mensaje capturado al programar.
+     * @param {boolean} is_reinforce true en el refuerzo posterior al layout (rAF).
+     * @returns {void}
+     */
+    apply_pending_focus(focus_id, is_reinforce) {
+      const self = this
+      if (this.pending_focus_message_id === focus_id) {
+        /* La raíz del template es un fragmento ($el no sirve): se busca dentro del contenedor del hilo. */
+        const found = focus_message_row(this.$refs.conversation_scroll_box, focus_id, 'wa-message--focus-flash')
+        if (!found && this.loading_conversation) {
+          /* El hilo todavía no está: no se consume, otra llamada de la carga lo reintenta. */
+          return
+        }
+        this.pending_focus_message_id = null
+        this.focus_applied = { id: focus_id, mode: found ? 'row' : 'bottom' }
+        if (!found) {
+          /* Mensaje no encontrado: se comporta como hoy (al final del hilo). */
+          this.scroll_conversation_to_bottom()
+        }
+        /* Se limpia la URL para que un refresh no vuelva a enfocar. */
+        const next_query = Object.assign({}, self.$route.query)
+        delete next_query.message_id
+        this.$router.replace({ query: next_query })
+        return
+      }
+      /* Ya aplicado por otra llamada de la misma carga: en el refuerzo se repite la posición. */
+      if (is_reinforce && this.focus_applied && this.focus_applied.id === focus_id) {
+        if (this.focus_applied.mode === 'row') {
+          focus_message_row(this.$refs.conversation_scroll_box, focus_id, 'wa-message--focus-flash', false)
+        } else {
+          this.scroll_conversation_to_bottom()
+        }
+      }
+    },
+
     /**
      * Mide si el texto del badge desborda el wrapper y activa la animación de scroll.
      * Llamado por el watcher de demo_badge_text después de nextTick para que el DOM
@@ -3574,5 +3659,22 @@ export default {
 .lead-attachment-remove:hover {
   color: #c53030;
 }
-</style>
 
+/* Contenedor de cada mensaje (lleva data-message-id). Columna flex para que la burbuja conserve su
+   align-self (izquierda/derecha) como si fuera hija directa del hilo. */
+.wa-message-anchor {
+  display: flex;
+  flex-direction: column;
+}
+/* Resalte breve del mensaje al abrir la conversación desde un push. */
+.wa-message-anchor.wa-message--focus-flash {
+  background-color: rgba(255, 193, 7, 0.28);
+  box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.55);
+  transition: background-color 0.4s ease, box-shadow 0.4s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wa-message-anchor.wa-message--focus-flash {
+    transition: none;
+  }
+}
+</style>
