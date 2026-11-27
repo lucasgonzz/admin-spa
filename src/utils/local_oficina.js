@@ -73,6 +73,26 @@ export const ESTADOS_MISION = {
 export const ORDEN_ESTADOS = ['trabajando', 'trabada', 'esperando_lucas', 'terminada']
 
 /**
+ * Estados del seguimiento de misiones que la Gamer publica en el Admin (misión dotin-misiones-admin) → texto y
+ * color del chip. Son los que salen en `seguimiento.estado_visible`: «activa sin señal» es una misión que figura
+ * activa pero no tiene actividad real reciente (nunca se dice «activa» sólo porque el proceso existe).
+ *
+ * @type {Object<string, {texto:string, color:string}>}
+ */
+export const ESTADOS_SEGUIMIENTO = {
+  en_cola: { texto: 'en cola', color: '#64748B' },
+  activa: { texto: 'activa', color: '#22C55E' },
+  activa_sin_senal: { texto: 'activa sin señal', color: '#F59E0B' },
+  pausada_tecnica: { texto: 'pausada por un problema técnico', color: '#F59E0B' },
+  esperando_decision: { texto: 'esperando tu decisión', color: '#FA7E06' },
+  terminada: { texto: 'terminada', color: '#64748B' },
+  detenida: { texto: 'detenida', color: '#EF4444' },
+}
+
+/** Largo máximo del texto libre de una respuesta (el mismo límite que valida el admin). */
+export const MAX_TEXTO_RESPUESTA = 1000
+
+/**
  * Columnas del Workboard de OpenClaw, en el orden en que se muestran. `triage` y `backlog`
  * comparten la columna «Sin clasificar».
  *
@@ -551,4 +571,90 @@ export function contar_columna(columna, conteo) {
     }
   })
   return hay ? total : columna.tarjetas.length
+}
+
+/**
+ * Describe el bloque `seguimiento` de una misión (lo que publica la Gamer en el Admin) para el panel: el chip del
+ * estado, la línea de vigencia y los textos de avance. Sin seguimiento la misión se ve exactamente como siempre.
+ *
+ * @param {Object|null|undefined} seguimiento `mision.seguimiento` de la escena.
+ * @returns {{texto:string, color:string, vigencia_texto:(string|null), avance:(string|null), pendiente:(string|null),
+ *   motivo:(string|null), proximo_paso:(string|null)}|null} null si la misión no trae seguimiento.
+ */
+export function describir_seguimiento(seguimiento) {
+  if (!es_objeto(seguimiento)) {
+    return null
+  }
+  // El estado visible manda (distingue «activa sin señal»); si no vino, el estado a secas.
+  const clave = seguimiento.estado_visible || seguimiento.estado
+  const estado = ESTADOS_SEGUIMIENTO[clave] || { texto: clave ? String(clave) : 'sin estado', color: '#94A3B8' }
+
+  // La información de la PC sólo se marca cuando no está al día.
+  let vigencia_texto = null
+  const minutos = typeof seguimiento.minutos_sin_reporte === 'number' ? texto_duracion(seguimiento.minutos_sin_reporte) : null
+  if (seguimiento.vigencia === 'desactualizada') {
+    vigencia_texto = 'desactualizada: la PC no reporta' + (minutos ? ' hace ' + minutos : '')
+  } else if (seguimiento.vigencia === 'sin_senal') {
+    vigencia_texto = 'sin señal de la PC' + (minutos ? ' hace ' + minutos : '')
+  }
+
+  return {
+    texto: estado.texto,
+    color: estado.color,
+    vigencia_texto: vigencia_texto,
+    avance: seguimiento.ultimo_avance || null,
+    pendiente: seguimiento.pendiente || null,
+    motivo: seguimiento.motivo || null,
+    proximo_paso: seguimiento.proximo_paso || null,
+  }
+}
+
+/**
+ * ¿Se puede responder esta pregunta desde el panel? Sólo una ordinaria que sigue abierta (y que el admin no marcó
+ * como no respondible): las sensibles las responde Lucas en persona por Slack o Telegram.
+ *
+ * @param {Object|null|undefined} pregunta `mision.seguimiento.pregunta`.
+ * @returns {boolean}
+ */
+export function puede_responder(pregunta) {
+  return es_objeto(pregunta) && pregunta.tipo === 'ordinaria' && pregunta.estado === 'abierta' && pregunta.puede_responder !== false
+}
+
+/**
+ * Un UUID v4. Usa `crypto.randomUUID` cuando existe (navegadores en contexto seguro y node) y, si no, lo arma con
+ * `crypto.getRandomValues` o, como último recurso, con `Math.random`.
+ *
+ * @returns {string}
+ */
+export function nuevo_uuid() {
+  const c = typeof globalThis !== 'undefined' ? globalThis.crypto : undefined
+  if (c && typeof c.randomUUID === 'function') {
+    return c.randomUUID()
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (letra) {
+    const azar = c && typeof c.getRandomValues === 'function' ? c.getRandomValues(new Uint8Array(1))[0] % 16 : Math.floor(Math.random() * 16)
+    const valor = letra === 'x' ? azar : (azar & 0x3) | 0x8
+    return valor.toString(16)
+  })
+}
+
+/**
+ * El cuerpo de `POST /local/missions/{slug}/questions/{uid}/answer`. El `answer_uid` se genera UNA vez por intento y
+ * se conserva en los reintentos (se pasa el mismo): así un doble clic o un reintento tras un corte de red no registra
+ * dos respuestas.
+ *
+ * @param {Object} pregunta `mision.seguimiento.pregunta` (de ahí sale la revisión).
+ * @param {string|null} opcion Clave de la opción elegida.
+ * @param {string|null} texto Texto libre (se recorta y, vacío, va null).
+ * @param {string} [answer_uid] El `answer_uid` del intento anterior, si es un reintento.
+ * @returns {{revision:number, opcion:(string|null), texto:(string|null), answer_uid:string}}
+ */
+export function cuerpo_de_respuesta(pregunta, opcion, texto, answer_uid) {
+  const limpio = String(texto === null || texto === undefined ? '' : texto).trim().slice(0, MAX_TEXTO_RESPUESTA)
+  return {
+    revision: pregunta && typeof pregunta.revision === 'number' ? pregunta.revision : 1,
+    opcion: opcion ? String(opcion) : null,
+    texto: limpio === '' ? null : limpio,
+    answer_uid: answer_uid || nuevo_uuid(),
+  }
 }

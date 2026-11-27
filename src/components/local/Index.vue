@@ -146,6 +146,7 @@
         :ahora="ahora"
         :enfocar="enfoque"
         @cerrar="panel = null"
+        @respondida="cargar"
       />
 
       <nav v-if="vertical" ref="camaras" class="ell-camaras" aria-label="Cámara">

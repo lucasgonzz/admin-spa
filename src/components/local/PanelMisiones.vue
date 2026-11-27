@@ -59,8 +59,27 @@
                 <span v-if="m.demorada" class="pm__chip pm__chip--demorada">demorada</span>
                 <span v-else-if="m.estado === 'esperando_lucas'" class="pm__chip pm__chip--espera" title="Está parada esperando una decisión o acción tuya; no está demorada">te espera</span>
                 <span v-if="m.sin_senal" class="pm__chip pm__chip--suave" title="Hace más de 5 minutos que la PC no reporta">sin señal</span>
+                <!-- Seguimiento que publica la Gamer en el Admin: sólo si la misión lo trae -->
+                <span v-if="m.seguimiento" class="pm__chip pm__chip--seguimiento" :style="{ '--pm-color': seguimiento_de(m).color }" title="Estado real que publica la PC en el Admin">{{ seguimiento_de(m).texto }}</span>
               </div>
             </div>
+          </div>
+
+          <!-- Seguimiento: vigencia de la información, último avance, qué falta y, si corresponde, por qué se frenó -->
+          <div v-if="m.seguimiento" class="pm__seguimiento">
+            <p v-if="seguimiento_de(m).vigencia_texto" class="pm__vigencia" role="status">
+              <i class="bi bi-exclamation-triangle" aria-hidden="true" />
+              {{ seguimiento_de(m).vigencia_texto }}
+            </p>
+            <p v-if="seguimiento_de(m).avance" class="pm__avance"><b>Último avance:</b> {{ seguimiento_de(m).avance }}</p>
+            <p v-if="seguimiento_de(m).pendiente" class="pm__avance"><b>Qué falta:</b> {{ seguimiento_de(m).pendiente }}</p>
+            <p v-if="seguimiento_de(m).motivo && (m.seguimiento.estado === 'detenida' || m.seguimiento.estado === 'pausada_tecnica')" class="pm__avance pm__avance--motivo">
+              <b>Motivo:</b> {{ seguimiento_de(m).motivo }}
+            </p>
+            <p v-if="seguimiento_de(m).proximo_paso && (m.seguimiento.estado === 'detenida' || m.seguimiento.estado === 'pausada_tecnica')" class="pm__avance pm__avance--motivo">
+              <b>Próximo paso:</b> {{ seguimiento_de(m).proximo_paso }}
+            </p>
+            <PreguntaDeMision v-if="m.seguimiento.pregunta" :pregunta="m.seguimiento.pregunta" :slug="slug_de(m)" @respondida="$emit('respondida', $event)" />
           </div>
 
           <!-- Barra de las 6 etapas -->
@@ -179,6 +198,7 @@
 </template>
 
 <script>
+import PreguntaDeMision from './PreguntaDeMision.vue'
 import {
   ETAPAS,
   ORIGENES,
@@ -188,6 +208,7 @@ import {
   NIVELES_RECURSOS,
   COLOR_ETAPA_PENDIENTE,
   TEXTO_FASE,
+  describir_seguimiento,
   indice_etapa,
   nivel_recursos,
   numero_es,
@@ -201,6 +222,7 @@ import {
 
 export default {
   name: 'ElLocalPanelMisiones',
+  components: { PreguntaDeMision },
   props: {
     /** `oficina.misiones` completas (el filtro se aplica acá, con los conteos sin filtrar). */
     misiones: { type: Array, default: () => [] },
@@ -217,7 +239,7 @@ export default {
     /** Pedido de enfocar algo: `{ id: <id de misión | 'espera'>, vez: <contador> }`. */
     enfocar: { type: Object, default: null },
   },
-  emits: ['cerrar', 'update:filtro'],
+  emits: ['cerrar', 'update:filtro', 'respondida'],
   data() {
     return {
       /** Misión (o 'espera') resaltada porque Lucas tocó su mesa o la fila de espera. */
@@ -320,6 +342,14 @@ export default {
     /** Datos del estado de una misión. */
     estado_de(mision) {
       return ESTADOS_MISION[mision.estado] || ESTADOS_MISION.trabajando
+    },
+    /** Seguimiento de una misión (chip, vigencia y textos) o null si no lo trae. */
+    seguimiento_de(mision) {
+      return describir_seguimiento(mision.seguimiento)
+    },
+    /** Slug de la misión para la ruta de respuesta (sin el prefijo `cc:`). */
+    slug_de(mision) {
+      return mision.slug || String(mision.id || '').replace(/^cc:/, '')
     },
     /** Datos de la prioridad de una entrada de la cola. */
     prioridad_de(item) {
@@ -600,6 +630,37 @@ export default {
 .pm__chip--suave {
   color: #aab9cf;
   font-weight: 500;
+}
+.pm__chip--seguimiento {
+  border: 1px solid var(--pm-color, #dce4f0);
+}
+
+/* ---------- Seguimiento publicado por la PC en el Admin ---------- */
+.pm__seguimiento {
+  display: grid;
+  gap: 6px;
+}
+.pm__vigencia {
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.16);
+  color: #fcd34d;
+  font-size: 12px;
+  font-weight: 600;
+}
+.pm__avance {
+  margin: 0;
+  color: #dce4f0;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.pm__avance b {
+  color: #fff;
+}
+.pm__avance--motivo {
+  color: #fdba74;
 }
 
 /* ---------- Barra de etapas ---------- */
